@@ -30,6 +30,43 @@ from aas_core_codegen.typescript.common import (
 # region De-serialization
 
 
+def _generate_parse_array() -> Stripped:
+    """Generate the generic helper to parse a JSON array item-by-item."""
+    return Stripped(
+        f"""\
+/**
+ * Parse every item of `iterable` with `parseItem`.
+ *
+ * @param iterable - to be parsed item-by-item
+ * @param parseItem - to parse a single item of `iterable`
+ * @returns parsed items, or an error
+ * @typeParam T - type of a single parsed item
+ */
+function parseArray<T>(
+{I}iterable: Iterable<JsonValue>,
+{I}parseItem: (
+{II}jsonableItem: JsonValue
+{I}) => AasCommon.Either<T, DeserializationError>
+): AasCommon.Either<Array<T>, DeserializationError> {{
+{I}const items = new Array<T>();
+{I}let i = 0;
+{I}for (const jsonableItem of iterable) {{
+{II}const itemOrError = parseItem(jsonableItem);
+{II}if (itemOrError.error !== null) {{
+{III}itemOrError.error.path.prepend(new IndexSegment(iterable, i));
+{III}return new AasCommon.Either<Array<T>, DeserializationError>(
+{IIII}null,
+{IIII}itemOrError.error
+{III});
+{II}}}
+{II}items.push(itemOrError.mustValue());
+{II}i++;
+{I}}}
+{I}return new AasCommon.Either<Array<T>, DeserializationError>(items, null);
+}}"""
+    )
+
+
 def _generate_bool_from_jsonable() -> Stripped:
     """Generate the function to decode a ``bool`` from a JSON-able."""
     return Stripped(
@@ -508,9 +545,6 @@ if (parsedOrError.error !== null) {{
                 "see intermediate._translate_._verify_only_simple_type_patterns"
             )
 
-            items_type = typescript_common.generate_type(
-                type_anno.items, types_module=Identifier("AasTypes")
-            )
             parse_function = _parse_function_for_atomic_value(type_anno.items)
 
             body = Stripped(
@@ -534,30 +568,15 @@ if (typeof jsonable[Symbol.iterator] !== "function") {{
 
 const iterable = <Iterable<JsonValue>>jsonable;
 
-const items =
-{I}new Array<{items_type}>();
-
-let i = 0;
-for (const jsonableItem of iterable) {{
-{I}const itemOrError = {parse_function}(
-{II}jsonableItem
-{I});
-
-{I}if (itemOrError.error !== null) {{
-{II}itemOrError.error.path.prepend(
-{III}new IndexSegment(
-{IIII}iterable,
-{IIII}i
-{III})
-{II});
-{II}return itemOrError.error;
-{I}}}
-
-{I}items.push(itemOrError.mustValue());
-{I}i++;
+const itemsOrError = parseArray(
+{I}iterable,
+{I}{parse_function}
+);
+if (itemsOrError.error !== null) {{
+{I}return itemsOrError.error;
 }}
 
-this.{prop_name} = items;
+this.{prop_name} = itemsOrError.mustValue();
 return null;"""
             )
 
@@ -1109,26 +1128,41 @@ jsonable[{key_literal}] =
                 "Please contact the developers if you need this feature."
             )
 
-            items_jsonable_type: Stripped
             items_primitive_type = intermediate.try_primitive_type(type_anno.items)
 
-            if items_primitive_type is not None:
-                if items_primitive_type == intermediate.PrimitiveType.BOOL:
-                    items_jsonable_type = Stripped("boolean")
-                elif items_primitive_type == intermediate.PrimitiveType.INT:
-                    items_jsonable_type = Stripped("number")
-                elif items_primitive_type == intermediate.PrimitiveType.FLOAT:
-                    items_jsonable_type = Stripped("number")
-                elif items_primitive_type == intermediate.PrimitiveType.STR:
-                    items_jsonable_type = Stripped("string")
-                elif items_primitive_type == intermediate.PrimitiveType.BYTEARRAY:
-                    items_jsonable_type = Stripped("string")
-                else:
-                    assert_never(items_primitive_type)
+            if items_primitive_type is not None and (
+                items_primitive_type != intermediate.PrimitiveType.BYTEARRAY
+            ):
+                # NOTE (mristin):
+                # No transformation is needed for these primitive types, so we
+                # do not even need ``serializeArray`` -- a defensive copy of
+                # the items suffices.
+                block = Stripped(
+                    f"jsonable[{key_literal}] = Array.from(that.{prop_name});"
+                )
+
+            elif items_primitive_type is intermediate.PrimitiveType.BYTEARRAY:
+                block = Stripped(
+                    f"""\
+jsonable[{key_literal}] = serializeArray(
+{I}that.{prop_name},
+{I}AasCommon.base64Encode
+);"""
+                )
 
             elif isinstance(type_anno.items, intermediate.OurTypeAnnotation):
                 if isinstance(type_anno.items.our_type, intermediate.Enumeration):
-                    items_jsonable_type = Stripped("string")
+                    must_to_str_name = typescript_naming.function_name(
+                        Identifier(f"must_{type_anno.items.our_type.name}_to_string")
+                    )
+
+                    block = Stripped(
+                        f"""\
+jsonable[{key_literal}] = serializeArray(
+{I}that.{prop_name},
+{I}AasStringification.{must_to_str_name}
+);"""
+                    )
 
                 elif isinstance(
                     type_anno.items.our_type, intermediate.ConstrainedPrimitive
@@ -1139,7 +1173,16 @@ jsonable[{key_literal}] =
                     type_anno.items.our_type,
                     (intermediate.AbstractClass, intermediate.ConcreteClass),
                 ):
-                    items_jsonable_type = Stripped("JsonObject")
+                    # NOTE (mristin):
+                    # ``this.transform`` needs a bound ``this``, so this is the
+                    # one case where we can not pass a bare function reference.
+                    block = Stripped(
+                        f"""\
+jsonable[{key_literal}] = serializeArray(
+{I}that.{prop_name},
+{I}(item) => this.transform(item)
+);"""
+                    )
 
                 else:
                     assert_never(type_anno.items.our_type)
@@ -1151,23 +1194,6 @@ jsonable[{key_literal}] =
                     f"but we got a list of type {type_anno}. "
                     "Please contact the developers if you need this feature."
                 )
-
-            var_name = typescript_naming.variable_name(Identifier(f"{prop.name}_array"))
-
-            transformation_expression = _generate_transform_atomic_value(
-                access_expression=Stripped("item"), type_anno=type_anno.items
-            )
-
-            block = Stripped(
-                f"""\
-const {var_name} = new Array<{items_jsonable_type}>();
-for (const item of that.{prop_name}) {{
-{I}{var_name}.push(
-{II}{indent_but_first_line(transformation_expression, II)}
-{I});
-}}
-jsonable[{key_literal}] = {var_name};"""
-            )
 
         else:
             assert_never(type_anno)
@@ -1218,6 +1244,33 @@ if (that.{prop_name} !== null) {{
     writer.write("\n}")
 
     return Stripped(writer.getvalue())
+
+
+def _generate_serialize_array() -> Stripped:
+    """Generate the generic helper to serialize an iterable into a JSON array."""
+    return Stripped(
+        f"""\
+/**
+ * Serialize every item of `items` with `serializeItem` into a JSON-able
+ * array.
+ *
+ * @param items - to be serialized
+ * @param serializeItem - to serialize a single item of `items`
+ * @returns JSON-able array
+ * @typeParam T - type of a single item to be serialized
+ * @typeParam J - type of a single item once serialized
+ */
+function serializeArray<T, J extends JsonValue>(
+{I}items: Iterable<T>,
+{I}serializeItem: (item: T) => J
+): Array<J> {{
+{I}const result = new Array<J>();
+{I}for (const item of items) {{
+{II}result.push(serializeItem(item));
+{I}}}
+{I}return result;
+}}"""
+    )
 
 
 def _generate_transformer(symbol_table: intermediate.SymbolTable) -> Stripped:
@@ -1434,6 +1487,7 @@ function newDeserializationError<T>(
 {I});
 }}"""
         ),
+        _generate_parse_array(),
         _generate_bool_from_jsonable(),
         _generate_int_from_jsonable(),
         _generate_float_from_jsonable(),
@@ -1512,6 +1566,8 @@ function newDeserializationError<T>(
     blocks.append(Stripped("// endregion"))
 
     blocks.append(Stripped("// region Serialization"))
+
+    blocks.append(_generate_serialize_array())
 
     blocks.append(_generate_transformer(symbol_table=symbol_table))
 

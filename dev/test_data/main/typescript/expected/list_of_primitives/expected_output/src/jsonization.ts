@@ -157,6 +157,37 @@ function newDeserializationError<T>(
 }
 
 /**
+ * Parse every item of `iterable` with `parseItem`.
+ *
+ * @param iterable - to be parsed item-by-item
+ * @param parseItem - to parse a single item of `iterable`
+ * @returns parsed items, or an error
+ * @typeParam T - type of a single parsed item
+ */
+function parseArray<T>(
+  iterable: Iterable<JsonValue>,
+  parseItem: (
+    jsonableItem: JsonValue
+  ) => AasCommon.Either<T, DeserializationError>
+): AasCommon.Either<Array<T>, DeserializationError> {
+  const items = new Array<T>();
+  let i = 0;
+  for (const jsonableItem of iterable) {
+    const itemOrError = parseItem(jsonableItem);
+    if (itemOrError.error !== null) {
+      itemOrError.error.path.prepend(new IndexSegment(iterable, i));
+      return new AasCommon.Either<Array<T>, DeserializationError>(
+        null,
+        itemOrError.error
+      );
+    }
+    items.push(itemOrError.mustValue());
+    i++;
+  }
+  return new AasCommon.Either<Array<T>, DeserializationError>(items, null);
+}
+
+/**
  * Parse `jsonable` as a boolean.
  *
  * @param jsonable - to be parsed
@@ -332,30 +363,15 @@ class SetterForSomething {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<boolean>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = booleanFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      booleanFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.someBools = items;
+    this.someBools = itemsOrError.mustValue();
     return null;
   }
 
@@ -387,30 +403,15 @@ class SetterForSomething {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<number>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = integerFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      integerFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.someInts = items;
+    this.someInts = itemsOrError.mustValue();
     return null;
   }
 
@@ -442,30 +443,15 @@ class SetterForSomething {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<number>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = numberFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      numberFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.someFloats = items;
+    this.someFloats = itemsOrError.mustValue();
     return null;
   }
 
@@ -497,30 +483,15 @@ class SetterForSomething {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<string>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = stringFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      stringFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.someStrings = items;
+    this.someStrings = itemsOrError.mustValue();
     return null;
   }
 
@@ -552,30 +523,15 @@ class SetterForSomething {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<Uint8Array>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = bytesFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      bytesFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.someBytes = items;
+    this.someBytes = itemsOrError.mustValue();
     return null;
   }
 }
@@ -731,6 +687,27 @@ const SETTER_MAP_FOR_SOMETHING =
 // region Serialization
 
 /**
+ * Serialize every item of `items` with `serializeItem` into a JSON-able
+ * array.
+ *
+ * @param items - to be serialized
+ * @param serializeItem - to serialize a single item of `items`
+ * @returns JSON-able array
+ * @typeParam T - type of a single item to be serialized
+ * @typeParam J - type of a single item once serialized
+ */
+function serializeArray<T, J extends JsonValue>(
+  items: Iterable<T>,
+  serializeItem: (item: T) => J
+): Array<J> {
+  const result = new Array<J>();
+  for (const item of items) {
+    result.push(serializeItem(item));
+  }
+  return result;
+}
+
+/**
  * Transform the instance to its JSON-able representation.
  */
 class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
@@ -747,45 +724,18 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
   ): JsonObject {
     const jsonable: JsonObject = {};
 
-    const someBoolsArray = new Array<boolean>();
-    for (const item of that.someBools) {
-      someBoolsArray.push(
-        item
-      );
-    }
-    jsonable["someBools"] = someBoolsArray;
+    jsonable["someBools"] = Array.from(that.someBools);
 
-    const someIntsArray = new Array<number>();
-    for (const item of that.someInts) {
-      someIntsArray.push(
-        item
-      );
-    }
-    jsonable["someInts"] = someIntsArray;
+    jsonable["someInts"] = Array.from(that.someInts);
 
-    const someFloatsArray = new Array<number>();
-    for (const item of that.someFloats) {
-      someFloatsArray.push(
-        item
-      );
-    }
-    jsonable["someFloats"] = someFloatsArray;
+    jsonable["someFloats"] = Array.from(that.someFloats);
 
-    const someStringsArray = new Array<string>();
-    for (const item of that.someStrings) {
-      someStringsArray.push(
-        item
-      );
-    }
-    jsonable["someStrings"] = someStringsArray;
+    jsonable["someStrings"] = Array.from(that.someStrings);
 
-    const someBytesArray = new Array<string>();
-    for (const item of that.someBytes) {
-      someBytesArray.push(
-        AasCommon.base64Encode(item)
-      );
-    }
-    jsonable["someBytes"] = someBytesArray;
+    jsonable["someBytes"] = serializeArray(
+      that.someBytes,
+      AasCommon.base64Encode
+    );
 
     return jsonable;
   }

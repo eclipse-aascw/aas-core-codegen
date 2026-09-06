@@ -157,6 +157,37 @@ function newDeserializationError<T>(
 }
 
 /**
+ * Parse every item of `iterable` with `parseItem`.
+ *
+ * @param iterable - to be parsed item-by-item
+ * @param parseItem - to parse a single item of `iterable`
+ * @returns parsed items, or an error
+ * @typeParam T - type of a single parsed item
+ */
+function parseArray<T>(
+  iterable: Iterable<JsonValue>,
+  parseItem: (
+    jsonableItem: JsonValue
+  ) => AasCommon.Either<T, DeserializationError>
+): AasCommon.Either<Array<T>, DeserializationError> {
+  const items = new Array<T>();
+  let i = 0;
+  for (const jsonableItem of iterable) {
+    const itemOrError = parseItem(jsonableItem);
+    if (itemOrError.error !== null) {
+      itemOrError.error.path.prepend(new IndexSegment(iterable, i));
+      return new AasCommon.Either<Array<T>, DeserializationError>(
+        null,
+        itemOrError.error
+      );
+    }
+    items.push(itemOrError.mustValue());
+    i++;
+  }
+  return new AasCommon.Either<Array<T>, DeserializationError>(items, null);
+}
+
+/**
  * Parse `jsonable` as a boolean.
  *
  * @param jsonable - to be parsed
@@ -601,6 +632,27 @@ const SETTER_MAP_FOR_SOMETHING =
 // endregion
 
 // region Serialization
+
+/**
+ * Serialize every item of `items` with `serializeItem` into a JSON-able
+ * array.
+ *
+ * @param items - to be serialized
+ * @param serializeItem - to serialize a single item of `items`
+ * @returns JSON-able array
+ * @typeParam T - type of a single item to be serialized
+ * @typeParam J - type of a single item once serialized
+ */
+function serializeArray<T, J extends JsonValue>(
+  items: Iterable<T>,
+  serializeItem: (item: T) => J
+): Array<J> {
+  const result = new Array<J>();
+  for (const item of items) {
+    result.push(serializeItem(item));
+  }
+  return result;
+}
 
 /**
  * Transform the instance to its JSON-able representation.

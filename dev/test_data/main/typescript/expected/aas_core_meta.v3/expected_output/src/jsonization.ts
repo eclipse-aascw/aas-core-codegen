@@ -157,6 +157,37 @@ function newDeserializationError<T>(
 }
 
 /**
+ * Parse every item of `iterable` with `parseItem`.
+ *
+ * @param iterable - to be parsed item-by-item
+ * @param parseItem - to parse a single item of `iterable`
+ * @returns parsed items, or an error
+ * @typeParam T - type of a single parsed item
+ */
+function parseArray<T>(
+  iterable: Iterable<JsonValue>,
+  parseItem: (
+    jsonableItem: JsonValue
+  ) => AasCommon.Either<T, DeserializationError>
+): AasCommon.Either<Array<T>, DeserializationError> {
+  const items = new Array<T>();
+  let i = 0;
+  for (const jsonableItem of iterable) {
+    const itemOrError = parseItem(jsonableItem);
+    if (itemOrError.error !== null) {
+      itemOrError.error.path.prepend(new IndexSegment(iterable, i));
+      return new AasCommon.Either<Array<T>, DeserializationError>(
+        null,
+        itemOrError.error
+      );
+    }
+    items.push(itemOrError.mustValue());
+    i++;
+  }
+  return new AasCommon.Either<Array<T>, DeserializationError>(items, null);
+}
+
+/**
  * Parse `jsonable` as a boolean.
  *
  * @param jsonable - to be parsed
@@ -406,30 +437,15 @@ class SetterForExtension {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.supplementalSemanticIds = items;
+    this.supplementalSemanticIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -521,30 +537,15 @@ class SetterForExtension {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.refersTo = items;
+    this.refersTo = itemsOrError.mustValue();
     return null;
   }
 }
@@ -966,30 +967,15 @@ class SetterForAdministrativeInformation {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.EmbeddedDataSpecification>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = embeddedDataSpecificationFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      embeddedDataSpecificationFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.embeddedDataSpecifications = items;
+    this.embeddedDataSpecifications = itemsOrError.mustValue();
     return null;
   }
 
@@ -1298,30 +1284,15 @@ class SetterForQualifier {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.supplementalSemanticIds = items;
+    this.supplementalSemanticIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -1577,30 +1548,15 @@ class SetterForAssetAdministrationShell {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Extension>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = extensionFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      extensionFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.extensions = items;
+    this.extensions = itemsOrError.mustValue();
     return null;
   }
 
@@ -1672,30 +1628,15 @@ class SetterForAssetAdministrationShell {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringNameType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringNameTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringNameTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.displayName = items;
+    this.displayName = itemsOrError.mustValue();
     return null;
   }
 
@@ -1727,30 +1668,15 @@ class SetterForAssetAdministrationShell {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringTextType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringTextTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringTextTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.description = items;
+    this.description = itemsOrError.mustValue();
     return null;
   }
 
@@ -1822,30 +1748,15 @@ class SetterForAssetAdministrationShell {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.EmbeddedDataSpecification>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = embeddedDataSpecificationFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      embeddedDataSpecificationFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.embeddedDataSpecifications = items;
+    this.embeddedDataSpecifications = itemsOrError.mustValue();
     return null;
   }
 
@@ -1917,30 +1828,15 @@ class SetterForAssetAdministrationShell {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.submodels = items;
+    this.submodels = itemsOrError.mustValue();
     return null;
   }
 
@@ -2162,30 +2058,15 @@ class SetterForAssetInformation {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.SpecificAssetId>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = specificAssetIdFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      specificAssetIdFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.specificAssetIds = items;
+    this.specificAssetIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -2536,30 +2417,15 @@ class SetterForSpecificAssetId {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.supplementalSemanticIds = items;
+    this.supplementalSemanticIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -2777,30 +2643,15 @@ class SetterForSubmodel {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Extension>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = extensionFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      extensionFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.extensions = items;
+    this.extensions = itemsOrError.mustValue();
     return null;
   }
 
@@ -2872,30 +2723,15 @@ class SetterForSubmodel {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringNameType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringNameTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringNameTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.displayName = items;
+    this.displayName = itemsOrError.mustValue();
     return null;
   }
 
@@ -2927,30 +2763,15 @@ class SetterForSubmodel {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringTextType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringTextTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringTextTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.description = items;
+    this.description = itemsOrError.mustValue();
     return null;
   }
 
@@ -3062,30 +2883,15 @@ class SetterForSubmodel {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.supplementalSemanticIds = items;
+    this.supplementalSemanticIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -3117,30 +2923,15 @@ class SetterForSubmodel {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Qualifier>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = qualifierFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      qualifierFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.qualifiers = items;
+    this.qualifiers = itemsOrError.mustValue();
     return null;
   }
 
@@ -3172,30 +2963,15 @@ class SetterForSubmodel {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.EmbeddedDataSpecification>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = embeddedDataSpecificationFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      embeddedDataSpecificationFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.embeddedDataSpecifications = items;
+    this.embeddedDataSpecifications = itemsOrError.mustValue();
     return null;
   }
 
@@ -3227,30 +3003,15 @@ class SetterForSubmodel {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.ISubmodelElement>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = submodelElementFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      submodelElementFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.submodelElements = items;
+    this.submodelElements = itemsOrError.mustValue();
     return null;
   }
 
@@ -3545,30 +3306,15 @@ class SetterForRelationshipElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Extension>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = extensionFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      extensionFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.extensions = items;
+    this.extensions = itemsOrError.mustValue();
     return null;
   }
 
@@ -3640,30 +3386,15 @@ class SetterForRelationshipElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringNameType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringNameTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringNameTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.displayName = items;
+    this.displayName = itemsOrError.mustValue();
     return null;
   }
 
@@ -3695,30 +3426,15 @@ class SetterForRelationshipElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringTextType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringTextTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringTextTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.description = items;
+    this.description = itemsOrError.mustValue();
     return null;
   }
 
@@ -3770,30 +3486,15 @@ class SetterForRelationshipElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.supplementalSemanticIds = items;
+    this.supplementalSemanticIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -3825,30 +3526,15 @@ class SetterForRelationshipElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Qualifier>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = qualifierFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      qualifierFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.qualifiers = items;
+    this.qualifiers = itemsOrError.mustValue();
     return null;
   }
 
@@ -3880,30 +3566,15 @@ class SetterForRelationshipElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.EmbeddedDataSpecification>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = embeddedDataSpecificationFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      embeddedDataSpecificationFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.embeddedDataSpecifications = items;
+    this.embeddedDataSpecifications = itemsOrError.mustValue();
     return null;
   }
 
@@ -4183,30 +3854,15 @@ class SetterForSubmodelElementList {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Extension>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = extensionFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      extensionFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.extensions = items;
+    this.extensions = itemsOrError.mustValue();
     return null;
   }
 
@@ -4278,30 +3934,15 @@ class SetterForSubmodelElementList {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringNameType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringNameTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringNameTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.displayName = items;
+    this.displayName = itemsOrError.mustValue();
     return null;
   }
 
@@ -4333,30 +3974,15 @@ class SetterForSubmodelElementList {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringTextType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringTextTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringTextTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.description = items;
+    this.description = itemsOrError.mustValue();
     return null;
   }
 
@@ -4408,30 +4034,15 @@ class SetterForSubmodelElementList {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.supplementalSemanticIds = items;
+    this.supplementalSemanticIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -4463,30 +4074,15 @@ class SetterForSubmodelElementList {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Qualifier>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = qualifierFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      qualifierFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.qualifiers = items;
+    this.qualifiers = itemsOrError.mustValue();
     return null;
   }
 
@@ -4518,30 +4114,15 @@ class SetterForSubmodelElementList {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.EmbeddedDataSpecification>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = embeddedDataSpecificationFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      embeddedDataSpecificationFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.embeddedDataSpecifications = items;
+    this.embeddedDataSpecifications = itemsOrError.mustValue();
     return null;
   }
 
@@ -4653,30 +4234,15 @@ class SetterForSubmodelElementList {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.ISubmodelElement>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = submodelElementFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      submodelElementFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.value = items;
+    this.value = itemsOrError.mustValue();
     return null;
   }
 
@@ -4866,30 +4432,15 @@ class SetterForSubmodelElementCollection {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Extension>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = extensionFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      extensionFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.extensions = items;
+    this.extensions = itemsOrError.mustValue();
     return null;
   }
 
@@ -4961,30 +4512,15 @@ class SetterForSubmodelElementCollection {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringNameType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringNameTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringNameTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.displayName = items;
+    this.displayName = itemsOrError.mustValue();
     return null;
   }
 
@@ -5016,30 +4552,15 @@ class SetterForSubmodelElementCollection {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringTextType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringTextTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringTextTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.description = items;
+    this.description = itemsOrError.mustValue();
     return null;
   }
 
@@ -5091,30 +4612,15 @@ class SetterForSubmodelElementCollection {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.supplementalSemanticIds = items;
+    this.supplementalSemanticIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -5146,30 +4652,15 @@ class SetterForSubmodelElementCollection {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Qualifier>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = qualifierFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      qualifierFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.qualifiers = items;
+    this.qualifiers = itemsOrError.mustValue();
     return null;
   }
 
@@ -5201,30 +4692,15 @@ class SetterForSubmodelElementCollection {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.EmbeddedDataSpecification>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = embeddedDataSpecificationFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      embeddedDataSpecificationFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.embeddedDataSpecifications = items;
+    this.embeddedDataSpecifications = itemsOrError.mustValue();
     return null;
   }
 
@@ -5256,30 +4732,15 @@ class SetterForSubmodelElementCollection {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.ISubmodelElement>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = submodelElementFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      submodelElementFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.value = items;
+    this.value = itemsOrError.mustValue();
     return null;
   }
 
@@ -5513,30 +4974,15 @@ class SetterForProperty {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Extension>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = extensionFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      extensionFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.extensions = items;
+    this.extensions = itemsOrError.mustValue();
     return null;
   }
 
@@ -5608,30 +5054,15 @@ class SetterForProperty {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringNameType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringNameTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringNameTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.displayName = items;
+    this.displayName = itemsOrError.mustValue();
     return null;
   }
 
@@ -5663,30 +5094,15 @@ class SetterForProperty {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringTextType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringTextTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringTextTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.description = items;
+    this.description = itemsOrError.mustValue();
     return null;
   }
 
@@ -5738,30 +5154,15 @@ class SetterForProperty {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.supplementalSemanticIds = items;
+    this.supplementalSemanticIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -5793,30 +5194,15 @@ class SetterForProperty {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Qualifier>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = qualifierFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      qualifierFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.qualifiers = items;
+    this.qualifiers = itemsOrError.mustValue();
     return null;
   }
 
@@ -5848,30 +5234,15 @@ class SetterForProperty {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.EmbeddedDataSpecification>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = embeddedDataSpecificationFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      embeddedDataSpecificationFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.embeddedDataSpecifications = items;
+    this.embeddedDataSpecifications = itemsOrError.mustValue();
     return null;
   }
 
@@ -6121,30 +5492,15 @@ class SetterForMultiLanguageProperty {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Extension>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = extensionFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      extensionFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.extensions = items;
+    this.extensions = itemsOrError.mustValue();
     return null;
   }
 
@@ -6216,30 +5572,15 @@ class SetterForMultiLanguageProperty {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringNameType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringNameTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringNameTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.displayName = items;
+    this.displayName = itemsOrError.mustValue();
     return null;
   }
 
@@ -6271,30 +5612,15 @@ class SetterForMultiLanguageProperty {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringTextType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringTextTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringTextTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.description = items;
+    this.description = itemsOrError.mustValue();
     return null;
   }
 
@@ -6346,30 +5672,15 @@ class SetterForMultiLanguageProperty {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.supplementalSemanticIds = items;
+    this.supplementalSemanticIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -6401,30 +5712,15 @@ class SetterForMultiLanguageProperty {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Qualifier>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = qualifierFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      qualifierFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.qualifiers = items;
+    this.qualifiers = itemsOrError.mustValue();
     return null;
   }
 
@@ -6456,30 +5752,15 @@ class SetterForMultiLanguageProperty {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.EmbeddedDataSpecification>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = embeddedDataSpecificationFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      embeddedDataSpecificationFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.embeddedDataSpecifications = items;
+    this.embeddedDataSpecifications = itemsOrError.mustValue();
     return null;
   }
 
@@ -6511,30 +5792,15 @@ class SetterForMultiLanguageProperty {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringTextType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringTextTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringTextTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.value = items;
+    this.value = itemsOrError.mustValue();
     return null;
   }
 
@@ -6737,30 +6003,15 @@ class SetterForRange {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Extension>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = extensionFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      extensionFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.extensions = items;
+    this.extensions = itemsOrError.mustValue();
     return null;
   }
 
@@ -6832,30 +6083,15 @@ class SetterForRange {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringNameType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringNameTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringNameTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.displayName = items;
+    this.displayName = itemsOrError.mustValue();
     return null;
   }
 
@@ -6887,30 +6123,15 @@ class SetterForRange {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringTextType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringTextTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringTextTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.description = items;
+    this.description = itemsOrError.mustValue();
     return null;
   }
 
@@ -6962,30 +6183,15 @@ class SetterForRange {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.supplementalSemanticIds = items;
+    this.supplementalSemanticIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -7017,30 +6223,15 @@ class SetterForRange {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Qualifier>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = qualifierFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      qualifierFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.qualifiers = items;
+    this.qualifiers = itemsOrError.mustValue();
     return null;
   }
 
@@ -7072,30 +6263,15 @@ class SetterForRange {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.EmbeddedDataSpecification>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = embeddedDataSpecificationFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      embeddedDataSpecificationFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.embeddedDataSpecifications = items;
+    this.embeddedDataSpecifications = itemsOrError.mustValue();
     return null;
   }
 
@@ -7343,30 +6519,15 @@ class SetterForReferenceElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Extension>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = extensionFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      extensionFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.extensions = items;
+    this.extensions = itemsOrError.mustValue();
     return null;
   }
 
@@ -7438,30 +6599,15 @@ class SetterForReferenceElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringNameType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringNameTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringNameTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.displayName = items;
+    this.displayName = itemsOrError.mustValue();
     return null;
   }
 
@@ -7493,30 +6639,15 @@ class SetterForReferenceElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringTextType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringTextTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringTextTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.description = items;
+    this.description = itemsOrError.mustValue();
     return null;
   }
 
@@ -7568,30 +6699,15 @@ class SetterForReferenceElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.supplementalSemanticIds = items;
+    this.supplementalSemanticIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -7623,30 +6739,15 @@ class SetterForReferenceElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Qualifier>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = qualifierFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      qualifierFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.qualifiers = items;
+    this.qualifiers = itemsOrError.mustValue();
     return null;
   }
 
@@ -7678,30 +6779,15 @@ class SetterForReferenceElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.EmbeddedDataSpecification>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = embeddedDataSpecificationFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      embeddedDataSpecificationFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.embeddedDataSpecifications = items;
+    this.embeddedDataSpecifications = itemsOrError.mustValue();
     return null;
   }
 
@@ -7901,30 +6987,15 @@ class SetterForBlob {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Extension>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = extensionFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      extensionFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.extensions = items;
+    this.extensions = itemsOrError.mustValue();
     return null;
   }
 
@@ -7996,30 +7067,15 @@ class SetterForBlob {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringNameType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringNameTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringNameTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.displayName = items;
+    this.displayName = itemsOrError.mustValue();
     return null;
   }
 
@@ -8051,30 +7107,15 @@ class SetterForBlob {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringTextType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringTextTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringTextTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.description = items;
+    this.description = itemsOrError.mustValue();
     return null;
   }
 
@@ -8126,30 +7167,15 @@ class SetterForBlob {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.supplementalSemanticIds = items;
+    this.supplementalSemanticIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -8181,30 +7207,15 @@ class SetterForBlob {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Qualifier>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = qualifierFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      qualifierFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.qualifiers = items;
+    this.qualifiers = itemsOrError.mustValue();
     return null;
   }
 
@@ -8236,30 +7247,15 @@ class SetterForBlob {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.EmbeddedDataSpecification>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = embeddedDataSpecificationFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      embeddedDataSpecificationFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.embeddedDataSpecifications = items;
+    this.embeddedDataSpecifications = itemsOrError.mustValue();
     return null;
   }
 
@@ -8488,30 +7484,15 @@ class SetterForFile {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Extension>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = extensionFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      extensionFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.extensions = items;
+    this.extensions = itemsOrError.mustValue();
     return null;
   }
 
@@ -8583,30 +7564,15 @@ class SetterForFile {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringNameType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringNameTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringNameTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.displayName = items;
+    this.displayName = itemsOrError.mustValue();
     return null;
   }
 
@@ -8638,30 +7604,15 @@ class SetterForFile {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringTextType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringTextTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringTextTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.description = items;
+    this.description = itemsOrError.mustValue();
     return null;
   }
 
@@ -8713,30 +7664,15 @@ class SetterForFile {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.supplementalSemanticIds = items;
+    this.supplementalSemanticIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -8768,30 +7704,15 @@ class SetterForFile {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Qualifier>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = qualifierFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      qualifierFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.qualifiers = items;
+    this.qualifiers = itemsOrError.mustValue();
     return null;
   }
 
@@ -8823,30 +7744,15 @@ class SetterForFile {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.EmbeddedDataSpecification>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = embeddedDataSpecificationFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      embeddedDataSpecificationFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.embeddedDataSpecifications = items;
+    this.embeddedDataSpecifications = itemsOrError.mustValue();
     return null;
   }
 
@@ -9077,30 +7983,15 @@ class SetterForAnnotatedRelationshipElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Extension>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = extensionFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      extensionFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.extensions = items;
+    this.extensions = itemsOrError.mustValue();
     return null;
   }
 
@@ -9172,30 +8063,15 @@ class SetterForAnnotatedRelationshipElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringNameType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringNameTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringNameTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.displayName = items;
+    this.displayName = itemsOrError.mustValue();
     return null;
   }
 
@@ -9227,30 +8103,15 @@ class SetterForAnnotatedRelationshipElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringTextType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringTextTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringTextTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.description = items;
+    this.description = itemsOrError.mustValue();
     return null;
   }
 
@@ -9302,30 +8163,15 @@ class SetterForAnnotatedRelationshipElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.supplementalSemanticIds = items;
+    this.supplementalSemanticIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -9357,30 +8203,15 @@ class SetterForAnnotatedRelationshipElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Qualifier>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = qualifierFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      qualifierFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.qualifiers = items;
+    this.qualifiers = itemsOrError.mustValue();
     return null;
   }
 
@@ -9412,30 +8243,15 @@ class SetterForAnnotatedRelationshipElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.EmbeddedDataSpecification>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = embeddedDataSpecificationFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      embeddedDataSpecificationFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.embeddedDataSpecifications = items;
+    this.embeddedDataSpecifications = itemsOrError.mustValue();
     return null;
   }
 
@@ -9507,30 +8323,15 @@ class SetterForAnnotatedRelationshipElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.IDataElement>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = dataElementFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      dataElementFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.annotations = items;
+    this.annotations = itemsOrError.mustValue();
     return null;
   }
 
@@ -9732,30 +8533,15 @@ class SetterForEntity {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Extension>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = extensionFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      extensionFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.extensions = items;
+    this.extensions = itemsOrError.mustValue();
     return null;
   }
 
@@ -9827,30 +8613,15 @@ class SetterForEntity {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringNameType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringNameTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringNameTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.displayName = items;
+    this.displayName = itemsOrError.mustValue();
     return null;
   }
 
@@ -9882,30 +8653,15 @@ class SetterForEntity {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringTextType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringTextTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringTextTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.description = items;
+    this.description = itemsOrError.mustValue();
     return null;
   }
 
@@ -9957,30 +8713,15 @@ class SetterForEntity {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.supplementalSemanticIds = items;
+    this.supplementalSemanticIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -10012,30 +8753,15 @@ class SetterForEntity {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Qualifier>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = qualifierFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      qualifierFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.qualifiers = items;
+    this.qualifiers = itemsOrError.mustValue();
     return null;
   }
 
@@ -10067,30 +8793,15 @@ class SetterForEntity {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.EmbeddedDataSpecification>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = embeddedDataSpecificationFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      embeddedDataSpecificationFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.embeddedDataSpecifications = items;
+    this.embeddedDataSpecifications = itemsOrError.mustValue();
     return null;
   }
 
@@ -10122,30 +8833,15 @@ class SetterForEntity {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.ISubmodelElement>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = submodelElementFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      submodelElementFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.statements = items;
+    this.statements = itemsOrError.mustValue();
     return null;
   }
 
@@ -10217,30 +8913,15 @@ class SetterForEntity {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.SpecificAssetId>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = specificAssetIdFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      specificAssetIdFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.specificAssetIds = items;
+    this.specificAssetIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -10869,30 +9550,15 @@ class SetterForBasicEventElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Extension>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = extensionFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      extensionFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.extensions = items;
+    this.extensions = itemsOrError.mustValue();
     return null;
   }
 
@@ -10964,30 +9630,15 @@ class SetterForBasicEventElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringNameType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringNameTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringNameTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.displayName = items;
+    this.displayName = itemsOrError.mustValue();
     return null;
   }
 
@@ -11019,30 +9670,15 @@ class SetterForBasicEventElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringTextType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringTextTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringTextTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.description = items;
+    this.description = itemsOrError.mustValue();
     return null;
   }
 
@@ -11094,30 +9730,15 @@ class SetterForBasicEventElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.supplementalSemanticIds = items;
+    this.supplementalSemanticIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -11149,30 +9770,15 @@ class SetterForBasicEventElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Qualifier>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = qualifierFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      qualifierFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.qualifiers = items;
+    this.qualifiers = itemsOrError.mustValue();
     return null;
   }
 
@@ -11204,30 +9810,15 @@ class SetterForBasicEventElement {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.EmbeddedDataSpecification>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = embeddedDataSpecificationFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      embeddedDataSpecificationFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.embeddedDataSpecifications = items;
+    this.embeddedDataSpecifications = itemsOrError.mustValue();
     return null;
   }
 
@@ -11600,30 +10191,15 @@ class SetterForOperation {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Extension>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = extensionFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      extensionFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.extensions = items;
+    this.extensions = itemsOrError.mustValue();
     return null;
   }
 
@@ -11695,30 +10271,15 @@ class SetterForOperation {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringNameType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringNameTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringNameTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.displayName = items;
+    this.displayName = itemsOrError.mustValue();
     return null;
   }
 
@@ -11750,30 +10311,15 @@ class SetterForOperation {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringTextType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringTextTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringTextTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.description = items;
+    this.description = itemsOrError.mustValue();
     return null;
   }
 
@@ -11825,30 +10371,15 @@ class SetterForOperation {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.supplementalSemanticIds = items;
+    this.supplementalSemanticIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -11880,30 +10411,15 @@ class SetterForOperation {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Qualifier>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = qualifierFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      qualifierFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.qualifiers = items;
+    this.qualifiers = itemsOrError.mustValue();
     return null;
   }
 
@@ -11935,30 +10451,15 @@ class SetterForOperation {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.EmbeddedDataSpecification>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = embeddedDataSpecificationFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      embeddedDataSpecificationFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.embeddedDataSpecifications = items;
+    this.embeddedDataSpecifications = itemsOrError.mustValue();
     return null;
   }
 
@@ -11990,30 +10491,15 @@ class SetterForOperation {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.OperationVariable>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = operationVariableFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      operationVariableFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.inputVariables = items;
+    this.inputVariables = itemsOrError.mustValue();
     return null;
   }
 
@@ -12045,30 +10531,15 @@ class SetterForOperation {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.OperationVariable>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = operationVariableFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      operationVariableFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.outputVariables = items;
+    this.outputVariables = itemsOrError.mustValue();
     return null;
   }
 
@@ -12100,30 +10571,15 @@ class SetterForOperation {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.OperationVariable>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = operationVariableFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      operationVariableFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.inoutputVariables = items;
+    this.inoutputVariables = itemsOrError.mustValue();
     return null;
   }
 
@@ -12408,30 +10864,15 @@ class SetterForCapability {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Extension>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = extensionFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      extensionFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.extensions = items;
+    this.extensions = itemsOrError.mustValue();
     return null;
   }
 
@@ -12503,30 +10944,15 @@ class SetterForCapability {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringNameType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringNameTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringNameTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.displayName = items;
+    this.displayName = itemsOrError.mustValue();
     return null;
   }
 
@@ -12558,30 +10984,15 @@ class SetterForCapability {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringTextType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringTextTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringTextTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.description = items;
+    this.description = itemsOrError.mustValue();
     return null;
   }
 
@@ -12633,30 +11044,15 @@ class SetterForCapability {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.supplementalSemanticIds = items;
+    this.supplementalSemanticIds = itemsOrError.mustValue();
     return null;
   }
 
@@ -12688,30 +11084,15 @@ class SetterForCapability {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Qualifier>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = qualifierFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      qualifierFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.qualifiers = items;
+    this.qualifiers = itemsOrError.mustValue();
     return null;
   }
 
@@ -12743,30 +11124,15 @@ class SetterForCapability {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.EmbeddedDataSpecification>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = embeddedDataSpecificationFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      embeddedDataSpecificationFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.embeddedDataSpecifications = items;
+    this.embeddedDataSpecifications = itemsOrError.mustValue();
     return null;
   }
 
@@ -12941,30 +11307,15 @@ class SetterForConceptDescription {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Extension>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = extensionFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      extensionFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.extensions = items;
+    this.extensions = itemsOrError.mustValue();
     return null;
   }
 
@@ -13036,30 +11387,15 @@ class SetterForConceptDescription {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringNameType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringNameTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringNameTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.displayName = items;
+    this.displayName = itemsOrError.mustValue();
     return null;
   }
 
@@ -13091,30 +11427,15 @@ class SetterForConceptDescription {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringTextType>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringTextTypeFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringTextTypeFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.description = items;
+    this.description = itemsOrError.mustValue();
     return null;
   }
 
@@ -13186,30 +11507,15 @@ class SetterForConceptDescription {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.EmbeddedDataSpecification>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = embeddedDataSpecificationFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      embeddedDataSpecificationFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.embeddedDataSpecifications = items;
+    this.embeddedDataSpecifications = itemsOrError.mustValue();
     return null;
   }
 
@@ -13241,30 +11547,15 @@ class SetterForConceptDescription {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Reference>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = referenceFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      referenceFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.isCaseOf = items;
+    this.isCaseOf = itemsOrError.mustValue();
     return null;
   }
 
@@ -13502,30 +11793,15 @@ class SetterForReference {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Key>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = keyFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      keyFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.keys = items;
+    this.keys = itemsOrError.mustValue();
     return null;
   }
 }
@@ -14184,30 +12460,15 @@ class SetterForEnvironment {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.AssetAdministrationShell>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = assetAdministrationShellFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      assetAdministrationShellFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.assetAdministrationShells = items;
+    this.assetAdministrationShells = itemsOrError.mustValue();
     return null;
   }
 
@@ -14239,30 +12500,15 @@ class SetterForEnvironment {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Submodel>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = submodelFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      submodelFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.submodels = items;
+    this.submodels = itemsOrError.mustValue();
     return null;
   }
 
@@ -14294,30 +12540,15 @@ class SetterForEnvironment {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.ConceptDescription>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = conceptDescriptionFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      conceptDescriptionFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.conceptDescriptions = items;
+    this.conceptDescriptions = itemsOrError.mustValue();
     return null;
   }
 }
@@ -14988,30 +13219,15 @@ class SetterForValueList {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.ValueReferencePair>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = valueReferencePairFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      valueReferencePairFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.valueReferencePairs = items;
+    this.valueReferencePairs = itemsOrError.mustValue();
     return null;
   }
 }
@@ -15569,30 +13785,15 @@ class SetterForDataSpecificationIec61360 {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringPreferredNameTypeIec61360>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringPreferredNameTypeIec61360FromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringPreferredNameTypeIec61360FromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.preferredName = items;
+    this.preferredName = itemsOrError.mustValue();
     return null;
   }
 
@@ -15624,30 +13825,15 @@ class SetterForDataSpecificationIec61360 {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringShortNameTypeIec61360>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringShortNameTypeIec61360FromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringShortNameTypeIec61360FromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.shortName = items;
+    this.shortName = itemsOrError.mustValue();
     return null;
   }
 
@@ -15779,30 +13965,15 @@ class SetterForDataSpecificationIec61360 {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.LangStringDefinitionTypeIec61360>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = langStringDefinitionTypeIec61360FromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      langStringDefinitionTypeIec61360FromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.definition = items;
+    this.definition = itemsOrError.mustValue();
     return null;
   }
 
@@ -18259,6 +16430,27 @@ const SETTER_MAP_FOR_DATA_SPECIFICATION_IEC_61360 =
 // region Serialization
 
 /**
+ * Serialize every item of `items` with `serializeItem` into a JSON-able
+ * array.
+ *
+ * @param items - to be serialized
+ * @param serializeItem - to serialize a single item of `items`
+ * @returns JSON-able array
+ * @typeParam T - type of a single item to be serialized
+ * @typeParam J - type of a single item once serialized
+ */
+function serializeArray<T, J extends JsonValue>(
+  items: Iterable<T>,
+  serializeItem: (item: T) => J
+): Array<J> {
+  const result = new Array<J>();
+  for (const item of items) {
+    result.push(serializeItem(item));
+  }
+  return result;
+}
+
+/**
  * Transform the instance to its JSON-able representation.
  */
 class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
@@ -18281,13 +16473,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.supplementalSemanticIds !== null) {
-      const supplementalSemanticIdsArray = new Array<JsonObject>();
-      for (const item of that.supplementalSemanticIds) {
-        supplementalSemanticIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["supplementalSemanticIds"] = supplementalSemanticIdsArray;
+      jsonable["supplementalSemanticIds"] = serializeArray(
+        that.supplementalSemanticIds,
+        (item) => this.transform(item)
+      );
     }
 
     jsonable["name"] =
@@ -18306,13 +16495,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.refersTo !== null) {
-      const refersToArray = new Array<JsonObject>();
-      for (const item of that.refersTo) {
-        refersToArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["refersTo"] = refersToArray;
+      jsonable["refersTo"] = serializeArray(
+        that.refersTo,
+        (item) => this.transform(item)
+      );
     }
 
     return jsonable;
@@ -18330,13 +16516,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     const jsonable: JsonObject = {};
 
     if (that.embeddedDataSpecifications !== null) {
-      const embeddedDataSpecificationsArray = new Array<JsonObject>();
-      for (const item of that.embeddedDataSpecifications) {
-        embeddedDataSpecificationsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["embeddedDataSpecifications"] = embeddedDataSpecificationsArray;
+      jsonable["embeddedDataSpecifications"] = serializeArray(
+        that.embeddedDataSpecifications,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.version !== null) {
@@ -18379,13 +16562,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.supplementalSemanticIds !== null) {
-      const supplementalSemanticIdsArray = new Array<JsonObject>();
-      for (const item of that.supplementalSemanticIds) {
-        supplementalSemanticIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["supplementalSemanticIds"] = supplementalSemanticIdsArray;
+      jsonable["supplementalSemanticIds"] = serializeArray(
+        that.supplementalSemanticIds,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.kind !== null) {
@@ -18428,13 +16608,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     const jsonable: JsonObject = {};
 
     if (that.extensions !== null) {
-      const extensionsArray = new Array<JsonObject>();
-      for (const item of that.extensions) {
-        extensionsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["extensions"] = extensionsArray;
+      jsonable["extensions"] = serializeArray(
+        that.extensions,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.category !== null) {
@@ -18448,23 +16625,17 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      const displayNameArray = new Array<JsonObject>();
-      for (const item of that.displayName) {
-        displayNameArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["displayName"] = displayNameArray;
+      jsonable["displayName"] = serializeArray(
+        that.displayName,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.description !== null) {
-      const descriptionArray = new Array<JsonObject>();
-      for (const item of that.description) {
-        descriptionArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["description"] = descriptionArray;
+      jsonable["description"] = serializeArray(
+        that.description,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.administration !== null) {
@@ -18476,13 +16647,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
       that.id;
 
     if (that.embeddedDataSpecifications !== null) {
-      const embeddedDataSpecificationsArray = new Array<JsonObject>();
-      for (const item of that.embeddedDataSpecifications) {
-        embeddedDataSpecificationsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["embeddedDataSpecifications"] = embeddedDataSpecificationsArray;
+      jsonable["embeddedDataSpecifications"] = serializeArray(
+        that.embeddedDataSpecifications,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.derivedFrom !== null) {
@@ -18494,13 +16662,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
       this.transform(that.assetInformation);
 
     if (that.submodels !== null) {
-      const submodelsArray = new Array<JsonObject>();
-      for (const item of that.submodels) {
-        submodelsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["submodels"] = submodelsArray;
+      jsonable["submodels"] = serializeArray(
+        that.submodels,
+        (item) => this.transform(item)
+      );
     }
 
     jsonable["modelType"] = "AssetAdministrationShell";
@@ -18530,13 +16695,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.specificAssetIds !== null) {
-      const specificAssetIdsArray = new Array<JsonObject>();
-      for (const item of that.specificAssetIds) {
-        specificAssetIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["specificAssetIds"] = specificAssetIdsArray;
+      jsonable["specificAssetIds"] = serializeArray(
+        that.specificAssetIds,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.assetType !== null) {
@@ -18591,13 +16753,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.supplementalSemanticIds !== null) {
-      const supplementalSemanticIdsArray = new Array<JsonObject>();
-      for (const item of that.supplementalSemanticIds) {
-        supplementalSemanticIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["supplementalSemanticIds"] = supplementalSemanticIdsArray;
+      jsonable["supplementalSemanticIds"] = serializeArray(
+        that.supplementalSemanticIds,
+        (item) => this.transform(item)
+      );
     }
 
     jsonable["name"] =
@@ -18626,13 +16785,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     const jsonable: JsonObject = {};
 
     if (that.extensions !== null) {
-      const extensionsArray = new Array<JsonObject>();
-      for (const item of that.extensions) {
-        extensionsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["extensions"] = extensionsArray;
+      jsonable["extensions"] = serializeArray(
+        that.extensions,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.category !== null) {
@@ -18646,23 +16802,17 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      const displayNameArray = new Array<JsonObject>();
-      for (const item of that.displayName) {
-        displayNameArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["displayName"] = displayNameArray;
+      jsonable["displayName"] = serializeArray(
+        that.displayName,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.description !== null) {
-      const descriptionArray = new Array<JsonObject>();
-      for (const item of that.description) {
-        descriptionArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["description"] = descriptionArray;
+      jsonable["description"] = serializeArray(
+        that.description,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.administration !== null) {
@@ -18686,43 +16836,31 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.supplementalSemanticIds !== null) {
-      const supplementalSemanticIdsArray = new Array<JsonObject>();
-      for (const item of that.supplementalSemanticIds) {
-        supplementalSemanticIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["supplementalSemanticIds"] = supplementalSemanticIdsArray;
+      jsonable["supplementalSemanticIds"] = serializeArray(
+        that.supplementalSemanticIds,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.qualifiers !== null) {
-      const qualifiersArray = new Array<JsonObject>();
-      for (const item of that.qualifiers) {
-        qualifiersArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["qualifiers"] = qualifiersArray;
+      jsonable["qualifiers"] = serializeArray(
+        that.qualifiers,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      const embeddedDataSpecificationsArray = new Array<JsonObject>();
-      for (const item of that.embeddedDataSpecifications) {
-        embeddedDataSpecificationsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["embeddedDataSpecifications"] = embeddedDataSpecificationsArray;
+      jsonable["embeddedDataSpecifications"] = serializeArray(
+        that.embeddedDataSpecifications,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.submodelElements !== null) {
-      const submodelElementsArray = new Array<JsonObject>();
-      for (const item of that.submodelElements) {
-        submodelElementsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["submodelElements"] = submodelElementsArray;
+      jsonable["submodelElements"] = serializeArray(
+        that.submodelElements,
+        (item) => this.transform(item)
+      );
     }
 
     jsonable["modelType"] = "Submodel";
@@ -18742,13 +16880,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     const jsonable: JsonObject = {};
 
     if (that.extensions !== null) {
-      const extensionsArray = new Array<JsonObject>();
-      for (const item of that.extensions) {
-        extensionsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["extensions"] = extensionsArray;
+      jsonable["extensions"] = serializeArray(
+        that.extensions,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.category !== null) {
@@ -18762,23 +16897,17 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      const displayNameArray = new Array<JsonObject>();
-      for (const item of that.displayName) {
-        displayNameArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["displayName"] = displayNameArray;
+      jsonable["displayName"] = serializeArray(
+        that.displayName,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.description !== null) {
-      const descriptionArray = new Array<JsonObject>();
-      for (const item of that.description) {
-        descriptionArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["description"] = descriptionArray;
+      jsonable["description"] = serializeArray(
+        that.description,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.semanticId !== null) {
@@ -18787,33 +16916,24 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.supplementalSemanticIds !== null) {
-      const supplementalSemanticIdsArray = new Array<JsonObject>();
-      for (const item of that.supplementalSemanticIds) {
-        supplementalSemanticIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["supplementalSemanticIds"] = supplementalSemanticIdsArray;
+      jsonable["supplementalSemanticIds"] = serializeArray(
+        that.supplementalSemanticIds,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.qualifiers !== null) {
-      const qualifiersArray = new Array<JsonObject>();
-      for (const item of that.qualifiers) {
-        qualifiersArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["qualifiers"] = qualifiersArray;
+      jsonable["qualifiers"] = serializeArray(
+        that.qualifiers,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      const embeddedDataSpecificationsArray = new Array<JsonObject>();
-      for (const item of that.embeddedDataSpecifications) {
-        embeddedDataSpecificationsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["embeddedDataSpecifications"] = embeddedDataSpecificationsArray;
+      jsonable["embeddedDataSpecifications"] = serializeArray(
+        that.embeddedDataSpecifications,
+        (item) => this.transform(item)
+      );
     }
 
     jsonable["first"] =
@@ -18839,13 +16959,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     const jsonable: JsonObject = {};
 
     if (that.extensions !== null) {
-      const extensionsArray = new Array<JsonObject>();
-      for (const item of that.extensions) {
-        extensionsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["extensions"] = extensionsArray;
+      jsonable["extensions"] = serializeArray(
+        that.extensions,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.category !== null) {
@@ -18859,23 +16976,17 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      const displayNameArray = new Array<JsonObject>();
-      for (const item of that.displayName) {
-        displayNameArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["displayName"] = displayNameArray;
+      jsonable["displayName"] = serializeArray(
+        that.displayName,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.description !== null) {
-      const descriptionArray = new Array<JsonObject>();
-      for (const item of that.description) {
-        descriptionArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["description"] = descriptionArray;
+      jsonable["description"] = serializeArray(
+        that.description,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.semanticId !== null) {
@@ -18884,33 +16995,24 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.supplementalSemanticIds !== null) {
-      const supplementalSemanticIdsArray = new Array<JsonObject>();
-      for (const item of that.supplementalSemanticIds) {
-        supplementalSemanticIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["supplementalSemanticIds"] = supplementalSemanticIdsArray;
+      jsonable["supplementalSemanticIds"] = serializeArray(
+        that.supplementalSemanticIds,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.qualifiers !== null) {
-      const qualifiersArray = new Array<JsonObject>();
-      for (const item of that.qualifiers) {
-        qualifiersArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["qualifiers"] = qualifiersArray;
+      jsonable["qualifiers"] = serializeArray(
+        that.qualifiers,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      const embeddedDataSpecificationsArray = new Array<JsonObject>();
-      for (const item of that.embeddedDataSpecifications) {
-        embeddedDataSpecificationsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["embeddedDataSpecifications"] = embeddedDataSpecificationsArray;
+      jsonable["embeddedDataSpecifications"] = serializeArray(
+        that.embeddedDataSpecifications,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.orderRelevant !== null) {
@@ -18936,13 +17038,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.value !== null) {
-      const valueArray = new Array<JsonObject>();
-      for (const item of that.value) {
-        valueArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["value"] = valueArray;
+      jsonable["value"] = serializeArray(
+        that.value,
+        (item) => this.transform(item)
+      );
     }
 
     jsonable["modelType"] = "SubmodelElementList";
@@ -18962,13 +17061,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     const jsonable: JsonObject = {};
 
     if (that.extensions !== null) {
-      const extensionsArray = new Array<JsonObject>();
-      for (const item of that.extensions) {
-        extensionsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["extensions"] = extensionsArray;
+      jsonable["extensions"] = serializeArray(
+        that.extensions,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.category !== null) {
@@ -18982,23 +17078,17 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      const displayNameArray = new Array<JsonObject>();
-      for (const item of that.displayName) {
-        displayNameArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["displayName"] = displayNameArray;
+      jsonable["displayName"] = serializeArray(
+        that.displayName,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.description !== null) {
-      const descriptionArray = new Array<JsonObject>();
-      for (const item of that.description) {
-        descriptionArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["description"] = descriptionArray;
+      jsonable["description"] = serializeArray(
+        that.description,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.semanticId !== null) {
@@ -19007,43 +17097,31 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.supplementalSemanticIds !== null) {
-      const supplementalSemanticIdsArray = new Array<JsonObject>();
-      for (const item of that.supplementalSemanticIds) {
-        supplementalSemanticIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["supplementalSemanticIds"] = supplementalSemanticIdsArray;
+      jsonable["supplementalSemanticIds"] = serializeArray(
+        that.supplementalSemanticIds,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.qualifiers !== null) {
-      const qualifiersArray = new Array<JsonObject>();
-      for (const item of that.qualifiers) {
-        qualifiersArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["qualifiers"] = qualifiersArray;
+      jsonable["qualifiers"] = serializeArray(
+        that.qualifiers,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      const embeddedDataSpecificationsArray = new Array<JsonObject>();
-      for (const item of that.embeddedDataSpecifications) {
-        embeddedDataSpecificationsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["embeddedDataSpecifications"] = embeddedDataSpecificationsArray;
+      jsonable["embeddedDataSpecifications"] = serializeArray(
+        that.embeddedDataSpecifications,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.value !== null) {
-      const valueArray = new Array<JsonObject>();
-      for (const item of that.value) {
-        valueArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["value"] = valueArray;
+      jsonable["value"] = serializeArray(
+        that.value,
+        (item) => this.transform(item)
+      );
     }
 
     jsonable["modelType"] = "SubmodelElementCollection";
@@ -19063,13 +17141,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     const jsonable: JsonObject = {};
 
     if (that.extensions !== null) {
-      const extensionsArray = new Array<JsonObject>();
-      for (const item of that.extensions) {
-        extensionsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["extensions"] = extensionsArray;
+      jsonable["extensions"] = serializeArray(
+        that.extensions,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.category !== null) {
@@ -19083,23 +17158,17 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      const displayNameArray = new Array<JsonObject>();
-      for (const item of that.displayName) {
-        displayNameArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["displayName"] = displayNameArray;
+      jsonable["displayName"] = serializeArray(
+        that.displayName,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.description !== null) {
-      const descriptionArray = new Array<JsonObject>();
-      for (const item of that.description) {
-        descriptionArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["description"] = descriptionArray;
+      jsonable["description"] = serializeArray(
+        that.description,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.semanticId !== null) {
@@ -19108,33 +17177,24 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.supplementalSemanticIds !== null) {
-      const supplementalSemanticIdsArray = new Array<JsonObject>();
-      for (const item of that.supplementalSemanticIds) {
-        supplementalSemanticIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["supplementalSemanticIds"] = supplementalSemanticIdsArray;
+      jsonable["supplementalSemanticIds"] = serializeArray(
+        that.supplementalSemanticIds,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.qualifiers !== null) {
-      const qualifiersArray = new Array<JsonObject>();
-      for (const item of that.qualifiers) {
-        qualifiersArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["qualifiers"] = qualifiersArray;
+      jsonable["qualifiers"] = serializeArray(
+        that.qualifiers,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      const embeddedDataSpecificationsArray = new Array<JsonObject>();
-      for (const item of that.embeddedDataSpecifications) {
-        embeddedDataSpecificationsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["embeddedDataSpecifications"] = embeddedDataSpecificationsArray;
+      jsonable["embeddedDataSpecifications"] = serializeArray(
+        that.embeddedDataSpecifications,
+        (item) => this.transform(item)
+      );
     }
 
     jsonable["valueType"] =
@@ -19169,13 +17229,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     const jsonable: JsonObject = {};
 
     if (that.extensions !== null) {
-      const extensionsArray = new Array<JsonObject>();
-      for (const item of that.extensions) {
-        extensionsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["extensions"] = extensionsArray;
+      jsonable["extensions"] = serializeArray(
+        that.extensions,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.category !== null) {
@@ -19189,23 +17246,17 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      const displayNameArray = new Array<JsonObject>();
-      for (const item of that.displayName) {
-        displayNameArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["displayName"] = displayNameArray;
+      jsonable["displayName"] = serializeArray(
+        that.displayName,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.description !== null) {
-      const descriptionArray = new Array<JsonObject>();
-      for (const item of that.description) {
-        descriptionArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["description"] = descriptionArray;
+      jsonable["description"] = serializeArray(
+        that.description,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.semanticId !== null) {
@@ -19214,43 +17265,31 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.supplementalSemanticIds !== null) {
-      const supplementalSemanticIdsArray = new Array<JsonObject>();
-      for (const item of that.supplementalSemanticIds) {
-        supplementalSemanticIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["supplementalSemanticIds"] = supplementalSemanticIdsArray;
+      jsonable["supplementalSemanticIds"] = serializeArray(
+        that.supplementalSemanticIds,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.qualifiers !== null) {
-      const qualifiersArray = new Array<JsonObject>();
-      for (const item of that.qualifiers) {
-        qualifiersArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["qualifiers"] = qualifiersArray;
+      jsonable["qualifiers"] = serializeArray(
+        that.qualifiers,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      const embeddedDataSpecificationsArray = new Array<JsonObject>();
-      for (const item of that.embeddedDataSpecifications) {
-        embeddedDataSpecificationsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["embeddedDataSpecifications"] = embeddedDataSpecificationsArray;
+      jsonable["embeddedDataSpecifications"] = serializeArray(
+        that.embeddedDataSpecifications,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.value !== null) {
-      const valueArray = new Array<JsonObject>();
-      for (const item of that.value) {
-        valueArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["value"] = valueArray;
+      jsonable["value"] = serializeArray(
+        that.value,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.valueId !== null) {
@@ -19275,13 +17314,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     const jsonable: JsonObject = {};
 
     if (that.extensions !== null) {
-      const extensionsArray = new Array<JsonObject>();
-      for (const item of that.extensions) {
-        extensionsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["extensions"] = extensionsArray;
+      jsonable["extensions"] = serializeArray(
+        that.extensions,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.category !== null) {
@@ -19295,23 +17331,17 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      const displayNameArray = new Array<JsonObject>();
-      for (const item of that.displayName) {
-        displayNameArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["displayName"] = displayNameArray;
+      jsonable["displayName"] = serializeArray(
+        that.displayName,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.description !== null) {
-      const descriptionArray = new Array<JsonObject>();
-      for (const item of that.description) {
-        descriptionArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["description"] = descriptionArray;
+      jsonable["description"] = serializeArray(
+        that.description,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.semanticId !== null) {
@@ -19320,33 +17350,24 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.supplementalSemanticIds !== null) {
-      const supplementalSemanticIdsArray = new Array<JsonObject>();
-      for (const item of that.supplementalSemanticIds) {
-        supplementalSemanticIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["supplementalSemanticIds"] = supplementalSemanticIdsArray;
+      jsonable["supplementalSemanticIds"] = serializeArray(
+        that.supplementalSemanticIds,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.qualifiers !== null) {
-      const qualifiersArray = new Array<JsonObject>();
-      for (const item of that.qualifiers) {
-        qualifiersArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["qualifiers"] = qualifiersArray;
+      jsonable["qualifiers"] = serializeArray(
+        that.qualifiers,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      const embeddedDataSpecificationsArray = new Array<JsonObject>();
-      for (const item of that.embeddedDataSpecifications) {
-        embeddedDataSpecificationsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["embeddedDataSpecifications"] = embeddedDataSpecificationsArray;
+      jsonable["embeddedDataSpecifications"] = serializeArray(
+        that.embeddedDataSpecifications,
+        (item) => this.transform(item)
+      );
     }
 
     jsonable["valueType"] =
@@ -19381,13 +17402,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     const jsonable: JsonObject = {};
 
     if (that.extensions !== null) {
-      const extensionsArray = new Array<JsonObject>();
-      for (const item of that.extensions) {
-        extensionsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["extensions"] = extensionsArray;
+      jsonable["extensions"] = serializeArray(
+        that.extensions,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.category !== null) {
@@ -19401,23 +17419,17 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      const displayNameArray = new Array<JsonObject>();
-      for (const item of that.displayName) {
-        displayNameArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["displayName"] = displayNameArray;
+      jsonable["displayName"] = serializeArray(
+        that.displayName,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.description !== null) {
-      const descriptionArray = new Array<JsonObject>();
-      for (const item of that.description) {
-        descriptionArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["description"] = descriptionArray;
+      jsonable["description"] = serializeArray(
+        that.description,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.semanticId !== null) {
@@ -19426,33 +17438,24 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.supplementalSemanticIds !== null) {
-      const supplementalSemanticIdsArray = new Array<JsonObject>();
-      for (const item of that.supplementalSemanticIds) {
-        supplementalSemanticIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["supplementalSemanticIds"] = supplementalSemanticIdsArray;
+      jsonable["supplementalSemanticIds"] = serializeArray(
+        that.supplementalSemanticIds,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.qualifiers !== null) {
-      const qualifiersArray = new Array<JsonObject>();
-      for (const item of that.qualifiers) {
-        qualifiersArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["qualifiers"] = qualifiersArray;
+      jsonable["qualifiers"] = serializeArray(
+        that.qualifiers,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      const embeddedDataSpecificationsArray = new Array<JsonObject>();
-      for (const item of that.embeddedDataSpecifications) {
-        embeddedDataSpecificationsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["embeddedDataSpecifications"] = embeddedDataSpecificationsArray;
+      jsonable["embeddedDataSpecifications"] = serializeArray(
+        that.embeddedDataSpecifications,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.value !== null) {
@@ -19477,13 +17480,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     const jsonable: JsonObject = {};
 
     if (that.extensions !== null) {
-      const extensionsArray = new Array<JsonObject>();
-      for (const item of that.extensions) {
-        extensionsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["extensions"] = extensionsArray;
+      jsonable["extensions"] = serializeArray(
+        that.extensions,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.category !== null) {
@@ -19497,23 +17497,17 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      const displayNameArray = new Array<JsonObject>();
-      for (const item of that.displayName) {
-        displayNameArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["displayName"] = displayNameArray;
+      jsonable["displayName"] = serializeArray(
+        that.displayName,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.description !== null) {
-      const descriptionArray = new Array<JsonObject>();
-      for (const item of that.description) {
-        descriptionArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["description"] = descriptionArray;
+      jsonable["description"] = serializeArray(
+        that.description,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.semanticId !== null) {
@@ -19522,33 +17516,24 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.supplementalSemanticIds !== null) {
-      const supplementalSemanticIdsArray = new Array<JsonObject>();
-      for (const item of that.supplementalSemanticIds) {
-        supplementalSemanticIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["supplementalSemanticIds"] = supplementalSemanticIdsArray;
+      jsonable["supplementalSemanticIds"] = serializeArray(
+        that.supplementalSemanticIds,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.qualifiers !== null) {
-      const qualifiersArray = new Array<JsonObject>();
-      for (const item of that.qualifiers) {
-        qualifiersArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["qualifiers"] = qualifiersArray;
+      jsonable["qualifiers"] = serializeArray(
+        that.qualifiers,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      const embeddedDataSpecificationsArray = new Array<JsonObject>();
-      for (const item of that.embeddedDataSpecifications) {
-        embeddedDataSpecificationsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["embeddedDataSpecifications"] = embeddedDataSpecificationsArray;
+      jsonable["embeddedDataSpecifications"] = serializeArray(
+        that.embeddedDataSpecifications,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.value !== null) {
@@ -19576,13 +17561,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     const jsonable: JsonObject = {};
 
     if (that.extensions !== null) {
-      const extensionsArray = new Array<JsonObject>();
-      for (const item of that.extensions) {
-        extensionsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["extensions"] = extensionsArray;
+      jsonable["extensions"] = serializeArray(
+        that.extensions,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.category !== null) {
@@ -19596,23 +17578,17 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      const displayNameArray = new Array<JsonObject>();
-      for (const item of that.displayName) {
-        displayNameArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["displayName"] = displayNameArray;
+      jsonable["displayName"] = serializeArray(
+        that.displayName,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.description !== null) {
-      const descriptionArray = new Array<JsonObject>();
-      for (const item of that.description) {
-        descriptionArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["description"] = descriptionArray;
+      jsonable["description"] = serializeArray(
+        that.description,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.semanticId !== null) {
@@ -19621,33 +17597,24 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.supplementalSemanticIds !== null) {
-      const supplementalSemanticIdsArray = new Array<JsonObject>();
-      for (const item of that.supplementalSemanticIds) {
-        supplementalSemanticIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["supplementalSemanticIds"] = supplementalSemanticIdsArray;
+      jsonable["supplementalSemanticIds"] = serializeArray(
+        that.supplementalSemanticIds,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.qualifiers !== null) {
-      const qualifiersArray = new Array<JsonObject>();
-      for (const item of that.qualifiers) {
-        qualifiersArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["qualifiers"] = qualifiersArray;
+      jsonable["qualifiers"] = serializeArray(
+        that.qualifiers,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      const embeddedDataSpecificationsArray = new Array<JsonObject>();
-      for (const item of that.embeddedDataSpecifications) {
-        embeddedDataSpecificationsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["embeddedDataSpecifications"] = embeddedDataSpecificationsArray;
+      jsonable["embeddedDataSpecifications"] = serializeArray(
+        that.embeddedDataSpecifications,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.value !== null) {
@@ -19675,13 +17642,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     const jsonable: JsonObject = {};
 
     if (that.extensions !== null) {
-      const extensionsArray = new Array<JsonObject>();
-      for (const item of that.extensions) {
-        extensionsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["extensions"] = extensionsArray;
+      jsonable["extensions"] = serializeArray(
+        that.extensions,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.category !== null) {
@@ -19695,23 +17659,17 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      const displayNameArray = new Array<JsonObject>();
-      for (const item of that.displayName) {
-        displayNameArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["displayName"] = displayNameArray;
+      jsonable["displayName"] = serializeArray(
+        that.displayName,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.description !== null) {
-      const descriptionArray = new Array<JsonObject>();
-      for (const item of that.description) {
-        descriptionArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["description"] = descriptionArray;
+      jsonable["description"] = serializeArray(
+        that.description,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.semanticId !== null) {
@@ -19720,33 +17678,24 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.supplementalSemanticIds !== null) {
-      const supplementalSemanticIdsArray = new Array<JsonObject>();
-      for (const item of that.supplementalSemanticIds) {
-        supplementalSemanticIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["supplementalSemanticIds"] = supplementalSemanticIdsArray;
+      jsonable["supplementalSemanticIds"] = serializeArray(
+        that.supplementalSemanticIds,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.qualifiers !== null) {
-      const qualifiersArray = new Array<JsonObject>();
-      for (const item of that.qualifiers) {
-        qualifiersArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["qualifiers"] = qualifiersArray;
+      jsonable["qualifiers"] = serializeArray(
+        that.qualifiers,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      const embeddedDataSpecificationsArray = new Array<JsonObject>();
-      for (const item of that.embeddedDataSpecifications) {
-        embeddedDataSpecificationsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["embeddedDataSpecifications"] = embeddedDataSpecificationsArray;
+      jsonable["embeddedDataSpecifications"] = serializeArray(
+        that.embeddedDataSpecifications,
+        (item) => this.transform(item)
+      );
     }
 
     jsonable["first"] =
@@ -19756,13 +17705,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
       this.transform(that.second);
 
     if (that.annotations !== null) {
-      const annotationsArray = new Array<JsonObject>();
-      for (const item of that.annotations) {
-        annotationsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["annotations"] = annotationsArray;
+      jsonable["annotations"] = serializeArray(
+        that.annotations,
+        (item) => this.transform(item)
+      );
     }
 
     jsonable["modelType"] = "AnnotatedRelationshipElement";
@@ -19782,13 +17728,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     const jsonable: JsonObject = {};
 
     if (that.extensions !== null) {
-      const extensionsArray = new Array<JsonObject>();
-      for (const item of that.extensions) {
-        extensionsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["extensions"] = extensionsArray;
+      jsonable["extensions"] = serializeArray(
+        that.extensions,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.category !== null) {
@@ -19802,23 +17745,17 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      const displayNameArray = new Array<JsonObject>();
-      for (const item of that.displayName) {
-        displayNameArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["displayName"] = displayNameArray;
+      jsonable["displayName"] = serializeArray(
+        that.displayName,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.description !== null) {
-      const descriptionArray = new Array<JsonObject>();
-      for (const item of that.description) {
-        descriptionArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["description"] = descriptionArray;
+      jsonable["description"] = serializeArray(
+        that.description,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.semanticId !== null) {
@@ -19827,43 +17764,31 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.supplementalSemanticIds !== null) {
-      const supplementalSemanticIdsArray = new Array<JsonObject>();
-      for (const item of that.supplementalSemanticIds) {
-        supplementalSemanticIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["supplementalSemanticIds"] = supplementalSemanticIdsArray;
+      jsonable["supplementalSemanticIds"] = serializeArray(
+        that.supplementalSemanticIds,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.qualifiers !== null) {
-      const qualifiersArray = new Array<JsonObject>();
-      for (const item of that.qualifiers) {
-        qualifiersArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["qualifiers"] = qualifiersArray;
+      jsonable["qualifiers"] = serializeArray(
+        that.qualifiers,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      const embeddedDataSpecificationsArray = new Array<JsonObject>();
-      for (const item of that.embeddedDataSpecifications) {
-        embeddedDataSpecificationsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["embeddedDataSpecifications"] = embeddedDataSpecificationsArray;
+      jsonable["embeddedDataSpecifications"] = serializeArray(
+        that.embeddedDataSpecifications,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.statements !== null) {
-      const statementsArray = new Array<JsonObject>();
-      for (const item of that.statements) {
-        statementsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["statements"] = statementsArray;
+      jsonable["statements"] = serializeArray(
+        that.statements,
+        (item) => this.transform(item)
+      );
     }
 
     jsonable["entityType"] =
@@ -19877,13 +17802,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.specificAssetIds !== null) {
-      const specificAssetIdsArray = new Array<JsonObject>();
-      for (const item of that.specificAssetIds) {
-        specificAssetIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["specificAssetIds"] = specificAssetIdsArray;
+      jsonable["specificAssetIds"] = serializeArray(
+        that.specificAssetIds,
+        (item) => this.transform(item)
+      );
     }
 
     jsonable["modelType"] = "Entity";
@@ -19951,13 +17873,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     const jsonable: JsonObject = {};
 
     if (that.extensions !== null) {
-      const extensionsArray = new Array<JsonObject>();
-      for (const item of that.extensions) {
-        extensionsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["extensions"] = extensionsArray;
+      jsonable["extensions"] = serializeArray(
+        that.extensions,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.category !== null) {
@@ -19971,23 +17890,17 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      const displayNameArray = new Array<JsonObject>();
-      for (const item of that.displayName) {
-        displayNameArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["displayName"] = displayNameArray;
+      jsonable["displayName"] = serializeArray(
+        that.displayName,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.description !== null) {
-      const descriptionArray = new Array<JsonObject>();
-      for (const item of that.description) {
-        descriptionArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["description"] = descriptionArray;
+      jsonable["description"] = serializeArray(
+        that.description,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.semanticId !== null) {
@@ -19996,33 +17909,24 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.supplementalSemanticIds !== null) {
-      const supplementalSemanticIdsArray = new Array<JsonObject>();
-      for (const item of that.supplementalSemanticIds) {
-        supplementalSemanticIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["supplementalSemanticIds"] = supplementalSemanticIdsArray;
+      jsonable["supplementalSemanticIds"] = serializeArray(
+        that.supplementalSemanticIds,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.qualifiers !== null) {
-      const qualifiersArray = new Array<JsonObject>();
-      for (const item of that.qualifiers) {
-        qualifiersArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["qualifiers"] = qualifiersArray;
+      jsonable["qualifiers"] = serializeArray(
+        that.qualifiers,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      const embeddedDataSpecificationsArray = new Array<JsonObject>();
-      for (const item of that.embeddedDataSpecifications) {
-        embeddedDataSpecificationsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["embeddedDataSpecifications"] = embeddedDataSpecificationsArray;
+      jsonable["embeddedDataSpecifications"] = serializeArray(
+        that.embeddedDataSpecifications,
+        (item) => this.transform(item)
+      );
     }
 
     jsonable["observed"] =
@@ -20080,13 +17984,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     const jsonable: JsonObject = {};
 
     if (that.extensions !== null) {
-      const extensionsArray = new Array<JsonObject>();
-      for (const item of that.extensions) {
-        extensionsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["extensions"] = extensionsArray;
+      jsonable["extensions"] = serializeArray(
+        that.extensions,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.category !== null) {
@@ -20100,23 +18001,17 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      const displayNameArray = new Array<JsonObject>();
-      for (const item of that.displayName) {
-        displayNameArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["displayName"] = displayNameArray;
+      jsonable["displayName"] = serializeArray(
+        that.displayName,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.description !== null) {
-      const descriptionArray = new Array<JsonObject>();
-      for (const item of that.description) {
-        descriptionArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["description"] = descriptionArray;
+      jsonable["description"] = serializeArray(
+        that.description,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.semanticId !== null) {
@@ -20125,63 +18020,45 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.supplementalSemanticIds !== null) {
-      const supplementalSemanticIdsArray = new Array<JsonObject>();
-      for (const item of that.supplementalSemanticIds) {
-        supplementalSemanticIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["supplementalSemanticIds"] = supplementalSemanticIdsArray;
+      jsonable["supplementalSemanticIds"] = serializeArray(
+        that.supplementalSemanticIds,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.qualifiers !== null) {
-      const qualifiersArray = new Array<JsonObject>();
-      for (const item of that.qualifiers) {
-        qualifiersArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["qualifiers"] = qualifiersArray;
+      jsonable["qualifiers"] = serializeArray(
+        that.qualifiers,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      const embeddedDataSpecificationsArray = new Array<JsonObject>();
-      for (const item of that.embeddedDataSpecifications) {
-        embeddedDataSpecificationsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["embeddedDataSpecifications"] = embeddedDataSpecificationsArray;
+      jsonable["embeddedDataSpecifications"] = serializeArray(
+        that.embeddedDataSpecifications,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.inputVariables !== null) {
-      const inputVariablesArray = new Array<JsonObject>();
-      for (const item of that.inputVariables) {
-        inputVariablesArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["inputVariables"] = inputVariablesArray;
+      jsonable["inputVariables"] = serializeArray(
+        that.inputVariables,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.outputVariables !== null) {
-      const outputVariablesArray = new Array<JsonObject>();
-      for (const item of that.outputVariables) {
-        outputVariablesArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["outputVariables"] = outputVariablesArray;
+      jsonable["outputVariables"] = serializeArray(
+        that.outputVariables,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.inoutputVariables !== null) {
-      const inoutputVariablesArray = new Array<JsonObject>();
-      for (const item of that.inoutputVariables) {
-        inoutputVariablesArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["inoutputVariables"] = inoutputVariablesArray;
+      jsonable["inoutputVariables"] = serializeArray(
+        that.inoutputVariables,
+        (item) => this.transform(item)
+      );
     }
 
     jsonable["modelType"] = "Operation";
@@ -20218,13 +18095,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     const jsonable: JsonObject = {};
 
     if (that.extensions !== null) {
-      const extensionsArray = new Array<JsonObject>();
-      for (const item of that.extensions) {
-        extensionsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["extensions"] = extensionsArray;
+      jsonable["extensions"] = serializeArray(
+        that.extensions,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.category !== null) {
@@ -20238,23 +18112,17 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      const displayNameArray = new Array<JsonObject>();
-      for (const item of that.displayName) {
-        displayNameArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["displayName"] = displayNameArray;
+      jsonable["displayName"] = serializeArray(
+        that.displayName,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.description !== null) {
-      const descriptionArray = new Array<JsonObject>();
-      for (const item of that.description) {
-        descriptionArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["description"] = descriptionArray;
+      jsonable["description"] = serializeArray(
+        that.description,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.semanticId !== null) {
@@ -20263,33 +18131,24 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.supplementalSemanticIds !== null) {
-      const supplementalSemanticIdsArray = new Array<JsonObject>();
-      for (const item of that.supplementalSemanticIds) {
-        supplementalSemanticIdsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["supplementalSemanticIds"] = supplementalSemanticIdsArray;
+      jsonable["supplementalSemanticIds"] = serializeArray(
+        that.supplementalSemanticIds,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.qualifiers !== null) {
-      const qualifiersArray = new Array<JsonObject>();
-      for (const item of that.qualifiers) {
-        qualifiersArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["qualifiers"] = qualifiersArray;
+      jsonable["qualifiers"] = serializeArray(
+        that.qualifiers,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.embeddedDataSpecifications !== null) {
-      const embeddedDataSpecificationsArray = new Array<JsonObject>();
-      for (const item of that.embeddedDataSpecifications) {
-        embeddedDataSpecificationsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["embeddedDataSpecifications"] = embeddedDataSpecificationsArray;
+      jsonable["embeddedDataSpecifications"] = serializeArray(
+        that.embeddedDataSpecifications,
+        (item) => this.transform(item)
+      );
     }
 
     jsonable["modelType"] = "Capability";
@@ -20309,13 +18168,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     const jsonable: JsonObject = {};
 
     if (that.extensions !== null) {
-      const extensionsArray = new Array<JsonObject>();
-      for (const item of that.extensions) {
-        extensionsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["extensions"] = extensionsArray;
+      jsonable["extensions"] = serializeArray(
+        that.extensions,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.category !== null) {
@@ -20329,23 +18185,17 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.displayName !== null) {
-      const displayNameArray = new Array<JsonObject>();
-      for (const item of that.displayName) {
-        displayNameArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["displayName"] = displayNameArray;
+      jsonable["displayName"] = serializeArray(
+        that.displayName,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.description !== null) {
-      const descriptionArray = new Array<JsonObject>();
-      for (const item of that.description) {
-        descriptionArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["description"] = descriptionArray;
+      jsonable["description"] = serializeArray(
+        that.description,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.administration !== null) {
@@ -20357,23 +18207,17 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
       that.id;
 
     if (that.embeddedDataSpecifications !== null) {
-      const embeddedDataSpecificationsArray = new Array<JsonObject>();
-      for (const item of that.embeddedDataSpecifications) {
-        embeddedDataSpecificationsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["embeddedDataSpecifications"] = embeddedDataSpecificationsArray;
+      jsonable["embeddedDataSpecifications"] = serializeArray(
+        that.embeddedDataSpecifications,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.isCaseOf !== null) {
-      const isCaseOfArray = new Array<JsonObject>();
-      for (const item of that.isCaseOf) {
-        isCaseOfArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["isCaseOf"] = isCaseOfArray;
+      jsonable["isCaseOf"] = serializeArray(
+        that.isCaseOf,
+        (item) => this.transform(item)
+      );
     }
 
     jsonable["modelType"] = "ConceptDescription";
@@ -20402,13 +18246,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
         this.transform(that.referredSemanticId);
     }
 
-    const keysArray = new Array<JsonObject>();
-    for (const item of that.keys) {
-      keysArray.push(
-        this.transform(item)
-      );
-    }
-    jsonable["keys"] = keysArray;
+    jsonable["keys"] = serializeArray(
+      that.keys,
+      (item) => this.transform(item)
+    );
 
     return jsonable;
   }
@@ -20487,33 +18328,24 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     const jsonable: JsonObject = {};
 
     if (that.assetAdministrationShells !== null) {
-      const assetAdministrationShellsArray = new Array<JsonObject>();
-      for (const item of that.assetAdministrationShells) {
-        assetAdministrationShellsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["assetAdministrationShells"] = assetAdministrationShellsArray;
+      jsonable["assetAdministrationShells"] = serializeArray(
+        that.assetAdministrationShells,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.submodels !== null) {
-      const submodelsArray = new Array<JsonObject>();
-      for (const item of that.submodels) {
-        submodelsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["submodels"] = submodelsArray;
+      jsonable["submodels"] = serializeArray(
+        that.submodels,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.conceptDescriptions !== null) {
-      const conceptDescriptionsArray = new Array<JsonObject>();
-      for (const item of that.conceptDescriptions) {
-        conceptDescriptionsArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["conceptDescriptions"] = conceptDescriptionsArray;
+      jsonable["conceptDescriptions"] = serializeArray(
+        that.conceptDescriptions,
+        (item) => this.transform(item)
+      );
     }
 
     return jsonable;
@@ -20596,13 +18428,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
   ): JsonObject {
     const jsonable: JsonObject = {};
 
-    const valueReferencePairsArray = new Array<JsonObject>();
-    for (const item of that.valueReferencePairs) {
-      valueReferencePairsArray.push(
-        this.transform(item)
-      );
-    }
-    jsonable["valueReferencePairs"] = valueReferencePairsArray;
+    jsonable["valueReferencePairs"] = serializeArray(
+      that.valueReferencePairs,
+      (item) => this.transform(item)
+    );
 
     return jsonable;
   }
@@ -20678,22 +18507,16 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
   ): JsonObject {
     const jsonable: JsonObject = {};
 
-    const preferredNameArray = new Array<JsonObject>();
-    for (const item of that.preferredName) {
-      preferredNameArray.push(
-        this.transform(item)
-      );
-    }
-    jsonable["preferredName"] = preferredNameArray;
+    jsonable["preferredName"] = serializeArray(
+      that.preferredName,
+      (item) => this.transform(item)
+    );
 
     if (that.shortName !== null) {
-      const shortNameArray = new Array<JsonObject>();
-      for (const item of that.shortName) {
-        shortNameArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["shortName"] = shortNameArray;
+      jsonable["shortName"] = serializeArray(
+        that.shortName,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.unit !== null) {
@@ -20724,13 +18547,10 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
     }
 
     if (that.definition !== null) {
-      const definitionArray = new Array<JsonObject>();
-      for (const item of that.definition) {
-        definitionArray.push(
-          this.transform(item)
-        );
-      }
-      jsonable["definition"] = definitionArray;
+      jsonable["definition"] = serializeArray(
+        that.definition,
+        (item) => this.transform(item)
+      );
     }
 
     if (that.valueFormat !== null) {
