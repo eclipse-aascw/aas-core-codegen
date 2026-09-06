@@ -157,6 +157,37 @@ function newDeserializationError<T>(
 }
 
 /**
+ * Parse every item of `iterable` with `parseItem`.
+ *
+ * @param iterable - to be parsed item-by-item
+ * @param parseItem - to parse a single item of `iterable`
+ * @returns parsed items, or an error
+ * @typeParam T - type of a single parsed item
+ */
+function parseArray<T>(
+  iterable: Iterable<JsonValue>,
+  parseItem: (
+    jsonableItem: JsonValue
+  ) => AasCommon.Either<T, DeserializationError>
+): AasCommon.Either<Array<T>, DeserializationError> {
+  const items = new Array<T>();
+  let i = 0;
+  for (const jsonableItem of iterable) {
+    const itemOrError = parseItem(jsonableItem);
+    if (itemOrError.error !== null) {
+      itemOrError.error.path.prepend(new IndexSegment(iterable, i));
+      return new AasCommon.Either<Array<T>, DeserializationError>(
+        null,
+        itemOrError.error
+      );
+    }
+    items.push(itemOrError.mustValue());
+    i++;
+  }
+  return new AasCommon.Either<Array<T>, DeserializationError>(items, null);
+}
+
+/**
  * Parse `jsonable` as a boolean.
  *
  * @param jsonable - to be parsed
@@ -779,30 +810,15 @@ class SetterForSomething {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.IAbstractItem>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = abstractItemFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      abstractItemFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.someItems = items;
+    this.someItems = itemsOrError.mustValue();
     return null;
   }
 
@@ -834,30 +850,15 @@ class SetterForSomething {
 
     const iterable = <Iterable<JsonValue>>jsonable;
 
-    const items =
-      new Array<AasTypes.Simple>();
-
-    let i = 0;
-    for (const jsonableItem of iterable) {
-      const itemOrError = simpleFromJsonable(
-        jsonableItem
-      );
-
-      if (itemOrError.error !== null) {
-        itemOrError.error.path.prepend(
-          new IndexSegment(
-            iterable,
-            i
-          )
-        );
-        return itemOrError.error;
-      }
-
-      items.push(itemOrError.mustValue());
-      i++;
+    const itemsOrError = parseArray(
+      iterable,
+      simpleFromJsonable
+    );
+    if (itemsOrError.error !== null) {
+      return itemsOrError.error;
     }
 
-    this.someSimples = items;
+    this.someSimples = itemsOrError.mustValue();
     return null;
   }
 }
@@ -1049,6 +1050,27 @@ const SETTER_MAP_FOR_SOMETHING =
 // region Serialization
 
 /**
+ * Serialize every item of `items` with `serializeItem` into a JSON-able
+ * array.
+ *
+ * @param items - to be serialized
+ * @param serializeItem - to serialize a single item of `items`
+ * @returns JSON-able array
+ * @typeParam T - type of a single item to be serialized
+ * @typeParam J - type of a single item once serialized
+ */
+function serializeArray<T, J extends JsonValue>(
+  items: Iterable<T>,
+  serializeItem: (item: T) => J
+): Array<J> {
+  const result = new Array<J>();
+  for (const item of items) {
+    result.push(serializeItem(item));
+  }
+  return result;
+}
+
+/**
  * Transform the instance to its JSON-able representation.
  */
 class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
@@ -1120,21 +1142,15 @@ class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
   ): JsonObject {
     const jsonable: JsonObject = {};
 
-    const someItemsArray = new Array<JsonObject>();
-    for (const item of that.someItems) {
-      someItemsArray.push(
-        this.transform(item)
-      );
-    }
-    jsonable["someItems"] = someItemsArray;
+    jsonable["someItems"] = serializeArray(
+      that.someItems,
+      (item) => this.transform(item)
+    );
 
-    const someSimplesArray = new Array<JsonObject>();
-    for (const item of that.someSimples) {
-      someSimplesArray.push(
-        this.transform(item)
-      );
-    }
-    jsonable["someSimples"] = someSimplesArray;
+    jsonable["someSimples"] = serializeArray(
+      that.someSimples,
+      (item) => this.transform(item)
+    );
 
     return jsonable;
   }
