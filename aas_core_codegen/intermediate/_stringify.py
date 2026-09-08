@@ -34,6 +34,7 @@ from aas_core_codegen.intermediate._types import (
     Snapshot,
     OurType,
     SymbolTable,
+    TupleTypeAnnotation,
     UnderstoodMethod,
     DescriptionOfMetaModel,
     DescriptionOfOurType,
@@ -88,6 +89,20 @@ def _stringify_list_type_annotation(
         name=that.__class__.__name__,
         properties=[
             stringify_mod.Property("items", stringify(that.items)),
+            stringify_mod.PropertyEllipsis("parsed", that.parsed),
+        ],
+    )
+
+    return result
+
+
+def _stringify_tuple_type_annotation(
+    that: TupleTypeAnnotation,
+) -> stringify_mod.Entity:
+    result = stringify_mod.Entity(
+        name=that.__class__.__name__,
+        properties=[
+            stringify_mod.Property("items", [stringify(item) for item in that.items]),
             stringify_mod.PropertyEllipsis("parsed", that.parsed),
         ],
     )
@@ -922,6 +937,7 @@ Dumpable = Union[
     Snapshot,
     OurType,
     SymbolTable,
+    TupleTypeAnnotation,
     UnderstoodMethod,
 ]
 
@@ -963,6 +979,7 @@ _DISPATCH = {
     PrimitiveTypeAnnotation: _stringify_primitive_type_annotation,
     Property: _stringify_property,
     Serialization: _stringify_serialization,
+    TupleTypeAnnotation: _stringify_tuple_type_annotation,
     Signature: _stringify_signature,
     Snapshot: _stringify_snapshot,
     SymbolTable: _stringify_symbol_table,

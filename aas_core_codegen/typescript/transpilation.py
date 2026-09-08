@@ -130,6 +130,56 @@ class Transpiler(
     def transform_index(
         self, node: parse_tree.Index
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        collection_type = self.type_map[node.collection]
+
+        if isinstance(
+            intermediate_type_inference.beneath_optional(collection_type),
+            intermediate_type_inference.TupleTypeAnnotation,
+        ):
+            # NOTE (mristin):
+            # Tuples are heterogeneous and fixed-length, so, unlike lists, they can
+            # not be indexed dynamically. Instead, the index must be a literal
+            # integer known at the time of the code generation. This is enforced
+            # in
+            # :py:meth:`aas_core_codegen.intermediate.type_inference.Inferrer.transform_index`.
+            #
+            # We represent tuples as native TypeScript tuple types (arrays under
+            # the hood), so we index them directly instead of going through
+            # ``AasCommon.at`` -- that helper collapses the item type to a single
+            # generic ``T``, which would lose the precise positional item type
+            # that a native tuple index access retains.
+            assert isinstance(node.index, parse_tree.Constant) and isinstance(
+                node.index.value, int
+            )
+
+            tuple_type = intermediate_type_inference.beneath_optional(collection_type)
+            assert isinstance(
+                tuple_type, intermediate_type_inference.TupleTypeAnnotation
+            )
+
+            index_value = node.index.value
+            if index_value < 0:
+                index_value += len(tuple_type.items)
+
+            collection, error = self.transform(node.collection)
+            if error is not None:
+                return None, error
+            assert collection is not None
+
+            tuple_no_parentheses_types = (
+                parse_tree.Member,
+                parse_tree.FunctionCall,
+                parse_tree.MethodCall,
+                parse_tree.Name,
+                parse_tree.Constant,
+                parse_tree.Index,
+                parse_tree.Tuple,
+            )
+            if not isinstance(node.collection, tuple_no_parentheses_types):
+                collection = Stripped(f"({collection})")
+
+            return Stripped(f"{collection}[{index_value}]"), None
+
         collection, error = self.transform(node.collection)
         if error is not None:
             return None, error
@@ -170,6 +220,29 @@ AasCommon.at(
             ),
             None,
         )
+
+    def transform_tuple(
+        self, node: parse_tree.Tuple
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        errors = []  # type: List[Error]
+        value_reprs = []  # type: List[Stripped]
+
+        for value_node in node.values:
+            value_repr, error = self.transform(value_node)
+            if error is not None:
+                errors.append(error)
+                continue
+
+            assert value_repr is not None
+            value_reprs.append(value_repr)
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the tuple", errors
+            )
+
+        joined = ", ".join(value_reprs)
+        return Stripped(f"[{joined}]"), None
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_comparison(

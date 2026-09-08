@@ -207,6 +207,93 @@ that.{prop_name}.Count == casted.{prop_name}.Count
                     f"and the property {prop.name!r}."
                 )
 
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            item_exprs = []  # type: List[Stripped]
+
+            for i, item_type_anno in enumerate(type_anno.items):
+                assert isinstance(
+                    item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+                ), (
+                    f"Expected an atomic tuple item (a primitive, a constrained "
+                    f"primitive, an enumeration or a class), but got {item_type_anno}. "
+                    f"This should have already been verified in "
+                    f"intermediate._translate._verify_only_simple_type_patterns."
+                )
+
+                item_that = f"that.{prop_name}.Item{i + 1}"
+                item_casted = f"casted.{prop_name}.Item{i + 1}"
+
+                item_primitive_type = intermediate.try_primitive_type(item_type_anno)
+
+                if item_primitive_type is not None:
+                    # NOTE (mristin):
+                    # Mypy 2.1.0 still struggled with ``in`` operator.
+                    # pylint: disable=consider-using-in
+                    if (
+                        item_primitive_type == intermediate.PrimitiveType.BOOL
+                        or item_primitive_type == intermediate.PrimitiveType.INT
+                        or item_primitive_type == intermediate.PrimitiveType.FLOAT
+                        or item_primitive_type == intermediate.PrimitiveType.STR
+                    ):
+                        item_exprs.append(Stripped(f"{item_that} == {item_casted}"))
+                    elif item_primitive_type == intermediate.PrimitiveType.BYTEARRAY:
+                        item_exprs.append(
+                            Stripped(
+                                f"""\
+ByteSpansEqual(
+{I}{item_that},
+{I}{item_casted})"""
+                            )
+                        )
+                    else:
+                        assert_never(item_primitive_type)
+                elif isinstance(item_type_anno, intermediate.OurTypeAnnotation):
+                    if isinstance(item_type_anno.our_type, intermediate.Enumeration):
+                        item_exprs.append(Stripped(f"{item_that} == {item_casted}"))
+                    elif isinstance(
+                        item_type_anno.our_type, intermediate.ConstrainedPrimitive
+                    ):
+                        raise AssertionError("Expected to handle this case above")
+                    elif isinstance(
+                        item_type_anno.our_type,
+                        (intermediate.AbstractClass, intermediate.ConcreteClass),
+                    ):
+                        item_exprs.append(
+                            Stripped(
+                                f"""\
+Transform(
+{I}{item_that},
+{I}{item_casted})"""
+                            )
+                        )
+                    else:
+                        assert_never(item_type_anno.our_type)
+                else:
+                    # NOTE (mristin):
+                    # This branch is unreachable in practice (``item_type_anno`` is
+                    # a ``PrimitiveTypeAnnotation`` here, and ``try_primitive_type``
+                    # always resolves those to a non-``None`` primitive type), but
+                    # mypy can not correlate the ``try_primitive_type`` call with
+                    # the ``isinstance`` narrowing above, so we can not use
+                    # ``assert_never`` here.
+                    raise AssertionError(
+                        f"Expected to handle this case above: {item_type_anno}"
+                    )
+
+            item_exprs_writer = io.StringIO()
+            item_exprs_writer.write("(")
+            for i, item_expr in enumerate(item_exprs):
+                item_exprs_writer.write("\n")
+                if i > 0:
+                    item_exprs_writer.write(
+                        f"{I}&& {indent_but_first_line(item_expr, I)}"
+                    )
+                else:
+                    item_exprs_writer.write(f"{I}{indent_but_first_line(item_expr, I)}")
+            item_exprs_writer.write(")")
+
+            expr = Stripped(item_exprs_writer.getvalue())
+
         else:
             # noinspection PyTypeChecker
             assert_never(type_anno)

@@ -1,12 +1,12 @@
 """Provide common functions shared among different Java code generation modules."""
 
-from typing import List, cast, Optional
+from typing import List, cast, Optional, Sequence
 import re
 
 from icontract import ensure, require
 
 from aas_core_codegen import intermediate
-from aas_core_codegen.common import Stripped, assert_never
+from aas_core_codegen.common import Stripped, assert_never, indent_but_first_line
 from aas_core_codegen.java import naming as java_naming
 
 
@@ -64,6 +64,13 @@ def needs_escaping(text: str) -> bool:
     return False
 
 
+#: Maximal arity of a tuple for which we pre-generate a generic ``TupleN`` record
+#: in :py:mod:`aas_core_codegen.java.lib._generate_common`.
+#:
+#: If you need larger tuples, please just bump this constant and re-generate.
+MAX_TUPLE_ARITY = 8
+
+
 PRIMITIVE_TYPE_MAP = {
     intermediate.PrimitiveType.BOOL: Stripped("Boolean"),
     intermediate.PrimitiveType.INT: Stripped("Long"),
@@ -71,6 +78,9 @@ PRIMITIVE_TYPE_MAP = {
     intermediate.PrimitiveType.STR: Stripped("String"),
     intermediate.PrimitiveType.BYTEARRAY: Stripped("byte[]"),
 }
+
+
+INDENT = "  "
 
 
 # fmt: off
@@ -121,6 +131,42 @@ def generate_type(
 
         return Stripped(f"List<{item_type}>")
 
+    elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+        # NOTE (mristin):
+        # Tuples are represented as a static family of generic records,
+        # ``Tuple1`` .. ``Tuple{MAX_TUPLE_ARITY}``, pre-generated in
+        # :py:mod:`aas_core_codegen.java.lib._generate_common`. Unlike our types,
+        # these records live in the ``common`` package regardless of the calling
+        # context, so ``our_type_qualifier`` is *not* applied to the ``TupleN``
+        # part itself -- only recursively to the item types.
+        item_types = [
+            generate_type(type_annotation=item, our_type_qualifier=our_type_qualifier)
+            for item in type_annotation.items
+        ]
+
+        assert len(item_types) <= MAX_TUPLE_ARITY, (
+            f"We only pre-generate Tuple1 .. Tuple{MAX_TUPLE_ARITY} "
+            f"in the common package, but got a tuple of arity {len(item_types)}. "
+            f"Please contact the developers if you need larger tuples."
+        )
+
+        tuple_type_name = f"Tuple{len(item_types)}"
+
+        one_liner = f"{tuple_type_name}<{', '.join(item_types)}>"
+        if len(one_liner) <= 60:
+            return Stripped(one_liner)
+
+        # NOTE (mristin):
+        # The one-liner is too long to read comfortably (this happens in
+        # practice for tuples mixing several class-typed items), so we break
+        # after the opening ``<`` and put every item type on its own line.
+        joined_item_types = ",\n".join(item_types)
+        return Stripped(
+            f"""\
+{tuple_type_name}<
+{INDENT}{indent_but_first_line(joined_item_types, INDENT)}>"""
+        )
+
     elif isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
         value = generate_type(
             type_annotation=type_annotation.value, our_type_qualifier=our_type_qualifier
@@ -133,7 +179,26 @@ def generate_type(
     raise AssertionError("Should not have gotten here")
 
 
-INDENT = "  "
+@require(lambda item_exprs: len(item_exprs) > 0)
+@require(lambda item_exprs: len(item_exprs) <= MAX_TUPLE_ARITY)
+def generate_tuple_literal(item_exprs: Sequence[Stripped]) -> Stripped:
+    """
+    Generate a Java expression constructing a tuple record out of ``item_exprs``.
+
+    We rely on the diamond operator for the type inference, so the type
+    annotation of the tuple is not needed here.
+    """
+    tuple_type_name = f"Tuple{len(item_exprs)}"
+
+    joined_item_exprs = ",\n".join(item_exprs)
+
+    return Stripped(
+        f"""\
+new {tuple_type_name}<>(
+{INDENT}{indent_but_first_line(joined_item_exprs, INDENT)})"""
+    )
+
+
 INDENT2 = INDENT * 2
 INDENT3 = INDENT * 3
 INDENT4 = INDENT * 4

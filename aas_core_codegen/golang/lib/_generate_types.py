@@ -657,6 +657,48 @@ for _, {loop_var} := range {receiver}.{prop_name} {{
             else:
                 # noinspection PyTypeChecker
                 assert_never(type_anno.items)
+
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            for i, item_type_anno in enumerate(type_anno.items):
+                if not (
+                    isinstance(item_type_anno, intermediate.OurTypeAnnotation)
+                    and isinstance(
+                        item_type_anno.our_type,
+                        (intermediate.AbstractClass, intermediate.ConcreteClass),
+                    )
+                ):
+                    continue
+
+                item_expr = f"{receiver}.{prop_name}.Item{i + 1}"
+
+                prop_blocks.append(
+                    Stripped(
+                        f"""\
+abort = action(
+{I}{item_expr},
+)
+if abort {{
+{I}return
+}}"""
+                    )
+                )
+
+                if recurse:
+                    prop_blocks.append(
+                        Stripped(
+                            f"""\
+abort = {item_expr}.Descend(
+{I}action,
+)
+if abort {{
+{I}return
+}}"""
+                        )
+                    )
+
+            if len(prop_blocks) == 0:
+                continue
+
         else:
             # noinspection PyTypeChecker
             assert_never(type_anno)
@@ -1412,9 +1454,12 @@ def _generate_comment_for_meta_model(
 def generate(
     symbol_table: VerifiedIntermediateSymbolTable,
     spec_impls: specific_implementations.SpecificImplementations,
+    repo_url: Stripped,
 ) -> Tuple[Optional[str], Optional[List[Error]]]:
     """Generate code of the data structures representing the meta-model."""
     errors = []  # type: List[Error]
+
+    common_url_literal = golang_common.string_literal(f"{repo_url}/common")
 
     blocks = []  # type: List[Stripped]
 
@@ -1462,6 +1507,12 @@ package types"""
     blocks.extend(
         [
             golang_common.WARNING,
+            Stripped(
+                f"""\
+import (
+{I}aascommon {common_url_literal}
+)"""
+            ),
             _generate_definition_for_model_type(symbol_table=symbol_table),
             Stripped(
                 f"""\

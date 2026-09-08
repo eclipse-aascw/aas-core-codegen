@@ -1,0 +1,83 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="https://dummy.com" elementFormDefault="qualified" targetNamespace="https://dummy.com">
+  <xs:group name="abstractItem">
+    <xs:sequence/>
+  </xs:group>
+  <xs:group name="abstractItem_choice">
+    <xs:choice>
+      <xs:element name="anotherItem" type="anotherItem_t"/>
+      <xs:element name="someItem" type="someItem_t"/>
+    </xs:choice>
+  </xs:group>
+  <xs:group name="anotherItem">
+    <xs:sequence>
+      <xs:group ref="abstractItem"/>
+      <xs:element name="serialNumber" type="xs:long"/>
+    </xs:sequence>
+  </xs:group>
+  <xs:group name="someItem">
+    <xs:sequence>
+      <xs:group ref="abstractItem"/>
+      <xs:element name="name" type="xs:string"/>
+    </xs:sequence>
+  </xs:group>
+  <xs:group name="something">
+    <xs:sequence>
+      <xs:element name="pair">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="v1" type="xs:string"/>
+            <xs:element name="v2" type="xs:long"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="items">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:group ref="abstractItem_choice"/>
+            <xs:group ref="abstractItem_choice"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="tricky">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="v1" type="xs:long"/>
+            <xs:element name="someItem" type="someItem_t"/>
+            <xs:group ref="abstractItem_choice"/>
+            <xs:element name="someItem" type="someItem_t"/>
+            <xs:element name="v5" type="xs:long"/>
+            <xs:element name="v6" type="result_t"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:simpleType name="result_t">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="ok"/>
+      <xs:enumeration value="not-ok"/>
+    </xs:restriction>
+  </xs:simpleType>
+  <xs:complexType name="abstractItem_t">
+    <xs:sequence>
+      <xs:group ref="abstractItem"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="anotherItem_t">
+    <xs:sequence>
+      <xs:group ref="anotherItem"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="someItem_t">
+    <xs:sequence>
+      <xs:group ref="someItem"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="something_t">
+    <xs:sequence>
+      <xs:group ref="something"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="something" type="something_t"/>
+</xs:schema>

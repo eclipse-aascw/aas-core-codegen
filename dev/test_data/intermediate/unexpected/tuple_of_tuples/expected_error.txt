@@ -1,0 +1,1 @@
+We currently support only a limited set of type annotation patterns. At the moment, we handle only tuples of primitives, constrained primitives, classes and enumerations (*i.e.* no tuples of optionals, lists or nested tuples), but the property 'nested' of the class 'Something' has type: Tuple[Tuple[str, int], bool]. Please contact the developers if you need this functionality

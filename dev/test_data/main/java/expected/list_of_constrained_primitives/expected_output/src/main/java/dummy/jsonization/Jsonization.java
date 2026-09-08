@@ -5,6 +5,7 @@
 
 package dummy.jsonization;
 
+import dummy.common.*;
 import dummy.reporting.Reporting;
 import dummy.types.enums.*;
 import dummy.types.impl.*;
@@ -317,9 +318,7 @@ public class Jsonization {
 
         final ArrayNode arraySomeNames = serializeArray(
           that.getSomeNames(),
-          (String item) ->
-            JsonNodeFactory.instance.textNode(
-              item));
+          JsonNodeFactory.instance::textNode);
         result.set("someNames", arraySomeNames);
 
         return result;

@@ -292,8 +292,54 @@ for i, v := range {prop_var} {{
                     f"you need this feature."
                 )
 
+            elif isinstance(type_anno.items, intermediate.TupleTypeAnnotation):
+                raise NotImplementedError(
+                    f"NOTE (mristin): We do not currently support "
+                    f"the generation of enhancing code for lists of tuples, "
+                    f"but you specified {type_anno}. Please contact the developers if "
+                    f"you need this feature."
+                )
+
             else:
                 assert_never(type_anno.items)
+
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            item_assignments = []  # type: List[Stripped]
+            for i, item_type_anno in enumerate(type_anno.items):
+                if not (
+                    isinstance(item_type_anno, intermediate.OurTypeAnnotation)
+                    and isinstance(
+                        item_type_anno.our_type,
+                        (intermediate.AbstractClass, intermediate.ConcreteClass),
+                    )
+                ):
+                    continue
+
+                item_interface_name = golang_naming.interface_name(
+                    item_type_anno.our_type.name
+                )
+
+                item_assignments.append(
+                    Stripped(
+                        f"""\
+{prop_var}.Item{i + 1} = Wrap[E](
+{I}{prop_var}.Item{i + 1},
+{I}factory,
+).(aastypes.{item_interface_name})"""
+                    )
+                )
+
+            if len(item_assignments) == 0:
+                continue
+
+            item_assignments_joined = "\n".join(item_assignments)
+            recurse_block = Stripped(
+                f"""\
+{item_assignments_joined}
+that.{prop_setter_name}(
+{I}{prop_var},
+)"""
+            )
 
         else:
             # noinspection PyTypeChecker
@@ -457,6 +503,7 @@ def generate(
     errors = []  # type: List[Error]
 
     aastypes_url_literal = golang_common.string_literal(f"{repo_url}/types")
+    aascommon_url_literal = golang_common.string_literal(f"{repo_url}/common")
 
     blocks = [
         Stripped(
@@ -469,6 +516,8 @@ package enhancing"""
             f"""\
 import (
 {I}"fmt"
+
+{I}aascommon {aascommon_url_literal}
 {I}aastypes {aastypes_url_literal}
 )"""
         ),

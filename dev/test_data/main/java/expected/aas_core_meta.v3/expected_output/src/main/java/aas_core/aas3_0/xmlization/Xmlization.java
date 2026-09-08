@@ -16,6 +16,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.List;
 import java.util.Optional;
+import aas_core.aas3_0.common.*;
 import aas_core.aas3_0.reporting.Reporting;
 import aas_core.aas3_0.stringification.Stringification;
 import aas_core.aas3_0.types.enums.*;
@@ -376,20 +377,21 @@ public class Xmlization {
     }
 
     /**
-     * Consume a {@code <v>} element from the reader and return whether
-     * it was a self-closing (empty) element.
+     * Consume a starting element of the {@code expectedName} from the reader
+     * and return whether it was a self-closing (empty) element.
      */
-    private static Reporting.Result<Boolean> tryVStartElement(XMLEventReader reader) {
+    private static Reporting.Result<Boolean> tryNamedStartElement(
+      XMLEventReader reader, String expectedName) {
       if (currentEvent(reader).isEndDocument()) {
         final Reporting.Error error = new Reporting.Error(
-          "Expected a <v> element, but got an end-of-file.");
+          "Expected a <" + expectedName + "> element, but got an end-of-file.");
         return Reporting.Result.failure(error);
       }
 
       if (!currentEvent(reader).isStartElement()) {
         final Reporting.Error error = new Reporting.Error(
-          "Expected a <v> start element, but got the node of type "
-            + getEventTypeAsString(currentEvent(reader)));
+          "Expected a <" + expectedName + "> start element, but got the node "
+            + "of type " + getEventTypeAsString(currentEvent(reader)));
         return Reporting.Result.failure(error);
       }
 
@@ -398,9 +400,10 @@ public class Xmlization {
         return tryElementName.castTo(Boolean.class);
       }
 
-      if (!"v".equals(tryElementName.getResult())) {
+      if (!expectedName.equals(tryElementName.getResult())) {
         final Reporting.Error error = new Reporting.Error(
-          "Expected a <v> element, but got an element " + tryElementName.getResult());
+          "Expected a <" + expectedName + "> element, but got an element "
+            + tryElementName.getResult());
         return Reporting.Result.failure(error);
       }
 
@@ -409,21 +412,23 @@ public class Xmlization {
     }
 
     /**
-     * Consume a {@code </v>} element from the reader.
+     * Consume a closing element of the {@code expectedName} from the reader.
      */
-    private static Reporting.Result<XMLEvent> tryVEndElement(XMLEventReader reader) {
+    private static Reporting.Result<XMLEvent> tryNamedEndElement(
+      XMLEventReader reader, String expectedName) {
       skipWhitespaceAndComments(reader);
 
       if (currentEvent(reader).isEndDocument()) {
         final Reporting.Error error = new Reporting.Error(
-          "Expected a </v> element, but got an end-of-file.");
+          "Expected a closing element for " + expectedName + ", "
+            + "but got an end-of-file.");
         return Reporting.Result.failure(error);
       }
 
       if (!currentEvent(reader).isEndElement()) {
         final Reporting.Error error = new Reporting.Error(
-          "Expected a </v> end element, but got the node of type "
-            + getEventTypeAsString(currentEvent(reader)));
+          "Expected a closing element for " + expectedName + ", "
+            + "but got the node of type " + getEventTypeAsString(currentEvent(reader)));
         return Reporting.Result.failure(error);
       }
 
@@ -432,9 +437,10 @@ public class Xmlization {
         return tryElementName.castTo(XMLEvent.class);
       }
 
-      if (!"v".equals(tryElementName.getResult())) {
+      if (!expectedName.equals(tryElementName.getResult())) {
         final Reporting.Error error = new Reporting.Error(
-          "Expected a </v> element, but got an end element " + tryElementName.getResult());
+          "Expected a closing element for " + expectedName + ", "
+            + "but got an end element " + tryElementName.getResult());
         return Reporting.Result.failure(error);
       }
 
@@ -442,24 +448,25 @@ public class Xmlization {
         return Reporting.Result.success(reader.nextEvent());
       } catch (XMLStreamException xmlStreamException) {
         throw new Xmlization.DeserializeException("",
-          "Failed in method tryVEndElement because of: " +
+          "Failed in method tryNamedEndElement because of: " +
             xmlStreamException.getMessage());
       }
     }
 
     /**
-     * Read the content of a {@code <v>} element and parse it as Boolean.
+     * Read the content of a named element and parse it as Boolean.
      */
-    private static Reporting.Result<Boolean> tryVElementAsBoolean(XMLEventReader reader) {
-      final Reporting.Result<Boolean> tryVStart = tryVStartElement(reader);
-      if (tryVStart.isError()) {
-        return tryVStart.castTo(Boolean.class);
+    private static Reporting.Result<Boolean> tryNamedElementAsBoolean(
+      XMLEventReader reader, String expectedName) {
+      final Reporting.Result<Boolean> tryStart = tryNamedStartElement(reader, expectedName);
+      if (tryStart.isError()) {
+        return tryStart.castTo(Boolean.class);
       }
 
-      if (tryVStart.getResult()) {
+      if (tryStart.getResult()) {
         final Reporting.Error error = new Reporting.Error(
           "Expected an XML content representing Boolean, " +
-          "but got a self-closing <v /> element");
+          "but got a self-closing <" + expectedName + " /> element");
         return Reporting.Result.failure(error);
       }
 
@@ -468,32 +475,33 @@ public class Xmlization {
         result = readContentAsBool(reader);
       } catch (Exception exception) {
         final Reporting.Error error = new Reporting.Error(
-          "The content of a <v> element could not be de-serialized " +
-          "as Boolean: " + exception.getMessage());
+          "The content of a <" + expectedName + "> element could not be "
+            + "de-serialized as Boolean: " + exception.getMessage());
         return Reporting.Result.failure(error);
       }
 
-      final Reporting.Result<XMLEvent> tryVEnd = tryVEndElement(reader);
-      if (tryVEnd.isError()) {
-        return tryVEnd.castTo(Boolean.class);
+      final Reporting.Result<XMLEvent> tryEnd = tryNamedEndElement(reader, expectedName);
+      if (tryEnd.isError()) {
+        return tryEnd.castTo(Boolean.class);
       }
 
       return Reporting.Result.success(result);
     }
 
     /**
-     * Read the content of a {@code <v>} element and parse it as Long.
+     * Read the content of a named element and parse it as Long.
      */
-    private static Reporting.Result<Long> tryVElementAsLong(XMLEventReader reader) {
-      final Reporting.Result<Boolean> tryVStart = tryVStartElement(reader);
-      if (tryVStart.isError()) {
-        return tryVStart.castTo(Long.class);
+    private static Reporting.Result<Long> tryNamedElementAsLong(
+      XMLEventReader reader, String expectedName) {
+      final Reporting.Result<Boolean> tryStart = tryNamedStartElement(reader, expectedName);
+      if (tryStart.isError()) {
+        return tryStart.castTo(Long.class);
       }
 
-      if (tryVStart.getResult()) {
+      if (tryStart.getResult()) {
         final Reporting.Error error = new Reporting.Error(
           "Expected an XML content representing Long, " +
-          "but got a self-closing <v /> element");
+          "but got a self-closing <" + expectedName + " /> element");
         return Reporting.Result.failure(error);
       }
 
@@ -502,32 +510,33 @@ public class Xmlization {
         result = readContentAsLong(reader);
       } catch (Exception exception) {
         final Reporting.Error error = new Reporting.Error(
-          "The content of a <v> element could not be de-serialized " +
-          "as Long: " + exception.getMessage());
+          "The content of a <" + expectedName + "> element could not be "
+            + "de-serialized as Long: " + exception.getMessage());
         return Reporting.Result.failure(error);
       }
 
-      final Reporting.Result<XMLEvent> tryVEnd = tryVEndElement(reader);
-      if (tryVEnd.isError()) {
-        return tryVEnd.castTo(Long.class);
+      final Reporting.Result<XMLEvent> tryEnd = tryNamedEndElement(reader, expectedName);
+      if (tryEnd.isError()) {
+        return tryEnd.castTo(Long.class);
       }
 
       return Reporting.Result.success(result);
     }
 
     /**
-     * Read the content of a {@code <v>} element and parse it as Double.
+     * Read the content of a named element and parse it as Double.
      */
-    private static Reporting.Result<Double> tryVElementAsDouble(XMLEventReader reader) {
-      final Reporting.Result<Boolean> tryVStart = tryVStartElement(reader);
-      if (tryVStart.isError()) {
-        return tryVStart.castTo(Double.class);
+    private static Reporting.Result<Double> tryNamedElementAsDouble(
+      XMLEventReader reader, String expectedName) {
+      final Reporting.Result<Boolean> tryStart = tryNamedStartElement(reader, expectedName);
+      if (tryStart.isError()) {
+        return tryStart.castTo(Double.class);
       }
 
-      if (tryVStart.getResult()) {
+      if (tryStart.getResult()) {
         final Reporting.Error error = new Reporting.Error(
           "Expected an XML content representing Double, " +
-          "but got a self-closing <v /> element");
+          "but got a self-closing <" + expectedName + " /> element");
         return Reporting.Result.failure(error);
       }
 
@@ -536,84 +545,86 @@ public class Xmlization {
         result = readContentAsDouble(reader);
       } catch (Exception exception) {
         final Reporting.Error error = new Reporting.Error(
-          "The content of a <v> element could not be de-serialized " +
-          "as Double: " + exception.getMessage());
+          "The content of a <" + expectedName + "> element could not be "
+            + "de-serialized as Double: " + exception.getMessage());
         return Reporting.Result.failure(error);
       }
 
-      final Reporting.Result<XMLEvent> tryVEnd = tryVEndElement(reader);
-      if (tryVEnd.isError()) {
-        return tryVEnd.castTo(Double.class);
+      final Reporting.Result<XMLEvent> tryEnd = tryNamedEndElement(reader, expectedName);
+      if (tryEnd.isError()) {
+        return tryEnd.castTo(Double.class);
       }
 
       return Reporting.Result.success(result);
     }
 
     /**
-     * Read the content of a {@code <v>} element and parse it as a string.
+     * Read the content of a named element and parse it as a string.
      */
-    private static Reporting.Result<String> tryVElementAsString(XMLEventReader reader) {
-      final Reporting.Result<Boolean> tryVStart = tryVStartElement(reader);
-      if (tryVStart.isError()) {
-        return tryVStart.castTo(String.class);
+    private static Reporting.Result<String> tryNamedElementAsString(
+      XMLEventReader reader, String expectedName) {
+      final Reporting.Result<Boolean> tryStart = tryNamedStartElement(reader, expectedName);
+      if (tryStart.isError()) {
+        return tryStart.castTo(String.class);
       }
 
       final String result;
-      if (tryVStart.getResult()) {
+      if (tryStart.getResult()) {
         result = "";
       } else {
         try {
           result = readContentAsString(reader);
         } catch (Exception exception) {
           final Reporting.Error error = new Reporting.Error(
-            "The content of a <v> element could not be de-serialized " +
-            "as String: " + exception.getMessage());
+            "The content of a <" + expectedName + "> element could not be "
+              + "de-serialized as String: " + exception.getMessage());
           return Reporting.Result.failure(error);
         }
       }
 
       // NOTE (mristin):
-      // A self-closing <v /> is represented as a pair of start and end events
-      // in StAX, so we need to consume the end element even if the <v /> was
-      // empty.
-      final Reporting.Result<XMLEvent> tryVEnd = tryVEndElement(reader);
-      if (tryVEnd.isError()) {
-        return tryVEnd.castTo(String.class);
+      // A self-closing named element is represented as a pair of start and end
+      // events in StAX, so we need to consume the end element even if the
+      // element was empty.
+      final Reporting.Result<XMLEvent> tryEnd = tryNamedEndElement(reader, expectedName);
+      if (tryEnd.isError()) {
+        return tryEnd.castTo(String.class);
       }
 
       return Reporting.Result.success(result);
     }
 
     /**
-     * Read a {@code <v>} element as base64-encoded bytes.
+     * Read a named element as base64-encoded bytes.
      */
-    private static Reporting.Result<byte[]> tryVElementAsBytes(XMLEventReader reader) {
-      final Reporting.Result<Boolean> tryVStart = tryVStartElement(reader);
-      if (tryVStart.isError()) {
-        return tryVStart.castTo(byte[].class);
+    private static Reporting.Result<byte[]> tryNamedElementAsBytes(
+      XMLEventReader reader, String expectedName) {
+      final Reporting.Result<Boolean> tryStart = tryNamedStartElement(reader, expectedName);
+      if (tryStart.isError()) {
+        return tryStart.castTo(byte[].class);
       }
 
       final byte[] result;
-      if (tryVStart.getResult()) {
+      if (tryStart.getResult()) {
         result = new byte[0];
       } else {
         try {
           result = readContentAsBase64(reader);
         } catch (Exception exception) {
           final Reporting.Error error = new Reporting.Error(
-            "The content of a <v> element could not be de-serialized " +
-            "as base64-encoded bytes: " + exception.getMessage());
+            "The content of a <" + expectedName + "> element could not be "
+              + "de-serialized as base64-encoded bytes: " + exception.getMessage());
           return Reporting.Result.failure(error);
         }
       }
 
       // NOTE (mristin):
-      // A self-closing <v /> is represented as a pair of start and end events
-      // in StAX, so we need to consume the end element even if the <v /> was
-      // empty.
-      final Reporting.Result<XMLEvent> tryVEnd = tryVEndElement(reader);
-      if (tryVEnd.isError()) {
-        return tryVEnd.castTo(byte[].class);
+      // A self-closing named element is represented as a pair of start and end
+      // events in StAX, so we need to consume the end element even if the
+      // element was empty.
+      final Reporting.Result<XMLEvent> tryEnd = tryNamedEndElement(reader, expectedName);
+      if (tryEnd.isError()) {
+        return tryEnd.castTo(byte[].class);
       }
 
       return Reporting.Result.success(result);
@@ -663,11 +674,12 @@ public class Xmlization {
     }
 
     /**
-     * Read a {@code <v>} element and parse its content as a literal
+     * Read a named element and parse its content as a literal
      * of {@link ModellingKind}.
      */
-    private static Reporting.Result<ModellingKind> tryVElementAsModellingKind(XMLEventReader reader) {
-      final Reporting.Result<String> tryText = tryVElementAsString(reader);
+    private static Reporting.Result<ModellingKind> tryNamedElementAsModellingKind(
+      XMLEventReader reader, String expectedName) {
+      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
       if (tryText.isError()) {
         return tryText.castTo(ModellingKind.class);
       }
@@ -686,11 +698,12 @@ public class Xmlization {
     }
 
     /**
-     * Read a {@code <v>} element and parse its content as a literal
+     * Read a named element and parse its content as a literal
      * of {@link QualifierKind}.
      */
-    private static Reporting.Result<QualifierKind> tryVElementAsQualifierKind(XMLEventReader reader) {
-      final Reporting.Result<String> tryText = tryVElementAsString(reader);
+    private static Reporting.Result<QualifierKind> tryNamedElementAsQualifierKind(
+      XMLEventReader reader, String expectedName) {
+      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
       if (tryText.isError()) {
         return tryText.castTo(QualifierKind.class);
       }
@@ -709,11 +722,12 @@ public class Xmlization {
     }
 
     /**
-     * Read a {@code <v>} element and parse its content as a literal
+     * Read a named element and parse its content as a literal
      * of {@link AssetKind}.
      */
-    private static Reporting.Result<AssetKind> tryVElementAsAssetKind(XMLEventReader reader) {
-      final Reporting.Result<String> tryText = tryVElementAsString(reader);
+    private static Reporting.Result<AssetKind> tryNamedElementAsAssetKind(
+      XMLEventReader reader, String expectedName) {
+      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
       if (tryText.isError()) {
         return tryText.castTo(AssetKind.class);
       }
@@ -732,11 +746,12 @@ public class Xmlization {
     }
 
     /**
-     * Read a {@code <v>} element and parse its content as a literal
+     * Read a named element and parse its content as a literal
      * of {@link AasSubmodelElements}.
      */
-    private static Reporting.Result<AasSubmodelElements> tryVElementAsAasSubmodelElements(XMLEventReader reader) {
-      final Reporting.Result<String> tryText = tryVElementAsString(reader);
+    private static Reporting.Result<AasSubmodelElements> tryNamedElementAsAasSubmodelElements(
+      XMLEventReader reader, String expectedName) {
+      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
       if (tryText.isError()) {
         return tryText.castTo(AasSubmodelElements.class);
       }
@@ -755,11 +770,12 @@ public class Xmlization {
     }
 
     /**
-     * Read a {@code <v>} element and parse its content as a literal
+     * Read a named element and parse its content as a literal
      * of {@link EntityType}.
      */
-    private static Reporting.Result<EntityType> tryVElementAsEntityType(XMLEventReader reader) {
-      final Reporting.Result<String> tryText = tryVElementAsString(reader);
+    private static Reporting.Result<EntityType> tryNamedElementAsEntityType(
+      XMLEventReader reader, String expectedName) {
+      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
       if (tryText.isError()) {
         return tryText.castTo(EntityType.class);
       }
@@ -778,11 +794,12 @@ public class Xmlization {
     }
 
     /**
-     * Read a {@code <v>} element and parse its content as a literal
+     * Read a named element and parse its content as a literal
      * of {@link Direction}.
      */
-    private static Reporting.Result<Direction> tryVElementAsDirection(XMLEventReader reader) {
-      final Reporting.Result<String> tryText = tryVElementAsString(reader);
+    private static Reporting.Result<Direction> tryNamedElementAsDirection(
+      XMLEventReader reader, String expectedName) {
+      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
       if (tryText.isError()) {
         return tryText.castTo(Direction.class);
       }
@@ -801,11 +818,12 @@ public class Xmlization {
     }
 
     /**
-     * Read a {@code <v>} element and parse its content as a literal
+     * Read a named element and parse its content as a literal
      * of {@link StateOfEvent}.
      */
-    private static Reporting.Result<StateOfEvent> tryVElementAsStateOfEvent(XMLEventReader reader) {
-      final Reporting.Result<String> tryText = tryVElementAsString(reader);
+    private static Reporting.Result<StateOfEvent> tryNamedElementAsStateOfEvent(
+      XMLEventReader reader, String expectedName) {
+      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
       if (tryText.isError()) {
         return tryText.castTo(StateOfEvent.class);
       }
@@ -824,11 +842,12 @@ public class Xmlization {
     }
 
     /**
-     * Read a {@code <v>} element and parse its content as a literal
+     * Read a named element and parse its content as a literal
      * of {@link ReferenceTypes}.
      */
-    private static Reporting.Result<ReferenceTypes> tryVElementAsReferenceTypes(XMLEventReader reader) {
-      final Reporting.Result<String> tryText = tryVElementAsString(reader);
+    private static Reporting.Result<ReferenceTypes> tryNamedElementAsReferenceTypes(
+      XMLEventReader reader, String expectedName) {
+      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
       if (tryText.isError()) {
         return tryText.castTo(ReferenceTypes.class);
       }
@@ -847,11 +866,12 @@ public class Xmlization {
     }
 
     /**
-     * Read a {@code <v>} element and parse its content as a literal
+     * Read a named element and parse its content as a literal
      * of {@link KeyTypes}.
      */
-    private static Reporting.Result<KeyTypes> tryVElementAsKeyTypes(XMLEventReader reader) {
-      final Reporting.Result<String> tryText = tryVElementAsString(reader);
+    private static Reporting.Result<KeyTypes> tryNamedElementAsKeyTypes(
+      XMLEventReader reader, String expectedName) {
+      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
       if (tryText.isError()) {
         return tryText.castTo(KeyTypes.class);
       }
@@ -870,11 +890,12 @@ public class Xmlization {
     }
 
     /**
-     * Read a {@code <v>} element and parse its content as a literal
+     * Read a named element and parse its content as a literal
      * of {@link DataTypeDefXsd}.
      */
-    private static Reporting.Result<DataTypeDefXsd> tryVElementAsDataTypeDefXsd(XMLEventReader reader) {
-      final Reporting.Result<String> tryText = tryVElementAsString(reader);
+    private static Reporting.Result<DataTypeDefXsd> tryNamedElementAsDataTypeDefXsd(
+      XMLEventReader reader, String expectedName) {
+      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
       if (tryText.isError()) {
         return tryText.castTo(DataTypeDefXsd.class);
       }
@@ -893,11 +914,12 @@ public class Xmlization {
     }
 
     /**
-     * Read a {@code <v>} element and parse its content as a literal
+     * Read a named element and parse its content as a literal
      * of {@link DataTypeIec61360}.
      */
-    private static Reporting.Result<DataTypeIec61360> tryVElementAsDataTypeIec61360(XMLEventReader reader) {
-      final Reporting.Result<String> tryText = tryVElementAsString(reader);
+    private static Reporting.Result<DataTypeIec61360> tryNamedElementAsDataTypeIec61360(
+      XMLEventReader reader, String expectedName) {
+      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
       if (tryText.isError()) {
         return tryText.castTo(DataTypeIec61360.class);
       }
@@ -1042,7 +1064,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (trySupplementalSemanticIds.isError()) {
                 trySupplementalSemanticIds.getError()
@@ -1169,7 +1191,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (tryRefersTo.isError()) {
                 tryRefersTo.getError()
@@ -1496,7 +1518,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IEmbeddedDataSpecification.class,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFromElement);
+                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
 
               if (tryEmbeddedDataSpecifications.isError()) {
                 tryEmbeddedDataSpecifications.getError()
@@ -1779,7 +1801,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (trySupplementalSemanticIds.isError()) {
                 trySupplementalSemanticIds.getError()
@@ -2094,7 +2116,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IExtension.class,
-                _DeserializeImplementation::tryExtensionFromElement);
+                itemReader -> tryExtensionFromElement(itemReader));
 
               if (tryExtensions.isError()) {
                 tryExtensions.getError()
@@ -2169,7 +2191,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringNameType.class,
-                _DeserializeImplementation::tryLangStringNameTypeFromElement);
+                itemReader -> tryLangStringNameTypeFromElement(itemReader));
 
               if (tryDisplayName.isError()) {
                 tryDisplayName.getError()
@@ -2188,7 +2210,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringTextType.class,
-                _DeserializeImplementation::tryLangStringTextTypeFromElement);
+                itemReader -> tryLangStringTextTypeFromElement(itemReader));
 
               if (tryDescription.isError()) {
                 tryDescription.getError()
@@ -2251,7 +2273,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IEmbeddedDataSpecification.class,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFromElement);
+                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
 
               if (tryEmbeddedDataSpecifications.isError()) {
                 tryEmbeddedDataSpecifications.getError()
@@ -2302,7 +2324,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (trySubmodels.isError()) {
                 trySubmodels.getError()
@@ -2519,7 +2541,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ISpecificAssetId.class,
-                _DeserializeImplementation::trySpecificAssetIdFromElement);
+                itemReader -> trySpecificAssetIdFromElement(itemReader));
 
               if (trySpecificAssetIds.isError()) {
                 trySpecificAssetIds.getError()
@@ -2858,7 +2880,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (trySupplementalSemanticIds.isError()) {
                 trySupplementalSemanticIds.getError()
@@ -3069,7 +3091,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IExtension.class,
-                _DeserializeImplementation::tryExtensionFromElement);
+                itemReader -> tryExtensionFromElement(itemReader));
 
               if (tryExtensions.isError()) {
                 tryExtensions.getError()
@@ -3144,7 +3166,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringNameType.class,
-                _DeserializeImplementation::tryLangStringNameTypeFromElement);
+                itemReader -> tryLangStringNameTypeFromElement(itemReader));
 
               if (tryDisplayName.isError()) {
                 tryDisplayName.getError()
@@ -3163,7 +3185,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringTextType.class,
-                _DeserializeImplementation::tryLangStringTextTypeFromElement);
+                itemReader -> tryLangStringTextTypeFromElement(itemReader));
 
               if (tryDescription.isError()) {
                 tryDescription.getError()
@@ -3294,7 +3316,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (trySupplementalSemanticIds.isError()) {
                 trySupplementalSemanticIds.getError()
@@ -3313,7 +3335,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IQualifier.class,
-                _DeserializeImplementation::tryQualifierFromElement);
+                itemReader -> tryQualifierFromElement(itemReader));
 
               if (tryQualifiers.isError()) {
                 tryQualifiers.getError()
@@ -3332,7 +3354,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IEmbeddedDataSpecification.class,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFromElement);
+                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
 
               if (tryEmbeddedDataSpecifications.isError()) {
                 tryEmbeddedDataSpecifications.getError()
@@ -3351,7 +3373,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ISubmodelElement.class,
-                _DeserializeImplementation::tryISubmodelElementFromElement);
+                itemReader -> tryISubmodelElementFromElement(itemReader));
 
               if (trySubmodelElements.isError()) {
                 trySubmodelElements.getError()
@@ -3535,7 +3557,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IExtension.class,
-                _DeserializeImplementation::tryExtensionFromElement);
+                itemReader -> tryExtensionFromElement(itemReader));
 
               if (tryExtensions.isError()) {
                 tryExtensions.getError()
@@ -3610,7 +3632,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringNameType.class,
-                _DeserializeImplementation::tryLangStringNameTypeFromElement);
+                itemReader -> tryLangStringNameTypeFromElement(itemReader));
 
               if (tryDisplayName.isError()) {
                 tryDisplayName.getError()
@@ -3629,7 +3651,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringTextType.class,
-                _DeserializeImplementation::tryLangStringTextTypeFromElement);
+                itemReader -> tryLangStringTextTypeFromElement(itemReader));
 
               if (tryDescription.isError()) {
                 tryDescription.getError()
@@ -3664,7 +3686,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (trySupplementalSemanticIds.isError()) {
                 trySupplementalSemanticIds.getError()
@@ -3683,7 +3705,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IQualifier.class,
-                _DeserializeImplementation::tryQualifierFromElement);
+                itemReader -> tryQualifierFromElement(itemReader));
 
               if (tryQualifiers.isError()) {
                 tryQualifiers.getError()
@@ -3702,7 +3724,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IEmbeddedDataSpecification.class,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFromElement);
+                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
 
               if (tryEmbeddedDataSpecifications.isError()) {
                 tryEmbeddedDataSpecifications.getError()
@@ -3902,7 +3924,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IExtension.class,
-                _DeserializeImplementation::tryExtensionFromElement);
+                itemReader -> tryExtensionFromElement(itemReader));
 
               if (tryExtensions.isError()) {
                 tryExtensions.getError()
@@ -3977,7 +3999,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringNameType.class,
-                _DeserializeImplementation::tryLangStringNameTypeFromElement);
+                itemReader -> tryLangStringNameTypeFromElement(itemReader));
 
               if (tryDisplayName.isError()) {
                 tryDisplayName.getError()
@@ -3996,7 +4018,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringTextType.class,
-                _DeserializeImplementation::tryLangStringTextTypeFromElement);
+                itemReader -> tryLangStringTextTypeFromElement(itemReader));
 
               if (tryDescription.isError()) {
                 tryDescription.getError()
@@ -4031,7 +4053,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (trySupplementalSemanticIds.isError()) {
                 trySupplementalSemanticIds.getError()
@@ -4050,7 +4072,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IQualifier.class,
-                _DeserializeImplementation::tryQualifierFromElement);
+                itemReader -> tryQualifierFromElement(itemReader));
 
               if (tryQualifiers.isError()) {
                 tryQualifiers.getError()
@@ -4069,7 +4091,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IEmbeddedDataSpecification.class,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFromElement);
+                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
 
               if (tryEmbeddedDataSpecifications.isError()) {
                 tryEmbeddedDataSpecifications.getError()
@@ -4243,7 +4265,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ISubmodelElement.class,
-                _DeserializeImplementation::tryISubmodelElementFromElement);
+                itemReader -> tryISubmodelElementFromElement(itemReader));
 
               if (tryValue.isError()) {
                 tryValue.getError()
@@ -4381,7 +4403,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IExtension.class,
-                _DeserializeImplementation::tryExtensionFromElement);
+                itemReader -> tryExtensionFromElement(itemReader));
 
               if (tryExtensions.isError()) {
                 tryExtensions.getError()
@@ -4456,7 +4478,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringNameType.class,
-                _DeserializeImplementation::tryLangStringNameTypeFromElement);
+                itemReader -> tryLangStringNameTypeFromElement(itemReader));
 
               if (tryDisplayName.isError()) {
                 tryDisplayName.getError()
@@ -4475,7 +4497,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringTextType.class,
-                _DeserializeImplementation::tryLangStringTextTypeFromElement);
+                itemReader -> tryLangStringTextTypeFromElement(itemReader));
 
               if (tryDescription.isError()) {
                 tryDescription.getError()
@@ -4510,7 +4532,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (trySupplementalSemanticIds.isError()) {
                 trySupplementalSemanticIds.getError()
@@ -4529,7 +4551,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IQualifier.class,
-                _DeserializeImplementation::tryQualifierFromElement);
+                itemReader -> tryQualifierFromElement(itemReader));
 
               if (tryQualifiers.isError()) {
                 tryQualifiers.getError()
@@ -4548,7 +4570,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IEmbeddedDataSpecification.class,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFromElement);
+                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
 
               if (tryEmbeddedDataSpecifications.isError()) {
                 tryEmbeddedDataSpecifications.getError()
@@ -4567,7 +4589,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ISubmodelElement.class,
-                _DeserializeImplementation::tryISubmodelElementFromElement);
+                itemReader -> tryISubmodelElementFromElement(itemReader));
 
               if (tryValue.isError()) {
                 tryValue.getError()
@@ -4726,7 +4748,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IExtension.class,
-                _DeserializeImplementation::tryExtensionFromElement);
+                itemReader -> tryExtensionFromElement(itemReader));
 
               if (tryExtensions.isError()) {
                 tryExtensions.getError()
@@ -4801,7 +4823,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringNameType.class,
-                _DeserializeImplementation::tryLangStringNameTypeFromElement);
+                itemReader -> tryLangStringNameTypeFromElement(itemReader));
 
               if (tryDisplayName.isError()) {
                 tryDisplayName.getError()
@@ -4820,7 +4842,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringTextType.class,
-                _DeserializeImplementation::tryLangStringTextTypeFromElement);
+                itemReader -> tryLangStringTextTypeFromElement(itemReader));
 
               if (tryDescription.isError()) {
                 tryDescription.getError()
@@ -4855,7 +4877,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (trySupplementalSemanticIds.isError()) {
                 trySupplementalSemanticIds.getError()
@@ -4874,7 +4896,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IQualifier.class,
-                _DeserializeImplementation::tryQualifierFromElement);
+                itemReader -> tryQualifierFromElement(itemReader));
 
               if (tryQualifiers.isError()) {
                 tryQualifiers.getError()
@@ -4893,7 +4915,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IEmbeddedDataSpecification.class,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFromElement);
+                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
 
               if (tryEmbeddedDataSpecifications.isError()) {
                 tryEmbeddedDataSpecifications.getError()
@@ -5126,7 +5148,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IExtension.class,
-                _DeserializeImplementation::tryExtensionFromElement);
+                itemReader -> tryExtensionFromElement(itemReader));
 
               if (tryExtensions.isError()) {
                 tryExtensions.getError()
@@ -5201,7 +5223,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringNameType.class,
-                _DeserializeImplementation::tryLangStringNameTypeFromElement);
+                itemReader -> tryLangStringNameTypeFromElement(itemReader));
 
               if (tryDisplayName.isError()) {
                 tryDisplayName.getError()
@@ -5220,7 +5242,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringTextType.class,
-                _DeserializeImplementation::tryLangStringTextTypeFromElement);
+                itemReader -> tryLangStringTextTypeFromElement(itemReader));
 
               if (tryDescription.isError()) {
                 tryDescription.getError()
@@ -5255,7 +5277,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (trySupplementalSemanticIds.isError()) {
                 trySupplementalSemanticIds.getError()
@@ -5274,7 +5296,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IQualifier.class,
-                _DeserializeImplementation::tryQualifierFromElement);
+                itemReader -> tryQualifierFromElement(itemReader));
 
               if (tryQualifiers.isError()) {
                 tryQualifiers.getError()
@@ -5293,7 +5315,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IEmbeddedDataSpecification.class,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFromElement);
+                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
 
               if (tryEmbeddedDataSpecifications.isError()) {
                 tryEmbeddedDataSpecifications.getError()
@@ -5312,7 +5334,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringTextType.class,
-                _DeserializeImplementation::tryLangStringTextTypeFromElement);
+                itemReader -> tryLangStringTextTypeFromElement(itemReader));
 
               if (tryValue.isError()) {
                 tryValue.getError()
@@ -5458,7 +5480,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IExtension.class,
-                _DeserializeImplementation::tryExtensionFromElement);
+                itemReader -> tryExtensionFromElement(itemReader));
 
               if (tryExtensions.isError()) {
                 tryExtensions.getError()
@@ -5533,7 +5555,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringNameType.class,
-                _DeserializeImplementation::tryLangStringNameTypeFromElement);
+                itemReader -> tryLangStringNameTypeFromElement(itemReader));
 
               if (tryDisplayName.isError()) {
                 tryDisplayName.getError()
@@ -5552,7 +5574,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringTextType.class,
-                _DeserializeImplementation::tryLangStringTextTypeFromElement);
+                itemReader -> tryLangStringTextTypeFromElement(itemReader));
 
               if (tryDescription.isError()) {
                 tryDescription.getError()
@@ -5587,7 +5609,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (trySupplementalSemanticIds.isError()) {
                 trySupplementalSemanticIds.getError()
@@ -5606,7 +5628,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IQualifier.class,
-                _DeserializeImplementation::tryQualifierFromElement);
+                itemReader -> tryQualifierFromElement(itemReader));
 
               if (tryQualifiers.isError()) {
                 tryQualifiers.getError()
@@ -5625,7 +5647,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IEmbeddedDataSpecification.class,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFromElement);
+                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
 
               if (tryEmbeddedDataSpecifications.isError()) {
                 tryEmbeddedDataSpecifications.getError()
@@ -5869,7 +5891,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IExtension.class,
-                _DeserializeImplementation::tryExtensionFromElement);
+                itemReader -> tryExtensionFromElement(itemReader));
 
               if (tryExtensions.isError()) {
                 tryExtensions.getError()
@@ -5944,7 +5966,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringNameType.class,
-                _DeserializeImplementation::tryLangStringNameTypeFromElement);
+                itemReader -> tryLangStringNameTypeFromElement(itemReader));
 
               if (tryDisplayName.isError()) {
                 tryDisplayName.getError()
@@ -5963,7 +5985,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringTextType.class,
-                _DeserializeImplementation::tryLangStringTextTypeFromElement);
+                itemReader -> tryLangStringTextTypeFromElement(itemReader));
 
               if (tryDescription.isError()) {
                 tryDescription.getError()
@@ -5998,7 +6020,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (trySupplementalSemanticIds.isError()) {
                 trySupplementalSemanticIds.getError()
@@ -6017,7 +6039,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IQualifier.class,
-                _DeserializeImplementation::tryQualifierFromElement);
+                itemReader -> tryQualifierFromElement(itemReader));
 
               if (tryQualifiers.isError()) {
                 tryQualifiers.getError()
@@ -6036,7 +6058,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IEmbeddedDataSpecification.class,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFromElement);
+                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
 
               if (tryEmbeddedDataSpecifications.isError()) {
                 tryEmbeddedDataSpecifications.getError()
@@ -6180,7 +6202,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IExtension.class,
-                _DeserializeImplementation::tryExtensionFromElement);
+                itemReader -> tryExtensionFromElement(itemReader));
 
               if (tryExtensions.isError()) {
                 tryExtensions.getError()
@@ -6255,7 +6277,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringNameType.class,
-                _DeserializeImplementation::tryLangStringNameTypeFromElement);
+                itemReader -> tryLangStringNameTypeFromElement(itemReader));
 
               if (tryDisplayName.isError()) {
                 tryDisplayName.getError()
@@ -6274,7 +6296,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringTextType.class,
-                _DeserializeImplementation::tryLangStringTextTypeFromElement);
+                itemReader -> tryLangStringTextTypeFromElement(itemReader));
 
               if (tryDescription.isError()) {
                 tryDescription.getError()
@@ -6309,7 +6331,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (trySupplementalSemanticIds.isError()) {
                 trySupplementalSemanticIds.getError()
@@ -6328,7 +6350,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IQualifier.class,
-                _DeserializeImplementation::tryQualifierFromElement);
+                itemReader -> tryQualifierFromElement(itemReader));
 
               if (tryQualifiers.isError()) {
                 tryQualifiers.getError()
@@ -6347,7 +6369,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IEmbeddedDataSpecification.class,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFromElement);
+                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
 
               if (tryEmbeddedDataSpecifications.isError()) {
                 tryEmbeddedDataSpecifications.getError()
@@ -6546,7 +6568,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IExtension.class,
-                _DeserializeImplementation::tryExtensionFromElement);
+                itemReader -> tryExtensionFromElement(itemReader));
 
               if (tryExtensions.isError()) {
                 tryExtensions.getError()
@@ -6621,7 +6643,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringNameType.class,
-                _DeserializeImplementation::tryLangStringNameTypeFromElement);
+                itemReader -> tryLangStringNameTypeFromElement(itemReader));
 
               if (tryDisplayName.isError()) {
                 tryDisplayName.getError()
@@ -6640,7 +6662,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringTextType.class,
-                _DeserializeImplementation::tryLangStringTextTypeFromElement);
+                itemReader -> tryLangStringTextTypeFromElement(itemReader));
 
               if (tryDescription.isError()) {
                 tryDescription.getError()
@@ -6675,7 +6697,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (trySupplementalSemanticIds.isError()) {
                 trySupplementalSemanticIds.getError()
@@ -6694,7 +6716,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IQualifier.class,
-                _DeserializeImplementation::tryQualifierFromElement);
+                itemReader -> tryQualifierFromElement(itemReader));
 
               if (tryQualifiers.isError()) {
                 tryQualifiers.getError()
@@ -6713,7 +6735,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IEmbeddedDataSpecification.class,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFromElement);
+                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
 
               if (tryEmbeddedDataSpecifications.isError()) {
                 tryEmbeddedDataSpecifications.getError()
@@ -6906,7 +6928,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IExtension.class,
-                _DeserializeImplementation::tryExtensionFromElement);
+                itemReader -> tryExtensionFromElement(itemReader));
 
               if (tryExtensions.isError()) {
                 tryExtensions.getError()
@@ -6981,7 +7003,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringNameType.class,
-                _DeserializeImplementation::tryLangStringNameTypeFromElement);
+                itemReader -> tryLangStringNameTypeFromElement(itemReader));
 
               if (tryDisplayName.isError()) {
                 tryDisplayName.getError()
@@ -7000,7 +7022,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringTextType.class,
-                _DeserializeImplementation::tryLangStringTextTypeFromElement);
+                itemReader -> tryLangStringTextTypeFromElement(itemReader));
 
               if (tryDescription.isError()) {
                 tryDescription.getError()
@@ -7035,7 +7057,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (trySupplementalSemanticIds.isError()) {
                 trySupplementalSemanticIds.getError()
@@ -7054,7 +7076,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IQualifier.class,
-                _DeserializeImplementation::tryQualifierFromElement);
+                itemReader -> tryQualifierFromElement(itemReader));
 
               if (tryQualifiers.isError()) {
                 tryQualifiers.getError()
@@ -7073,7 +7095,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IEmbeddedDataSpecification.class,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFromElement);
+                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
 
               if (tryEmbeddedDataSpecifications.isError()) {
                 tryEmbeddedDataSpecifications.getError()
@@ -7124,7 +7146,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IDataElement.class,
-                _DeserializeImplementation::tryIDataElementFromElement);
+                itemReader -> tryIDataElementFromElement(itemReader));
 
               if (tryAnnotations.isError()) {
                 tryAnnotations.getError()
@@ -7270,7 +7292,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IExtension.class,
-                _DeserializeImplementation::tryExtensionFromElement);
+                itemReader -> tryExtensionFromElement(itemReader));
 
               if (tryExtensions.isError()) {
                 tryExtensions.getError()
@@ -7345,7 +7367,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringNameType.class,
-                _DeserializeImplementation::tryLangStringNameTypeFromElement);
+                itemReader -> tryLangStringNameTypeFromElement(itemReader));
 
               if (tryDisplayName.isError()) {
                 tryDisplayName.getError()
@@ -7364,7 +7386,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringTextType.class,
-                _DeserializeImplementation::tryLangStringTextTypeFromElement);
+                itemReader -> tryLangStringTextTypeFromElement(itemReader));
 
               if (tryDescription.isError()) {
                 tryDescription.getError()
@@ -7399,7 +7421,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (trySupplementalSemanticIds.isError()) {
                 trySupplementalSemanticIds.getError()
@@ -7418,7 +7440,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IQualifier.class,
-                _DeserializeImplementation::tryQualifierFromElement);
+                itemReader -> tryQualifierFromElement(itemReader));
 
               if (tryQualifiers.isError()) {
                 tryQualifiers.getError()
@@ -7437,7 +7459,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IEmbeddedDataSpecification.class,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFromElement);
+                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
 
               if (tryEmbeddedDataSpecifications.isError()) {
                 tryEmbeddedDataSpecifications.getError()
@@ -7456,7 +7478,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ISubmodelElement.class,
-                _DeserializeImplementation::tryISubmodelElementFromElement);
+                itemReader -> tryISubmodelElementFromElement(itemReader));
 
               if (tryStatements.isError()) {
                 tryStatements.getError()
@@ -7555,7 +7577,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ISpecificAssetId.class,
-                _DeserializeImplementation::trySpecificAssetIdFromElement);
+                itemReader -> trySpecificAssetIdFromElement(itemReader));
 
               if (trySpecificAssetIds.isError()) {
                 trySpecificAssetIds.getError()
@@ -8015,7 +8037,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IExtension.class,
-                _DeserializeImplementation::tryExtensionFromElement);
+                itemReader -> tryExtensionFromElement(itemReader));
 
               if (tryExtensions.isError()) {
                 tryExtensions.getError()
@@ -8090,7 +8112,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringNameType.class,
-                _DeserializeImplementation::tryLangStringNameTypeFromElement);
+                itemReader -> tryLangStringNameTypeFromElement(itemReader));
 
               if (tryDisplayName.isError()) {
                 tryDisplayName.getError()
@@ -8109,7 +8131,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringTextType.class,
-                _DeserializeImplementation::tryLangStringTextTypeFromElement);
+                itemReader -> tryLangStringTextTypeFromElement(itemReader));
 
               if (tryDescription.isError()) {
                 tryDescription.getError()
@@ -8144,7 +8166,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (trySupplementalSemanticIds.isError()) {
                 trySupplementalSemanticIds.getError()
@@ -8163,7 +8185,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IQualifier.class,
-                _DeserializeImplementation::tryQualifierFromElement);
+                itemReader -> tryQualifierFromElement(itemReader));
 
               if (tryQualifiers.isError()) {
                 tryQualifiers.getError()
@@ -8182,7 +8204,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IEmbeddedDataSpecification.class,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFromElement);
+                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
 
               if (tryEmbeddedDataSpecifications.isError()) {
                 tryEmbeddedDataSpecifications.getError()
@@ -8587,7 +8609,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IExtension.class,
-                _DeserializeImplementation::tryExtensionFromElement);
+                itemReader -> tryExtensionFromElement(itemReader));
 
               if (tryExtensions.isError()) {
                 tryExtensions.getError()
@@ -8662,7 +8684,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringNameType.class,
-                _DeserializeImplementation::tryLangStringNameTypeFromElement);
+                itemReader -> tryLangStringNameTypeFromElement(itemReader));
 
               if (tryDisplayName.isError()) {
                 tryDisplayName.getError()
@@ -8681,7 +8703,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringTextType.class,
-                _DeserializeImplementation::tryLangStringTextTypeFromElement);
+                itemReader -> tryLangStringTextTypeFromElement(itemReader));
 
               if (tryDescription.isError()) {
                 tryDescription.getError()
@@ -8716,7 +8738,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (trySupplementalSemanticIds.isError()) {
                 trySupplementalSemanticIds.getError()
@@ -8735,7 +8757,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IQualifier.class,
-                _DeserializeImplementation::tryQualifierFromElement);
+                itemReader -> tryQualifierFromElement(itemReader));
 
               if (tryQualifiers.isError()) {
                 tryQualifiers.getError()
@@ -8754,7 +8776,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IEmbeddedDataSpecification.class,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFromElement);
+                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
 
               if (tryEmbeddedDataSpecifications.isError()) {
                 tryEmbeddedDataSpecifications.getError()
@@ -8773,7 +8795,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IOperationVariable.class,
-                _DeserializeImplementation::tryOperationVariableFromElement);
+                itemReader -> tryOperationVariableFromElement(itemReader));
 
               if (tryInputVariables.isError()) {
                 tryInputVariables.getError()
@@ -8792,7 +8814,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IOperationVariable.class,
-                _DeserializeImplementation::tryOperationVariableFromElement);
+                itemReader -> tryOperationVariableFromElement(itemReader));
 
               if (tryOutputVariables.isError()) {
                 tryOutputVariables.getError()
@@ -8811,7 +8833,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IOperationVariable.class,
-                _DeserializeImplementation::tryOperationVariableFromElement);
+                itemReader -> tryOperationVariableFromElement(itemReader));
 
               if (tryInoutputVariables.isError()) {
                 tryInoutputVariables.getError()
@@ -9089,7 +9111,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IExtension.class,
-                _DeserializeImplementation::tryExtensionFromElement);
+                itemReader -> tryExtensionFromElement(itemReader));
 
               if (tryExtensions.isError()) {
                 tryExtensions.getError()
@@ -9164,7 +9186,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringNameType.class,
-                _DeserializeImplementation::tryLangStringNameTypeFromElement);
+                itemReader -> tryLangStringNameTypeFromElement(itemReader));
 
               if (tryDisplayName.isError()) {
                 tryDisplayName.getError()
@@ -9183,7 +9205,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringTextType.class,
-                _DeserializeImplementation::tryLangStringTextTypeFromElement);
+                itemReader -> tryLangStringTextTypeFromElement(itemReader));
 
               if (tryDescription.isError()) {
                 tryDescription.getError()
@@ -9218,7 +9240,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (trySupplementalSemanticIds.isError()) {
                 trySupplementalSemanticIds.getError()
@@ -9237,7 +9259,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IQualifier.class,
-                _DeserializeImplementation::tryQualifierFromElement);
+                itemReader -> tryQualifierFromElement(itemReader));
 
               if (tryQualifiers.isError()) {
                 tryQualifiers.getError()
@@ -9256,7 +9278,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IEmbeddedDataSpecification.class,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFromElement);
+                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
 
               if (tryEmbeddedDataSpecifications.isError()) {
                 tryEmbeddedDataSpecifications.getError()
@@ -9381,7 +9403,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IExtension.class,
-                _DeserializeImplementation::tryExtensionFromElement);
+                itemReader -> tryExtensionFromElement(itemReader));
 
               if (tryExtensions.isError()) {
                 tryExtensions.getError()
@@ -9456,7 +9478,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringNameType.class,
-                _DeserializeImplementation::tryLangStringNameTypeFromElement);
+                itemReader -> tryLangStringNameTypeFromElement(itemReader));
 
               if (tryDisplayName.isError()) {
                 tryDisplayName.getError()
@@ -9475,7 +9497,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringTextType.class,
-                _DeserializeImplementation::tryLangStringTextTypeFromElement);
+                itemReader -> tryLangStringTextTypeFromElement(itemReader));
 
               if (tryDescription.isError()) {
                 tryDescription.getError()
@@ -9538,7 +9560,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IEmbeddedDataSpecification.class,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFromElement);
+                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
 
               if (tryEmbeddedDataSpecifications.isError()) {
                 tryEmbeddedDataSpecifications.getError()
@@ -9557,7 +9579,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IReference.class,
-                _DeserializeImplementation::tryReferenceFromElement);
+                itemReader -> tryReferenceFromElement(itemReader));
 
               if (tryIsCaseOf.isError()) {
                 tryIsCaseOf.getError()
@@ -9751,7 +9773,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IKey.class,
-                _DeserializeImplementation::tryKeyFromElement);
+                itemReader -> tryKeyFromElement(itemReader));
 
               if (tryKeys.isError()) {
                 tryKeys.getError()
@@ -10416,7 +10438,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IAssetAdministrationShell.class,
-                _DeserializeImplementation::tryAssetAdministrationShellFromElement);
+                itemReader -> tryAssetAdministrationShellFromElement(itemReader));
 
               if (tryAssetAdministrationShells.isError()) {
                 tryAssetAdministrationShells.getError()
@@ -10435,7 +10457,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ISubmodel.class,
-                _DeserializeImplementation::trySubmodelFromElement);
+                itemReader -> trySubmodelFromElement(itemReader));
 
               if (trySubmodels.isError()) {
                 trySubmodels.getError()
@@ -10454,7 +10476,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IConceptDescription.class,
-                _DeserializeImplementation::tryConceptDescriptionFromElement);
+                itemReader -> tryConceptDescriptionFromElement(itemReader));
 
               if (tryConceptDescriptions.isError()) {
                 tryConceptDescriptions.getError()
@@ -11174,7 +11196,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 IValueReferencePair.class,
-                _DeserializeImplementation::tryValueReferencePairFromElement);
+                itemReader -> tryValueReferencePairFromElement(itemReader));
 
               if (tryValueReferencePairs.isError()) {
                 tryValueReferencePairs.getError()
@@ -11787,7 +11809,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringPreferredNameTypeIec61360.class,
-                _DeserializeImplementation::tryLangStringPreferredNameTypeIec61360FromElement);
+                itemReader -> tryLangStringPreferredNameTypeIec61360FromElement(itemReader));
 
               if (tryPreferredName.isError()) {
                 tryPreferredName.getError()
@@ -11806,7 +11828,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringShortNameTypeIec61360.class,
-                _DeserializeImplementation::tryLangStringShortNameTypeIec61360FromElement);
+                itemReader -> tryLangStringShortNameTypeIec61360FromElement(itemReader));
 
               if (tryShortName.isError()) {
                 tryShortName.getError()
@@ -11977,7 +11999,7 @@ public class Xmlization {
                 reader,
                 isEmptyProperty,
                 ILangStringDefinitionTypeIec61360.class,
-                _DeserializeImplementation::tryLangStringDefinitionTypeIec61360FromElement);
+                itemReader -> tryLangStringDefinitionTypeIec61360FromElement(itemReader));
 
               if (tryDefinition.isError()) {
                 tryDefinition.getError()
@@ -13392,6 +13414,25 @@ public class Xmlization {
           writeItem.serialize(item, w);
         }
       };
+    }
+
+    /**
+     * Adapt {@code writeContent} to serialize a value wrapped in its own
+     * {@code name} element.
+     *
+     * <p>This is only needed for a scalar item (a primitive or an enumeration
+     * literal), which is wrapped in a positional {@code v}/{@code v1}/
+     * {@code v2} *etc.* element; a class item is dispatched through its own
+     * natural element tag by {@code this::visit} already, so it needs no
+     * such wrapping.
+     *
+     * <p>{@code name} is a plain runtime string, not a type, so it can not be
+     * pinned via a generic type parameter -- binding it requires an actual
+     * closure, built once here.
+     */
+    private <T> ElementContentSerializer<T> asNamedElementSerializer(
+      String name, ElementContentSerializer<T> writeContent) {
+      return (that, w) -> serializeElement(name, that, w, writeContent);
     }
 
     /**

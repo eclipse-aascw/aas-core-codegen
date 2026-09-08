@@ -194,6 +194,73 @@ def _parse_method_for_atomic_value(
     return Stripped(parse_method)
 
 
+def _generate_parse_tuple_helper(arity: int) -> Stripped:
+    """Generate the generic helper to parse a JSON array as a tuple."""
+    type_params = [f"T{i + 1}" for i in range(arity)]
+    tuple_type = f"Tuple{arity}<{', '.join(type_params)}>"
+
+    param_lines = [
+        f"Function<JsonNode, Reporting.Result<? extends T{i + 1}>> parseItem{i + 1}"
+        for i in range(arity)
+    ]
+
+    writer = io.StringIO()
+    writer.write(
+        f"""\
+/**
+ * Parse {{@code array}} as a tuple of {arity} item(s), each de-serialized
+ * with the corresponding {{@code parseItemI}}.
+ *
+ * @param array JSON array to be parsed
+ */
+private static <{", ".join(type_params)}> Reporting.Result<{tuple_type}> parseTuple{arity}(
+{I}JsonNode array,
+"""
+    )
+    for i, param_line in enumerate(param_lines):
+        writer.write(I)
+        writer.write(param_line)
+        writer.write(",\n" if i < len(param_lines) - 1 else ") {\n")
+
+    writer.write(
+        f"""\
+{I}if (array.size() != {arity}) {{
+{II}final Reporting.Error error = new Reporting.Error(
+{III}"Expected exactly {arity} item(s), but got " + array.size());
+{II}return Reporting.Result.failure(error);
+{I}}}
+
+"""
+    )
+
+    for i in range(arity):
+        writer.write(
+            f"""\
+{I}final Reporting.Result<? extends T{i + 1}> item{i + 1}Result =
+{II}parseItem{i + 1}.apply(array.get({i}));
+{I}if (item{i + 1}Result.isError()) {{
+{II}item{i + 1}Result.getError()
+{III}.prependSegment(new Reporting.IndexSegment({i}));
+{II}return Reporting.Result.failure(item{i + 1}Result.getError());
+{I}}}
+
+"""
+        )
+
+    tuple_literal = java_common.generate_tuple_literal(
+        item_exprs=[Stripped(f"item{i + 1}Result.getResult()") for i in range(arity)]
+    )
+
+    writer.write(
+        f"""\
+{I}return Reporting.Result.success(
+{II}{indent_but_first_line(tuple_literal, II)});
+}}"""
+    )
+
+    return Stripped(writer.getvalue())
+
+
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_deserialize_constructor_argument(
     arg: intermediate.Argument,
@@ -233,10 +300,7 @@ if ({target_var}Result.isError()) {{
         )
 
     elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        assert not isinstance(
-            type_anno.items,
-            (intermediate.OptionalTypeAnnotation, intermediate.ListTypeAnnotation),
-        ), (
+        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
             f"We only support lists of atomic values (primitives, constrained "
             f"primitives, enumeration literals) or classes when de-serializing "
             f"from JSON, but the argument {arg.name!r} has the unsupported "
@@ -266,6 +330,53 @@ if (!{array_var}.isArray()) {{
 final Reporting.Result<List<{item_type}>> {target_var}Result = parseArray(
 {I}{array_var},
 {I}_DeserializeImplementation::{parse_method});
+if ({target_var}Result.isError()) {{
+{I}{target_var}Result.getError()
+{II}.prependSegment(
+{III}new Reporting.NameSegment(
+{IIII}{json_literal}));
+{I}return {target_var}Result.castTo({cls_name}.class);
+}}
+{target_var} = {target_var}Result.getResult();"""
+        )
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        arity = len(type_anno.items)
+
+        array_var = java_naming.variable_name(Identifier(f"array_{arg.name}"))
+
+        cls_name = java_naming.class_name(cls.name)
+        tuple_type = java_common.generate_type(type_anno)
+
+        item_parsers = []  # type: List[Stripped]
+        for item_type_anno in type_anno.items:
+            assert isinstance(
+                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
+                f"Expected an atomic tuple item (a primitive, a constrained "
+                f"primitive, an enumeration or a class), but got {item_type_anno}. "
+                f"This should have already been verified in "
+                f"intermediate._translate._verify_only_simple_type_patterns."
+            )
+
+            parse_method = _parse_method_for_atomic_value(item_type_anno)
+            item_parsers.append(Stripped(f"_DeserializeImplementation::{parse_method}"))
+
+        joined_item_parsers = ",\n".join(item_parsers)
+
+        parse_block = Stripped(
+            f"""\
+final JsonNode {array_var} = currentNode.getValue();
+if (!{array_var}.isArray()) {{
+{I}final Reporting.Error error = new Reporting.Error(
+{II}"Expected a JsonArray, but got " + {array_var}.getNodeType());
+{I}error.prependSegment(
+{II}new Reporting.NameSegment(
+{III}{json_literal}));
+{I}return Reporting.Result.failure(error);
+}}
+final Reporting.Result<{tuple_type}> {target_var}Result = parseTuple{arity}(
+{I}{array_var},
+{I}{indent_but_first_line(joined_item_parsers, I)});
 if ({target_var}Result.isError()) {{
 {I}{target_var}Result.getError()
 {II}.prependSegment(
@@ -677,6 +788,9 @@ private static <T> Reporting.Result<List<T>> parseArray(
         ),
     ]  # type: List[Stripped]
 
+    for arity in intermediate.tuple_arities(symbol_table):
+        blocks.append(_generate_parse_tuple_helper(arity=arity))
+
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
             blocks.append(_generate_from_method_for_enumeration(enumeration=our_type))
@@ -924,6 +1038,98 @@ _Transformer.bytesToJsonNode(
         assert_never(primitive_type)
 
 
+def _serialize_method_reference_for_primitive_type(
+    primitive_type: intermediate.PrimitiveType,
+) -> Stripped:
+    """Determine a bare method reference for serializing a primitive value."""
+    if primitive_type is intermediate.PrimitiveType.BOOL:
+        return Stripped("JsonNodeFactory.instance::booleanNode")
+    elif primitive_type is intermediate.PrimitiveType.FLOAT:
+        return Stripped("JsonNodeFactory.instance::numberNode")
+    elif primitive_type is intermediate.PrimitiveType.STR:
+        return Stripped("JsonNodeFactory.instance::textNode")
+    elif primitive_type is intermediate.PrimitiveType.INT:
+        return Stripped("_Transformer::toJsonNode")
+    elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
+        return Stripped("_Transformer::bytesToJsonNode")
+    else:
+        assert_never(primitive_type)
+
+
+def _serialize_method_reference_for_atomic_value(
+    type_annotation: intermediate.AtomicTypeAnnotation,
+) -> Stripped:
+    """
+    Determine a bare method reference for serializing an atomic value to JSON.
+
+    The reference matches ``Function<T, JsonNode>`` for the item's Java type
+    ``T``, so it can be passed on directly wherever such a function is
+    expected (e.g. as an item serializer in a list or a tuple), with no
+    closure needed.
+    """
+    if isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
+        return _serialize_method_reference_for_primitive_type(type_annotation.a_type)
+
+    elif isinstance(type_annotation, intermediate.OurTypeAnnotation):
+        our_type = type_annotation.our_type
+        if isinstance(our_type, intermediate.Enumeration):
+            method_name = java_naming.method_name(
+                Identifier(f"{our_type.name}_to_json_value")
+            )
+            return Stripped(f"Serialize::{method_name}")
+        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+            return _serialize_method_reference_for_primitive_type(our_type.constrainee)
+        elif isinstance(
+            our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+        ):
+            # NOTE (mristin):
+            # ``transform`` is an instance method of the enclosing
+            # ``_Transformer`` class itself, dispatching through the visitor
+            # pattern, so it is referenced bound to ``this``.
+            return Stripped("this::transform")
+        else:
+            assert_never(our_type)
+    else:
+        assert_never(type_annotation)
+
+
+def _generate_serialize_tuple_helper(arity: int) -> Stripped:
+    """Generate the generic helper to serialize a tuple into a JSON array."""
+    type_params = [f"T{i + 1}" for i in range(arity)]
+    tuple_type = f"Tuple{arity}<{', '.join(type_params)}>"
+
+    param_lines = [f"{tuple_type} value"] + [
+        f"Function<T{i + 1}, JsonNode> serializeItem{i + 1}" for i in range(arity)
+    ]
+
+    writer = io.StringIO()
+    writer.write(
+        f"""\
+/**
+ * Serialize each item of {{@code value}} with the corresponding
+ * {{@code serializeItemI}} into a JSON array.
+ */
+private static <{", ".join(type_params)}> ArrayNode serializeTuple{arity}(
+"""
+    )
+    for i, param_line in enumerate(param_lines):
+        writer.write(I)
+        writer.write(param_line)
+        writer.write(",\n" if i < len(param_lines) - 1 else ") {\n")
+
+    writer.write(f"{I}final ArrayNode result = JsonNodeFactory.instance.arrayNode();\n")
+    for i in range(arity):
+        writer.write(
+            f"""\
+{I}result.add(
+{II}serializeItem{i + 1}.apply(value.item{i + 1}()));
+"""
+        )
+    writer.write(f"{I}return result;\n}}")
+
+    return Stripped(writer.getvalue())
+
+
 def _generate_serialize_atomic_value(
     type_annotation: intermediate.AtomicTypeAnnotation, source_expr: Stripped
 ) -> Stripped:
@@ -1006,10 +1212,7 @@ def _generate_transform_property(
         )
         stmts.append(Stripped(f"result.set({prop_literal}, {conversion_expr});"))
     elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        assert not isinstance(
-            type_anno.items,
-            (intermediate.OptionalTypeAnnotation, intermediate.ListTypeAnnotation),
-        ), (
+        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
             f"We only support lists of atomic values (primitives, constrained "
             f"primitives, enumeration literals) or classes when serializing "
             f"to JSON, but the property {prop.name!r} has the unsupported "
@@ -1017,21 +1220,46 @@ def _generate_transform_property(
             f"developers if you need this feature."
         )
 
-        item_type = java_common.generate_type(type_anno.items)
         array_var = java_naming.variable_name(Identifier(f"array_{prop.name}"))
 
-        item_conversion_expr = _generate_serialize_atomic_value(
-            type_annotation=type_anno.items, source_expr=Stripped("item")
-        )
+        item_serializer = _serialize_method_reference_for_atomic_value(type_anno.items)
 
-        # We cannot use textwrap due to indent_but_first_line.
         stmts.append(
             Stripped(
                 f"""\
 final ArrayNode {array_var} = serializeArray(
 {I}{source_expr},
-{I}({item_type} item) ->
-{II}{indent_but_first_line(item_conversion_expr, II)});
+{I}{item_serializer});
+result.set({prop_literal}, {array_var});"""
+            )
+        )
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        arity = len(type_anno.items)
+        array_var = java_naming.variable_name(Identifier(f"array_{prop.name}"))
+
+        item_serializers = []  # type: List[Stripped]
+        for item_type_anno in type_anno.items:
+            assert isinstance(
+                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
+                f"Expected an atomic tuple item (a primitive, a constrained "
+                f"primitive, an enumeration or a class), but got {item_type_anno}. "
+                f"This should have already been verified in "
+                f"intermediate._translate._verify_only_simple_type_patterns."
+            )
+
+            item_serializers.append(
+                _serialize_method_reference_for_atomic_value(item_type_anno)
+            )
+
+        joined_item_serializers = ",\n".join(item_serializers)
+
+        stmts.append(
+            Stripped(
+                f"""\
+final ArrayNode {array_var} = serializeTuple{arity}(
+{I}{source_expr},
+{I}{indent_but_first_line(joined_item_serializers, I)});
 result.set({prop_literal}, {array_var});"""
             )
         )
@@ -1164,6 +1392,9 @@ private static <T> ArrayNode serializeArray(
 }}"""
         ),
     ]  # type: List[Stripped]
+
+    for arity in intermediate.tuple_arities(symbol_table):
+        blocks.append(_generate_serialize_tuple_helper(arity=arity))
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
@@ -1328,6 +1559,7 @@ def generate(
     errors = []  # type: List[Error]
 
     imports = [
+        Stripped(f"import {package}.common.*;"),
         Stripped(f"import {package}.reporting.Reporting;"),
         Stripped(f"import {package}.types.enums.*;"),
         Stripped(f"import {package}.types.impl.*;"),

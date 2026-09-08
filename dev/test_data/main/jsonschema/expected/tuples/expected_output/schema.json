@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2019-09/schema",
+  "title": "DummyForTest",
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "#/definitions/Something"
+    }
+  ],
+  "$id": "https://dummy.com",
+  "definitions": {
+    "AbstractItem": {
+      "type": "object",
+      "properties": {
+        "modelType": {
+          "$ref": "#/definitions/ModelType"
+        }
+      },
+      "required": [
+        "modelType"
+      ]
+    },
+    "AbstractItem_choice": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/AnotherItem"
+        },
+        {
+          "$ref": "#/definitions/SomeItem"
+        }
+      ]
+    },
+    "AnotherItem": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/AbstractItem"
+        },
+        {
+          "properties": {
+            "serialNumber": {
+              "type": "integer"
+            },
+            "modelType": {
+              "const": "AnotherItem"
+            }
+          },
+          "required": [
+            "serialNumber"
+          ]
+        }
+      ]
+    },
+    "ModelType": {
+      "type": "string",
+      "enum": [
+        "AnotherItem",
+        "SomeItem"
+      ]
+    },
+    "Result": {
+      "type": "string",
+      "enum": [
+        "not-ok",
+        "ok"
+      ]
+    },
+    "SomeItem": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/AbstractItem"
+        },
+        {
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "modelType": {
+              "const": "SomeItem"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      ]
+    },
+    "Something": {
+      "type": "object",
+      "properties": {
+        "pair": {
+          "type": "array",
+          "items": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "minItems": 2,
+          "maxItems": 2,
+          "additionalItems": false
+        },
+        "items": {
+          "type": "array",
+          "items": [
+            {
+              "$ref": "#/definitions/AbstractItem_choice"
+            },
+            {
+              "$ref": "#/definitions/AbstractItem_choice"
+            }
+          ],
+          "minItems": 2,
+          "maxItems": 2,
+          "additionalItems": false
+        },
+        "tricky": {
+          "type": "array",
+          "items": [
+            {
+              "type": "integer"
+            },
+            {
+              "$ref": "#/definitions/SomeItem"
+            },
+            {
+              "$ref": "#/definitions/AbstractItem_choice"
+            },
+            {
+              "$ref": "#/definitions/SomeItem"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "$ref": "#/definitions/Result"
+            }
+          ],
+          "minItems": 6,
+          "maxItems": 6,
+          "additionalItems": false
+        }
+      },
+      "required": [
+        "pair",
+        "items",
+        "tricky"
+      ]
+    }
+  }
+}

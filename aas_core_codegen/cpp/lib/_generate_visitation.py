@@ -384,6 +384,41 @@ for (
                 f"Please contact the developers if you need this feature."
             )
 
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        visit_stmts = []  # type: List[Stripped]
+        for i, item_type_anno in enumerate(type_anno.items):
+            assert isinstance(
+                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
+                "Tuple items are restricted to atomic types (primitives, "
+                "constrained primitives, classes and enumerations) by "
+                "intermediate._translate._verify_only_simple_type_patterns, so no "
+                "nested optionals, lists or tuples are expected here."
+            )
+
+            if isinstance(
+                item_type_anno, intermediate.OurTypeAnnotation
+            ) and isinstance(
+                item_type_anno.our_type,
+                (intermediate.AbstractClass, intermediate.ConcreteClass),
+            ):
+                visit_stmts.append(
+                    Stripped(
+                        f"""\
+Visit(
+{I}std::get<{i}>(
+{II}{indent_but_first_line(get_expr, II)}
+{I})
+);"""
+                    )
+                )
+
+        if len(visit_stmts) == 0:
+            # No visits to any of the tuple items.
+            return Stripped("")
+
+        code = Stripped("\n".join(visit_stmts))
+
     else:
         # noinspection PyTypeChecker
         assert_never(type_anno)

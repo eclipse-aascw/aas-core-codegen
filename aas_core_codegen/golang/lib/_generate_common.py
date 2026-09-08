@@ -1,16 +1,34 @@
 """Generate code of common functionality."""
 
 import io
+from typing import List
 
 from icontract import ensure
 
 from aas_core_codegen.common import (
     Stripped,
+    indent_but_first_line,
 )
 from aas_core_codegen.golang import (
     common as golang_common,
 )
 from aas_core_codegen.golang.common import INDENT as I, INDENT2 as II, INDENT3 as III
+
+
+def _generate_tuple_struct(arity: int) -> Stripped:
+    """Generate the generic struct representing a tuple of the given ``arity``."""
+    type_params = ", ".join(f"T{i + 1} any" for i in range(arity))
+    fields = "\n".join(f"Item{i + 1} T{i + 1}" for i in range(arity))
+
+    name = f"Tuple{arity}"
+
+    return Stripped(
+        f"""\
+// Represent a fixed-size heterogeneous tuple of {arity} item(s).
+type {name}[{type_params}] struct {{
+{I}{indent_but_first_line(fields, I)}
+}}"""
+    )
 
 
 # fmt: off
@@ -137,8 +155,14 @@ func NewString(value string) *string {{
 {I}return &value
 }}"""
         ),
-        golang_common.WARNING,
-    ]
+    ]  # type: List[Stripped]
+
+    blocks.extend(
+        _generate_tuple_struct(arity=arity)
+        for arity in range(1, golang_common.MAX_TUPLE_ARITY + 1)
+    )
+
+    blocks.append(golang_common.WARNING)
 
     writer = io.StringIO()
     for i, block in enumerate(blocks):

@@ -1,0 +1,125 @@
+SymbolTable(
+  our_types=[
+    ConstrainedPrimitive(
+      name='Positive',
+      inheritances=[],
+      inheritance_id_set=...,
+      ancestors=[],
+      ancestor_id_set=...,
+      descendants=[],
+      descendant_id_set=...,
+      constrainee='INT',
+      is_implementation_specific=False,
+      invariants=[
+        Invariant(
+          description='Larger than zero',
+          body=textwrap.dedent("""\
+            Comparison(
+              left=Name(
+                identifier='self',
+                original_node=...),
+              op='GT',
+              right=Constant(
+                value=0,
+                original_node=...),
+              original_node=...)"""),
+          specified_for='Reference to ConstrainedPrimitive Positive',
+          parsed=...)],
+      invariant_id_set=...,
+      description=None,
+      parsed=...),
+    ConcreteClass(
+      name='Something',
+      inheritances=[],
+      inheritance_id_set=...,
+      ancestors=[],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=None,
+      descendant_id_set=...,
+      descendants=[],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[],
+      properties=[
+        Property(
+          name='some_positives',
+          type_annotation=TupleTypeAnnotation(
+            items=[
+              OurTypeAnnotation(
+                our_type='Reference to our type Positive',
+                parsed=...),
+              OurTypeAnnotation(
+                our_type='Reference to our type Positive',
+                parsed=...)],
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='somePositives',
+          xml_name='somePositives',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='some_positives',
+            type_annotation=TupleTypeAnnotation(
+              items=[
+                OurTypeAnnotation(
+                  our_type='Reference to our type Positive',
+                  parsed=...),
+                OurTypeAnnotation(
+                  our_type='Reference to our type Positive',
+                  parsed=...)],
+              parsed=...),
+            default=None,
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='some_positives',
+              argument='some_positives',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='some_positives',
+              argument='some_positives',
+              default=None)""")]),
+      invariants=[],
+      serialization=Serialization(
+        with_model_type=False),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...)],
+  our_types_topologically_sorted=[
+    'Reference to our type Positive',
+    'Reference to our type Something'],
+  enumerations=[],
+  constrained_primitives=[
+    'Reference to our type Positive'],
+  classes=[
+    'Reference to our type Something'],
+  concrete_classes=[
+    'Reference to our type Something'],
+  constants=[],
+  constants_by_name=...,
+  verification_functions=[],
+  verification_functions_by_name=...,
+  meta_model=MetaModel(
+    description=None,
+    version='dummy',
+    xml_namespace='https://dummy.com'))

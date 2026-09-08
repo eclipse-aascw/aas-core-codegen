@@ -1,6 +1,7 @@
 """Provide generators for the main package."""
 
 from aas_core_codegen.java.lib import (
+    _generate_common,
     _generate_constants,
     _generate_copying,
     _generate_enhancing,
@@ -13,6 +14,8 @@ from aas_core_codegen.java.lib import (
     _generate_visitation,
     _generate_xmlization,
 )
+
+generate_common = _generate_common.generate
 
 generate_constants = _generate_constants.generate
 

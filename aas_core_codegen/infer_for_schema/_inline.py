@@ -418,6 +418,10 @@ def _over_non_optional_type_annotations(
     elif isinstance(type_annotation, intermediate.ListTypeAnnotation):
         yield from _over_non_optional_type_annotations(type_annotation.items)
 
+    elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+        for item in type_annotation.items:
+            yield from _over_non_optional_type_annotations(item)
+
     elif isinstance(
         type_annotation,
         (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),

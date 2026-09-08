@@ -33,11 +33,6 @@ from aas_core_codegen.java.common import (
     INDENT3 as III,
 )
 from aas_core_codegen.intermediate import (
-    ListTypeAnnotation,
-    OptionalTypeAnnotation,
-    OurTypeAnnotation,
-    PrimitiveTypeAnnotation,
-    TypeAnnotationUnion,
     construction as intermediate_construction,
 )
 
@@ -307,41 +302,13 @@ def verify(
 # region Generation
 
 
-def _beneath_optional_or_list(
-    type_anno: TypeAnnotationUnion,
-) -> Union[PrimitiveTypeAnnotation, OurTypeAnnotation]:
-    while isinstance(type_anno, (ListTypeAnnotation, OptionalTypeAnnotation)):
-        if isinstance(type_anno, ListTypeAnnotation):
-            type_anno = type_anno.items
-        else:
-            type_anno = type_anno.value
-
-    return type_anno
-
-
 def _has_descendable_properties(cls: intermediate.Class) -> bool:
     for prop in cls.properties:
-        type_anno = _beneath_optional_or_list(prop.type_annotation)
-
-        if not isinstance(type_anno, intermediate.OurTypeAnnotation):
-            continue
-
-        our_type = type_anno.our_type
-
-        if isinstance(
-            our_type,
-            (
-                intermediate.Enumeration,
-                intermediate.ConstrainedPrimitive,
-            ),
-        ):
-            continue
-
         descendability = intermediate.map_descendability(
             type_annotation=prop.type_annotation
         )
 
-        if descendability:
+        if descendability[prop.type_annotation]:
             return True
 
     return False
@@ -418,6 +385,54 @@ Stream.concat(Stream.<IClass>of({class_name}.this.{prop_name}),
 {class_name}.this.{prop_name}.stream()
 {I}.flatMap(item -> Stream.concat(Stream.<IClass>of(item),
 {II}StreamSupport.stream(item.descend().spliterator(), false)))"""
+                )
+
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            item_stream_exprs = []  # type: List[Stripped]
+
+            for i, item_type_anno in enumerate(type_anno.items):
+                if not descendability.get(item_type_anno, False):
+                    continue
+
+                assert isinstance(
+                    item_type_anno, intermediate.OurTypeAnnotation
+                ) and isinstance(
+                    item_type_anno.our_type,
+                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                ), (
+                    f"We expect only atomic values (primitives, constrained "
+                    f"primitives, enumeration literals) or classes as items "
+                    f"of a tuple at the moment, but you specified {type_anno}. "
+                    f"Please contact the developers if you need this feature."
+                )
+
+                item_access = Stripped(f"{class_name}.this.{prop_name}.item{i + 1}()")
+
+                if not recurse:
+                    item_stream_exprs.append(
+                        Stripped(f"Stream.<IClass>of({item_access})")
+                    )
+                else:
+                    item_stream_exprs.append(
+                        Stripped(
+                            f"""\
+Stream.concat(Stream.<IClass>of({item_access}),
+{I}StreamSupport.stream({item_access}.descend().spliterator(), false))"""
+                        )
+                    )
+
+            assert len(item_stream_exprs) > 0, (
+                "Expected at least one descendable item, since the property "
+                "has been determined to be descendable"
+            )
+
+            prop_expr = item_stream_exprs[0]
+            for item_stream_expr in item_stream_exprs[1:]:
+                prop_expr = Stripped(
+                    f"""\
+Stream.concat(
+{I}{indent_but_first_line(prop_expr, I)},
+{I}{indent_but_first_line(item_stream_expr, I)})"""
                 )
 
         else:
@@ -552,6 +567,7 @@ def _generate_imports_for_interface(
     The ``package`` defines the root Java package.
     """
     imports = [
+        Stripped(f"{package}.common.*"),
         Stripped(f"{package}.types.enums.*"),
         Stripped(f"{package}.types.impl.*"),
         Stripped(f"{package}.types.model.*"),
@@ -590,6 +606,7 @@ def _generate_imports_for_class(
         return Stripped("")
 
     imports = [
+        Stripped(f"{package}.common.*"),
         Stripped(f"{package}.visitation.IVisitor"),
         Stripped(f"{package}.visitation.IVisitorWithContext"),
         Stripped(f"{package}.visitation.ITransformer"),

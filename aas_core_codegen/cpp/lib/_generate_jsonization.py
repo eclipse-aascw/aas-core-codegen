@@ -816,6 +816,153 @@ std::pair<
     )
 
 
+def _generate_deserialize_tuple_function(arity: int) -> Stripped:
+    """
+    Generate a generic function to de-serialize a tuple of the given ``arity``.
+
+    Each positional item is de-serialized by its own ``deserialize_item{i}``
+    callable from the corresponding array item. The array-ness and length of
+    ``json`` are checked once, up-front, mirroring how
+    :py:func:`_generate_deserialize_list` checks that ``json`` is an array
+    before looping over its items.
+    """
+    assert arity > 0
+
+    # NOTE (mristin):
+    # ``T{i}`` only appears in the return type (a non-deduced context), so it
+    # must always be given explicitly at the call site, while
+    # ``DeserializeItemT{i}`` is deduced from the corresponding callable
+    # argument. Explicit template arguments bind positionally to the *first*
+    # declared template parameters, so all the ``T{i}`` must precede all the
+    # ``DeserializeItemT{i}`` for a call site that only specifies
+    # ``T0, ..., T{arity-1}`` to work.
+    template_params_joined = ",\n".join(
+        [f"typename T{i}" for i in range(arity)]
+        + [f"typename DeserializeItemT{i}" for i in range(arity)]
+    )
+
+    item_types_joined = ",\n".join(f"T{i}" for i in range(arity))
+
+    parameters = ",\n".join(
+        f"DeserializeItemT{i}&& deserialize_item{i}" for i in range(arity)
+    )
+
+    item_declarations = "\n".join(
+        f"common::optional<T{i}> item{i};" for i in range(arity)
+    )
+
+    item_blocks = []  # type: List[Stripped]
+    for i in range(arity):
+        item_blocks.append(
+            Stripped(
+                f"""\
+std::tie(
+{I}item{i},
+{I}error
+) = deserialize_item{i}(
+{I}json[{i}]
+);
+
+if (error.has_value()) {{
+{I}error->path.segments.emplace_front(
+{II}common::make_unique<IndexSegment>(
+{III}{i}
+{II})
+{I});
+{I}return std::make_pair<
+{II}common::optional<std::tuple<
+{III}{indent_but_first_line(item_types_joined, III)}
+{II}> >,
+{II}common::optional<DeserializationError>
+{I}>(
+{II}common::nullopt,
+{II}std::move(error)
+{I});
+}}"""
+            )
+        )
+
+    item_blocks_joined = "\n\n".join(item_blocks)
+
+    tuple_items_joined = ",\n".join(f"std::move(*item{i})" for i in range(arity))
+
+    function_name = f"DeserializeTuple{arity}"
+
+    return Stripped(
+        f"""\
+template <
+{I}{indent_but_first_line(template_params_joined, I)}
+>
+std::pair<
+{I}common::optional<std::tuple<
+{II}{indent_but_first_line(item_types_joined, II)}
+{I}> >,
+{I}common::optional<DeserializationError>
+> {function_name}(
+{I}const nlohmann::json& json,
+{I}{indent_but_first_line(parameters, I)}
+) {{
+{I}if (!json.is_array()) {{
+{II}std::wstring message = common::Concat(
+{III}L"Expected an array, but got: ",
+{III}common::Utf8ToWstring(
+{IIII}json.type_name()
+{III})
+{II});
+
+{II}return std::make_pair<
+{III}common::optional<std::tuple<
+{IIII}{indent_but_first_line(item_types_joined, IIII)}
+{III}> >,
+{III}common::optional<DeserializationError>
+{II}>(
+{III}common::nullopt,
+{III}common::make_optional<DeserializationError>(
+{IIII}message
+{III})
+{II});
+{I}}}
+
+{I}if (json.size() != {arity}) {{
+{II}std::wstring message = common::Concat(
+{III}L"Expected exactly {arity} item(s) in the array, "
+{III}L"but got: ",
+{III}std::to_wstring(json.size())
+{II});
+
+{II}return std::make_pair<
+{III}common::optional<std::tuple<
+{IIII}{indent_but_first_line(item_types_joined, IIII)}
+{III}> >,
+{III}common::optional<DeserializationError>
+{II}>(
+{III}common::nullopt,
+{III}common::make_optional<DeserializationError>(
+{IIII}message
+{III})
+{II});
+{I}}}
+
+{I}common::optional<DeserializationError> error;
+
+{I}{indent_but_first_line(item_declarations, I)}
+
+{I}{indent_but_first_line(item_blocks_joined, I)}
+
+{I}return std::make_pair(
+{II}common::make_optional<std::tuple<
+{III}{indent_but_first_line(item_types_joined, III)}
+{II}> >(
+{III}std::make_tuple(
+{IIII}{indent_but_first_line(tuple_items_joined, IIII)}
+{III})
+{II}),
+{II}common::nullopt
+{I});
+}}"""
+    )
+
+
 def _generate_get_model_type() -> Stripped:
     """Generate the getter of the model type from JSON object for dispatches."""
     return Stripped(
@@ -1431,6 +1578,132 @@ if (error.has_value()) {{
     )
 
 
+def _deserialize_expr_for_atomic_item(
+    item_type_anno: intermediate.AtomicTypeAnnotation,
+) -> Stripped:
+    """Generate the expression of the callable to de-serialize a tuple item."""
+    items_primitive_type = intermediate.try_primitive_type(item_type_anno)
+
+    if items_primitive_type is not None:
+        return _PRIMITIVE_TYPE_TO_DESERIALIZE[items_primitive_type]
+
+    if isinstance(item_type_anno, intermediate.PrimitiveTypeAnnotation):
+        raise AssertionError("This case should have been handled before.")
+
+    elif isinstance(item_type_anno, intermediate.OurTypeAnnotation):
+        if isinstance(item_type_anno.our_type, intermediate.Enumeration):
+            return cpp_naming.function_name(
+                Identifier(f"deserialize_{item_type_anno.our_type.name}")
+            )
+
+        elif isinstance(item_type_anno.our_type, intermediate.ConstrainedPrimitive):
+            raise AssertionError("This case should have been handled before.")
+
+        elif isinstance(
+            item_type_anno.our_type,
+            (intermediate.AbstractClass, intermediate.ConcreteClass),
+        ):
+            deserialize_cls = _determine_deserialize_function_for_class(
+                cls=item_type_anno.our_type
+            )
+
+            return Stripped(
+                f"""\
+[&additional_properties](const nlohmann::json& a_json) {{
+{I}return {deserialize_cls}(a_json, additional_properties);
+}}"""
+            )
+
+        else:
+            # noinspection PyTypeChecker
+            assert_never(item_type_anno.our_type)
+
+    else:
+        # noinspection PyTypeChecker
+        assert_never(item_type_anno)
+
+    raise AssertionError("Should not have gotten here")
+
+
+def _generate_deserialize_tuple_property(
+    prop: intermediate.Property, ok_type: Stripped
+) -> Stripped:
+    """
+    Generate the snippet to de-serialize the tuple property.
+
+    We assume that the check whether the property is set is performed elsewhere.
+
+    The ``ok_type`` denotes the type of the deserialized instance, *not* the property.
+    We have to distinguish between cases where we directly create an upcast pointer to
+    an ancestor class, and cases where there are no ancestor classes.
+
+    The actual array/length checks, per-item de-serialization and error-path
+    bookkeeping are delegated to the generic ``DeserializeTupleN`` function
+    generated once for the tuple's arity by
+    :py:func:`_generate_deserialize_tuple_function`.
+    """
+    type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+    assert isinstance(type_anno, intermediate.TupleTypeAnnotation)
+
+    var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
+    json_prop_name = prop.json_name
+    json_prop_name_literal = cpp_common.string_literal(json_prop_name)
+
+    item_types = []  # type: List[Stripped]
+    item_exprs = []  # type: List[Stripped]
+
+    for item_type_anno in type_anno.items:
+        assert isinstance(item_type_anno, intermediate.AtomicTypeAnnotationAsTuple), (
+            "Tuple items are restricted to atomic types (primitives, "
+            "constrained primitives, classes and enumerations) by "
+            "intermediate._translate._verify_only_simple_type_patterns, so no "
+            "nested optionals, lists or tuples are expected here."
+        )
+
+        item_types.append(
+            cpp_common.generate_type(
+                item_type_anno, types_namespace=cpp_common.TYPES_NAMESPACE
+            )
+        )
+
+        item_exprs.append(_deserialize_expr_for_atomic_item(item_type_anno))
+
+    item_types_joined = ",\n".join(item_types)
+    item_exprs_joined = ",\n".join(item_exprs)
+
+    function_name = f"DeserializeTuple{len(type_anno.items)}"
+
+    return Stripped(
+        f"""\
+std::tie(
+{I}{var_name},
+{I}error
+) = {function_name}<
+{I}{indent_but_first_line(item_types_joined, I)}
+>(
+{I}json[{json_prop_name_literal}],
+{I}{indent_but_first_line(item_exprs_joined, I)}
+);
+
+if (error.has_value()) {{
+{I}error->path.segments.emplace_front(
+{II}common::make_unique<PropertySegment>(
+{III}{cpp_common.wstring_literal(json_prop_name)}
+{II})
+{I});
+
+{I}return std::make_pair<
+{II}common::optional<std::shared_ptr<{ok_type}> >,
+{II}common::optional<DeserializationError>
+{I}>(
+{II}common::nullopt,
+{II}std::move(error)
+{I});
+}}"""
+    )
+
+
 def _generate_deserialize_property(
     prop: intermediate.Property, ok_type: Stripped
 ) -> Stripped:
@@ -1467,6 +1740,8 @@ def _generate_deserialize_property(
             assert_never(type_anno.our_type)
     elif isinstance(type_anno, intermediate.ListTypeAnnotation):
         code = _generate_deserialize_list_property(prop=prop, ok_type=ok_type)
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        code = _generate_deserialize_tuple_property(prop=prop, ok_type=ok_type)
     else:
         # noinspection PyTypeChecker
         assert_never(type_anno)
@@ -2325,6 +2600,115 @@ nlohmann::json SerializeListWithInfallible(
     )
 
 
+def _generate_serialize_tuple_function(arity: int) -> Stripped:
+    """
+    Generate a generic function to serialize a tuple of the given ``arity``.
+
+    Each positional item is serialized by its own ``serialize_item{i}``
+    callable, which must return a
+    ``std::pair<common::optional<nlohmann::json>, common::optional<SerializationError>>``
+    regardless of whether the item's own JSON conversion can actually fail --
+    mirroring how ``SerializeListWithFallible`` expects a fallible callable for
+    every list item.
+    """
+    assert arity > 0
+
+    template_params_joined = ",\n".join(
+        [f"typename T{i}" for i in range(arity)]
+        + [f"typename SerializeItemT{i}" for i in range(arity)]
+    )
+
+    item_types_joined = ",\n".join(f"T{i}" for i in range(arity))
+
+    parameters = ",\n".join(
+        f"SerializeItemT{i}&& serialize_item{i}" for i in range(arity)
+    )
+
+    item_stmts = []  # type: List[Stripped]
+    for i in range(arity):
+        item_stmts.append(
+            Stripped(
+                f"""\
+common::optional<nlohmann::json> json_item{i};
+std::tie(
+{I}json_item{i},
+{I}error
+) = serialize_item{i}(
+{I}std::get<{i}>(value)
+);
+if (error.has_value()) {{
+{I}error->path.segments.emplace_front(
+{II}common::make_unique<iteration::IndexSegment>(
+{III}{i}
+{II})
+{I});
+{I}return std::make_pair<
+{II}common::optional<nlohmann::json>,
+{II}common::optional<SerializationError>
+{I}>(
+{II}common::nullopt,
+{II}std::move(error)
+{I});
+}}
+
+serialized.emplace_back(
+{I}std::move(*json_item{i})
+);"""
+            )
+        )
+
+    item_stmts_joined = "\n\n".join(item_stmts)
+
+    function_name = f"SerializeTuple{arity}"
+
+    return Stripped(
+        f"""\
+/**
+ * Serialize a tuple of {arity} item(s) to a JSON array.
+ */
+template <
+{I}{indent_but_first_line(template_params_joined, I)}
+>
+std::pair<
+{I}common::optional<nlohmann::json>,
+{I}common::optional<SerializationError>
+> {function_name}(
+{I}const std::tuple<
+{II}{indent_but_first_line(item_types_joined, II)}
+{I}>& value,
+{I}{indent_but_first_line(parameters, I)}
+) {{
+{I}nlohmann::json serialized = nlohmann::json::array();
+{I}serialized.get_ptr<nlohmann::json::array_t*>()->reserve(
+{II}{arity}
+{I});
+
+{I}common::optional<SerializationError> error;
+
+{I}{indent_but_first_line(item_stmts_joined, I)}
+
+{I}return std::make_pair(
+{II}std::move(serialized),
+{II}common::nullopt
+{I});
+}}"""
+    )
+
+
+def _generate_identity() -> Stripped:
+    """Generate the function for identity serialization which we can pass to list serialization."""
+    return Stripped(
+        f"""\
+/**
+ * Just forward the value as it is.
+ */
+template<typename T>
+const T& Identity(const T& value) {{
+{I}return value;
+}}"""
+    )
+
+
 def _generate_serialize_iclass_definition() -> List[Stripped]:
     """Generate the definition of the main dispatch for serializing ``IClass``."""
     return [
@@ -2582,6 +2966,196 @@ result[{json_prop_name_literal}] = std::move(
         assert_never(serialize_list)
 
 
+def _generate_serialize_tuple_property(
+    getter_expr: Stripped,
+    type_anno: intermediate.TupleTypeAnnotation,
+    property_name: Identifier,
+    json_name: str,
+) -> Stripped:
+    """
+    Generate the snippet to serialize the given property as a tuple.
+
+    The ``getter_expr`` refers to the C++ expression specifying the tuple
+    to be serialized.
+
+    The ``property_name`` refers to the intermediate property name, and
+    the ``json_name`` to its name in the JSON serialization.
+
+    Every per-item closure built here is normalized to return
+    ``std::pair<common::optional<nlohmann::json>, common::optional<SerializationError>>``
+    -- even for primitive kinds whose own JSON conversion can never fail --
+    so that the generic ``SerializeTupleN`` (see
+    :py:func:`_generate_serialize_tuple_function`) can treat every item
+    uniformly. The actual per-item error-path bookkeeping is delegated to
+    that generic function.
+    """
+    item_exprs = []  # type: List[Stripped]
+
+    for item_type_anno in type_anno.items:
+        assert isinstance(item_type_anno, intermediate.AtomicTypeAnnotationAsTuple), (
+            "Tuple items are restricted to atomic types (primitives, "
+            "constrained primitives, classes and enumerations) by "
+            "intermediate._translate._verify_only_simple_type_patterns, so no "
+            "nested optionals, lists or tuples are expected here."
+        )
+
+        items_primitive_type = intermediate.try_primitive_type(item_type_anno)
+
+        if items_primitive_type is not None:
+            if items_primitive_type is intermediate.PrimitiveType.BOOL:
+                item_exprs.append(
+                    Stripped(
+                        f"""\
+[](bool item) {{
+{I}return std::make_pair(
+{II}common::make_optional<nlohmann::json>(item),
+{II}common::nullopt
+{I});
+}}"""
+                    )
+                )
+
+            elif items_primitive_type is intermediate.PrimitiveType.INT:
+                item_exprs.append(Stripped("SerializeInt64"))
+
+            elif items_primitive_type is intermediate.PrimitiveType.FLOAT:
+                item_exprs.append(
+                    Stripped(
+                        f"""\
+[](double item) {{
+{I}return std::make_pair(
+{II}common::make_optional<nlohmann::json>(item),
+{II}common::nullopt
+{I});
+}}"""
+                    )
+                )
+
+            elif items_primitive_type is intermediate.PrimitiveType.STR:
+                item_exprs.append(
+                    Stripped(
+                        f"""\
+[](const std::wstring& item) {{
+{I}return std::make_pair(
+{II}common::make_optional<nlohmann::json>(
+{III}SerializeWstring(item)
+{II}),
+{II}common::nullopt
+{I});
+}}"""
+                    )
+                )
+
+            elif items_primitive_type is intermediate.PrimitiveType.BYTEARRAY:
+                item_exprs.append(
+                    Stripped(
+                        f"""\
+[](const std::vector<std::uint8_t>& item) {{
+{I}return std::make_pair(
+{II}common::make_optional<nlohmann::json>(
+{III}stringification::Base64Encode(item)
+{II}),
+{II}common::nullopt
+{I});
+}}"""
+                    )
+                )
+
+            else:
+                # noinspection PyTypeChecker
+                assert_never(items_primitive_type)
+
+        elif isinstance(item_type_anno, intermediate.PrimitiveTypeAnnotation):
+            raise AssertionError("Expected this case to be handled before")
+
+        elif isinstance(item_type_anno, intermediate.OurTypeAnnotation):
+            if isinstance(item_type_anno.our_type, intermediate.Enumeration):
+                enum_name = cpp_naming.enum_name(item_type_anno.our_type.name)
+
+                item_exprs.append(
+                    Stripped(
+                        f"""\
+[](types::{enum_name} item) {{
+{I}return std::make_pair(
+{II}common::make_optional<nlohmann::json>(
+{III}stringification::to_string(item)
+{II}),
+{II}common::nullopt
+{I});
+}}"""
+                    )
+                )
+
+            elif isinstance(item_type_anno.our_type, intermediate.ConstrainedPrimitive):
+                raise AssertionError("Expected this case to be handled before")
+
+            elif isinstance(
+                item_type_anno.our_type,
+                (intermediate.AbstractClass, intermediate.ConcreteClass),
+            ):
+                item_type = cpp_common.generate_type(
+                    item_type_anno, types_namespace=cpp_common.TYPES_NAMESPACE
+                )
+
+                item_exprs.append(
+                    Stripped(
+                        f"""\
+[](
+{I}const {indent_but_first_line(item_type, I)}& item
+) {{
+{I}return SerializeIClass(
+{II}*item
+{I});
+}}"""
+                    )
+                )
+
+            else:
+                # noinspection PyTypeChecker
+                assert_never(item_type_anno.our_type)
+
+        else:
+            # noinspection PyTypeChecker
+            assert_never(item_type_anno)
+
+    item_exprs_joined = ",\n".join(item_exprs)
+
+    json_prop_name_literal = cpp_common.string_literal(json_name)
+    serialized_var = cpp_naming.variable_name(Identifier(f"json_{property_name}"))
+    function_name = f"SerializeTuple{len(type_anno.items)}"
+
+    return Stripped(
+        f"""\
+common::optional<nlohmann::json> {serialized_var};
+std::tie(
+{I}{serialized_var},
+{I}error
+) = {function_name}(
+{I}{indent_but_first_line(getter_expr, I)},
+{I}{indent_but_first_line(item_exprs_joined, I)}
+);
+if (error.has_value()) {{
+{I}error->path.segments.emplace_front(
+{II}common::make_unique<iteration::PropertySegment>(
+{III}iteration::Property::{cpp_naming.enum_literal_name(property_name)}
+{II})
+{I});
+
+{I}return std::make_pair<
+{II}common::optional<nlohmann::json>,
+{II}common::optional<SerializationError>
+{I}>(
+{II}common::nullopt,
+{II}std::move(error)
+{I});
+}}
+
+result[{json_prop_name_literal}] = std::move(
+{I}*{serialized_var}
+);"""
+    )
+
+
 def _generate_serialize_property(prop: intermediate.Property) -> Stripped:
     """Generate code snippet to serialize the property ``prop``."""
     type_anno = intermediate.beneath_optional(prop.type_annotation)
@@ -2667,6 +3241,14 @@ result[{cpp_common.string_literal(json_prop_name)}] = std::move(
             json_name=json_prop_name,
         )
 
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        code = _generate_serialize_tuple_property(
+            getter_expr=getter_expr,
+            type_anno=type_anno,
+            property_name=prop.name,
+            json_name=json_prop_name,
+        )
+
     else:
         # noinspection PyTypeChecker
         assert_never(type_anno)
@@ -2745,6 +3327,21 @@ nlohmann::json result = nlohmann::json::object();"""
 
             if isinstance(type_anno.items, intermediate.OurTypeAnnotation):
                 needs_error = True
+                break
+
+        if isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            for item_type_anno in type_anno.items:
+                item_primitive_type = intermediate.try_primitive_type(item_type_anno)
+
+                if item_primitive_type is intermediate.PrimitiveType.INT:
+                    needs_error = True
+                    break
+
+                if isinstance(item_type_anno, intermediate.OurTypeAnnotation):
+                    needs_error = True
+                    break
+
+            if needs_error:
                 break
 
     if needs_error:
@@ -2903,6 +3500,12 @@ def _type_annotation_contains_list(
     elif isinstance(type_annotation, intermediate.ListTypeAnnotation):
         return True
 
+    elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+        # NOTE (mristin):
+        # Tuples are heterogeneous and fixed-length, so we never de-serialize them
+        # with the generic ``DeserializeList``.
+        return False
+
     elif isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
         return _type_annotation_contains_list(type_annotation.value)
 
@@ -2966,6 +3569,9 @@ def generate_implementation(
         for prop in cls.properties
     ):
         blocks.append(_generate_deserialize_list())
+
+    for arity in intermediate.tuple_arities(symbol_table):
+        blocks.append(_generate_deserialize_tuple_function(arity))
 
     for enumeration in symbol_table.enumerations:
         blocks.append(_generate_deserialize_enumeration(enumeration))
@@ -3046,6 +3652,9 @@ struct SerializationError {{
             _generate_serialize_list_with_infallible_item_serialization(),
         ]
     )
+
+    for arity in intermediate.tuple_arities(symbol_table):
+        blocks.append(_generate_serialize_tuple_function(arity))
 
     blocks.extend(_generate_serialize_iclass_definition())
 

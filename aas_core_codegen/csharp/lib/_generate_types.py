@@ -657,6 +657,32 @@ class _DescendBodyUnroller(csharp_unrolling.AbstractUnroller):
 
         return [node]
 
+    def _unroll_tuple_type_annotation(
+        self,
+        unrollee_expr: str,
+        type_annotation: intermediate.TupleTypeAnnotation,
+        path: List[str],
+        item_level: int,
+        key_value_level: int,
+    ) -> List[csharp_unrolling.Node]:
+        """Generate code for the given specific ``type_annotation``."""
+        nodes = []  # type: List[csharp_unrolling.Node]
+
+        for i, item_type_annotation in enumerate(type_annotation.items):
+            item_expr = f"{unrollee_expr}.Item{i + 1}"
+
+            nodes.extend(
+                self.unroll(
+                    unrollee_expr=item_expr,
+                    type_annotation=item_type_annotation,
+                    path=[],  # Path is unused in this context
+                    item_level=item_level,
+                    key_value_level=key_value_level,
+                )
+            )
+
+        return nodes
+
     def _unroll_optional_type_annotation(
         self,
         unrollee_expr: str,

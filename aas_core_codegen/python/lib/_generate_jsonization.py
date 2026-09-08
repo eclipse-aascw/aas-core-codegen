@@ -278,6 +278,82 @@ def _list_from_jsonable(
     )
 
 
+# fmt: off
+@require(lambda arity: arity > 0)
+# fmt: on
+def _generate_tuple_from_jsonable(arity: int) -> Stripped:
+    """Generate the generic helper to parse a JSON array as a tuple of ``arity``."""
+    type_vars = [f"_TupleItem{i}T" for i in range(1, arity + 1)]
+
+    parameters = ",\n".join(
+        f"parse_item_{i}: Callable[[Jsonable], {type_var}]"
+        for i, type_var in enumerate(type_vars, start=1)
+    )
+
+    param_docs = "\n".join(
+        f"{I}:param parse_item_{i}: to parse the item at the position {i - 1}"
+        for i in range(1, arity + 1)
+    )
+
+    item_parses = "\n\n".join(
+        f"""\
+try:
+{I}item_{i} = parse_item_{i}(array_like[{i - 1}])
+except DeserializationException as exception:
+{I}exception.path._prepend(IndexSegment(array_like, {i - 1}))
+{I}raise"""
+        for i in range(1, arity + 1)
+    )
+
+    result_items = ",\n".join(f"item_{i}" for i in range(1, arity + 1))
+
+    function_name = f"_tuple{arity}_from_jsonable"
+
+    return Stripped(
+        f'''\
+def {function_name}(
+{I}jsonable: Jsonable,
+{I}{indent_but_first_line(parameters, I)}
+) -> Tuple[{", ".join(type_vars)}]:
+{I}"""
+{I}Parse :paramref:`jsonable` as a tuple of {arity} item(s), applying
+{I}the corresponding ``parse_item_*`` function on every item.
+
+{I}:param jsonable: JSON-able structure to be parsed
+{param_docs}
+{I}:return: parsed tuple
+{I}:raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+{I}"""
+{I}array_like = _try_to_cast_to_array_like(jsonable)
+{I}if array_like is None:
+{II}raise DeserializationException(
+{III}f"Expected something array-like, but got: {{type(jsonable)}}"
+{II})
+
+{I}# NOTE (mristin):
+{I}# Unlike a list, a tuple is heterogeneous, so we need to index the individual
+{I}# items by their fixed position, and a general ``Iterable`` does not support
+{I}# that.
+{I}if not isinstance(array_like, collections.abc.Sequence):
+{II}raise DeserializationException(
+{III}f"Expected something indexable to de-serialize a tuple, "
+{III}f"but got: {{type(jsonable)}}"
+{II})
+
+{I}if len(array_like) != {arity}:
+{II}raise DeserializationException(
+{III}f"Expected exactly {arity} item(s) in the array, "
+{III}f"but got: {{len(array_like)}}"
+{II})
+
+{I}{indent_but_first_line(item_parses, I)}
+
+{I}return (
+{II}{indent_but_first_line(result_items, II)}
+{I})'''
+    )
+
+
 def _generate_dispatch_map_for_abstract_class(
     cls: intermediate.AbstractClass,
 ) -> Stripped:
@@ -499,7 +575,21 @@ def _generate_setter(cls: intermediate.ConcreteClass) -> Stripped:
         # We make all the properties optional since we switch over the properties
         # during the de-serialization.
         if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-            prop_type = Stripped(f"Optional[{prop_type}]")
+            if "\n" not in prop_type:
+                prop_type = Stripped(f"Optional[{prop_type}]")
+            else:
+                # NOTE (mristin):
+                # ``prop_type`` is already broken over multiple lines (see,
+                # *e.g.*, the ``TupleTypeAnnotation`` case
+                # in :py:func:`python_common.generate_type`), so we follow the
+                # same bracket-per-line style here instead of squeezing it
+                # onto one line.
+                prop_type = Stripped(
+                    f"""\
+Optional[
+{I}{indent_but_first_line(prop_type, I)}
+]"""
+                )
 
         if i > 0:
             init_writer.write("\n")
@@ -552,7 +642,11 @@ self.{prop_name} = {function_name}(
         elif isinstance(type_anno, intermediate.ListTypeAnnotation):
             assert not isinstance(
                 type_anno.items,
-                (intermediate.OptionalTypeAnnotation, intermediate.ListTypeAnnotation),
+                (
+                    intermediate.OptionalTypeAnnotation,
+                    intermediate.ListTypeAnnotation,
+                    intermediate.TupleTypeAnnotation,
+                ),
             ), (
                 "We chose to implement only a very limited pattern matching; "
                 "see intermediate._translate_._verify_only_simple_type_patterns"
@@ -565,6 +659,32 @@ self.{prop_name} = {function_name}(
 self.{prop_name} = _list_from_jsonable(
 {I}jsonable,
 {I}{parse_function}
+)"""
+            )
+
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            arity = len(type_anno.items)
+
+            parse_functions = []  # type: List[Stripped]
+            for item_type_anno in type_anno.items:
+                assert isinstance(
+                    item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+                ), (
+                    "Tuple items are restricted to atomic types (primitives, "
+                    "constrained primitives, classes and enumerations) by "
+                    "intermediate._translate._verify_only_simple_type_patterns, so no "
+                    "nested optionals, lists or tuples are expected here."
+                )
+
+                parse_functions.append(_parse_function_for_atomic_value(item_type_anno))
+
+            joined_parse_functions = ",\n".join(parse_functions)
+
+            body = Stripped(
+                f"""\
+self.{prop_name} = _tuple{arity}_from_jsonable(
+{I}jsonable,
+{I}{indent_but_first_line(joined_parse_functions, I)}
 )"""
             )
 
@@ -1035,6 +1155,38 @@ jsonable[{key_literal}] = [
 ]"""
                 )
 
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            item_expressions = []  # type: List[Stripped]
+            for i, item_type_anno in enumerate(type_anno.items):
+                assert isinstance(
+                    item_type_anno,
+                    (
+                        intermediate.PrimitiveTypeAnnotation,
+                        intermediate.OurTypeAnnotation,
+                    ),
+                ), (
+                    "Tuple items are restricted to atomic types (primitives, "
+                    "constrained primitives, classes and enumerations) by "
+                    "intermediate._translate._verify_only_simple_type_patterns, so no "
+                    "nested optionals, lists or tuples are expected here."
+                )
+
+                item_expressions.append(
+                    _generate_transform_atomic_value(
+                        access_expression=Stripped(f"that.{prop_name}[{i}]"),
+                        type_anno=item_type_anno,
+                    )
+                )
+
+            item_expressions_joined = ",\n".join(item_expressions)
+
+            block = Stripped(
+                f"""\
+jsonable[{key_literal}] = [
+{I}{indent_but_first_line(item_expressions_joined, I)}
+]"""
+            )
+
         else:
             assert_never(type_anno)
 
@@ -1166,6 +1318,7 @@ from typing import (
 {I}MutableMapping,
 {I}Optional,
 {I}Sequence,
+{I}Tuple,
 {I}TypeVar,
 {I}Union,
 )
@@ -1321,6 +1474,19 @@ MutableJsonable = Union[
         _generate_is_array_like(),
         _generate_list_from_jsonable(),
     ]  # type: List[Stripped]
+
+    tuple_arities = intermediate.tuple_arities(symbol_table)
+    if len(tuple_arities) > 0:
+        blocks.append(
+            Stripped(
+                "\n".join(
+                    f'_TupleItem{i}T = TypeVar("_TupleItem{i}T")'
+                    for i in range(1, max(tuple_arities) + 1)
+                )
+            )
+        )
+        for arity in tuple_arities:
+            blocks.append(_generate_tuple_from_jsonable(arity=arity))
 
     errors = []  # type: List[Error]
 

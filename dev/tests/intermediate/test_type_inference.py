@@ -274,6 +274,49 @@ class Test_with_smoke(unittest.TestCase):
 
         Test_with_smoke.execute(source=source)
 
+    def test_tuple_literal(self) -> None:
+        source = textwrap.dedent(
+            """\
+            @verification
+            def some_verification(x: str, y: int) -> bool:
+                return (x, y)[0] == x
+
+
+            __version__ = "dummy"
+            __xml_namespace__ = "https://dummy.com"
+            """
+        )
+
+        Test_with_smoke.execute(source=source)
+
+    def test_tuple_of_classes(self) -> None:
+        source = textwrap.dedent(
+            """\
+            class Some_class:
+                something: int
+
+                def __init__(self, something: int) -> None:
+                    self.something = something
+
+            @invariant(
+                lambda self:
+                self.pair[0].something >= 1,
+                "Something of the first item must be at least 1."
+            )
+            class Another_class:
+                pair: Tuple[Some_class, Some_class]
+
+                def __init__(self, pair: Tuple[Some_class, Some_class]) -> None:
+                    self.pair = pair
+
+
+            __version__ = "dummy"
+            __xml_namespace__ = "https://dummy.com"
+            """
+        )
+
+        Test_with_smoke.execute(source=source)
+
     def test_is_none_fails_on_non_optional(self) -> None:
         source = textwrap.dedent(
             """\

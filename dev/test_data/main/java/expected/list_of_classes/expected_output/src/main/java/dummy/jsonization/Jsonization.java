@@ -5,6 +5,7 @@
 
 package dummy.jsonization;
 
+import dummy.common.*;
 import dummy.reporting.Reporting;
 import dummy.types.enums.*;
 import dummy.types.impl.*;
@@ -715,16 +716,12 @@ public class Jsonization {
 
         final ArrayNode arraySomeItems = serializeArray(
           that.getSomeItems(),
-          (IAbstractItem item) ->
-            transform(
-              item));
+          this::transform);
         result.set("someItems", arraySomeItems);
 
         final ArrayNode arraySomeSimples = serializeArray(
           that.getSomeSimples(),
-          (ISimple item) ->
-            transform(
-              item));
+          this::transform);
         result.set("someSimples", arraySomeSimples);
 
         return result;

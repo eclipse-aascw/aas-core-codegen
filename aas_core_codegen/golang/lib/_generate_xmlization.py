@@ -687,33 +687,11 @@ func readListOfScalars[T Scalar](
 {III}break
 {II}}}
 
-{II}var local string
-{II}local, err = parseAsStartElementAndExtractLocalName(
-{III}current,
-{II})
-{II}if err != nil {{
-{III}return
-{II}}}
-
-{II}if local != "v" {{
-{III}err = newDeserializationError(
-{IIII}fmt.Sprintf(
-{IIIII}"Expected start element 'v' as a delimiter for a list of values, "+
-{IIIIII}"but got %s",
-{IIIII}local,
-{IIII}),
-{III})
-{II}}}
-
-{II}// Move the current to the value
-{II}current, err = readNext(decoder, current)
-{II}if err != nil {{
-{III}return
-{II}}}
-
 {II}var value T
 {II}var valueErr error
-{II}value, current, valueErr = readTextAsT(decoder, current)
+{II}value, current, valueErr = readScalarWithName(
+{III}decoder, current, "v", readTextAsT,
+{II})
 {II}if valueErr != nil {{
 {III}if deseriaErr, ok := valueErr.(*DeserializationError); ok {{
 {IIII}deseriaErr.Path.PrependIndex(
@@ -727,19 +705,72 @@ func readListOfScalars[T Scalar](
 {II}values = append(values, value)
 
 {II}i++
-
-{II}err = checkEndElement(current, local)
-{II}if err != nil {{
-{III}return
-{II}}}
-
-{II}current, err = readNext(decoder, nil)
-{II}if err != nil {{
-{III}return
-{II}}}
 {I}}}
 
 {I}next = current
+{I}return
+}}"""
+    )
+
+
+def _generate_read_scalar_with_name() -> Stripped:
+    return Stripped(
+        f"""\
+// Read a scalar, *i.e.*, a non-instance, wrapped in a single element bearing
+// the `expectedName`, as a positional item of a tuple.
+//
+// The resulting `next` token points to the first token just after the wrapping
+// element.
+func readScalarWithName[T Scalar](
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+{I}expectedName string,
+{I}readTextAsT func(
+{II}aDecoder *xml.Decoder,
+{II}aCurrent xml.Token,
+{I}) (value T, aNext xml.Token, anErr error),
+) (value T, next xml.Token, err error) {{
+{I}current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}var local string
+{I}local, err = parseAsStartElementAndExtractLocalName(
+{II}current,
+{I})
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}if local != expectedName {{
+{II}err = newDeserializationError(
+{III}fmt.Sprintf(
+{IIII}"Expected start element %s as a tuple item delimiter, "+
+{IIIII}"but got %s",
+{IIII}expectedName, local,
+{III}),
+{II})
+{II}return
+{I}}}
+
+{I}// Move the current to the value
+{I}current, err = readNext(decoder, current)
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}value, current, err = readTextAsT(decoder, current)
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}err = checkEndElement(current, local)
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}next, err = readNext(decoder, current)
 {I}return
 }}"""
     )
@@ -796,6 +827,155 @@ func readListOfInstances[T aastypes.IClass](
 {II}}}
 {I}}}
 
+{I}next = current
+{I}return
+}}"""
+    )
+
+
+def _generate_as_scalar_tuple_item_reader() -> Stripped:
+    """
+    Generate the adapter to bind a scalar reader's name for a tuple item.
+
+    ``readTupleN`` (see :py:func:`_generate_read_tuple_helper`) expects a
+    uniform ``func(decoder, current) (T, xml.Token, error)`` per item, so
+    that a single generic function can be shared by *every* tuple-typed
+    property of a given arity, regardless of which mix of scalar and
+    instance items appears at each position (an instance item is adapted
+    instead by :py:func:`_generate_as_instance_tuple_item_reader`). A scalar
+    item, unlike a list item, is wrapped in a positional element name
+    (``v1``, ``v2``, *etc.*) instead of always the fixed ``v`` -- this name
+    is a runtime string that differs at every call site, so it must be
+    bound in via a closure (Go has no partial-application syntax); this
+    adapter builds that closure once, instead of repeating it inline at
+    every such tuple item.
+    """
+    return Stripped(
+        f"""\
+// Adapt `readTextAsT` together with `expectedName` into a tuple item reader.
+//
+// `expectedName` (`v1`, `v2`, ...) is a plain runtime string, not a type,
+// so it can not be pinned via a generic type parameter the way
+// `asInstanceTupleItemWriter` pins its own type parameter -- binding it
+// requires an actual closure, built once here.
+func asScalarTupleItemReader[T Scalar](
+{I}expectedName string,
+{I}readTextAsT func(
+{II}aDecoder *xml.Decoder,
+{II}aCurrent xml.Token,
+{I}) (value T, aNext xml.Token, anErr error),
+) func(decoder *xml.Decoder, current xml.Token) (T, xml.Token, error) {{
+{I}return func(decoder *xml.Decoder, current xml.Token) (T, xml.Token, error) {{
+{II}return readScalarWithName(decoder, current, expectedName, readTextAsT)
+{I}}}
+}}"""
+    )
+
+
+def _generate_as_instance_tuple_item_reader() -> Stripped:
+    """
+    Generate the adapter so an instance item reader fits a tuple item reader.
+
+    See :py:func:`_generate_as_scalar_tuple_item_reader` for why
+    ``readTupleN`` needs this uniform shape. An instance item, unlike a
+    scalar item, dispatches through its own element tag, so it needs no
+    name bound in -- but each class has its *own* ``read...WithLookahead``
+    function (there is no single shared reader for all classes, unlike
+    ``Marshal`` on the writing side), so this adapter must bind that
+    specific, varying function value in via a closure -- a type parameter
+    alone can not do it, since a function *value*, not just its type,
+    varies per call site. The bound function only returns the instance and
+    an error, not the next token either, so this closure also threads the
+    whitespace-skip and the advance-past-the-element steps that
+    :py:func:`_generate_read_list_of_instances` already performs inline for
+    list items.
+    """
+    return Stripped(
+        f"""\
+// Adapt `readTWithLookahead` into a tuple item reader.
+//
+// `readTWithLookahead` is a distinct function value per class (there is no
+// single shared "read any instance" function to instantiate generically),
+// so it must be bound in via a closure, built once here.
+func asInstanceTupleItemReader[T aastypes.IClass](
+{I}readTWithLookahead func(
+{II}aDecoder *xml.Decoder,
+{II}aCurrent xml.Token,
+{I}) (anInstance T, anErr error),
+) func(decoder *xml.Decoder, current xml.Token) (T, xml.Token, error) {{
+{I}return func(
+{II}decoder *xml.Decoder, current xml.Token,
+{I}) (value T, next xml.Token, err error) {{
+{II}current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
+{II}if err != nil {{
+{III}return
+{II}}}
+
+{II}value, err = readTWithLookahead(decoder, current)
+{II}if err != nil {{
+{III}return
+{II}}}
+
+{II}next, err = readNext(decoder, current)
+{II}return
+{I}}}
+}}"""
+    )
+
+
+@require(lambda arity: arity > 0)
+def _generate_read_tuple_helper(arity: int) -> Stripped:
+    """Generate a generic function to read a tuple of the given ``arity``."""
+    type_params = [f"T{i + 1}" for i in range(arity)]
+    type_params_joined = ", ".join(f"{t} any" for t in type_params)
+
+    tuple_type = f"aascommon.Tuple{arity}[{', '.join(type_params)}]"
+
+    params_joined = ",\n".join(
+        f"readItem{i + 1} func(\n"
+        f"{I}decoder *xml.Decoder, current xml.Token,\n"
+        f") ({type_params[i]}, xml.Token, error)"
+        for i in range(arity)
+    )
+
+    item_blocks = []  # type: List[Stripped]
+    for i in range(arity):
+        item_blocks.append(
+            Stripped(
+                f"""\
+var item{i + 1} {type_params[i]}
+item{i + 1}, current, err = readItem{i + 1}(decoder, current)
+if err != nil {{
+{I}if deseriaErr, ok := err.(*DeserializationError); ok {{
+{II}deseriaErr.Path.PrependIndex(
+{III}&aasreporting.IndexSegment{{Index: {i}}},
+{II})
+{I}}}
+{I}return
+}}"""
+            )
+        )
+
+    item_blocks_joined = "\n\n".join(item_blocks)
+
+    item_fields_joined = "\n".join(f"Item{i + 1}: item{i + 1}," for i in range(arity))
+
+    function_name = f"readTuple{arity}"
+
+    return Stripped(
+        f"""\
+// Read a tuple of {arity} item(s) with `readItem1`, `readItem2`, *etc.* on
+// the correspondingly positioned item, or return an error.
+func {function_name}[{type_params_joined}](
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+{I}{indent_but_first_line(params_joined, I)},
+) (result {tuple_type}, next xml.Token, err error) {{
+{I}{indent_but_first_line(item_blocks_joined, I)}
+
+{I}result = {tuple_type}{{
+{II}{indent_but_first_line(item_fields_joined, II)}
+{I}}}
 {I}next = current
 {I}return
 }}"""
@@ -1080,6 +1260,67 @@ if valueErr == nil {{
                 else:
                     # noinspection PyTypeChecker
                     assert_never(type_anno.items)
+
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            arity = len(type_anno.items)
+
+            item_reader_exprs = []  # type: List[Stripped]
+
+            for i, item_type_anno in enumerate(type_anno.items):
+                if isinstance(
+                    item_type_anno, intermediate.OurTypeAnnotation
+                ) and isinstance(
+                    item_type_anno.our_type,
+                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                ):
+                    read_with_lookahead_function = golang_naming.private_function_name(
+                        Identifier(
+                            f"read_{item_type_anno.our_type.name}_with_lookahead"
+                        )
+                    )
+
+                    item_reader_exprs.append(
+                        Stripped(
+                            f"asInstanceTupleItemReader({read_with_lookahead_function}),"
+                        )
+                    )
+
+                else:
+                    if isinstance(
+                        item_type_anno, intermediate.OurTypeAnnotation
+                    ) and isinstance(item_type_anno.our_type, intermediate.Enumeration):
+                        read_text_function = golang_naming.private_function_name(
+                            Identifier(f"read_text_as_{item_type_anno.our_type.name}")
+                        )
+                    else:
+                        items_primitive_type = intermediate.try_primitive_type(
+                            item_type_anno
+                        )
+                        assert items_primitive_type is not None
+                        read_text_function = _READ_FUNCTION_BY_PRIMITIVE_TYPE[
+                            items_primitive_type
+                        ]
+
+                    v_name_literal = golang_common.string_literal(f"v{i + 1}")
+
+                    item_reader_exprs.append(
+                        Stripped(
+                            f"asScalarTupleItemReader({v_name_literal}, {read_text_function}),"
+                        )
+                    )
+
+            item_reader_exprs_joined = "\n".join(item_reader_exprs)
+
+            case_body_blocks.append(
+                Stripped(
+                    f"""\
+{prop_var}, current, valueErr = readTuple{arity}(
+{I}decoder,
+{I}current,
+{I}{indent_but_first_line(item_reader_exprs_joined, I)}
+)"""
+                )
+            )
 
         else:
             # noinspection PyTypeChecker
@@ -1896,6 +2137,122 @@ func writeScalarProperty[T Scalar](
     )
 
 
+def _generate_as_scalar_tuple_item_writer() -> Stripped:
+    """
+    Generate the adapter to bind a scalar writer's name for a tuple item.
+
+    ``writeTupleN`` (see :py:func:`_generate_write_tuple_helper`) expects a
+    uniform ``func(encoder, value T) error`` per item, so that a single
+    generic function can be shared by *every* tuple-typed property of a
+    given arity, regardless of which mix of scalar and instance items
+    appears at each position (an instance item is adapted instead by
+    :py:func:`_generate_as_instance_tuple_item_writer`). A scalar item,
+    unlike a list item, is wrapped in a positional element name (``v1``,
+    ``v2``, *etc.*) instead of always the fixed ``v`` -- this name is a
+    runtime string that differs at every call site, so it must be bound in
+    via a closure (Go has no partial-application syntax); this adapter
+    builds that closure once, instead of repeating it inline at every such
+    tuple item.
+    """
+    return Stripped(
+        f"""\
+// Adapt `writeTAsText` together with `name` into a tuple item writer.
+//
+// `name` (`v1`, `v2`, ...) is a plain runtime string, not a type, so it
+// can not be pinned via a generic type parameter the way
+// `asInstanceTupleItemWriter` pins its own type parameter -- binding it
+// requires an actual closure, built once here.
+func asScalarTupleItemWriter[T Scalar](
+{I}name string,
+{I}writeTAsText func(anEncoder *xml.Encoder, aValue T) (anErr error),
+) func(encoder *xml.Encoder, value T) error {{
+{I}return func(encoder *xml.Encoder, value T) error {{
+{II}return writeScalarProperty(encoder, name, value, writeTAsText)
+{I}}}
+}}"""
+    )
+
+
+def _generate_as_instance_tuple_item_writer() -> Stripped:
+    """
+    Generate the adapter so an instance can be written as a tuple item writer.
+
+    See :py:func:`_generate_as_scalar_tuple_item_writer` for why
+    ``writeTupleN`` needs this uniform shape. Unlike the two adapters above
+    (and unlike :py:func:`_generate_as_instance_tuple_item_reader`), no
+    closure is needed here at all: every class shares the very same
+    ``Marshal`` function (there is no per-class function value to bind in),
+    so the only thing that varies per tuple item is the *type* parameter
+    ``T``. ``Marshal`` itself takes the wide ``aastypes.IClass``, which can
+    not be used as a ``func(encoder, value T) error`` for a tuple item's own
+    (more specific) interface type -- Go function values are invariant in
+    their parameter type (no contravariance, verified against the
+    compiler) -- so this plain generic function exists solely to narrow
+    the parameter type to ``T``. Go can not infer ``T`` for it from
+    context, so every call site instantiates it explicitly, *e.g.*,
+    ``asInstanceTupleItemWriter[ISomeItem]`` -- passed on as that
+    instantiated function value directly (no call, no closure), since
+    Go allows referencing a generic function this way without invoking it.
+    """
+    return Stripped(
+        f"""\
+// Adapt `Marshal` into a tuple item writer for instances of `T`.
+func asInstanceTupleItemWriter[T aastypes.IClass](encoder *xml.Encoder, value T) error {{
+{I}return Marshal(encoder, value, false)
+}}"""
+    )
+
+
+@require(lambda arity: arity > 0)
+def _generate_write_tuple_helper(arity: int) -> Stripped:
+    """Generate a generic function to write a tuple of the given ``arity``."""
+    type_params = [f"T{i + 1}" for i in range(arity)]
+    type_params_joined = ", ".join(f"{t} any" for t in type_params)
+
+    tuple_type = f"aascommon.Tuple{arity}[{', '.join(type_params)}]"
+
+    params_joined = ",\n".join(
+        f"writeItem{i + 1} func(encoder *xml.Encoder, value {type_params[i]}) error"
+        for i in range(arity)
+    )
+
+    item_blocks = []  # type: List[Stripped]
+    for i in range(arity):
+        item_blocks.append(
+            Stripped(
+                f"""\
+err = writeItem{i + 1}(encoder, that.Item{i + 1})
+if err != nil {{
+{I}if seriaErr, ok := err.(*SerializationError); ok {{
+{II}seriaErr.Path.PrependIndex(
+{III}&aasreporting.IndexSegment{{Index: {i}}},
+{II})
+{I}}}
+{I}return
+}}"""
+            )
+        )
+
+    item_blocks_joined = "\n\n".join(item_blocks)
+
+    function_name = f"writeTuple{arity}"
+
+    return Stripped(
+        f"""\
+// Write `that` with `writeItem1`, `writeItem2`, *etc.* on the
+// correspondingly positioned item, or return an error.
+func {function_name}[{type_params_joined}](
+{I}encoder *xml.Encoder,
+{I}that {tuple_type},
+{I}{indent_but_first_line(params_joined, I)},
+) (err error) {{
+{I}{indent_but_first_line(item_blocks_joined, I)}
+
+{I}return
+}}"""
+    )
+
+
 def _generate_write_embedded_instance_property() -> Stripped:
     return Stripped(
         f"""\
@@ -2332,6 +2689,80 @@ err = writeListOfInstancesProperty(
 {if_err_nil_prepend_name_if_serialization_error_return}"""
             )
 
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        arity = len(type_anno.items)
+
+        item_writer_exprs = []  # type: List[Stripped]
+
+        for i, item_type_anno in enumerate(type_anno.items):
+            if isinstance(
+                item_type_anno, intermediate.OurTypeAnnotation
+            ) and isinstance(
+                item_type_anno.our_type,
+                (intermediate.AbstractClass, intermediate.ConcreteClass),
+            ):
+                item_type = golang_common.generate_type(
+                    type_annotation=item_type_anno, types_package=Identifier("aastypes")
+                )
+
+                item_writer_exprs.append(
+                    Stripped(f"asInstanceTupleItemWriter[{item_type}],")
+                )
+
+            else:
+                if isinstance(
+                    item_type_anno, intermediate.OurTypeAnnotation
+                ) and isinstance(item_type_anno.our_type, intermediate.Enumeration):
+                    write_function = golang_naming.private_function_name(
+                        Identifier(f"write_{item_type_anno.our_type.name}_as_text")
+                    )
+                else:
+                    items_primitive_type = intermediate.try_primitive_type(
+                        item_type_anno
+                    )
+                    assert items_primitive_type is not None
+                    write_function = _WRITE_FUNCTION_BY_PRIMITIVE_TYPE[
+                        items_primitive_type
+                    ]
+
+                v_name_literal = golang_common.string_literal(f"v{i + 1}")
+
+                item_writer_exprs.append(
+                    Stripped(
+                        f"asScalarTupleItemWriter({v_name_literal}, {write_function}),"
+                    )
+                )
+
+        item_writer_exprs_joined = "\n".join(item_writer_exprs)
+
+        write_block = Stripped(
+            f"""\
+err = writeStartElement(
+{I}encoder,
+{I}{local_literal},
+{I}false,
+)
+if err != nil {{
+{I}return
+}}
+
+err = writeTuple{arity}(
+{I}encoder,
+{I}{access_expr},
+{I}{indent_but_first_line(item_writer_exprs_joined, I)}
+)
+if err != nil {{
+{I}return
+}}
+
+err = writeEndElement(
+{I}encoder,
+{I}{local_literal},
+{I}false,
+)
+{if_err_nil_prepend_name_if_serialization_error_return}"""
+        )
+
     else:
         assert_never(type_anno)
 
@@ -2646,10 +3077,18 @@ const Namespace = {namespace_literal}"""
             _generate_parse_as_start_element_and_extract_local_name(),
             _generate_check_end_element(),
             _generate_scalar_definition(),
+            _generate_read_scalar_with_name(),
             _generate_read_list_of_scalars(),
             _generate_read_list_of_instances(),
         ]
     )
+
+    tuple_arities = intermediate.tuple_arities(symbol_table)
+    if len(tuple_arities) > 0:
+        blocks.append(_generate_as_scalar_tuple_item_reader())
+        blocks.append(_generate_as_instance_tuple_item_reader())
+        for arity in tuple_arities:
+            blocks.append(_generate_read_tuple_helper(arity))
 
     errors = []  # type: List[Error]
 
@@ -2716,6 +3155,13 @@ const Namespace = {namespace_literal}"""
             _generate_write_list_of_scalars_property(),
         ]
     )
+
+    tuple_arities = intermediate.tuple_arities(symbol_table)
+    if len(tuple_arities) > 0:
+        blocks.append(_generate_as_scalar_tuple_item_writer())
+        blocks.append(_generate_as_instance_tuple_item_writer())
+        for arity in tuple_arities:
+            blocks.append(_generate_write_tuple_helper(arity))
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):

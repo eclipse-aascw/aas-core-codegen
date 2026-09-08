@@ -4,7 +4,7 @@ import io
 import textwrap
 from typing import Tuple, Optional, List
 
-from icontract import ensure
+from icontract import ensure, require
 
 from aas_core_codegen import intermediate, naming, specific_implementations
 from aas_core_codegen.common import (
@@ -364,6 +364,215 @@ private static List<T> ParseArrayOfStruct<T>(
     )
 
 
+def _generate_tuple_item_deserializer_helpers() -> Stripped:
+    """Generate the delegate and adapters shared by all the generic tuple parsers."""
+    return Stripped(
+        f"""\
+/// <summary>
+/// Parse a single tuple item.
+/// </summary>
+/// <remarks>
+/// A tuple-typed property is parsed by <c>ParseTupleN</c> (see
+/// <see cref="ParseTuple2{{T0, T1}}" /> for the arity-2 case, *etc.*), one
+/// function shared by *every* tuple-typed property of a given arity,
+/// regardless of which mix of reference and value types appears at each
+/// position. If <c>ParseTupleN</c> demanded the same
+/// <c>JsonClassItemDeserializer&lt;T&gt;</c>/<c>JsonStructItemDeserializer&lt;T&gt;</c>
+/// shape already used for list items (a nullable return, constrained to
+/// <c>class</c> or <c>struct</c>), its own type parameters would need that
+/// constraint fixed once per position -- which breaks the moment two
+/// different tuple-typed properties of the same arity mix reference and
+/// value types differently at the same position (<em>e.g.</em>,
+/// <c>(string, long)</c> at one property and <c>(long, string)</c> at
+/// another could not share one <c>ParseTuple2</c>).
+///
+/// A single unconstrained <c>T? Method(Nodes.JsonNode node, out Reporting.Error? error)</c>
+/// shape shared by both reference and value types does not work around this
+/// either: for a value type, an unconstrained <c>T?</c> erases to plain
+/// <c>T</c> (not <c>System.Nullable&lt;T&gt;</c>), so a method returning
+/// <c>long?</c> can not even be assigned to it.
+///
+/// <c>TupleItemDeserializer&lt;T&gt;</c> sidesteps the class/struct split
+/// entirely by using an <c>out</c> parameter for the value instead of a
+/// nullable return, at the cost of needing an adapter --
+/// <see cref="AsTupleItemDeserializer{{T}}(JsonClassItemDeserializer{{T}})" /> --
+/// to convert an existing item parser (such as a bare <c>StringFrom</c> or
+/// <c>LongFrom</c> method group) into one.
+/// </remarks>
+/// <typeparam name="T">Type of the parsed item</typeparam>
+private delegate void TupleItemDeserializer<T>(
+{I}Nodes.JsonNode node,
+{I}out T value,
+{I}out Reporting.Error? error);
+
+/// <summary>
+/// Adapt <paramref name="deserializeItem" /> -- a reference-type item parser
+/// as used for list-typed properties -- into a <see cref="TupleItemDeserializer{{T}}" />
+/// for use in a tuple-typed property.
+/// </summary>
+/// <remarks>
+/// See the remarks on <see cref="TupleItemDeserializer{{T}}" /> for why this
+/// adapter -- rather than a shared constraint on <c>ParseTupleN</c> itself --
+/// is necessary. This overload and its <c>JsonStructItemDeserializer&lt;T&gt;</c>
+/// counterpart are dispatched on the parameter's delegate type alone, so a
+/// caller never has to pick between them by name; each encapsulates the
+/// "unwrap the nullable result, or propagate the error" check exactly once,
+/// mirroring how <see cref="ParseArrayOfClass{{T}}" />/
+/// <see cref="ParseArrayOfStruct{{T}}" /> encapsulate the very same check
+/// once for lists instead of repeating it at every call site.
+/// </remarks>
+/// <typeparam name="T">Type of the parsed item</typeparam>
+private static TupleItemDeserializer<T> AsTupleItemDeserializer<T>(
+{I}JsonClassItemDeserializer<T> deserializeItem
+{I}) where T : class
+{{
+{I}return (
+{II}Nodes.JsonNode node,
+{II}out T value,
+{II}out Reporting.Error? error) =>
+{II}{{
+{III}T? parsed = deserializeItem(node, out error);
+{III}if (error != null)
+{III}{{
+{IIII}value = default!;
+{IIII}return;
+{III}}}
+{III}value = parsed
+{IIII}?? throw new System.InvalidOperationException(
+{IIIII}"Unexpected result null when error is null");
+{II}}};
+}}
+
+/// <summary>
+/// Adapt <paramref name="deserializeItem" /> -- a value-type item parser
+/// as used for list-typed properties -- into a <see cref="TupleItemDeserializer{{T}}" />
+/// for use in a tuple-typed property.
+/// </summary>
+/// <remarks>
+/// See <see cref="AsTupleItemDeserializer{{T}}(JsonClassItemDeserializer{{T}})" />
+/// for why this adapter is necessary.
+/// </remarks>
+/// <typeparam name="T">Type of the parsed item</typeparam>
+private static TupleItemDeserializer<T> AsTupleItemDeserializer<T>(
+{I}JsonStructItemDeserializer<T> deserializeItem
+{I}) where T : struct
+{{
+{I}return (
+{II}Nodes.JsonNode node,
+{II}out T value,
+{II}out Reporting.Error? error) =>
+{II}{{
+{III}T? parsed = deserializeItem(node, out error);
+{III}if (error != null)
+{III}{{
+{IIII}value = default;
+{IIII}return;
+{III}}}
+{III}value = parsed
+{IIII}?? throw new System.InvalidOperationException(
+{IIIII}"Unexpected result null when error is null");
+{II}}};
+}}"""
+    )
+
+
+@require(lambda arity: arity > 0)
+def _generate_parse_tuple_helper(arity: int) -> Stripped:
+    """
+    Generate a generic function to parse a tuple of the given ``arity``.
+
+    Each positional item is parsed by its own ``deserializeItemI`` callback,
+    which sets the ``out value`` only if it does not also set ``out error``.
+    We can not reuse :py:func:`_generate_parse_array_of_class_helper`/
+    :py:func:`_generate_parse_array_of_struct_helper` here since a tuple is
+    heterogeneous: unlike a single generic ``T`` shared by every list item,
+    each tuple position has its own type, possibly a mix of reference and
+    value types, so the item delegate takes ``value`` as an ``out`` parameter
+    instead of returning a nullable ``T?`` (which would need a ``class`` or
+    ``struct`` constraint fixed once for all instantiations of this method).
+    """
+    type_params = [f"T{i}" for i in range(arity)]
+    type_params_joined = ", ".join(type_params)
+
+    if arity == 1:
+        tuple_type = f"System.ValueTuple<{type_params[0]}>"
+    else:
+        tuple_type = f"({type_params_joined})"
+
+    params_joined = ",\n".join(
+        f"TupleItemDeserializer<T{i}> deserializeItem{i}" for i in range(arity)
+    )
+
+    item_blocks = []  # type: List[Stripped]
+    for i in range(arity):
+        item_blocks.append(
+            Stripped(
+                f"""\
+Nodes.JsonNode? node{i} = array[{i}];
+if (node{i} == null)
+{{
+{I}error = new Reporting.Error(
+{II}"Expected a non-null item, but got a null");
+{I}error.PrependSegment(
+{II}new Reporting.IndexSegment(
+{III}{i}));
+{I}return default!;
+}}
+deserializeItem{i}(node{i}, out T{i} item{i}, out error);
+if (error != null)
+{{
+{I}error.PrependSegment(
+{II}new Reporting.IndexSegment(
+{III}{i}));
+{I}return default!;
+}}"""
+            )
+        )
+
+    item_blocks_joined = "\n\n".join(item_blocks)
+
+    item_vars_joined = ",\n".join(f"item{i}" for i in range(arity))
+
+    if arity == 1:
+        return_expr = "System.ValueTuple.Create(item0)"
+    else:
+        return_expr = f"""\
+(
+{I}{indent_but_first_line(item_vars_joined, I)}
+)"""
+
+    function_name = f"ParseTuple{arity}"
+
+    return Stripped(
+        f"""\
+/// <summary>
+/// Parse every item of <paramref name="array" /> as a tuple of {arity} item(s).
+/// </summary>
+/// <remarks>
+/// This is shared by all the tuple-typed properties of arity {arity}.
+/// </remarks>
+private static {tuple_type} {function_name}<{type_params_joined}>(
+{I}Nodes.JsonArray array,
+{I}{indent_but_first_line(params_joined, I)},
+{I}out Reporting.Error? error)
+{{
+{I}error = null;
+
+{I}if (array.Count != {arity})
+{I}{{
+{II}error = new Reporting.Error(
+{III}$"Expected exactly {arity} item(s) in the JsonArray, " +
+{III}$"but got: {{array.Count}}");
+{II}return default!;
+{I}}}
+
+{I}{indent_but_first_line(item_blocks_joined, I)}
+
+{I}return {indent_but_first_line(return_expr, I)};
+}}"""
+    )
+
+
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_deserialize_constructor_argument(
     arg: intermediate.Argument,
@@ -407,10 +616,7 @@ if ({target_var} == null)
         )
 
     elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        assert not isinstance(
-            type_anno.items,
-            (intermediate.OptionalTypeAnnotation, intermediate.ListTypeAnnotation),
-        ), (
+        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
             f"(mristin): We generate only code for lists of atomic values in the JSON "
             f"de-serialization, but got a list of type {type_anno}. "
             f"Please contact the developers if you need this feature."
@@ -453,6 +659,56 @@ if ({array_var} == null)
 {target_var} = {parse_array_function}<{item_type}>(
 {I}{array_var},
 {I}{parse_method},
+{I}out error);
+if (error != null)
+{{
+{I}error.PrependSegment(
+{II}new Reporting.NameSegment(
+{III}{json_literal}));
+{I}return null;
+}}"""
+        )
+
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        array_var = csharp_naming.variable_name(Identifier(f"array_{arg.name}"))
+
+        item_deserializer_exprs = []  # type: List[Stripped]
+
+        for item_type_anno in type_anno.items:
+            assert isinstance(
+                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
+                f"Expected an atomic tuple item (a primitive, a constrained "
+                f"primitive, an enumeration or a class), but got {item_type_anno}. "
+                f"This should have already been verified in "
+                f"intermediate._translate._verify_only_simple_type_patterns."
+            )
+
+            parse_method = _parse_method_for_atomic_value(item_type_anno)
+
+            item_deserializer_exprs.append(
+                Stripped(f"AsTupleItemDeserializer({parse_method})")
+            )
+
+        item_deserializer_exprs_joined = ",\n".join(item_deserializer_exprs)
+
+        arity = len(type_anno.items)
+
+        parse_block = Stripped(
+            f"""\
+Nodes.JsonArray? {array_var} = keyValue.Value as Nodes.JsonArray;
+if ({array_var} == null)
+{{
+{I}error = new Reporting.Error(
+{II}$"Expected a JsonArray, but got {{keyValue.Value.GetType()}}");
+{I}error.PrependSegment(
+{II}new Reporting.NameSegment(
+{III}{json_literal}));
+{I}return null;
+}}
+{target_var} = ParseTuple{arity}(
+{I}{array_var},
+{I}{indent_but_first_line(item_deserializer_exprs_joined, I)},
 {I}out error);
 if (error != null)
 {{
@@ -981,6 +1237,12 @@ internal static byte[]? BytesFrom(
         _generate_parse_array_of_struct_helper(),
     ]  # type: List[Stripped]
 
+    tuple_arities = intermediate.tuple_arities(symbol_table)
+    if len(tuple_arities) > 0:
+        blocks.append(_generate_tuple_item_deserializer_helpers())
+        for arity in tuple_arities:
+            blocks.append(_generate_parse_tuple_helper(arity))
+
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
             blocks.append(_generate_from_method_for_enumeration(enumeration=our_type))
@@ -1273,6 +1535,152 @@ Transform(
         assert_never(type_annotation)
 
 
+def _generate_tuple_atomic_serializer_helpers() -> List[Stripped]:
+    """
+    Generate ``ToJsonValue`` overloads so every atomic tuple item is a bare method group.
+
+    ``SerializeTupleN`` (see :py:func:`_generate_serialize_tuple_helper`)
+    accepts a plain ``System.Func<T, Nodes.JsonNode?>`` per item, so a tuple
+    item whose serialization is already a single call to one of our own
+    methods (the existing ``Transformer.ToJsonValue(long)``, a class's own
+    ``Transform``, an enum's own ``...ToJsonValue``) can be passed on
+    directly, with no wrapping lambda -- see
+    :py:func:`_tuple_item_serializer_expr`.
+
+    ``bool``, ``float`` (``double``), ``str`` and ``bytearray`` (the latter
+    additionally composing a base64 encoding step) route through the BCL's
+    ``Nodes.JsonValue.Create`` instead, which can NOT be passed on directly
+    as a bare method group -- verified against the compiler:
+    ``Nodes.JsonValue.Create`` is a *generic* method with an optional second
+    parameter (``Create<T>(T value, JsonNodeOptions? options = null)``), and
+    the C# compiler refuses to convert a method group to a delegate in that
+    combination (CS1503), regardless of whether ``T`` would otherwise be
+    inferable from the target delegate.
+
+    So we add more overloads of the already-existing, single-purpose,
+    non-generic ``Transformer.ToJsonValue`` here -- one per such primitive
+    type -- exactly so that *an overload of ours*, not
+    ``Nodes.JsonValue.Create`` itself, can be forwarded as a bare method
+    group; unlike a generic method, a plain overload set is resolved by the
+    compiler purely from the (already-known, at every call site here) target
+    delegate type, which is exactly the case that fails for
+    ``Nodes.JsonValue.Create`` -- also verified against the compiler.
+    """
+    result = []  # type: List[Stripped]
+
+    for csharp_type, conversion_expr in (
+        ("bool", "Nodes.JsonValue.Create(that)"),
+        ("double", "Nodes.JsonValue.Create(that)"),
+        ("string", "Nodes.JsonValue.Create(that)"),
+        ("byte[]", "Nodes.JsonValue.Create(System.Convert.ToBase64String(that))"),
+    ):
+        result.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Convert <paramref name="that" /> to a JSON value.
+/// </summary>
+[CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
+private static Nodes.JsonValue ToJsonValue({csharp_type} that)
+{{
+{I}return {conversion_expr};
+}}"""
+            )
+        )
+
+    return result
+
+
+def _tuple_item_serializer_expr(
+    type_annotation: intermediate.AtomicTypeAnnotation,
+) -> Stripped:
+    """
+    Generate an expression usable directly as a tuple item's serializer.
+
+    ``SerializeTupleN`` (see :py:func:`_generate_serialize_tuple_helper`)
+    infers its type parameters from the tuple value itself (its first
+    argument), so -- unlike the adapters needed on the deserialization side
+    -- a bare method group already matching ``System.Func<T, Nodes.JsonNode?>``
+    can be passed on directly here, without a wrapping lambda, for every
+    atomic kind: every primitive routes through one of the
+    ``Transformer.ToJsonValue`` overloads (see
+    :py:func:`_generate_tuple_atomic_serializer_helpers` for why we route
+    ``bool``/``float``/``str``/``bytearray`` through overloads of our own
+    instead of the BCL's ``Nodes.JsonValue.Create`` directly), and classes/
+    enums route through their own existing single-overload, non-generic
+    ``Transform``/``...ToJsonValue`` methods.
+    """
+    if isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
+        primitive_type = type_annotation.a_type
+    elif isinstance(type_annotation, intermediate.OurTypeAnnotation) and isinstance(
+        type_annotation.our_type, intermediate.ConstrainedPrimitive
+    ):
+        primitive_type = type_annotation.our_type.constrainee
+    else:
+        primitive_type = None
+
+    if primitive_type is not None:
+        return Stripped("Transformer.ToJsonValue")
+
+    assert isinstance(type_annotation, intermediate.OurTypeAnnotation)
+    our_type = type_annotation.our_type
+
+    if isinstance(our_type, intermediate.Enumeration):
+        name = csharp_naming.enum_name(our_type.name)
+        return Stripped(f"Serialize.{name}ToJsonValue")
+    elif isinstance(our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)):
+        return Stripped("Transform")
+    elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+        raise AssertionError(
+            f"Unexpected {our_type=}: a constrained primitive should have "
+            f"already been handled above through ``primitive_type``"
+        )
+    else:
+        assert_never(our_type)
+
+
+@require(lambda arity: arity > 0)
+def _generate_serialize_tuple_helper(arity: int) -> Stripped:
+    """Generate a generic function to serialize a tuple of the given ``arity``."""
+    type_params = [f"T{i}" for i in range(arity)]
+    type_params_joined = ", ".join(type_params)
+
+    if arity == 1:
+        tuple_type = f"System.ValueTuple<{type_params[0]}>"
+    else:
+        tuple_type = f"({type_params_joined})"
+
+    params_joined = ",\n".join(
+        f"System.Func<T{i}, Nodes.JsonNode?> serializeItem{i}" for i in range(arity)
+    )
+
+    add_stmts_joined = "\n".join(
+        f"result.Add(serializeItem{i}(that.Item{i + 1}));" for i in range(arity)
+    )
+
+    function_name = f"SerializeTuple{arity}"
+
+    return Stripped(
+        f"""\
+/// <summary>
+/// Serialize the tuple <paramref name="that" /> of {arity} item(s) with
+/// <paramref name="serializeItem0" />, <paramref name="serializeItem1" />, *etc.*
+/// into a JSON array.
+/// </summary>
+/// <remarks>
+/// This is shared by all the tuple-typed properties of arity {arity}.
+/// </remarks>
+private static Nodes.JsonArray {function_name}<{type_params_joined}>(
+{I}{tuple_type} that,
+{I}{indent_but_first_line(params_joined, I)})
+{{
+{I}var result = new Nodes.JsonArray();
+{I}{indent_but_first_line(add_stmts_joined, I)}
+{I}return result;
+}}"""
+    )
+
+
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_transform_property(
     prop: intermediate.Property,
@@ -1310,10 +1718,7 @@ def _generate_transform_property(
         )
         stmts.append(Stripped(f"result[{prop_literal}] = {conversion_expr};"))
     elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        assert not isinstance(
-            type_anno.items,
-            (intermediate.OptionalTypeAnnotation, intermediate.ListTypeAnnotation),
-        ), (
+        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
             f"(mristin): We generate only code for lists of atomic values in the JSON "
             f"serialization, but got a list of type {type_anno}. "
             f"Please contact the developers if you need this feature."
@@ -1334,6 +1739,36 @@ Nodes.JsonArray {array_var} = SerializeArray(
 {I}{source_expr},
 {I}({item_type} item) =>
 {II}{indent_but_first_line(item_conversion_expr, II)});
+result[{prop_literal}] = {array_var};"""
+            )
+        )
+
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        array_var = csharp_naming.variable_name(Identifier(f"array_{prop.name}"))
+
+        item_serializer_exprs = []  # type: List[Stripped]
+        for item_type_anno in type_anno.items:
+            assert isinstance(
+                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
+                f"Expected an atomic tuple item (a primitive, a constrained "
+                f"primitive, an enumeration or a class), but got {item_type_anno}. "
+                f"This should have already been verified in "
+                f"intermediate._translate._verify_only_simple_type_patterns."
+            )
+
+            item_serializer_exprs.append(_tuple_item_serializer_expr(item_type_anno))
+
+        item_serializer_exprs_joined = ",\n".join(item_serializer_exprs)
+
+        arity = len(type_anno.items)
+
+        stmts.append(
+            Stripped(
+                f"""\
+Nodes.JsonArray {array_var} = SerializeTuple{arity}(
+{I}{source_expr},
+{I}{indent_but_first_line(item_serializer_exprs_joined, I)});
 result[{prop_literal}] = {array_var};"""
             )
         )
@@ -1490,6 +1925,12 @@ private static Nodes.JsonArray SerializeArray<T>(
 }}"""
         ),
     ]  # type: List[Stripped]
+
+    tuple_arities = intermediate.tuple_arities(symbol_table)
+    if len(tuple_arities) > 0:
+        blocks.extend(_generate_tuple_atomic_serializer_helpers())
+        for arity in tuple_arities:
+            blocks.append(_generate_serialize_tuple_helper(arity))
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):

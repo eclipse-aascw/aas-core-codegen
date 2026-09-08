@@ -840,6 +840,8 @@ def _generate_transform_property(
             )
         else:
             pass
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        pass
     else:
         pass
 
@@ -874,10 +876,7 @@ errorStream = Stream.<Reporting.Error>concat(errorStream,
         )
 
     elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        assert not isinstance(
-            type_anno.items,
-            (intermediate.OptionalTypeAnnotation, intermediate.ListTypeAnnotation),
-        ), (
+        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
             "We chose to implement only a very limited pattern matching; "
             "see the note above in the code."
         )
@@ -913,6 +912,31 @@ errorStream = Stream.<Reporting.Error>concat(errorStream,
 {II}}}));"""
             )
         )
+
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        for i, item_type_anno in enumerate(type_anno.items):
+            if not isinstance(item_type_anno, intermediate.OurTypeAnnotation):
+                # There is nothing that we check for primitive items.
+                continue
+
+            verify_method = _generate_verify_method(our_type=item_type_anno.our_type)
+            item_expr = Stripped(f"{source_expr}.item{i + 1}()")
+
+            stmts.append(
+                Stripped(
+                    f"""\
+errorStream = Stream.<Reporting.Error>concat(errorStream,
+{I}Stream.of({item_expr})
+{II}.flatMap(Verification::{verify_method})
+{III}.map(error -> {{
+{IIII}error.prependSegment(
+{IIIII}new Reporting.IndexSegment({i}));
+{IIII}error.prependSegment(
+{IIIII}new Reporting.NameSegment({prop_literal}));
+{IIII}return error;
+{III}}}));"""
+                )
+            )
 
     else:
         assert_never(type_anno)
@@ -1231,6 +1255,7 @@ def generate(
         Stripped("import java.util.stream.IntStream;"),
         Stripped("import java.util.stream.Stream;"),
         Stripped("import java.util.stream.StreamSupport;"),
+        Stripped(f"import {package}.common.*;"),
         Stripped(f"import {package}.constants.*;"),
         Stripped(f"import {package}.reporting.Reporting;"),
         Stripped(f"import {package}.types.enums.*;"),

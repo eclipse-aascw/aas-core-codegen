@@ -832,10 +832,7 @@ def _generate_transform_property(
         )
 
     elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        assert not isinstance(
-            type_anno.items,
-            (intermediate.OptionalTypeAnnotation, intermediate.ListTypeAnnotation),
-        ), (
+        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
             "We chose to implement only a very limited pattern matching; "
             "see the note above in the code."
         )
@@ -885,6 +882,46 @@ int {index_var} = 0;
 }}"""
             )
         )
+
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        for i, item_type_anno in enumerate(type_anno.items):
+            # NOTE (mristin):
+            # We only descend into our types here; there is nothing to check for
+            # a plain primitive item.
+            if not isinstance(item_type_anno, intermediate.OurTypeAnnotation):
+                continue
+
+            item_expr = f"{source_expr}.Item{i + 1}"
+            verify_method = _generate_verify_method(our_type=item_type_anno.our_type)
+
+            foreach_error_in_verify = (
+                f"foreach (var error in {verify_method}({item_expr}))"
+            )
+            # Heuristic to break the lines, very rudimentary
+            if len(foreach_error_in_verify) > 80:
+                foreach_error_in_verify = textwrap.dedent(
+                    f"""\
+                    foreach (
+                        {I}var error in {verify_method}(
+                        {II}{item_expr}))"""
+                )
+
+            # We can't use textwrap.dedent due to foreach_snippet.
+            stmts.append(
+                Stripped(
+                    f"""\
+{foreach_error_in_verify}
+{{
+{I}error.PrependSegment(
+{II}new Reporting.IndexSegment(
+{III}{i}));
+{I}error.PrependSegment(
+{II}new Reporting.NameSegment(
+{III}{prop_literal}));
+{I}yield return error;
+}}"""
+                )
+            )
 
     else:
         assert_never(type_anno)

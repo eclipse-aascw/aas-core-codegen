@@ -835,6 +835,14 @@ def _find_constrained_primitive(
     elif isinstance(type_annotation, intermediate.ListTypeAnnotation):
         return _find_constrained_primitive(type_annotation.items)
 
+    elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+        for item in type_annotation.items:
+            result = _find_constrained_primitive(item)
+            if result is not None:
+                return result
+
+        return None
+
     else:
         assert_never(type_annotation)
 
@@ -1176,14 +1184,7 @@ error_ = common::make_unique<Error>(
         )
 
     for prop in verificator_qualities.constrained_primitive_properties:
-        constrained_primitive = _find_constrained_primitive(prop.type_annotation)
-        assert constrained_primitive is not None
-
         type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-        of_constrained_primitive = cpp_naming.class_name(
-            Identifier(f"Of_{constrained_primitive.name}")
-        )
 
         property_enum = cpp_naming.enum_name(Identifier("Property"))
         property_literal = cpp_naming.enum_literal_name(prop.name)
@@ -1206,7 +1207,11 @@ error_ = common::make_unique<Error>(
 
         elif isinstance(type_anno, intermediate.OurTypeAnnotation):
             assert isinstance(type_anno.our_type, intermediate.ConstrainedPrimitive)
-            assert type_anno.our_type is constrained_primitive
+            constrained_primitive = type_anno.our_type
+
+            of_constrained_primitive = cpp_naming.class_name(
+                Identifier(f"Of_{constrained_primitive.name}")
+            )
 
             # noinspection PyListCreation
             flow_for_prop = []
@@ -1274,6 +1279,10 @@ error_->path.segments.emplace_back(
                     f"but we got: {prop.type_annotation}. "
                     f"Please contact the developers if you need this feature."
                 )
+
+            of_constrained_primitive = cpp_naming.class_name(
+                Identifier(f"Of_{type_anno.items.our_type.name}")
+            )
 
             # noinspection PyListCreation
             flow_for_prop = []
@@ -1344,6 +1353,88 @@ error_->path.segments.emplace_back(
                     ],
                 )
             )
+
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            # NOTE (mristin):
+            # Unlike lists, tuples are heterogeneous and fixed-length, and different
+            # items might refer to different constrained primitives, so we generate
+            # a separate, statically indexed verificator invocation for every item
+            # which is annotated with a constrained primitive.
+            item_indices_and_constrained_primitives = [
+                (i, item_type_anno.our_type)
+                for i, item_type_anno in enumerate(type_anno.items)
+                if isinstance(item_type_anno, intermediate.OurTypeAnnotation)
+                and isinstance(
+                    item_type_anno.our_type, intermediate.ConstrainedPrimitive
+                )
+            ]
+            assert len(item_indices_and_constrained_primitives) > 0
+
+            # noinspection PyListCreation
+            flow_for_prop = []
+
+            for (
+                item_index,
+                item_constrained_primitive,
+            ) in item_indices_and_constrained_primitives:
+                item_of_constrained_primitive = cpp_naming.class_name(
+                    Identifier(f"Of_{item_constrained_primitive.name}")
+                )
+
+                item_getter_expr = Stripped(f"std::get<{item_index}>({getter_expr})")
+
+                flow_for_prop.append(
+                    yielding_flow.command_from_text(
+                        f"""\
+constrained_primitive_verificator_ = (
+{I}common::make_unique<
+{II}constrained_primitive_verificator::{item_of_constrained_primitive}
+{I}>(
+{II}{indent_but_first_line(item_getter_expr, II)}
+{I})
+);
+constrained_primitive_verificator_->Start();"""
+                    )
+                )
+                flow_for_prop.append(
+                    yielding_flow.For(
+                        "!constrained_primitive_verificator_->Done()",
+                        "constrained_primitive_verificator_->Next();",
+                        [
+                            yielding_flow.command_from_text(
+                                f"""\
+// We intentionally take over the ownership of the errors' data members,
+// as we know the implementation in all the detail, and want to avoid a costly
+// copy.
+error_ = common::make_unique<Error>(
+{I}std::move(
+{II}constrained_primitive_verificator_->GetMutable()
+{I})
+);
+
+error_->path.segments.emplace_back(
+{I}common::make_unique<iteration::IndexSegment>(
+{II}{item_index}
+{I})
+);
+
+error_->path.segments.emplace_back(
+{I}common::make_unique<iteration::PropertySegment>(
+{II}iteration::{property_enum}::{property_literal}
+{I})
+);
+
+++index_;"""
+                            ),
+                            yielding_flow.Yield(),
+                        ],
+                    )
+                )
+                flow_for_prop.append(
+                    yielding_flow.command_from_text(
+                        "constrained_primitive_verificator_ = nullptr;"
+                    )
+                )
 
         else:
             assert_never(type_anno)

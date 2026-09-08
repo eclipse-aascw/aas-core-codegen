@@ -348,6 +348,34 @@ class _ParseConstant(_Parse):
             )
 
 
+class _ParseTuple(_Parse):
+    def matches(self, node: ast.AST) -> bool:
+        return isinstance(node, ast.Tuple)
+
+    # noinspection PyTypeChecker
+    def transform(self, node: ast.AST) -> Tuple[Optional[tree.Node], Optional[Error]]:
+        assert isinstance(node, ast.Tuple)
+
+        values = []  # type: List[tree.Expression]
+        for elt_node in node.elts:
+            value, error = ast_node_to_our_node(elt_node)
+            if error is not None:
+                return None, error
+
+            assert value is not None
+
+            if not isinstance(value, tree.Expression):
+                return None, Error(
+                    elt_node,
+                    f"Expected an expression as an element of a tuple literal, "
+                    f"but got: {value}",
+                )
+
+            values.append(value)
+
+        return tree.Tuple(values=values, original_node=node), None
+
+
 class _ParseImplication(_Parse):
     # noinspection PyUnresolvedReferences
     def matches(self, node: ast.AST) -> bool:
@@ -712,6 +740,7 @@ _CHAIN_OF_RULES = [
     _ParseAnyOrAll(),
     _ParseCall(),
     _ParseConstant(),
+    _ParseTuple(),
     _ParseImplication(),
     _ParseMember(),
     _ParseIndex(),

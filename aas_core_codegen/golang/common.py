@@ -3,12 +3,17 @@ import io
 import math
 import re
 import urllib.parse
-from typing import List, Tuple, Optional
+from typing import List, Sequence, Tuple, Optional
 
-from icontract import ensure
+from icontract import ensure, require
 
 from aas_core_codegen import intermediate
-from aas_core_codegen.common import Stripped, assert_never, Identifier
+from aas_core_codegen.common import (
+    Stripped,
+    assert_never,
+    Identifier,
+    indent_but_first_line,
+)
 from aas_core_codegen.golang import (
     naming as golang_naming,
     pointering as golang_pointering,
@@ -197,6 +202,13 @@ _assert_all_primitive_types_are_mapped()
 TYPES_PACKAGE = Identifier("aastypes")
 CONSTANTS_PACKAGE = Identifier("aasconstants")
 VERIFICATION_PACKAGE = Identifier("aasverification")
+COMMON_PACKAGE = Identifier("aascommon")
+
+#: Maximal arity of a tuple for which we pre-generate a generic ``TupleN`` struct
+#: in :py:mod:`aas_core_codegen.golang.lib._generate_common`.
+#:
+#: If you need larger tuples, please just bump this constant and re-generate.
+MAX_TUPLE_ARITY = 8
 
 
 def generate_type(
@@ -244,6 +256,23 @@ def generate_type(
 
         return Stripped(f"[]{item_type}")
 
+    elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+        item_types = [
+            generate_type(type_annotation=item, types_package=types_package)
+            for item in type_annotation.items
+        ]
+
+        assert len(item_types) <= MAX_TUPLE_ARITY, (
+            f"We only pre-generate Tuple1 .. Tuple{MAX_TUPLE_ARITY} "
+            f"in {COMMON_PACKAGE}, but got a tuple of arity {len(item_types)}. "
+            f"Please contact the developers if you need larger tuples."
+        )
+
+        joined_item_types = ", ".join(item_types)
+        tuple_type_name = f"Tuple{len(item_types)}"
+
+        return Stripped(f"{COMMON_PACKAGE}.{tuple_type_name}[{joined_item_types}]")
+
     elif isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
         value_type = generate_type(
             type_annotation=type_annotation.value, types_package=types_package
@@ -258,6 +287,27 @@ def generate_type(
         assert_never(type_annotation)
 
     raise AssertionError("Should not have gotten here")
+
+
+@require(lambda item_exprs: len(item_exprs) > 0)
+def generate_tuple_literal(
+    type_annotation: intermediate.TupleTypeAnnotation,
+    item_exprs: Sequence[Stripped],
+    types_package: Optional[Identifier] = None,
+) -> Stripped:
+    """Generate a Go composite literal for a tuple of the given item expressions."""
+    tuple_type = generate_type(
+        type_annotation=type_annotation, types_package=types_package
+    )
+
+    joined_item_exprs = ",\n".join(item_exprs)
+
+    return Stripped(
+        f"""\
+{tuple_type}{{
+{INDENT}{indent_but_first_line(joined_item_exprs, INDENT)},
+}}"""
+    )
 
 
 INDENT2 = INDENT * 2

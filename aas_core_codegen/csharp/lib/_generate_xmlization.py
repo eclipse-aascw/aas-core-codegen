@@ -513,6 +513,301 @@ private static List<T> ParseListOfStruct<T>(
     )
 
 
+def _generate_tuple_item_reader_delegate() -> Stripped:
+    """Generate the delegate and adapters shared by all the generic tuple parsers."""
+    return Stripped(
+        f"""\
+/// <summary>
+/// Read a single tuple item from the current position of the reader.
+/// </summary>
+/// <remarks>
+/// A tuple-typed property is parsed by <c>ParseTupleN</c> (see
+/// <see cref="ParseTuple2{{T0, T1}}" /> for the arity-2 case, *etc.*), one
+/// function shared by *every* tuple-typed property of a given arity,
+/// regardless of which mix of reference and value types appears at each
+/// position. If <c>ParseTupleN</c> demanded the same
+/// <c>ClassItemDeserializer&lt;T&gt;</c>/<c>StructItemDeserializer&lt;T&gt;</c>
+/// shape already used for list items (a nullable return, constrained to
+/// <c>class</c> or <c>struct</c>), its own type parameters would need that
+/// constraint fixed once per position -- which breaks the moment two
+/// different tuple-typed properties of the same arity mix reference and
+/// value types differently at the same position (<em>e.g.</em>,
+/// <c>(string, long)</c> at one property and <c>(long, string)</c> at
+/// another could not share one <c>ParseTuple2</c>).
+///
+/// A single unconstrained <c>T? Method(Xml.XmlReader reader, out Reporting.Error? error)</c>
+/// shape shared by both reference and value types does not work around this
+/// either: for a value type, an unconstrained <c>T?</c> erases to plain
+/// <c>T</c> (not <c>System.Nullable&lt;T&gt;</c>), so a method returning
+/// <c>long?</c> can not even be assigned to it.
+///
+/// <c>TupleItemDeserializer&lt;T&gt;</c> sidesteps the class/struct split
+/// entirely by using an <c>out</c> parameter for the value instead of a
+/// nullable return, at the cost of needing an adapter --
+/// <see cref="AsTupleItemDeserializer{{T}}(ClassItemDeserializer{{T}})" /> --
+/// to convert an existing item reader (such as a <c>ReadVElementAsString</c>
+/// call or a class's own <c>...FromElement</c> method group) into one.
+/// </remarks>
+/// <typeparam name="T">Type of the parsed item</typeparam>
+private delegate void TupleItemDeserializer<T>(
+{I}Xml.XmlReader reader,
+{I}out T value,
+{I}out Reporting.Error? error);
+
+/// <summary>
+/// Adapt <paramref name="deserializeItem" /> -- a reference-type item reader
+/// as used for list-typed properties -- into a <see cref="TupleItemDeserializer{{T}}" />
+/// for use in a tuple-typed property.
+/// </summary>
+/// <remarks>
+/// See the remarks on <see cref="TupleItemDeserializer{{T}}" /> for why this
+/// adapter -- rather than a shared constraint on <c>ParseTupleN</c> itself --
+/// is necessary. This overload and its <c>StructItemDeserializer&lt;T&gt;</c>
+/// counterpart are dispatched on the parameter's delegate type alone, so a
+/// caller never has to pick between them by name; each encapsulates the
+/// "unwrap the nullable result, or propagate the error" check exactly once,
+/// mirroring how <see cref="ParseListOfClass{{T}}" />/
+/// <see cref="ParseListOfStruct{{T}}" /> encapsulate the very same check
+/// once for lists instead of repeating it at every call site.
+/// </remarks>
+/// <typeparam name="T">Type of the parsed item</typeparam>
+private static TupleItemDeserializer<T> AsTupleItemDeserializer<T>(
+{I}ClassItemDeserializer<T> deserializeItem
+{I}) where T : class
+{{
+{I}return (
+{II}Xml.XmlReader reader,
+{II}out T value,
+{II}out Reporting.Error? error) =>
+{II}{{
+{III}T? parsed = deserializeItem(reader, out error);
+{III}if (error != null)
+{III}{{
+{IIII}value = default!;
+{IIII}return;
+{III}}}
+{III}value = parsed
+{IIII}?? throw new System.InvalidOperationException(
+{IIIII}"Unexpected result null when error is null");
+{II}}};
+}}
+
+/// <summary>
+/// Adapt <paramref name="deserializeItem" /> -- a value-type item reader
+/// as used for list-typed properties -- into a <see cref="TupleItemDeserializer{{T}}" />
+/// for use in a tuple-typed property.
+/// </summary>
+/// <remarks>
+/// See <see cref="AsTupleItemDeserializer{{T}}(ClassItemDeserializer{{T}})" />
+/// for why this adapter is necessary.
+/// </remarks>
+/// <typeparam name="T">Type of the parsed item</typeparam>
+private static TupleItemDeserializer<T> AsTupleItemDeserializer<T>(
+{I}StructItemDeserializer<T> deserializeItem
+{I}) where T : struct
+{{
+{I}return (
+{II}Xml.XmlReader reader,
+{II}out T value,
+{II}out Reporting.Error? error) =>
+{II}{{
+{III}T? parsed = deserializeItem(reader, out error);
+{III}if (error != null)
+{III}{{
+{IIII}value = default;
+{IIII}return;
+{III}}}
+{III}value = parsed
+{IIII}?? throw new System.InvalidOperationException(
+{IIIII}"Unexpected result null when error is null");
+{II}}};
+}}
+
+/// <summary>
+/// Read a single tuple item wrapped in a reference-type-valued named
+/// element such as <c>&lt;v1&gt;</c>, <c>&lt;v2&gt;</c>, *etc.*
+/// </summary>
+/// <remarks>
+/// This is the counterpart of <see cref="ClassItemDeserializer{{T}}" /> for
+/// item readers that additionally need the expected element name passed in
+/// -- such as <see cref="ReadVElementAsString" /> -- since a tuple item, unlike
+/// a list item, is wrapped in a positional element name instead of always
+/// the fixed <c>&lt;v&gt;</c>.
+/// </remarks>
+/// <typeparam name="T">Type of the parsed item</typeparam>
+private delegate T? NamedClassItemDeserializer<T>(
+{I}Xml.XmlReader reader,
+{I}string elementName,
+{I}out Reporting.Error? error
+{I}) where T : class;
+
+/// <summary>
+/// Read a single tuple item wrapped in a value-type-valued named element
+/// such as <c>&lt;v1&gt;</c>, <c>&lt;v2&gt;</c>, *etc.*
+/// </summary>
+/// <remarks>
+/// See the remarks on <see cref="NamedClassItemDeserializer{{T}}" />.
+/// </remarks>
+/// <typeparam name="T">Type of the parsed item</typeparam>
+private delegate T? NamedStructItemDeserializer<T>(
+{I}Xml.XmlReader reader,
+{I}string elementName,
+{I}out Reporting.Error? error
+{I}) where T : struct;
+
+/// <summary>
+/// Adapt <paramref name="deserializeItem" /> -- a reference-type item reader
+/// which additionally expects the element name, such as
+/// <see cref="ReadVElementAsString" /> -- into a
+/// <see cref="TupleItemDeserializer{{T}}" /> bound to
+/// <paramref name="elementName" />, for use in a tuple-typed property.
+/// </summary>
+/// <remarks>
+/// See the remarks on <see cref="TupleItemDeserializer{{T}}" /> for why an
+/// adapter is necessary in the first place. This overload additionally
+/// closes over <paramref name="elementName" /> (<em>e.g.</em>, <c>"v1"</c>),
+/// so that the tuple-typed property itself does not need to spell out a
+/// lambda just to bind the positional element name.
+/// </remarks>
+/// <typeparam name="T">Type of the parsed item</typeparam>
+private static TupleItemDeserializer<T> AsTupleItemDeserializer<T>(
+{I}NamedClassItemDeserializer<T> deserializeItem,
+{I}string elementName
+{I}) where T : class
+{{
+{I}return (
+{II}Xml.XmlReader reader,
+{II}out T value,
+{II}out Reporting.Error? error) =>
+{II}{{
+{III}T? parsed = deserializeItem(reader, elementName, out error);
+{III}if (error != null)
+{III}{{
+{IIII}value = default!;
+{IIII}return;
+{III}}}
+{III}value = parsed
+{IIII}?? throw new System.InvalidOperationException(
+{IIIII}"Unexpected result null when error is null");
+{II}}};
+}}
+
+/// <summary>
+/// Adapt <paramref name="deserializeItem" /> -- a value-type item reader
+/// which additionally expects the element name, such as
+/// <see cref="ReadVElementAsLong" /> -- into a
+/// <see cref="TupleItemDeserializer{{T}}" /> bound to
+/// <paramref name="elementName" />, for use in a tuple-typed property.
+/// </summary>
+/// <remarks>
+/// See <see cref="AsTupleItemDeserializer{{T}}(NamedClassItemDeserializer{{T}}, string)" />
+/// for why this adapter is necessary.
+/// </remarks>
+/// <typeparam name="T">Type of the parsed item</typeparam>
+private static TupleItemDeserializer<T> AsTupleItemDeserializer<T>(
+{I}NamedStructItemDeserializer<T> deserializeItem,
+{I}string elementName
+{I}) where T : struct
+{{
+{I}return (
+{II}Xml.XmlReader reader,
+{II}out T value,
+{II}out Reporting.Error? error) =>
+{II}{{
+{III}T? parsed = deserializeItem(reader, elementName, out error);
+{III}if (error != null)
+{III}{{
+{IIII}value = default;
+{IIII}return;
+{III}}}
+{III}value = parsed
+{IIII}?? throw new System.InvalidOperationException(
+{IIIII}"Unexpected result null when error is null");
+{II}}};
+}}"""
+    )
+
+
+@require(lambda arity: arity > 0)
+def _generate_parse_tuple_helper(arity: int) -> Stripped:
+    """
+    Generate a generic function to parse a tuple of the given ``arity``.
+
+    Each positional item is read by its own ``deserializeItemI`` callback,
+    which is expected to have already consumed its own start and end tags (if
+    any). We can not reuse :py:func:`_generate_parse_list_of_class_helpers`/
+    :py:func:`_generate_parse_list_of_struct_helpers` here since a tuple is
+    heterogeneous -- see :py:func:`TupleItemDeserializer` for why the item
+    delegate uses an ``out`` parameter instead of a nullable return value.
+    """
+    type_params = [f"T{i}" for i in range(arity)]
+    type_params_joined = ", ".join(type_params)
+
+    if arity == 1:
+        tuple_type = f"System.ValueTuple<{type_params[0]}>"
+    else:
+        tuple_type = f"({type_params_joined})"
+
+    params_joined = ",\n".join(
+        f"TupleItemDeserializer<T{i}> deserializeItem{i}" for i in range(arity)
+    )
+
+    item_blocks = []  # type: List[Stripped]
+    for i in range(arity):
+        item_block = Stripped(
+            f"""\
+deserializeItem{i}(reader, out T{i} item{i}, out error);
+if (error != null)
+{{
+{I}error.PrependSegment(
+{II}new Reporting.IndexSegment(
+{III}{i}));
+{I}return default!;
+}}"""
+        )
+        if i < arity - 1:
+            item_block = Stripped(
+                f"{item_block}\nSkipNoneWhitespaceAndComments(reader);"
+            )
+        item_blocks.append(item_block)
+
+    item_blocks_joined = "\n\n".join(item_blocks)
+
+    item_vars_joined = ",\n".join(f"item{i}" for i in range(arity))
+
+    if arity == 1:
+        return_expr = "System.ValueTuple.Create(item0)"
+    else:
+        return_expr = f"""\
+(
+{I}{indent_but_first_line(item_vars_joined, I)}
+)"""
+
+    function_name = f"ParseTuple{arity}"
+
+    return Stripped(
+        f"""\
+/// <summary>
+/// Parse a tuple of {arity} item(s) from the current position
+/// of <paramref name="reader" />.
+/// </summary>
+/// <remarks>
+/// This is shared by all the tuple-typed properties of arity {arity}.
+/// </remarks>
+private static {tuple_type} {function_name}<{type_params_joined}>(
+{I}Xml.XmlReader reader,
+{I}{indent_but_first_line(params_joined, I)},
+{I}out Reporting.Error? error)
+{{
+{I}error = null;
+
+{I}{indent_but_first_line(item_blocks_joined, I)}
+
+{I}return {indent_but_first_line(return_expr, I)};
+}}"""
+    )
+
+
 def _generate_read_v_element_as_enumeration(
     enumeration: intermediate.Enumeration,
 ) -> Stripped:
@@ -943,6 +1238,117 @@ if (!isEmptyProperty)
     )
 
 
+def _generate_deserialize_tuple_property(prop: intermediate.Property) -> Stripped:
+    """Generate the code to de-serialize a property ``prop`` as a tuple."""
+    type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+    assert isinstance(type_anno, intermediate.TupleTypeAnnotation), "Pre-condition"
+
+    prop_name = csharp_naming.property_name(prop.name)
+    xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
+    target_var = csharp_naming.variable_name(Identifier(f"the_{prop.name}"))
+
+    item_deserializer_exprs = []  # type: List[Stripped]
+
+    for i, item_type_anno in enumerate(type_anno.items):
+        primitive_type = intermediate.try_primitive_type(item_type_anno)
+
+        if primitive_type is not None:
+            v_name_literal = csharp_common.string_literal(f"v{i + 1}")
+
+            method: str
+            if primitive_type is intermediate.PrimitiveType.BOOL:
+                method = "ReadVElementAsBoolean"
+            elif primitive_type is intermediate.PrimitiveType.INT:
+                method = "ReadVElementAsLong"
+            elif primitive_type is intermediate.PrimitiveType.FLOAT:
+                method = "ReadVElementAsDouble"
+            elif primitive_type is intermediate.PrimitiveType.STR:
+                method = "ReadVElementAsString"
+            elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
+                method = "ReadVElementAsBytes"
+            else:
+                assert_never(primitive_type)
+
+            item_deserializer_exprs.append(
+                Stripped(f"AsTupleItemDeserializer({method}, {v_name_literal})")
+            )
+        elif isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
+            item_type_anno.our_type, intermediate.Enumeration
+        ):
+            enum_name = csharp_naming.enum_name(item_type_anno.our_type.name)
+            v_name_literal = csharp_common.string_literal(f"v{i + 1}")
+
+            item_deserializer_exprs.append(
+                Stripped(
+                    f"AsTupleItemDeserializer(ReadVElementAs{enum_name}, {v_name_literal})"
+                )
+            )
+        else:
+            # NOTE (mristin):
+            # A tuple item can only be a primitive value, a constrained primitive,
+            # an enumeration literal or a class instance; see
+            # intermediate._translate._verify_only_simple_type_patterns.
+            assert isinstance(item_type_anno, intermediate.OurTypeAnnotation) and (
+                isinstance(
+                    item_type_anno.our_type,
+                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                )
+            ), (
+                f"Unexpected tuple item type {item_type_anno} at index {i} "
+                f"for the property {prop.name!r}"
+            )
+
+            our_type = item_type_anno.our_type
+            if (
+                isinstance(our_type, intermediate.AbstractClass)
+                or len(our_type.concrete_descendants) > 0
+            ):
+                deserialize_method_name = (
+                    f"{csharp_naming.interface_name(our_type.name)}FromElement"
+                )
+            else:
+                deserialize_method_name = (
+                    f"{csharp_naming.class_name(our_type.name)}FromElement"
+                )
+
+            item_deserializer_exprs.append(
+                Stripped(f"AsTupleItemDeserializer({deserialize_method_name})")
+            )
+
+    item_deserializer_exprs_joined = ",\n".join(item_deserializer_exprs)
+
+    arity = len(type_anno.items)
+
+    return Stripped(
+        f"""\
+if (isEmptyProperty)
+{{
+{I}error = new Reporting.Error(
+{II}"The property {prop_name} can not be de-serialized " +
+{II}"from a self-closing element since it needs content");
+{I}error.PrependSegment(
+{II}new Reporting.NameSegment(
+{III}{xml_prop_name_literal}));
+{I}return null;
+}}
+
+SkipNoneWhitespaceAndComments(reader);
+
+{target_var} = ParseTuple{arity}(
+{I}reader,
+{I}{indent_but_first_line(item_deserializer_exprs_joined, I)},
+{I}out error);
+if (error != null)
+{{
+{I}error.PrependSegment(
+{II}new Reporting.NameSegment(
+{III}{xml_prop_name_literal}));
+{I}return null;
+}}"""
+    )
+
+
 @require(lambda prop, cls: id(prop) in cls.property_id_set)
 def _generate_deserialize_property(
     prop: intermediate.Property, cls: intermediate.ConcreteClass
@@ -982,6 +1388,9 @@ def _generate_deserialize_property(
 
     elif isinstance(type_anno, intermediate.ListTypeAnnotation):
         blocks.append(_generate_deserialize_list_property(prop=prop))
+
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        blocks.append(_generate_deserialize_tuple_property(prop=prop))
 
     else:
         assert_never(type_anno)
@@ -1637,6 +2046,12 @@ def _generate_deserialize_impl(
         _generate_consume_close_tag(),
     ]  # type: List[Stripped]
 
+    tuple_arities = intermediate.tuple_arities(symbol_table)
+    if len(tuple_arities) > 0:
+        blocks.append(_generate_tuple_item_reader_delegate())
+        for arity in tuple_arities:
+            blocks.append(_generate_parse_tuple_helper(arity))
+
     for enumeration in symbol_table.enumerations:
         blocks.append(_generate_read_v_element_as_enumeration(enumeration))
 
@@ -1918,6 +2333,169 @@ private static void SerializeElement<T>(
 {I}writer.WriteStartElement(name, NS);
 {I}serializeContent(that, writer);
 {I}writer.WriteEndElement();
+}}"""
+    )
+
+
+def _generate_write_v_element_as_primitive_functions() -> List[Stripped]:
+    """
+    Generate the functions to write a primitive value as a named element.
+
+    These mirror :py:func:`_generate_read_v_element_as_primitive_functions`
+    on the write side: a tuple item, unlike a list item, is wrapped in a
+    positional element name (<c>v1</c>, <c>v2</c>, *etc.*) instead of always
+    the fixed <c>v</c>, so we generate one write function per primitive type,
+    parameterized by the element name, instead of inlining the
+    start-element/write-value/end-element sequence at every tuple item.
+    """
+    result = []  # type: List[Stripped]
+
+    for function_name, csharp_type, write_value_statement in (
+        ("WriteVElementAsBoolean", "bool", "writer.WriteValue(that);"),
+        ("WriteVElementAsLong", "long", "writer.WriteValue(that);"),
+        ("WriteVElementAsDouble", "double", "writer.WriteValue(that);"),
+        ("WriteVElementAsString", "string", "writer.WriteValue(that);"),
+        (
+            "WriteVElementAsBytes",
+            "byte[]",
+            "writer.WriteBase64(that, 0, that.Length);",
+        ),
+    ):
+        result.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Write <paramref name="that" /> as a named element.
+/// </summary>
+private static void {function_name}(
+{I}{csharp_type} that,
+{I}string elementName,
+{I}Xml.XmlWriter writer)
+{{
+{I}writer.WriteStartElement(elementName, NS);
+{I}{write_value_statement}
+{I}writer.WriteEndElement();
+}}"""
+            )
+        )
+
+    return result
+
+
+def _generate_write_v_element_as_enumeration(
+    enumeration: intermediate.Enumeration,
+) -> Stripped:
+    """Generate the function to write a literal of ``enumeration`` as a named element."""
+    enum_name = csharp_naming.enum_name(enumeration.name)
+
+    return Stripped(
+        f"""\
+/// <summary>
+/// Write <paramref name="that" /> as a named element.
+/// </summary>
+private static void WriteVElementAs{enum_name}(
+{I}Aas.{enum_name} that,
+{I}string elementName,
+{I}Xml.XmlWriter writer)
+{{
+{I}writer.WriteStartElement(elementName, NS);
+{I}writer.WriteValue(
+{II}Stringification.ToString(that)
+{III}?? throw new System.ArgumentException(
+{IIII}"Invalid literal for the enumeration {enum_name}: " +
+{IIII}that.ToString()));
+{I}writer.WriteEndElement();
+}}"""
+    )
+
+
+def _generate_tuple_item_serializer_helpers() -> Stripped:
+    """Generate the delegate and adapter shared by all the generic tuple serializers."""
+    return Stripped(
+        f"""\
+/// <summary>
+/// Write a single tuple item wrapped in a named element.
+/// </summary>
+/// <remarks>
+/// A tuple-typed property is written by <c>SerializeTupleN</c> (see
+/// <see cref="SerializeTuple2{{T0, T1}}" /> for the arity-2 case, *etc.*),
+/// which -- like <see cref="SerializeElement{{T}}" /> -- expects an
+/// <see cref="ElementContentSerializer{{T}}" /> per item. A class item's own
+/// <c>Visit</c> method already has that shape (writing its own element
+/// directly, with no wrapping needed), so it can be passed on unchanged.
+/// A primitive or enumeration item, on the other hand, first needs to be
+/// wrapped in its own positional <c>v1</c>, <c>v2</c>, *etc.* element -- this
+/// adapter closes over the element name so that a tuple-typed property does
+/// not need to spell out that wrapping (start element/write value/end
+/// element) at every item, mirroring how
+/// <see cref="AsTupleItemDeserializer{{T}}(NamedClassItemDeserializer{{T}}, string)" />
+/// avoids the equivalent on the read side.
+/// </remarks>
+/// <typeparam name="T">Type of the item to be written</typeparam>
+private delegate void NamedElementSerializer<T>(
+{I}T that, string elementName, Xml.XmlWriter writer);
+
+/// <summary>
+/// Adapt <paramref name="writeItem" /> -- a named-element item writer such as
+/// <see cref="WriteVElementAsLong" /> -- into an
+/// <see cref="ElementContentSerializer{{T}}" /> bound to
+/// <paramref name="elementName" />, for use in a tuple-typed property.
+/// </summary>
+/// <typeparam name="T">Type of the item to be written</typeparam>
+private static ElementContentSerializer<T> AsTupleItemSerializer<T>(
+{I}NamedElementSerializer<T> writeItem,
+{I}string elementName)
+{{
+{I}return (T that, Xml.XmlWriter writer) => writeItem(that, elementName, writer);
+}}"""
+    )
+
+
+@require(lambda arity: arity > 0)
+def _generate_serialize_tuple_helper(arity: int) -> Stripped:
+    """
+    Generate a generic function to serialize a tuple of the given ``arity``.
+
+    Each positional item is written by its own ``serializeItemI`` callable,
+    re-using the very same :py:class:`ElementContentSerializer` delegate
+    defined for :py:func:`_generate_serialize_element_helper`, since a tuple
+    item writer has exactly the same shape (write the item's own content,
+    positioned wherever the writer already is).
+    """
+    type_params = [f"T{i}" for i in range(arity)]
+    type_params_joined = ", ".join(type_params)
+
+    if arity == 1:
+        tuple_type = f"System.ValueTuple<{type_params[0]}>"
+    else:
+        tuple_type = f"({type_params_joined})"
+
+    params_joined = ",\n".join(
+        f"ElementContentSerializer<T{i}> serializeItem{i}" for i in range(arity)
+    )
+
+    write_stmts_joined = "\n".join(
+        f"serializeItem{i}(that.Item{i + 1}, writer);" for i in range(arity)
+    )
+
+    function_name = f"SerializeTuple{arity}"
+
+    return Stripped(
+        f"""\
+/// <summary>
+/// Write the tuple <paramref name="that" /> of {arity} item(s) with
+/// <paramref name="serializeItem0" />, <paramref name="serializeItem1" />,
+/// *etc.*, positioned wherever <paramref name="writer" /> already is.
+/// </summary>
+/// <remarks>
+/// This is shared by all the tuple-typed properties of arity {arity}.
+/// </remarks>
+private static void {function_name}<{type_params_joined}>(
+{I}{tuple_type} that,
+{I}Xml.XmlWriter writer,
+{I}{indent_but_first_line(params_joined, I)})
+{{
+{I}{indent_but_first_line(write_stmts_joined, I)}
 }}"""
     )
 
@@ -2235,6 +2813,114 @@ if (that.{prop_name} != null)
     return result
 
 
+def _generate_serialize_tuple_property_as_content(
+    prop: intermediate.Property,
+) -> Stripped:
+    """Generate the serialization of a tuple ``prop`` as a sequence of elements."""
+    type_anno = intermediate.beneath_optional(prop.type_annotation)
+    assert isinstance(type_anno, intermediate.TupleTypeAnnotation)
+
+    prop_name = csharp_naming.property_name(prop.name)
+
+    item_serializer_exprs = []  # type: List[Stripped]
+
+    for i, item_type_anno in enumerate(type_anno.items):
+        primitive_type = intermediate.try_primitive_type(item_type_anno)
+
+        if primitive_type is not None:
+            item_type = csharp_common.generate_type(item_type_anno)
+            v_name_literal = csharp_common.string_literal(f"v{i + 1}")
+
+            write_function: str
+            if primitive_type is intermediate.PrimitiveType.BOOL:
+                write_function = "WriteVElementAsBoolean"
+            elif primitive_type is intermediate.PrimitiveType.INT:
+                write_function = "WriteVElementAsLong"
+            elif primitive_type is intermediate.PrimitiveType.FLOAT:
+                write_function = "WriteVElementAsDouble"
+            elif primitive_type is intermediate.PrimitiveType.STR:
+                write_function = "WriteVElementAsString"
+            elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
+                write_function = "WriteVElementAsBytes"
+            else:
+                assert_never(primitive_type)
+
+            item_serializer_exprs.append(
+                Stripped(
+                    f"AsTupleItemSerializer<{item_type}>({write_function}, {v_name_literal})"
+                )
+            )
+        elif isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
+            item_type_anno.our_type, intermediate.Enumeration
+        ):
+            item_type = csharp_common.generate_type(item_type_anno)
+            enum_name = csharp_naming.enum_name(item_type_anno.our_type.name)
+            v_name_literal = csharp_common.string_literal(f"v{i + 1}")
+
+            item_serializer_exprs.append(
+                Stripped(
+                    f"AsTupleItemSerializer<{item_type}>("
+                    f"WriteVElementAs{enum_name}, {v_name_literal})"
+                )
+            )
+        else:
+            # NOTE (mristin):
+            # A tuple item can only be a primitive value, a constrained primitive,
+            # an enumeration literal or a class instance; see
+            # intermediate._translate._verify_only_simple_type_patterns.
+            assert isinstance(item_type_anno, intermediate.OurTypeAnnotation) and (
+                isinstance(
+                    item_type_anno.our_type,
+                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                )
+            ), (
+                f"Unexpected tuple item type {item_type_anno} at index {i} "
+                f"for the property {prop.name!r}"
+            )
+
+            # NOTE (mristin):
+            # ``this.Visit`` already writes the item's own element directly
+            # (with no positional wrapping needed), and its
+            # ``(IClass, Xml.XmlWriter)`` signature is contravariantly
+            # compatible with ``ElementContentSerializer<T>`` for any more
+            # specific interface ``T``, so we can pass it on unchanged.
+            item_serializer_exprs.append(Stripped("this.Visit"))
+
+    item_serializer_exprs_joined = ",\n".join(item_serializer_exprs)
+
+    xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
+
+    arity = len(type_anno.items)
+
+    content_serializer = Stripped(
+        f"""\
+(value, w) => SerializeTuple{arity}(
+{I}value,
+{I}w,
+{I}{indent_but_first_line(item_serializer_exprs_joined, I)})"""
+    )
+
+    result = Stripped(
+        f"""\
+SerializeElement(
+{I}{xml_prop_name_literal},
+{I}that.{prop_name},
+{I}writer,
+{I}{indent_but_first_line(content_serializer, I)});"""
+    )
+
+    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
+        result = Stripped(
+            f"""\
+if (that.{prop_name} != null)
+{{
+{I}{indent_but_first_line(result, I)}
+}}"""
+        )
+
+    return result
+
+
 def _generate_serialize_property_as_content(prop: intermediate.Property) -> Stripped:
     """Generate the code to serialize the ``prop`` as content of an XML element."""
     type_anno = intermediate.beneath_optional(prop.type_annotation)
@@ -2270,6 +2956,9 @@ def _generate_serialize_property_as_content(prop: intermediate.Property) -> Stri
 
     elif isinstance(type_anno, intermediate.ListTypeAnnotation):
         body = _generate_serialize_list_property_as_content(prop=prop)
+
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        body = _generate_serialize_tuple_property_as_content(prop=prop)
 
     else:
         assert_never(type_anno)
@@ -2353,6 +3042,15 @@ def _generate_visitor(
     errors = []  # type: List[Error]
 
     blocks = [_generate_serialize_element_helper()]  # type: List[Stripped]
+
+    tuple_arities = intermediate.tuple_arities(symbol_table)
+    if len(tuple_arities) > 0:
+        blocks.extend(_generate_write_v_element_as_primitive_functions())
+        for enumeration in symbol_table.enumerations:
+            blocks.append(_generate_write_v_element_as_enumeration(enumeration))
+        blocks.append(_generate_tuple_item_serializer_helpers())
+        for arity in tuple_arities:
+            blocks.append(_generate_serialize_tuple_helper(arity))
 
     # The abstract classes are directly dispatched by the transformer,
     # so we do not need to handle them separately.

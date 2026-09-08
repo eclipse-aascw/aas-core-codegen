@@ -5,6 +5,7 @@
 
 package dummy.jsonization;
 
+import dummy.common.*;
 import dummy.reporting.Reporting;
 import dummy.types.enums.*;
 import dummy.types.impl.*;

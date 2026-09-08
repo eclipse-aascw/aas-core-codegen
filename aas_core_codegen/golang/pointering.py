@@ -76,6 +76,15 @@ def is_pointer_type(
                 ]
             else:
                 return False
+
+        elif isinstance(
+            type_annotation.value, intermediate_type_inference.TupleTypeAnnotation
+        ):
+            # NOTE (mristin, 2026-09-03):
+            # Tuples are represented as Go structs, which are not nilable, so we
+            # need a pointer to represent the optional.
+            return True
+
         else:
             return False
 
@@ -102,6 +111,13 @@ def is_pointer_type(
                 ]
             else:
                 return False
+
+        elif isinstance(type_annotation.value, intermediate.TupleTypeAnnotation):
+            # NOTE (mristin, 2026-09-03):
+            # Tuples are represented as Go structs, which are not nilable, so we
+            # need a pointer to represent the optional.
+            return True
+
         else:
             return False
 
@@ -215,6 +231,28 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         collection_type_anno = intermediate_type_inference.beneath_optional(
             self._type_map[node.collection]
         )
+
+        if isinstance(
+            collection_type_anno, intermediate_type_inference.TupleTypeAnnotation
+        ):
+            # NOTE (mristin, 2026-09-03):
+            # The index into a tuple must be a literal integer, which has already
+            # been verified in
+            # :py:class:`aas_core_codegen.intermediate.type_inference.Inferrer`.
+            assert isinstance(node.index, parse_tree.Constant) and isinstance(
+                node.index.value, int
+            )
+
+            index_value = node.index.value
+            if index_value < 0:
+                index_value += len(collection_type_anno.items)
+
+            item_type_anno = intermediate_type_inference.beneath_optional(
+                collection_type_anno.items[index_value]
+            )
+
+            self.is_pointer_map[node] = is_pointer_type(item_type_anno)
+            return None
 
         if not isinstance(
             collection_type_anno, intermediate_type_inference.ListTypeAnnotation
@@ -379,6 +417,24 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         return None
 
     def transform_constant(self, node: parse_tree.Constant) -> Optional[Error]:
+        self.is_pointer_map[node] = False
+        return None
+
+    def transform_tuple(self, node: parse_tree.Tuple) -> Optional[Error]:
+        last_error = None  # type: Optional[Error]
+        for value in node.values:
+            error = self.transform(value)
+
+            # NOTE (mristin):
+            # Do not immediately return so that other values are processed as well.
+            # This way we get a longer list of errors which the caller can report
+            # using :py:prop:`errors`.
+            if error is not None:
+                last_error = error
+
+        if last_error is not None:
+            return last_error
+
         self.is_pointer_map[node] = False
         return None
 

@@ -5,6 +5,7 @@
 
 package aas_core.aas3_0.types.impl;
 
+import aas_core.aas3_0.common.*;
 import aas_core.aas3_0.visitation.IVisitor;
 import aas_core.aas3_0.visitation.IVisitorWithContext;
 import aas_core.aas3_0.visitation.ITransformer;

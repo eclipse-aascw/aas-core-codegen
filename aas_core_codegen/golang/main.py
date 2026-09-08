@@ -135,7 +135,9 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
         (
             base_rel_path / "types/types.go",
             lambda: golang_lib.generate_types(
-                symbol_table=verified_ir_table, spec_impls=context.spec_impls
+                symbol_table=verified_ir_table,
+                spec_impls=context.spec_impls,
+                repo_url=repo_url,
             ),
         ),
         (

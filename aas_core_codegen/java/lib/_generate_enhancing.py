@@ -470,6 +470,7 @@ def _generate_enhanced(
                 Stripped("import java.lang.Iterable;"),
                 Stripped("import java.util.Optional;"),
                 Stripped("import java.util.List;"),
+                Stripped(f"import {package}.common.*;"),
                 Stripped(f"import {package}.visitation.IVisitor;"),
                 Stripped(f"import {package}.visitation.IVisitorWithContext;"),
                 Stripped(f"import {package}.visitation.ITransformer;"),
@@ -589,9 +590,8 @@ if (that.{getter_name}().isPresent()) {{
                 assert_never(type_anno.our_type)
         elif isinstance(type_anno, intermediate.ListTypeAnnotation):
             # fmt: off
-            assert not isinstance(
-                type_anno.items,
-                (intermediate.OptionalTypeAnnotation, intermediate.ListTypeAnnotation)
+            assert isinstance(
+                type_anno.items, intermediate.AtomicTypeAnnotationAsTuple
             ), (
                 "We handle only lists of atomic values (primitives, constrained "
                 "primitives, enumeration literals) or lists of classes in the "
@@ -657,6 +657,94 @@ List<{item_interface_name}> {prop_name} = that.{getter_name}();
                 )
 
             wrap_stmt = Stripped(writer.getvalue())
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            if not any(
+                isinstance(item, intermediate.OurTypeAnnotation)
+                and isinstance(
+                    item.our_type,
+                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                )
+                for item in type_anno.items
+            ):
+                # We can not enhance tuples none of whose items are classes;
+                # nothing to do here.
+                continue
+
+            tuple_type = java_common.generate_type(type_anno)
+
+            getter_name = java_naming.getter_name(prop.name)
+            setter_name = java_naming.setter_name(prop.name)
+
+            item_stmts = []  # type: List[Stripped]
+            item_exprs = []  # type: List[Stripped]
+
+            for i, item_type_anno in enumerate(type_anno.items):
+                item_access = Stripped(f"{prop_name}.item{i + 1}()")
+
+                if isinstance(
+                    item_type_anno, intermediate.OurTypeAnnotation
+                ) and isinstance(
+                    item_type_anno.our_type,
+                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                ):
+                    item_interface_name = java_naming.interface_name(
+                        item_type_anno.our_type.name
+                    )
+                    transformed_name = java_naming.variable_name(
+                        Identifier(f"transformed_{prop.name}_{i}")
+                    )
+                    casted_name = java_naming.variable_name(
+                        Identifier(f"casted_{prop.name}_{i}")
+                    )
+
+                    item_stmts.append(
+                        Stripped(
+                            f"""\
+IClass {transformed_name} = transform({item_access});
+if (!({transformed_name} instanceof {item_interface_name})) {{
+{I}throw new UnsupportedOperationException(
+{II}"Expected the transformed value to be a {item_interface_name} " +
+{II}", but got: " + {transformed_name}
+{I});
+}}
+{item_interface_name} {casted_name} = ({item_interface_name}) {transformed_name};"""
+                        )
+                    )
+
+                    item_exprs.append(Stripped(casted_name))
+                else:
+                    item_exprs.append(item_access)
+
+            tuple_literal = java_common.generate_tuple_literal(item_exprs=item_exprs)
+
+            stmt_parts = item_stmts + [
+                Stripped(
+                    f"""\
+that.{setter_name}(
+{I}{indent_but_first_line(tuple_literal, I)});"""
+                )
+            ]
+
+            stmt = Stripped("\n".join(stmt_parts))
+
+            writer = io.StringIO()
+
+            if optional:
+                writer.write(
+                    f"""\
+if (that.{getter_name}().isPresent()) {{
+{I}{tuple_type} {prop_name} = that.{getter_name}().get();
+{I}{indent_but_first_line(stmt, I)}
+}}"""
+                )
+            else:
+                writer.write(
+                    f"""\
+{tuple_type} {prop_name} = that.{getter_name}();
+{stmt}"""
+                )
+
+            wrap_stmt = Stripped(writer.getvalue())
         else:
             assert_never(type_anno.our_type)
 
@@ -707,6 +795,8 @@ def _generate_wrapper(
         Stripped("import java.util.function.Function;"),
         Stripped("import java.util.stream.Collectors;"),
         Stripped("import java.util.stream.Stream;"),
+        Stripped(f"import {package}.common.*;"),
+        Stripped(f"import {package}.types.enums.*;"),
         Stripped(f"import {package}.types.model.*;"),
         Stripped(f"import {package}.visitation.AbstractTransformer;"),
     ]  # type: List[Stripped]

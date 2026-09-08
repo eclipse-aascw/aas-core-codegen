@@ -5,6 +5,7 @@
 
 package dummy.types.impl;
 
+import dummy.common.*;
 import dummy.visitation.IVisitor;
 import dummy.visitation.IVisitorWithContext;
 import dummy.visitation.ITransformer;

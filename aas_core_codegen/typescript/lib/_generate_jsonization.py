@@ -4,7 +4,7 @@ import io
 import textwrap
 from typing import Tuple, Optional, List
 
-from icontract import ensure
+from icontract import ensure, require
 
 from aas_core_codegen import intermediate, naming, specific_implementations
 from aas_core_codegen.common import (
@@ -162,6 +162,118 @@ function checkIsIterable(jsonable: JsonValue): DeserializationError | null {{
 {I}}}
 
 {I}return null;
+}}"""
+    )
+
+
+@require(lambda arity: arity > 0)
+def _generate_parse_tuple_helper(arity: int) -> Stripped:
+    """
+    Generate the generic helper to parse an iterable into a tuple of `arity`.
+
+    Every atomic value parser (see :py:func:`_parse_function_for_atomic_value`)
+    already has the uniform signature ``(jsonable: JsonValue) =>
+    AasCommon.Either<T, DeserializationError>`` -- the very same shape
+    :py:func:`_generate_parse_array` expects for a list item -- so a tuple
+    item's parser can be passed on to the generated function as a bare
+    reference, with no adapter or closure needed.
+
+    We consume `iterable` through its iterator protocol instead of
+    materializing it into an ``Array`` first, so that we never pay for a copy
+    we do not need. The common case -- a JSON-parsed array -- already exposes
+    ``.length``, which we use for an immediate, cheap fail-fast arity check
+    before parsing a single item; a non-array iterable is simply iterated
+    item-by-item, and a too-few/too-many mismatch is caught as it is
+    encountered.
+    """
+    type_params = [f"T{i}" for i in range(arity)]
+    type_params_joined = ", ".join(type_params)
+    tuple_type = f"[{', '.join(type_params)}]"
+
+    param_docs = "\n".join(
+        f" * @param parseItem{i} - to parse the item at index {i} of `iterable`"
+        for i in range(arity)
+    )
+    type_param_docs = "\n".join(
+        f" * @typeParam {type_params[i]} - type of the item at index {i}"
+        for i in range(arity)
+    )
+
+    params_joined = ",\n".join(
+        f"""\
+parseItem{i}: (
+{I}jsonableItem: JsonValue
+) => AasCommon.Either<{type_params[i]}, DeserializationError>"""
+        for i in range(arity)
+    )
+
+    item_blocks = []  # type: List[Stripped]
+    for i in range(arity):
+        item_blocks.append(
+            Stripped(
+                f"""\
+const next{i} = iterator.next();
+if (next{i}.done) {{
+{I}return newDeserializationError<{tuple_type}>(
+{II}`Expected exactly {arity} item(s) in the array, ` +
+{III}`but got only {i} item(s)`
+{I});
+}}
+const item{i}OrError = parseItem{i}(next{i}.value);
+if (item{i}OrError.error !== null) {{
+{I}item{i}OrError.error.path.prepend(new IndexSegment(iterable, {i}));
+{I}return new AasCommon.Either<{tuple_type}, DeserializationError>(
+{II}null,
+{II}item{i}OrError.error
+{I});
+}}"""
+            )
+        )
+    item_blocks_joined = "\n\n".join(item_blocks)
+
+    values_joined = ",\n".join(f"item{i}OrError.mustValue()" for i in range(arity))
+
+    function_name = f"parseTuple{arity}"
+
+    return Stripped(
+        f"""\
+/**
+ * Parse `iterable` into a tuple of {arity} item(s) by calling `parseItem0`,
+ * `parseItem1`, *etc.* on the correspondingly positioned item.
+ *
+ * @param iterable - expected to contain exactly {arity} item(s)
+{param_docs}
+ * @returns parsed tuple, or an error
+{type_param_docs}
+ */
+function {function_name}<{type_params_joined}>(
+{I}iterable: Iterable<JsonValue>,
+{I}{indent_but_first_line(params_joined, I)}
+): AasCommon.Either<{tuple_type}, DeserializationError> {{
+{I}if (Array.isArray(iterable) && iterable.length !== {arity}) {{
+{II}return newDeserializationError<{tuple_type}>(
+{III}`Expected exactly {arity} item(s) in the array, ` +
+{IIII}`but got: ${{iterable.length}}`
+{II});
+{I}}}
+
+{I}const iterator = iterable[Symbol.iterator]();
+
+{I}{indent_but_first_line(item_blocks_joined, I)}
+
+{I}const nextExtra = iterator.next();
+{I}if (!nextExtra.done) {{
+{II}return newDeserializationError<{tuple_type}>(
+{III}`Expected exactly {arity} item(s) in the array, but got more`
+{II});
+{I}}}
+
+{I}return new AasCommon.Either<{tuple_type}, DeserializationError>(
+{II}[
+{III}{indent_but_first_line(values_joined, III)}
+{II}],
+{II}null
+{I});
 }}"""
     )
 
@@ -632,9 +744,8 @@ if (parsedOrError.error !== null) {{
             )
 
         elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-            assert not isinstance(
-                type_anno.items,
-                (intermediate.OptionalTypeAnnotation, intermediate.ListTypeAnnotation),
+            assert isinstance(
+                type_anno.items, intermediate.AtomicTypeAnnotationAsTuple
             ), (
                 "We chose to implement only a very limited pattern matching; "
                 "see intermediate._translate_._verify_only_simple_type_patterns"
@@ -660,6 +771,55 @@ if (itemsOrError.error !== null) {{
 }}
 
 this.{prop_name} = itemsOrError.mustValue();
+return null;"""
+            )
+
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            item_count = len(type_anno.items)
+
+            item_types = []  # type: List[Stripped]
+            item_parse_functions = []  # type: List[Stripped]
+            for item_type_anno in type_anno.items:
+                assert isinstance(
+                    item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+                ), (
+                    "Tuple items are restricted to atomic types (primitives, "
+                    "constrained primitives, classes and enumerations) by "
+                    "intermediate._translate._verify_only_simple_type_patterns, so no "
+                    "nested optionals, lists or tuples are expected here."
+                )
+
+                item_types.append(
+                    typescript_common.generate_type(
+                        item_type_anno, types_module=Identifier("AasTypes")
+                    )
+                )
+                item_parse_functions.append(
+                    _parse_function_for_atomic_value(item_type_anno)
+                )
+
+            parse_tuple_function_name = f"parseTuple{item_count}"
+            item_types_joined = ", ".join(item_types)
+            item_parse_functions_joined = ",\n".join(item_parse_functions)
+
+            body = Stripped(
+                f"""\
+const iterableError = checkIsIterable(jsonable);
+if (iterableError !== null) {{
+{I}return iterableError;
+}}
+
+const iterable = <Iterable<JsonValue>>jsonable;
+
+const tupleOrError = {parse_tuple_function_name}<{item_types_joined}>(
+{I}iterable,
+{I}{indent_but_first_line(item_parse_functions_joined, I)}
+);
+if (tupleOrError.error !== null) {{
+{I}return tupleOrError.error;
+}}
+
+this.{prop_name} = tupleOrError.mustValue();
 return null;"""
             )
 
@@ -1270,6 +1430,34 @@ jsonable[{key_literal}] = serializeArray(
                     "Please contact the developers if you need this feature."
                 )
 
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            item_expressions = []  # type: List[Stripped]
+            for i, item_type_anno in enumerate(type_anno.items):
+                assert isinstance(
+                    item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+                ), (
+                    "Tuple items are restricted to atomic types (primitives, "
+                    "constrained primitives, classes and enumerations) by "
+                    "intermediate._translate._verify_only_simple_type_patterns, so no "
+                    "nested optionals, lists or tuples are expected here."
+                )
+
+                item_expressions.append(
+                    _generate_transform_atomic_value(
+                        access_expression=Stripped(f"that.{prop_name}[{i}]"),
+                        type_anno=item_type_anno,
+                    )
+                )
+
+            item_expressions_joined = ",\n".join(item_expressions)
+
+            block = Stripped(
+                f"""\
+jsonable[{key_literal}] = [
+{I}{indent_but_first_line(item_expressions_joined, I)}
+];"""
+            )
+
         else:
             assert_never(type_anno)
 
@@ -1572,6 +1760,9 @@ function newDeserializationError<T>(
         _generate_str_from_jsonable(),
         _generate_bytes_from_jsonable(),
     ]  # type: List[Stripped]
+
+    for arity in intermediate.tuple_arities(symbol_table=symbol_table):
+        blocks.append(_generate_parse_tuple_helper(arity))
 
     errors = []  # type: List[Error]
 

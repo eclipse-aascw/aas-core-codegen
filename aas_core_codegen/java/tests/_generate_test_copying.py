@@ -187,6 +187,62 @@ transform(
                     f"""\
 that.{getter_name}().equals(casted.{getter_name}())"""
                 )
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            item_exprs = []  # type: List[Stripped]
+
+            for i, item_type_anno in enumerate(type_anno.items):
+                that_item = f"that.{getter_name}().item{i + 1}()"
+                casted_item = f"casted.{getter_name}().item{i + 1}()"
+
+                if optional:
+                    that_item = f"that.{getter_name}().get().item{i + 1}()"
+                    casted_item = f"casted.{getter_name}().get().item{i + 1}()"
+
+                item_primitive_type = intermediate.try_primitive_type(item_type_anno)
+
+                if isinstance(
+                    item_type_anno, intermediate.OurTypeAnnotation
+                ) and isinstance(
+                    item_type_anno.our_type,
+                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                ):
+                    item_exprs.append(
+                        Stripped(
+                            f"""\
+transform(
+{I}{that_item},
+{I}{casted_item})"""
+                        )
+                    )
+                elif item_primitive_type is intermediate.PrimitiveType.BYTEARRAY:
+                    item_exprs.append(
+                        Stripped(
+                            f"""\
+Arrays.equals(
+{I}{that_item},
+{I}{casted_item})"""
+                        )
+                    )
+                else:
+                    item_exprs.append(Stripped(f"{that_item}.equals({casted_item})"))
+
+            items_joined = "\n&& ".join(item_exprs)
+
+            tuple_expr = Stripped(
+                f"""\
+({indent_but_first_line(items_joined, I)})"""
+            )
+
+            if optional:
+                expr = Stripped(
+                    f"""\
+(that.{getter_name}().isPresent()
+{I}? casted.{getter_name}().isPresent()
+{I}&& {indent_but_first_line(tuple_expr, I)}
+{I}: ! casted.{getter_name}().isPresent())"""
+                )
+            else:
+                expr = tuple_expr
         else:
             # noinspection PyTypeChecker
             assert_never(type_anno)
@@ -423,6 +479,7 @@ package {package}.tests;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import {package}.common.*;
 import {package}.copying.Copying;
 import {package}.types.impl.*;
 import {package}.types.model.*;

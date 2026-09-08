@@ -113,6 +113,10 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
         ]
     ] = [
         (
+            project_rel_path / "common",
+            lambda: (java_lib.generate_common(package=package), None),
+        ),
+        (
             project_rel_path / "constants",
             lambda: java_lib.generate_constants(
                 symbol_table=context.symbol_table, package=package
