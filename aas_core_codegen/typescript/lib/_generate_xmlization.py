@@ -465,7 +465,7 @@ if ({var_name} !== null) {{
 
 const propertyCloseError = consumeCloseTag(
 {I}cursor,
-{I}localNameOfTag(propertyStartTag.tag)
+{I}propertyLocalName
 );
 if (propertyCloseError !== null) {{
 {I}propertyError = propertyCloseError;
@@ -598,38 +598,23 @@ function {function_name}(
 ): AasCommon.Either<AasTypes.{cls_name}, DeserializationError> {{
 {I}{indent_but_first_line(declarations, I)}
 
+{I}const className = AasTypes.{cls_name}.name;
+
 {I}cursor.skipIgnorable();
 {I}// eslint-disable-next-line no-constant-condition
 {I}while (true) {{
-{II}const token = cursor.current();
-{II}if (token === null) {{
-{III}return newDeserializationError<AasTypes.{cls_name}>(
-{IIII}`Unexpected end of token stream while parsing {cls_name}`
-{III});
-{II}}}
-
-{II}if (token instanceof CloseTagToken) {{
+{II}const nextTagOrError = nextPropertyOpenTag(cursor, className);
+{II}if (nextTagOrError === null) {{
 {III}break;
 {II}}}
-
-{II}if (!(token instanceof OpenTagToken)) {{
-{III}return newDeserializationError<AasTypes.{cls_name}>(
-{IIII}"Expected an XML property start element or the closing element of " +
-{IIII}`{cls_name}, but got token kind: ${{token.kind}}`
-{III});
-{II}}}
-
-{II}const namespaceError = checkExpectedOpenTagNamespace(token);
-{II}if (namespaceError !== null) {{
+{II}if (nextTagOrError instanceof DeserializationError) {{
 {III}return new AasCommon.Either<AasTypes.{cls_name}, DeserializationError>(
 {IIII}null,
-{IIII}namespaceError
+{IIII}nextTagOrError
 {III});
 {II}}}
 
-{II}const propertyStartTag = token;
-{II}const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-{II}cursor.advance();
+{II}const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
 {II}let propertyError: DeserializationError | null = null;
 {II}switch (propertyLocalName) {{
@@ -787,38 +772,27 @@ def _generate_serialize_atomic_element(
     access_expr: Stripped,
 ) -> Stripped:
     """
-    Generate the statements to write an atomic value wrapped in an element.
+    Generate the statement to write an atomic value wrapped in an element.
 
     This is used both for a single atomic property and for an atomic item of
     a list or a tuple, where ``element_name_literal`` is either the property's
     own XML name or a fixed item element name (*e.g.*, ``"v"`` or ``"v1"``).
     """
     return Stripped(
-        f"""\
-parts.push(openTag({element_name_literal}));
-parts.push({serialize_function}({access_expr}));
-parts.push(closeTag({element_name_literal}));"""
+        f"writeVElement(parts, {element_name_literal}, "
+        f"{serialize_function}({access_expr}));"
     )
 
 
-def _generate_serialize_class_element(
-    serialized_var: Identifier,
-    access_expr: Stripped,
-) -> Stripped:
+def _generate_serialize_class_element(access_expr: Stripped) -> Stripped:
     """
-    Generate the statements to write a class instance using its own element tag.
+    Generate the statement to write a class instance using its own element tag.
 
     This is used whenever the runtime type of the value is not statically known
     to be a concrete class without descendants (*i.e.*, for polymorphic
     properties, and for every item of a list or a tuple of class instances).
     """
-    return Stripped(
-        f"""\
-const {serialized_var} = this.transform({access_expr});
-parts.push(openTag({serialized_var}.localName));
-parts.push({serialized_var}.innerXml);
-parts.push(closeTag({serialized_var}.localName));"""
-    )
+    return Stripped(f"writeClassElement(parts, this.transform({access_expr}));")
 
 
 def _generate_serialize_block_for_property(
@@ -840,13 +814,13 @@ def _generate_serialize_block_for_property(
             (intermediate.AbstractClass, intermediate.ConcreteClass),
         ):
             our_type = type_anno.our_type
-            serialized_var = typescript_naming.variable_name(
-                Identifier(f"serialized_{prop.name}")
-            )
             if (
                 isinstance(our_type, intermediate.ConcreteClass)
                 and len(our_type.concrete_descendants) == 0
             ):
+                serialized_var = typescript_naming.variable_name(
+                    Identifier(f"serialized_{prop.name}")
+                )
                 body = Stripped(
                     f"""\
 const {serialized_var} = this.transform({access_expr});
@@ -859,9 +833,7 @@ parts.push(closeTag({xml_name_literal}));"""
                     f"""\
 parts.push(openTag({xml_name_literal}));
 {indent_but_first_line(
-    _generate_serialize_class_element(
-        serialized_var=serialized_var, access_expr=access_expr
-    ),
+    _generate_serialize_class_element(access_expr=access_expr),
     I,
 )}
 parts.push(closeTag({xml_name_literal}));"""
@@ -912,18 +884,13 @@ parts.push(closeTag({xml_name_literal}));"""
             (intermediate.AbstractClass, intermediate.ConcreteClass),
         ):
             item_var = typescript_naming.variable_name(Identifier(f"item_{prop.name}"))
-            serialized_item_var = typescript_naming.variable_name(
-                Identifier(f"serialized_{prop.name}_item")
-            )
 
             body = Stripped(
                 f"""\
 parts.push(openTag({xml_name_literal}));
 for (const {item_var} of {access_expr}) {{
 {I}{indent_but_first_line(
-    _generate_serialize_class_element(
-        serialized_var=serialized_item_var, access_expr=Stripped(item_var)
-    ),
+    _generate_serialize_class_element(access_expr=Stripped(item_var)),
     I,
 )}
 }}
@@ -1443,6 +1410,47 @@ function checkExpectedOpenTagNamespace(
 {I}return null;
 }}
 
+/**
+ * Read the next property's opening tag while parsing the sequence of
+ * properties of `className`, advancing `cursor` past it.
+ *
+ * @param cursor - to be read from
+ * @param className - name of the class being parsed, for error reporting
+ * @returns
+ * the next property's opening tag, or `null` if the closing tag of
+ * `className` was reached instead, or an error
+ */
+function nextPropertyOpenTag(
+{I}cursor: XmlCursor,
+{I}className: string
+): OpenTagToken | DeserializationError | null {{
+{I}const token = cursor.current();
+{I}if (token === null) {{
+{II}return new DeserializationError(
+{III}`Unexpected end of token stream while parsing ${{className}}`
+{II});
+{I}}}
+
+{I}if (token instanceof CloseTagToken) {{
+{II}return null;
+{I}}}
+
+{I}if (!(token instanceof OpenTagToken)) {{
+{II}return new DeserializationError(
+{III}"Expected an XML property start element or the closing element of " +
+{III}`${{className}}, but got token kind: ${{token.kind}}`
+{II});
+{I}}}
+
+{I}const namespaceError = checkExpectedOpenTagNamespace(token);
+{I}if (namespaceError !== null) {{
+{II}return namespaceError;
+{I}}}
+
+{I}cursor.advance();
+{I}return token;
+}}
+
 function checkExpectedCloseTag(
 {I}closeTag: CloseTagToken,
 {I}expectedLocalName: string
@@ -1937,6 +1945,37 @@ function openTag(localName: string, withNamespace = false): string {{
 
 function closeTag(localName: string): string {{
 {I}return `</${{localName}}>`;
+}}
+
+/**
+ * Push `content` wrapped in its own `localName` element onto `parts`.
+ *
+ * We push the opening tag, the content and the closing tag as three separate
+ * entries instead of pre-concatenating them, so that ``parts.join("")`` at
+ * the top level copies the (possibly large, deeply nested) `content` exactly
+ * once.
+ */
+function writeVElement(
+{I}parts: Array<string>,
+{I}localName: string,
+{I}content: string
+): void {{
+{I}parts.push(openTag(localName));
+{I}parts.push(content);
+{I}parts.push(closeTag(localName));
+}}
+
+/**
+ * Push a class instance already serialized to XML parts onto `parts`, wrapped
+ * in its own element as given by {{@link SerializedElement.localName}}.
+ */
+function writeClassElement(
+{I}parts: Array<string>,
+{I}serialized: SerializedElement
+): void {{
+{I}parts.push(openTag(serialized.localName));
+{I}parts.push(serialized.innerXml);
+{I}parts.push(closeTag(serialized.localName));
 }}
 
 function escapeXmlText(text: string): string {{

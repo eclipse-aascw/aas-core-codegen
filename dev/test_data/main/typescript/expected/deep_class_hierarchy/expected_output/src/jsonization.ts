@@ -157,6 +157,87 @@ function newDeserializationError<T>(
 }
 
 /**
+ * Check that `jsonable` looks like a JSON object, without parsing it.
+ *
+ * @param jsonable - to be checked
+ * @returns error, if any
+ */
+function checkIsJsonObject(jsonable: JsonValue): DeserializationError | null {
+  if (jsonable === null) {
+    return new DeserializationError(
+      "Expected a JSON object, but got null"
+    );
+  }
+  if (Array.isArray(jsonable)) {
+    return new DeserializationError(
+      "Expected a JSON object, but got a JSON array"
+    );
+  }
+  if (typeof jsonable !== "object") {
+    return new DeserializationError(
+      `Expected a JSON object, but got: ${typeof jsonable}`
+    );
+  }
+
+  return null;
+}
+
+/**
+ * Check that the parsed `modelType` matches `expected`.
+ *
+ * @param modelType - parsed value of the `modelType` property,
+ * or `null` if it was missing
+ * @param expected - expected model type
+ * @returns error, if any
+ */
+function checkModelType(
+  modelType: string | null,
+  expected: string
+): DeserializationError | null {
+  if (modelType === null) {
+    return new DeserializationError(
+      "The required property 'modelType' is missing"
+    );
+  }
+  if (modelType != expected) {
+    return new DeserializationError(
+      `Expected model type '${expected}', ` +
+      `but got: ${modelType}`
+    );
+  }
+
+  return null;
+}
+
+/**
+ * Check that `jsonable` looks like an iterable which can be parsed
+ * item-by-item, without consuming it.
+ *
+ * @param jsonable - to be checked
+ * @returns error, if any
+ */
+function checkIsIterable(jsonable: JsonValue): DeserializationError | null {
+  if (jsonable === null) {
+    return new DeserializationError(
+      "Expected an iterable, but got null"
+    );
+  }
+  if (typeof jsonable !== "object") {
+    return new DeserializationError(
+      `Expected an iterable, but got: ${typeof jsonable}`
+    );
+  }
+  if (typeof jsonable[Symbol.iterator] !== "function") {
+    return new DeserializationError(
+      "Expected an iterable with iterator function, " +
+        `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
+    );
+  }
+
+  return null;
+}
+
+/**
  * Parse every item of `iterable` with `parseItem`.
  *
  * @param iterable - to be parsed item-by-item
@@ -333,23 +414,19 @@ export function nodeFromJsonable(
   AasTypes.INode,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.INode>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.INode,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.INode>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.INode>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonable["modelType"];
+  const modelType = jsonObject["modelType"];
   if (modelType === undefined) {
     return newDeserializationError<AasTypes.INode>(
       "The required property modelType is missing"
@@ -385,23 +462,19 @@ export function branchFromJsonable(
   AasTypes.IBranch,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.IBranch>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.IBranch,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.IBranch>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.IBranch>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonable["modelType"];
+  const modelType = jsonObject["modelType"];
   if (modelType === undefined) {
     return newDeserializationError<AasTypes.IBranch>(
       "The required property modelType is missing"
@@ -520,26 +593,22 @@ function branchFromJsonableWithoutDispatch(
   AasTypes.Branch,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.Branch>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Branch,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.Branch>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.Branch>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForBranch();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_BRANCH.get(key);
 
@@ -554,7 +623,7 @@ function branchFromJsonableWithoutDispatch(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.Branch,
@@ -582,18 +651,14 @@ function branchFromJsonableWithoutDispatch(
     );
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.Branch
+  const modelTypeError = checkModelType(setter.modelType, "Branch");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Branch,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "Branch") {
-    return newDeserializationError<
-      AasTypes.Branch
-    >(
-      "Expected model type 'Branch', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -622,23 +687,19 @@ export function leafFromJsonable(
   AasTypes.ILeaf,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.ILeaf>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.ILeaf,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.ILeaf>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.ILeaf>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonable["modelType"];
+  const modelType = jsonObject["modelType"];
   if (modelType === undefined) {
     return newDeserializationError<AasTypes.ILeaf>(
       "The required property modelType is missing"
@@ -779,26 +840,22 @@ function leafFromJsonableWithoutDispatch(
   AasTypes.Leaf,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.Leaf>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Leaf,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.Leaf>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.Leaf>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForLeaf();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_LEAF.get(key);
 
@@ -813,7 +870,7 @@ function leafFromJsonableWithoutDispatch(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.Leaf,
@@ -849,18 +906,14 @@ function leafFromJsonableWithoutDispatch(
     );
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.Leaf
+  const modelTypeError = checkModelType(setter.modelType, "Leaf");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Leaf,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "Leaf") {
-    return newDeserializationError<
-      AasTypes.Leaf
-    >(
-      "Expected model type 'Leaf', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -1010,26 +1063,22 @@ export function blossomFromJsonable(
   AasTypes.Blossom,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.Blossom>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Blossom,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.Blossom>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.Blossom>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForBlossom();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_BLOSSOM.get(key);
 
@@ -1044,7 +1093,7 @@ export function blossomFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.Blossom,
@@ -1088,18 +1137,14 @@ export function blossomFromJsonable(
     );
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.Blossom
+  const modelTypeError = checkModelType(setter.modelType, "Blossom");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Blossom,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "Blossom") {
-    return newDeserializationError<
-      AasTypes.Blossom
-    >(
-      "Expected model type 'Blossom', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -1181,26 +1226,22 @@ export function somethingFromJsonable(
   AasTypes.Something,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.Something>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Something,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.Something>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.Something>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForSomething();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_SOMETHING.get(key);
 
@@ -1215,7 +1256,7 @@ export function somethingFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.Something,
@@ -1319,26 +1360,22 @@ export function containerFromJsonable(
   AasTypes.Container,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.Container>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Container,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.Container>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.Container>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForContainer();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_CONTAINER.get(key);
 
@@ -1353,7 +1390,7 @@ export function containerFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.Container,

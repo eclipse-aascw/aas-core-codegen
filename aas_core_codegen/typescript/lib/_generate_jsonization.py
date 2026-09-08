@@ -67,6 +67,105 @@ function parseArray<T>(
     )
 
 
+def _generate_check_model_type() -> Stripped:
+    """Generate the generic helper to check a parsed ``modelType`` property."""
+    return Stripped(
+        f"""\
+/**
+ * Check that the parsed `modelType` matches `expected`.
+ *
+ * @param modelType - parsed value of the `modelType` property,
+ * or `null` if it was missing
+ * @param expected - expected model type
+ * @returns error, if any
+ */
+function checkModelType(
+{I}modelType: string | null,
+{I}expected: string
+): DeserializationError | null {{
+{I}if (modelType === null) {{
+{II}return new DeserializationError(
+{III}"The required property 'modelType' is missing"
+{II});
+{I}}}
+{I}if (modelType != expected) {{
+{II}return new DeserializationError(
+{III}`Expected model type '${{expected}}', ` +
+{III}`but got: ${{modelType}}`
+{II});
+{I}}}
+
+{I}return null;
+}}"""
+    )
+
+
+def _generate_check_is_json_object() -> Stripped:
+    """Generate the generic helper to check that a JSON-able is a JSON object."""
+    return Stripped(
+        f"""\
+/**
+ * Check that `jsonable` looks like a JSON object, without parsing it.
+ *
+ * @param jsonable - to be checked
+ * @returns error, if any
+ */
+function checkIsJsonObject(jsonable: JsonValue): DeserializationError | null {{
+{I}if (jsonable === null) {{
+{II}return new DeserializationError(
+{III}"Expected a JSON object, but got null"
+{II});
+{I}}}
+{I}if (Array.isArray(jsonable)) {{
+{II}return new DeserializationError(
+{III}"Expected a JSON object, but got a JSON array"
+{II});
+{I}}}
+{I}if (typeof jsonable !== "object") {{
+{II}return new DeserializationError(
+{III}`Expected a JSON object, but got: ${{typeof jsonable}}`
+{II});
+{I}}}
+
+{I}return null;
+}}"""
+    )
+
+
+def _generate_check_is_iterable() -> Stripped:
+    """Generate the generic helper to check that a JSON-able is an iterable."""
+    return Stripped(
+        f"""\
+/**
+ * Check that `jsonable` looks like an iterable which can be parsed
+ * item-by-item, without consuming it.
+ *
+ * @param jsonable - to be checked
+ * @returns error, if any
+ */
+function checkIsIterable(jsonable: JsonValue): DeserializationError | null {{
+{I}if (jsonable === null) {{
+{II}return new DeserializationError(
+{III}"Expected an iterable, but got null"
+{II});
+{I}}}
+{I}if (typeof jsonable !== "object") {{
+{II}return new DeserializationError(
+{III}`Expected an iterable, but got: ${{typeof jsonable}}`
+{II});
+{I}}}
+{I}if (typeof jsonable[Symbol.iterator] !== "function") {{
+{II}return new DeserializationError(
+{III}"Expected an iterable with iterator function, " +
+{IIII}`but got iterator of type: ${{typeof jsonable[Symbol.iterator]}}`
+{II});
+{I}}}
+
+{I}return null;
+}}"""
+    )
+
+
 def _generate_bool_from_jsonable() -> Stripped:
     """Generate the function to decode a ``bool`` from a JSON-able."""
     return Stripped(
@@ -375,23 +474,19 @@ export function {function_name}(
 {I}AasTypes.{interface_name},
 {I}DeserializationError
 > {{
-{I}if (jsonable === null) {{
-{II}return newDeserializationError<AasTypes.{interface_name}>(
-{III}"Expected a JSON object, but got null"
+{I}const objectError = checkIsJsonObject(jsonable);
+{I}if (objectError !== null) {{
+{II}return new AasCommon.Either<
+{III}AasTypes.{interface_name},
+{III}DeserializationError
+{II}>(
+{III}null,
+{III}objectError
 {II});
 {I}}}
-{I}if (Array.isArray(jsonable)) {{
-{II}return newDeserializationError<AasTypes.{interface_name}>(
-{III}"Expected a JSON object, but got a JSON array"
-{II});
-{I}}}
-{I}if (typeof jsonable !== "object") {{
-{II}return newDeserializationError<AasTypes.{interface_name}>(
-{III}`Expected a JSON object, but got: ${{typeof jsonable}}`
-{II});
-{I}}}
+{I}const jsonObject = <JsonObject>jsonable;
 
-{I}const modelType = jsonable["modelType"];
+{I}const modelType = jsonObject["modelType"];
 {I}if (modelType === undefined) {{
 {II}return newDeserializationError<AasTypes.{interface_name}>(
 {III}"The required property modelType is missing"
@@ -549,21 +644,9 @@ if (parsedOrError.error !== null) {{
 
             body = Stripped(
                 f"""\
-if (jsonable === null) {{
-{I}return new DeserializationError(
-{II}"Expected an iterable, but got null"
-{I});
-}}
-if (typeof jsonable !== "object") {{
-{I}return new DeserializationError(
-{II}`Expected an iterable, but got: ${{typeof jsonable}}`
-{I});
-}}
-if (typeof jsonable[Symbol.iterator] !== "function") {{
-{I}return new DeserializationError(
-{II}"Expected an iterable with iterator function, " +
-{III}`but got iterator of type: ${{typeof jsonable[Symbol.iterator]}}`
-{I});
+const iterableError = checkIsIterable(jsonable);
+if (iterableError !== null) {{
+{I}return iterableError;
 }}
 
 const iterable = <Iterable<JsonValue>>jsonable;
@@ -791,21 +874,17 @@ def _generate_concrete_class_from_jsonable(
     blocks = [
         Stripped(
             f"""\
-if (jsonable === null) {{
-{I}return newDeserializationError<AasTypes.{cls_name}>(
-{II}"Expected a JSON object, but got null"
+const objectError = checkIsJsonObject(jsonable);
+if (objectError !== null) {{
+{I}return new AasCommon.Either<
+{II}AasTypes.{cls_name},
+{II}DeserializationError
+{I}>(
+{II}null,
+{II}objectError
 {I});
 }}
-if (Array.isArray(jsonable)) {{
-{I}return newDeserializationError<AasTypes.{cls_name}>(
-{II}"Expected a JSON object, but got a JSON array"
-{I});
-}}
-if (typeof jsonable !== "object") {{
-{I}return newDeserializationError<AasTypes.{cls_name}>(
-{II}`Expected a JSON object, but got: ${{typeof jsonable}}`
-{I});
-}}"""
+const jsonObject = <JsonObject>jsonable;"""
         ),
         Stripped(f"const setter = new {setter_cls_name}();"),
     ]  # type: List[Stripped]
@@ -817,8 +896,8 @@ if (typeof jsonable !== "object") {{
     blocks.append(
         Stripped(
             f"""\
-for (const key in jsonable) {{
-{I}const jsonableValue = jsonable[key];
+for (const key in jsonObject) {{
+{I}const jsonableValue = jsonObject[key];
 {I}const setterMethod =
 {II}{map_name}.get(key);
 
@@ -833,7 +912,7 @@ for (const key in jsonable) {{
 {I}const error = setterMethod.call(setter, jsonableValue);
 {I}if (error !== null) {{
 {II}error.path.prepend(
-{III}new PropertySegment(<JsonObject>jsonable, key)
+{III}new PropertySegment(jsonObject, key)
 {II});
 {II}return new AasCommon.Either<
 {III}AasTypes.{cls_name},
@@ -884,18 +963,14 @@ if (setter.{prop_name} === null) {{
         blocks.append(
             Stripped(
                 f"""\
-if (setter.{prop_name} === null) {{
-{I}return newDeserializationError<
-{II}AasTypes.{cls_name}
+const modelTypeError = checkModelType(setter.{prop_name}, "{model_type}");
+if (modelTypeError !== null) {{
+{I}return new AasCommon.Either<
+{II}AasTypes.{cls_name},
+{II}DeserializationError
 {I}>(
-{II}"The required property 'modelType' is missing"
-{I});
-}} else if (setter.{prop_name} != "{model_type}") {{
-{I}return newDeserializationError<
-{II}AasTypes.{cls_name}
-{I}>(
-{II}"Expected model type '{model_type}', " +
-{II}`but got: ${{setter.{prop_name}}}`
+{II}null,
+{II}modelTypeError
 {I});
 }}"""
             )
@@ -1487,6 +1562,9 @@ function newDeserializationError<T>(
 {I});
 }}"""
         ),
+        _generate_check_is_json_object(),
+        _generate_check_model_type(),
+        _generate_check_is_iterable(),
         _generate_parse_array(),
         _generate_bool_from_jsonable(),
         _generate_int_from_jsonable(),

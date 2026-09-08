@@ -281,7 +281,7 @@ def main() -> int:
     "@typescript-eslint/no-unused-vars": [
       "error",
       {
-        "varsIgnorePattern": "^(_|Aas.*|.*FromJsonable|.*FromXmlElement|parse.*|serialize.*)$",
+        "varsIgnorePattern": "^(_|Aas.*|.*FromJsonable|.*FromXmlElement|parse.*|serialize.*|check.*|write.*|next.*)$",
         // NOTE (mristin):
         // We do not flag unused function/method parameters. Some
         // meta-model-defined functions (*e.g.*, a ``@verification`` function
