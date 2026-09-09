@@ -333,8 +333,66 @@ that.{prop_name} = (
                     f"of type {type_anno} to be enhanced. "
                     f"Please contact the developers if you need this feature."
                 )
+
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            pre_stmts = []  # type: List[Stripped]
+            item_exprs = []  # type: List[Stripped]
+            any_class_item = False
+
+            for i, item_type_anno in enumerate(type_anno.items):
+                item_access = Stripped(f"that.{prop_name}.Item{i + 1}")
+
+                if isinstance(
+                    item_type_anno, intermediate.OurTypeAnnotation
+                ) and isinstance(
+                    item_type_anno.our_type,
+                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                ):
+                    any_class_item = True
+
+                    item_interface_name = csharp_naming.interface_name(
+                        item_type_anno.our_type.name
+                    )
+                    transformed_name = csharp_naming.variable_name(
+                        Identifier(f"transformed_{prop.name}_{i}")
+                    )
+                    casted_name = csharp_naming.variable_name(
+                        Identifier(f"casted_{prop.name}_{i}")
+                    )
+
+                    pre_stmts.append(
+                        Stripped(
+                            f"""\
+var {transformed_name} = Transform(
+{I}{item_access}
+);
+var {casted_name} = (
+{I}{transformed_name} as Aas.{item_interface_name}
+) ?? throw new System.InvalidOperationException(
+{I}"Expected the transformed value to be a {item_interface_name}, " +
+{I}$"but got: {{{transformed_name}}}"
+);"""
+                        )
+                    )
+
+                    item_exprs.append(Stripped(casted_name))
+                else:
+                    item_exprs.append(item_access)
+
+            if not any_class_item:
+                # We can not enhance any of the tuple items; nothing to do here.
+                continue
+
+            tuple_literal = csharp_common.generate_tuple_literal(item_exprs)
+            joined_pre_stmts = "\n\n".join(pre_stmts)
+
+            wrap_stmt = Stripped(
+                f"""\
+{joined_pre_stmts}
+that.{prop_name} = {tuple_literal};"""
+            )
         else:
-            assert_never(type_anno.our_type)
+            assert_never(type_anno)
 
         if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
             wrap_stmt = Stripped(

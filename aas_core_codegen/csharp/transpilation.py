@@ -126,6 +126,52 @@ class Transpiler(
     def transform_index(
         self, node: parse_tree.Index
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        collection_type = self.type_map[node.collection]
+
+        if isinstance(
+            intermediate_type_inference.beneath_optional(collection_type),
+            intermediate_type_inference.TupleTypeAnnotation,
+        ):
+            # NOTE (mristin):
+            # Tuples are heterogeneous and fixed-length, so, unlike lists, they can
+            # not be indexed at runtime. Instead, the index must be a literal
+            # integer known at the time of the code generation so that we can
+            # generate an access to the corresponding ``ItemN`` property.
+            #
+            # This is enforced in
+            # :py:meth:`aas_core_codegen.intermediate.type_inference.Inferrer.transform_index`.
+            assert isinstance(node.index, parse_tree.Constant) and isinstance(
+                node.index.value, int
+            )
+
+            tuple_type = intermediate_type_inference.beneath_optional(collection_type)
+            assert isinstance(
+                tuple_type, intermediate_type_inference.TupleTypeAnnotation
+            )
+
+            index_value = node.index.value
+            if index_value < 0:
+                index_value += len(tuple_type.items)
+
+            collection, error = self.transform(node.collection)
+            if error is not None:
+                return None, error
+            assert collection is not None
+
+            tuple_no_parentheses_types = (
+                parse_tree.Member,
+                parse_tree.FunctionCall,
+                parse_tree.MethodCall,
+                parse_tree.Name,
+                parse_tree.Constant,
+                parse_tree.Index,
+                parse_tree.Tuple,
+            )
+            if not isinstance(node.collection, tuple_no_parentheses_types):
+                collection = Stripped(f"({collection})")
+
+            return Stripped(f"{collection}.Item{index_value + 1}"), None
+
         collection, error = self.transform(node.collection)
         if error is not None:
             return None, error
@@ -159,6 +205,29 @@ class Transpiler(
             collection = Stripped(f"({collection})")
 
         return Stripped(f"{collection}[{index}]"), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_tuple(
+        self, node: parse_tree.Tuple
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        errors = []  # type: List[Error]
+        value_reprs = []  # type: List[Stripped]
+
+        for value_node in node.values:
+            value_repr, error = self.transform(value_node)
+            if error is not None:
+                errors.append(error)
+                continue
+
+            assert value_repr is not None
+            value_reprs.append(value_repr)
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the tuple", errors
+            )
+
+        return csharp_common.generate_tuple_literal(value_reprs), None
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_comparison(

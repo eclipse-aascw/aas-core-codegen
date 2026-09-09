@@ -5,6 +5,7 @@
 
 package dummy.jsonization;
 
+import dummy.common.*;
 import dummy.reporting.Reporting;
 import dummy.types.enums.*;
 import dummy.types.impl.*;
@@ -457,37 +458,27 @@ public class Jsonization {
 
         final ArrayNode arraySomeBools = serializeArray(
           that.getSomeBools(),
-          (Boolean item) ->
-            JsonNodeFactory.instance.booleanNode(
-              item));
+          JsonNodeFactory.instance::booleanNode);
         result.set("someBools", arraySomeBools);
 
         final ArrayNode arraySomeInts = serializeArray(
           that.getSomeInts(),
-          (Long item) ->
-            _Transformer.toJsonNode(
-              item));
+          _Transformer::toJsonNode);
         result.set("someInts", arraySomeInts);
 
         final ArrayNode arraySomeFloats = serializeArray(
           that.getSomeFloats(),
-          (Double item) ->
-            JsonNodeFactory.instance.numberNode(
-              item));
+          JsonNodeFactory.instance::numberNode);
         result.set("someFloats", arraySomeFloats);
 
         final ArrayNode arraySomeStrings = serializeArray(
           that.getSomeStrings(),
-          (String item) ->
-            JsonNodeFactory.instance.textNode(
-              item));
+          JsonNodeFactory.instance::textNode);
         result.set("someStrings", arraySomeStrings);
 
         final ArrayNode arraySomeBytes = serializeArray(
           that.getSomeBytes(),
-          (byte[] item) ->
-            _Transformer.bytesToJsonNode(
-              item));
+          _Transformer::bytesToJsonNode);
         result.set("someBytes", arraySomeBytes);
 
         return result;

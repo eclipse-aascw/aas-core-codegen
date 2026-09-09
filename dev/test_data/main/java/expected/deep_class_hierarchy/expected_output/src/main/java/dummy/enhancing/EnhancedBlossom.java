@@ -8,6 +8,7 @@ package dummy.enhancing;
 import java.lang.Iterable;
 import java.util.Optional;
 import java.util.List;
+import dummy.common.*;
 import dummy.visitation.IVisitor;
 import dummy.visitation.IVisitorWithContext;
 import dummy.visitation.ITransformer;

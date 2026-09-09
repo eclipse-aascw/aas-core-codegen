@@ -1,11 +1,11 @@
 """Provide common functions shared among different C# code generation modules."""
 import re
-from typing import List, cast, Optional
+from typing import List, Sequence, cast, Optional
 
 from icontract import ensure, require
 
 from aas_core_codegen import intermediate
-from aas_core_codegen.common import Stripped, assert_never
+from aas_core_codegen.common import Stripped, assert_never, indent_but_first_line
 from aas_core_codegen.csharp import naming as csharp_naming
 
 
@@ -156,6 +156,22 @@ def generate_type(
 
         return Stripped(f"List<{item_type}>")
 
+    elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+        item_types = [
+            generate_type(type_annotation=item, our_type_qualifier=our_type_qualifier)
+            for item in type_annotation.items
+        ]
+
+        joined_item_types = ", ".join(item_types)
+
+        if len(item_types) == 1:
+            # NOTE (mristin):
+            # A single-element value tuple has no literal syntax in C#, so we have
+            # to spell out the generic type explicitly.
+            return Stripped(f"System.ValueTuple<{joined_item_types}>")
+
+        return Stripped(f"({joined_item_types})")
+
     elif isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
         value = generate_type(
             type_annotation=type_annotation.value, our_type_qualifier=our_type_qualifier
@@ -176,6 +192,31 @@ INDENT5 = INDENT * 5
 INDENT6 = INDENT * 6
 INDENT7 = INDENT * 7
 INDENT8 = INDENT * 8
+
+
+@require(lambda item_exprs: len(item_exprs) > 0)
+def generate_tuple_literal(item_exprs: Sequence[Stripped]) -> Stripped:
+    """Generate a value tuple literal out of the given item expressions."""
+    joined_item_exprs = ",\n".join(item_exprs)
+
+    if len(item_exprs) == 1:
+        # NOTE (mristin):
+        # A single-element value tuple has no literal syntax in C#, so we have
+        # to resort to the explicit factory method.
+        return Stripped(
+            f"""\
+System.ValueTuple.Create(
+{INDENT}{indent_but_first_line(joined_item_exprs, INDENT)}
+)"""
+        )
+
+    return Stripped(
+        f"""\
+(
+{INDENT}{indent_but_first_line(joined_item_exprs, INDENT)}
+)"""
+    )
+
 
 # noinspection RegExpSimplifiable
 NAMESPACE_IDENTIFIER_RE = re.compile(

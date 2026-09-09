@@ -102,6 +102,17 @@ class AbstractUnroller(DBC):
         """Generate code for the given specific ``type_annotation``."""
         raise NotImplementedError()
 
+    @abc.abstractmethod
+    def _unroll_tuple_type_annotation(
+        self,
+        unrollee_expr: str,
+        type_annotation: intermediate.TupleTypeAnnotation,
+        path: List[str],
+        list_loop_level: int,
+    ) -> List[Node]:
+        """Generate code for the given specific ``type_annotation``."""
+        raise NotImplementedError()
+
     @require(lambda list_loop_level: list_loop_level >= 0)
     def unroll(
         self,
@@ -148,6 +159,14 @@ class AbstractUnroller(DBC):
 
         elif isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
             return self._unroll_optional_type_annotation(
+                unrollee_expr=unrollee_expr,
+                type_annotation=type_annotation,
+                path=path,
+                list_loop_level=list_loop_level,
+            )
+
+        elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+            return self._unroll_tuple_type_annotation(
                 unrollee_expr=unrollee_expr,
                 type_annotation=type_annotation,
                 path=path,

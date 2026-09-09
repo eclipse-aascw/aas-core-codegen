@@ -7,6 +7,7 @@ package aas_core.aas3_0.tests;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import aas_core.aas3_0.common.*;
 import aas_core.aas3_0.copying.Copying;
 import aas_core.aas3_0.types.impl.*;
 import aas_core.aas3_0.types.model.*;

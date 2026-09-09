@@ -257,6 +257,23 @@ class Constant(Expression):
         visitor.visit_constant(self)
 
 
+class Tuple(Expression):
+    """Represent a tuple literal such as ``("oi", 3)``."""
+
+    def __init__(self, values: Sequence["Expression"], original_node: ast.AST) -> None:
+        """Initialize with the given values."""
+        Expression.__init__(self, original_node=original_node)
+        self.values = values
+
+    def transform(self, transformer: "Transformer[T]") -> T:
+        """Accept the transformer."""
+        return transformer.transform_tuple(self)
+
+    def visit(self, visitor: "Visitor") -> None:
+        """Accept the visitor."""
+        visitor.visit_tuple(self)
+
+
 class IsNone(Expression):
     """Represent a check whether something ``is None``."""
 
@@ -588,6 +605,11 @@ class Visitor(DBC):
         """Visit a constant."""
         pass
 
+    def visit_tuple(self, node: Tuple) -> None:
+        """Visit a tuple literal."""
+        for value in node.values:
+            self.visit(value)
+
     def visit_is_none(self, node: IsNone) -> None:
         """Visit an is-none check."""
         self.visit(node.value)
@@ -713,6 +735,11 @@ class Transformer(Generic[T], DBC):
     @abc.abstractmethod
     def transform_constant(self, node: Constant) -> T:
         """Transform a constant into something."""
+        raise NotImplementedError(f"{node=}")
+
+    @abc.abstractmethod
+    def transform_tuple(self, node: Tuple) -> T:
+        """Transform a tuple literal into something."""
         raise NotImplementedError(f"{node=}")
 
     @abc.abstractmethod
@@ -881,6 +908,17 @@ class _StringifyTransformer(Transformer[stringify.Entity]):
             name=node.__class__.__name__,
             properties=[
                 stringify.Property("value", node.value),
+                stringify.PropertyEllipsis("original_node", node.original_node),
+            ],
+        )
+
+    def transform_tuple(self, node: Tuple) -> stringify.Entity:
+        return stringify.Entity(
+            name=node.__class__.__name__,
+            properties=[
+                stringify.Property(
+                    "values", [self.transform(value) for value in node.values]
+                ),
                 stringify.PropertyEllipsis("original_node", node.original_node),
             ],
         )
@@ -1103,6 +1141,10 @@ class RestrictedTransformer(Transformer[T]):
         """Transform a constant into something."""
         raise AssertionError(f"Unexpected node: {dump(node)}")
 
+    def transform_tuple(self, node: Tuple) -> T:
+        """Transform a tuple literal into something."""
+        raise AssertionError(f"Unexpected node: {dump(node)}")
+
     def transform_is_none(self, node: IsNone) -> T:
         """Transform an is-none check into something."""
         raise AssertionError(f"Unexpected node: {dump(node)}")
@@ -1212,6 +1254,11 @@ class _IterationTransformer(Transformer[Iterator[Node]]):
 
     def transform_constant(self, node: Constant) -> Iterator[Node]:
         yield node
+
+    def transform_tuple(self, node: Tuple) -> Iterator[Node]:
+        yield node
+        for value in node.values:
+            yield from self.transform(value)
 
     def transform_is_none(self, node: IsNone) -> Iterator[Node]:
         yield node

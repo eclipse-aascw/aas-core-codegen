@@ -665,6 +665,30 @@ class _DescendBodyUnroller(typescript_unrolling.AbstractUnroller):
             )
         ]
 
+    def _unroll_tuple_type_annotation(
+        self,
+        unrollee_expr: str,
+        type_annotation: intermediate.TupleTypeAnnotation,
+        path: List[str],
+        list_loop_level: int,
+    ) -> List[typescript_unrolling.Node]:
+        """Generate code for the given specific ``type_annotation``."""
+        # NOTE (mristin):
+        # Unlike lists, tuples are heterogeneous and fixed-length, so we unroll
+        # every item at its own fixed index instead of looping.
+        result = []  # type: List[typescript_unrolling.Node]
+        for i, item_type_annotation in enumerate(type_annotation.items):
+            result.extend(
+                self.unroll(
+                    unrollee_expr=f"{unrollee_expr}[{i}]",
+                    type_annotation=item_type_annotation,
+                    path=[],  # Path is unused in this context
+                    list_loop_level=list_loop_level,
+                )
+            )
+
+        return result
+
 
 def _generate_descend_body(cls: intermediate.ConcreteClass, recurse: bool) -> Stripped:
     """

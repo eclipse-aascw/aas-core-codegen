@@ -1005,6 +1005,103 @@ for i, v := range that.{getter_name}() {{
 }}"""
             )
 
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        item_blocks = []  # type: List[Stripped]
+
+        for i, item_type_anno in enumerate(type_anno.items):
+            assert isinstance(
+                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
+                f"NOTE (mristin): We expect only atomic items in a tuple "
+                f"at the moment, but got {item_type_anno} in {type_anno}. "
+                f"This should have already been verified in "
+                f"intermediate._translate._verify_only_simple_type_patterns."
+            )
+
+            item_expr = f"that.{getter_name}().Item{i + 1}"
+
+            if isinstance(item_type_anno, intermediate.PrimitiveTypeAnnotation):
+                # There is no verification for primitive types within a tuple.
+                continue
+
+            elif isinstance(item_type_anno, intermediate.OurTypeAnnotation):
+                if isinstance(
+                    item_type_anno.our_type,
+                    (intermediate.Enumeration, intermediate.ConstrainedPrimitive),
+                ):
+                    verify_function_name = golang_naming.function_name(
+                        Identifier(f"verify_{item_type_anno.our_type.name}")
+                    )
+
+                    item_blocks.append(
+                        Stripped(
+                            f"""\
+abort = {verify_function_name}(
+{I}{item_expr},
+{I}func(err *VerificationError) bool {{
+{II}err.Path.PrependIndex(
+{III}&aasreporting.IndexSegment{{
+{IIII}Index: {i},
+{III}}},
+{II})
+
+{II}err.Path.PrependName(
+{III}&aasreporting.NameSegment{{
+{IIII}Name: {prop_name_literal},
+{III}}},
+{II})
+
+{II}return onError(err)
+{I}}},
+)
+if abort {{
+{I}return
+}}"""
+                        )
+                    )
+
+                elif isinstance(
+                    item_type_anno.our_type,
+                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                ):
+                    item_blocks.append(
+                        Stripped(
+                            f"""\
+abort = Verify(
+{I}{item_expr},
+{I}func(err *VerificationError) bool {{
+{II}err.Path.PrependIndex(
+{III}&aasreporting.IndexSegment{{
+{IIII}Index: {i},
+{III}}},
+{II})
+
+{II}err.Path.PrependName(
+{III}&aasreporting.NameSegment{{
+{IIII}Name: {prop_name_literal},
+{III}}},
+{II})
+
+{II}return onError(err)
+{I}}},
+)
+if abort {{
+{I}return
+}}"""
+                        )
+                    )
+
+                else:
+                    # noinspection PyTypeChecker
+                    assert_never(item_type_anno.our_type)
+
+            else:
+                # noinspection PyTypeChecker
+                assert_never(item_type_anno)
+
+        if len(item_blocks) > 0:
+            block = Stripped("\n\n".join(item_blocks))
+
     else:
         assert_never(type_anno)
 

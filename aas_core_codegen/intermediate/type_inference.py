@@ -17,6 +17,7 @@ from typing import (
     Optional,
     List,
     Final,
+    Sequence,
     Union,
     get_args,
     Tuple,
@@ -226,6 +227,22 @@ class SetTypeAnnotation(SubscriptedTypeAnnotation):
         return f"Set[{self.items}]"
 
 
+class TupleTypeAnnotation(SubscriptedTypeAnnotation):
+    """
+    Represent a type annotation involving a ``Tuple[...]`` of fixed length.
+
+    Unlike :class:`ListTypeAnnotation`, the items are heterogeneous and their
+    number is fixed.
+    """
+
+    def __init__(self, items: Sequence["TypeAnnotationUnion"]):
+        self.items = items
+
+    def __str__(self) -> str:
+        items_joined = ", ".join(str(item) for item in self.items)
+        return f"Tuple[{items_joined}]"
+
+
 class OptionalTypeAnnotation(SubscriptedTypeAnnotation):
     """Represent a type annotation involving an ``Optional[...]``."""
 
@@ -311,6 +328,15 @@ def _type_annotations_equal(
             return False
         else:
             return _type_annotations_equal(that.items, other.items)
+
+    elif isinstance(that, TupleTypeAnnotation):
+        if not isinstance(other, TupleTypeAnnotation):
+            return False
+        else:
+            return len(that.items) == len(other.items) and all(
+                _type_annotations_equal(that_item, other_item)
+                for that_item, other_item in zip(that.items, other.items)
+            )
 
     elif isinstance(that, OptionalTypeAnnotation):
         if not isinstance(other, OptionalTypeAnnotation):
@@ -452,6 +478,18 @@ def _assignable(
             # in implementation targets such as C++ and Golang.
             return _type_annotations_equal(target_type.items, value_type.items)
 
+    elif isinstance(target_type, TupleTypeAnnotation):
+        if not isinstance(value_type, TupleTypeAnnotation):
+            return False
+        else:
+            # NOTE (mristin, 2026-09-02):
+            # We assume the tuples to be invariant, analogous to the lists and sets
+            # above.
+            return len(target_type.items) == len(value_type.items) and all(
+                _type_annotations_equal(target_item, value_item)
+                for target_item, value_item in zip(target_type.items, value_type.items)
+            )
+
     elif isinstance(target_type, OptionalTypeAnnotation):
         # NOTE (mristin, 2021-12-25):
         # We can always assign a non-optional to an optional.
@@ -504,6 +542,11 @@ def convert_type_annotation(
 
     elif isinstance(type_annotation, _types.ListTypeAnnotation):
         return ListTypeAnnotation(items=convert_type_annotation(type_annotation.items))
+
+    elif isinstance(type_annotation, _types.TupleTypeAnnotation):
+        return TupleTypeAnnotation(
+            items=[convert_type_annotation(item) for item in type_annotation.items]
+        )
 
     elif isinstance(type_annotation, _types.OptionalTypeAnnotation):
         return OptionalTypeAnnotation(
@@ -639,6 +682,7 @@ class _Canonicalizer(parse_tree.RestrictedTransformer[str]):
                 parse_tree.JoinedStr,
                 parse_tree.Any,
                 parse_tree.All,
+                parse_tree.Tuple,
             ),
         )
 
@@ -726,6 +770,18 @@ class _Canonicalizer(parse_tree.RestrictedTransformer[str]):
 
     def transform_constant(self, node: parse_tree.Constant) -> str:
         result = repr(node.value)
+        self.representation_map[node] = result
+        return result
+
+    def transform_tuple(self, node: parse_tree.Tuple) -> str:
+        values = [self.transform(value) for value in node.values]
+
+        values_joined = ", ".join(values)
+        if len(values) == 1:
+            result = f"({values_joined},)"
+        else:
+            result = f"({values_joined})"
+
         self.representation_map[node] = result
         return result
 
@@ -972,6 +1028,7 @@ TypeAnnotationUnion = Union[
     MethodTypeAnnotation,
     ListTypeAnnotation,
     SetTypeAnnotation,
+    TupleTypeAnnotation,
     OptionalTypeAnnotation,
     EnumerationAsTypeTypeAnnotation,
 ]
@@ -1179,11 +1236,49 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         if not success:
             return None
 
+        if isinstance(collection_type, TupleTypeAnnotation):
+            # NOTE (mristin, 2026-09-02):
+            # Tuples are heterogeneous, so, unlike lists, we can only infer the type
+            # of the individual item if the index is given as a literal integer.
+            if not (
+                isinstance(node.index, parse_tree.Constant)
+                and isinstance(node.index.value, int)
+                and not isinstance(node.index.value, bool)
+            ):
+                self.errors.append(
+                    Error(
+                        node.index.original_node,
+                        f"Expected a literal integer as the index into a tuple "
+                        f"so that the type of the individual tuple item can be "
+                        f"statically inferred, but got: {parse_tree.dump(node.index)}",
+                    )
+                )
+                return None
+
+            items = collection_type.items
+            index_value = node.index.value
+            if not (
+                -len(items) <= index_value < len(items)
+            ):  # pylint: disable=superfluous-parens
+                self.errors.append(
+                    Error(
+                        node.index.original_node,
+                        f"The index {index_value} is out of range "
+                        f"for a tuple of {len(items)} item(s): {collection_type}",
+                    )
+                )
+                return None
+
+            result = items[index_value]
+            self.type_map[node] = result
+            return result
+
         if not isinstance(collection_type, ListTypeAnnotation):
             self.errors.append(
                 Error(
                     node.collection.original_node,
-                    f"Expected an index access on a list, but got: {collection_type}",
+                    f"Expected an index access on a list or a tuple, "
+                    f"but got: {collection_type}",
                 )
             )
             return None
@@ -1201,6 +1296,25 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
             return None
 
         result = collection_type.items
+        self.type_map[node] = result
+        return result
+
+    def transform_tuple(
+        self, node: parse_tree.Tuple
+    ) -> Optional["TypeAnnotationUnion"]:
+        items = []  # type: List[TypeAnnotationUnion]
+        failed = False
+        for value in node.values:
+            value_type = self.transform(value)
+            if value_type is None:
+                failed = True
+            else:
+                items.append(value_type)
+
+        if failed:
+            return None
+
+        result = TupleTypeAnnotation(items=items)
         self.type_map[node] = result
         return result
 
@@ -1445,6 +1559,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
                     MethodTypeAnnotation,
                     ListTypeAnnotation,
                     SetTypeAnnotation,
+                    TupleTypeAnnotation,
                     OptionalTypeAnnotation,
                     EnumerationAsTypeTypeAnnotation,
                 ),
@@ -2281,6 +2396,7 @@ TypeAnnotationExceptOptional = Union[
     MethodTypeAnnotation,
     ListTypeAnnotation,
     SetTypeAnnotation,
+    TupleTypeAnnotation,
     EnumerationAsTypeTypeAnnotation,
 ]
 assert_union_without_excluded(

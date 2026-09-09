@@ -264,6 +264,36 @@ def _define_type(
             definition["type"] = "array"
             definition["items"] = items_type_definition
 
+        elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+            items_type_definitions = []  # type: List[MutableMapping[str, Any]]
+            for item_type_annotation in type_annotation.items:
+                assert isinstance(
+                    item_type_annotation, intermediate.AtomicTypeAnnotationAsTuple
+                ), (
+                    "NOTE (mristin): We only support tuples of atomic types "
+                    "(primitives, constrained primitives, classes and enumerations); "
+                    "this should have been caught before by "
+                    "intermediate._translate._verify_only_simple_type_patterns."
+                )
+
+                item_type_definition, item_error = _define_type(
+                    type_annotation=item_type_annotation,
+                    constraints_by_value=constraints_by_value,
+                    fix_pattern=fix_pattern,
+                )
+
+                if item_error is not None:
+                    return None, item_error
+
+                assert item_type_definition is not None
+                items_type_definitions.append(item_type_definition)
+
+            definition["type"] = "array"
+            definition["items"] = items_type_definitions
+            definition["minItems"] = len(items_type_definitions)
+            definition["maxItems"] = len(items_type_definitions)
+            definition["additionalItems"] = False
+
         else:
             assert_never(type_annotation)
 
@@ -338,6 +368,10 @@ def _over_non_optional_type_annotations(
 
     elif isinstance(type_annotation, intermediate.ListTypeAnnotation):
         yield from _over_non_optional_type_annotations(type_annotation.items)
+
+    elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+        for item in type_annotation.items:
+            yield from _over_non_optional_type_annotations(item)
 
     elif isinstance(
         type_annotation,

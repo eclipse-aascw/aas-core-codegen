@@ -267,6 +267,14 @@ def generate_type(
 
         return Stripped(f"Array<{item_type}>")
 
+    elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+        item_types = [
+            generate_type(type_annotation=item, types_module=types_module)
+            for item in type_annotation.items
+        ]
+
+        return Stripped(f"[{', '.join(item_types)}]")
+
     elif isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
         value = generate_type(
             type_annotation=type_annotation.value, types_module=types_module

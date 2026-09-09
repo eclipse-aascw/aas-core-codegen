@@ -1,0 +1,30 @@
+{
+  "pair": ["world", 70],
+  "items": [
+    {
+      "modelType": "AnotherItem",
+      "serialNumber": 1
+    },
+    {
+      "modelType": "SomeItem",
+      "name": "another-thing"
+    }
+  ],
+  "tricky": [
+    -3,
+    {
+      "modelType": "SomeItem",
+      "name": "third"
+    },
+    {
+      "modelType": "SomeItem",
+      "name": "fourth"
+    },
+    {
+      "modelType": "SomeItem",
+      "name": "fifth"
+    },
+    123,
+    "not-ok"
+  ]
+}

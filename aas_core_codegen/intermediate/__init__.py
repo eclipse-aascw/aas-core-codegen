@@ -12,6 +12,7 @@ PYTHON_TYPE_TO_PRIMITIVE_TYPE = _types.PYTHON_TYPE_TO_PRIMITIVE_TYPE
 PrimitiveTypeAnnotation = _types.PrimitiveTypeAnnotation
 OurTypeAnnotation = _types.OurTypeAnnotation
 ListTypeAnnotation = _types.ListTypeAnnotation
+TupleTypeAnnotation = _types.TupleTypeAnnotation
 OptionalTypeAnnotation = _types.OptionalTypeAnnotation
 SummaryRemarksDescription = _types.SummaryRemarksDescription
 SummaryRemarksConstraintsDescription = _types.SummaryRemarksConstraintsDescription
@@ -68,6 +69,10 @@ TypeAnnotationExceptOptional = _types.TypeAnnotationExceptOptional
 try_primitive_type = _types.try_primitive_type
 map_descendability = _types.map_descendability
 collect_ids_of_our_types_in_properties = _types.collect_ids_of_our_types_in_properties
+over_type_annotation_and_nested_type_annotations = (
+    _types.over_type_annotation_and_nested_type_annotations
+)
+tuple_arities = _types.tuple_arities
 
 translate = _translate.translate
 errors_if_contracts_for_functions_or_methods_defined = (

@@ -7,6 +7,7 @@ package dummy.tests;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dummy.common.*;
 import dummy.copying.Copying;
 import dummy.types.impl.*;
 import dummy.types.model.*;

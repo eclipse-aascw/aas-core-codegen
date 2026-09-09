@@ -258,6 +258,24 @@ class OptionalInferrer(parse_tree.Transformer[Optional[Error]]):
         self.is_optional_map[node] = False
         return None
 
+    def transform_tuple(self, node: parse_tree.Tuple) -> Optional[Error]:
+        last_error = None  # type: Optional[Error]
+        for value in node.values:
+            error = self.transform(value)
+
+            # NOTE (mristin):
+            # Do not immediately return so that other values are processed as well.
+            # This way we get a longer list of errors which the caller can report
+            # using :py:prop:`errors`.
+            if error is not None:
+                last_error = error
+
+        if last_error is not None:
+            return last_error
+
+        self.is_optional_map[node] = False
+        return None
+
     def transform_is_none(self, node: parse_tree.IsNone) -> Optional[Error]:
         error = self.transform(node.value)
 

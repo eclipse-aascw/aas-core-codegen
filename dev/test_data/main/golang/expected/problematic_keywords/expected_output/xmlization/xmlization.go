@@ -560,6 +560,64 @@ type Scalar interface {
 	~[]byte
 }
 
+// Read a scalar, *i.e.*, a non-instance, wrapped in a single element bearing
+// the `expectedName`, as a positional item of a tuple.
+//
+// The resulting `next` token points to the first token just after the wrapping
+// element.
+func readScalarWithName[T Scalar](
+	decoder *xml.Decoder,
+	current xml.Token,
+	expectedName string,
+	readTextAsT func(
+		aDecoder *xml.Decoder,
+		aCurrent xml.Token,
+	) (value T, aNext xml.Token, anErr error),
+) (value T, next xml.Token, err error) {
+	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
+	if err != nil {
+		return
+	}
+
+	var local string
+	local, err = parseAsStartElementAndExtractLocalName(
+		current,
+	)
+	if err != nil {
+		return
+	}
+
+	if local != expectedName {
+		err = newDeserializationError(
+			fmt.Sprintf(
+				"Expected start element %s as a tuple item delimiter, "+
+					"but got %s",
+				expectedName, local,
+			),
+		)
+		return
+	}
+
+	// Move the current to the value
+	current, err = readNext(decoder, current)
+	if err != nil {
+		return
+	}
+
+	value, current, err = readTextAsT(decoder, current)
+	if err != nil {
+		return
+	}
+
+	err = checkEndElement(current, local)
+	if err != nil {
+		return
+	}
+
+	next, err = readNext(decoder, current)
+	return
+}
+
 // Read a list of scalars, *i.e.*, non-instances as a sequence of `<v>` elements.
 //
 // The item is serialized as text in the `<v>` element.
@@ -587,33 +645,11 @@ func readListOfScalars[T Scalar](
 			break
 		}
 
-		var local string
-		local, err = parseAsStartElementAndExtractLocalName(
-			current,
-		)
-		if err != nil {
-			return
-		}
-
-		if local != "v" {
-			err = newDeserializationError(
-				fmt.Sprintf(
-					"Expected start element 'v' as a delimiter for a list of values, "+
-						"but got %s",
-					local,
-				),
-			)
-		}
-
-		// Move the current to the value
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-
 		var value T
 		var valueErr error
-		value, current, valueErr = readTextAsT(decoder, current)
+		value, current, valueErr = readScalarWithName(
+			decoder, current, "v", readTextAsT,
+		)
 		if valueErr != nil {
 			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
 				deseriaErr.Path.PrependIndex(
@@ -627,16 +663,6 @@ func readListOfScalars[T Scalar](
 		values = append(values, value)
 
 		i++
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
-		}
 	}
 
 	next = current

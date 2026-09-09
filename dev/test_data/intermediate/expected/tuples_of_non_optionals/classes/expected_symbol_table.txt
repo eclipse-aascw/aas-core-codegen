@@ -1,0 +1,291 @@
+SymbolTable(
+  our_types=[
+    AbstractClass(
+      name='AbstractItem',
+      inheritances=[],
+      inheritance_id_set=...,
+      ancestors=[],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=Interface(
+        base='Reference to AbstractClass AbstractItem',
+        name='AbstractItem',
+        inheritances=[],
+        implementers=[
+          'Reference to ConcreteClass AnotherItem',
+          'Reference to ConcreteClass SomeItem'],
+        properties=[],
+        signatures=[],
+        description=None,
+        parsed=...,
+        properties_by_name=...,
+        property_id_set=...),
+      descendant_id_set=...,
+      descendants=[
+        'Reference to ConcreteClass AnotherItem',
+        'Reference to ConcreteClass SomeItem'],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[
+        'Reference to ConcreteClass AnotherItem',
+        'Reference to ConcreteClass SomeItem'],
+      properties=[],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=None,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[],
+        inlined_statements=[]),
+      invariants=[],
+      serialization=Serialization(
+        with_model_type=True),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...),
+    ConcreteClass(
+      name='SomeItem',
+      inheritances=[
+        'Reference to AbstractClass AbstractItem'],
+      inheritance_id_set=...,
+      ancestors=[
+        'Reference to AbstractClass AbstractItem'],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=None,
+      descendant_id_set=...,
+      descendants=[],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[],
+      properties=[
+        Property(
+          name='name',
+          type_annotation=PrimitiveTypeAnnotation(
+            a_type='STR',
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass SomeItem',
+          json_name='name',
+          xml_name='name',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='name',
+            type_annotation=PrimitiveTypeAnnotation(
+              a_type='STR',
+              parsed=...),
+            default=None,
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='name',
+              argument='name',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='name',
+              argument='name',
+              default=None)""")]),
+      invariants=[],
+      serialization=Serialization(
+        with_model_type=True),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...),
+    ConcreteClass(
+      name='AnotherItem',
+      inheritances=[
+        'Reference to AbstractClass AbstractItem'],
+      inheritance_id_set=...,
+      ancestors=[
+        'Reference to AbstractClass AbstractItem'],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=None,
+      descendant_id_set=...,
+      descendants=[],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[],
+      properties=[
+        Property(
+          name='serial_number',
+          type_annotation=PrimitiveTypeAnnotation(
+            a_type='INT',
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass AnotherItem',
+          json_name='serialNumber',
+          xml_name='serialNumber',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='serial_number',
+            type_annotation=PrimitiveTypeAnnotation(
+              a_type='INT',
+              parsed=...),
+            default=None,
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='serial_number',
+              argument='serial_number',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='serial_number',
+              argument='serial_number',
+              default=None)""")]),
+      invariants=[],
+      serialization=Serialization(
+        with_model_type=True),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...),
+    ConcreteClass(
+      name='Something',
+      inheritances=[],
+      inheritance_id_set=...,
+      ancestors=[],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=None,
+      descendant_id_set=...,
+      descendants=[],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[],
+      properties=[
+        Property(
+          name='some_items',
+          type_annotation=TupleTypeAnnotation(
+            items=[
+              OurTypeAnnotation(
+                our_type='Reference to our type AbstractItem',
+                parsed=...),
+              OurTypeAnnotation(
+                our_type='Reference to our type AbstractItem',
+                parsed=...)],
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='someItems',
+          xml_name='someItems',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='some_items',
+            type_annotation=TupleTypeAnnotation(
+              items=[
+                OurTypeAnnotation(
+                  our_type='Reference to our type AbstractItem',
+                  parsed=...),
+                OurTypeAnnotation(
+                  our_type='Reference to our type AbstractItem',
+                  parsed=...)],
+              parsed=...),
+            default=None,
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='some_items',
+              argument='some_items',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='some_items',
+              argument='some_items',
+              default=None)""")]),
+      invariants=[],
+      serialization=Serialization(
+        with_model_type=False),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...)],
+  our_types_topologically_sorted=[
+    'Reference to our type AbstractItem',
+    'Reference to our type AnotherItem',
+    'Reference to our type SomeItem',
+    'Reference to our type Something'],
+  enumerations=[],
+  constrained_primitives=[],
+  classes=[
+    'Reference to our type AbstractItem',
+    'Reference to our type SomeItem',
+    'Reference to our type AnotherItem',
+    'Reference to our type Something'],
+  concrete_classes=[
+    'Reference to our type SomeItem',
+    'Reference to our type AnotherItem',
+    'Reference to our type Something'],
+  constants=[],
+  constants_by_name=...,
+  verification_functions=[],
+  verification_functions_by_name=...,
+  meta_model=MetaModel(
+    description=None,
+    version='dummy',
+    xml_namespace='https://dummy.com'))

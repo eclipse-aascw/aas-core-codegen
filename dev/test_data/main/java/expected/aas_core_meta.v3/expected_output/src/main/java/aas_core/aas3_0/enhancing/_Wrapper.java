@@ -10,6 +10,8 @@ import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import aas_core.aas3_0.common.*;
+import aas_core.aas3_0.types.enums.*;
 import aas_core.aas3_0.types.model.*;
 import aas_core.aas3_0.visitation.AbstractTransformer;
 

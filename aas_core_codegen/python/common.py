@@ -7,7 +7,12 @@ from typing import List, cast, Tuple, Optional, Mapping
 from icontract import ensure, require
 
 from aas_core_codegen import intermediate
-from aas_core_codegen.common import Stripped, assert_never, Identifier
+from aas_core_codegen.common import (
+    Stripped,
+    assert_never,
+    Identifier,
+    indent_but_first_line,
+)
 from aas_core_codegen.python import naming as python_naming
 
 
@@ -280,6 +285,9 @@ def _assert_all_primitive_types_are_mapped() -> None:
 _assert_all_primitive_types_are_mapped()
 
 
+INDENT = "    "
+
+
 def generate_type(
     type_annotation: intermediate.TypeAnnotationUnion,
     types_module: Optional[Identifier] = None,
@@ -330,12 +338,57 @@ def generate_type(
 
         return Stripped(f"List[{item_type}]")
 
+    elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+        item_types = [
+            generate_type(type_annotation=item, types_module=types_module)
+            for item in type_annotation.items
+        ]
+
+        # NOTE (mristin):
+        # We first determine the length of the one-liner *without* actually
+        # joining ``item_types`` into it, so that we do not throw away that
+        # join in the (in practice common, for tuples mixing several
+        # class-typed items) case where it turns out to be too long to read
+        # comfortably and we have to re-join with a different separator
+        # anyhow. ``len("Tuple[]") == 7`` and every separator between two
+        # items is ``", "`` (2 characters).
+        one_liner_length = (
+            7
+            + sum(len(item_type) for item_type in item_types)
+            + 2 * (len(item_types) - 1)
+        )
+
+        if one_liner_length <= 60:
+            return Stripped(f"Tuple[{', '.join(item_types)}]")
+
+        # NOTE (mristin):
+        # Break each item type onto its own line.
+        joined_item_types = ",\n".join(item_types)
+        return Stripped(
+            f"""\
+Tuple[
+{INDENT}{indent_but_first_line(joined_item_types, INDENT)},
+]"""
+        )
+
     elif isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
         value = generate_type(
             type_annotation=type_annotation.value, types_module=types_module
         )
 
-        return Stripped(f"Optional[{value}]")
+        if "\n" not in value:
+            return Stripped(f"Optional[{value}]")
+
+        # NOTE (mristin):
+        # ``value`` is already broken over multiple lines (see, *e.g.*, the
+        # ``TupleTypeAnnotation`` case above), so we follow the same
+        # bracket-per-line style here instead of squeezing it onto one line.
+        return Stripped(
+            f"""\
+Optional[
+{INDENT}{indent_but_first_line(value, INDENT)}
+]"""
+        )
 
     else:
         assert_never(type_annotation)
@@ -343,7 +396,6 @@ def generate_type(
     raise AssertionError("Should not have gotten here")
 
 
-INDENT = "    "
 INDENT2 = INDENT * 2
 INDENT3 = INDENT * 3
 INDENT4 = INDENT * 4

@@ -862,6 +862,39 @@ class TestPickle(unittest.TestCase):
 
         self.assertIsInstance(unpickled, intermediate_types.ListTypeAnnotation)
 
+    def test_tuple_type_annotation(self) -> None:
+        source = textwrap.dedent(
+            """\
+            class Some_class:
+                some_property: Tuple[str, int]
+
+                def __init__(
+                        self,
+                        some_property: Tuple[str, int]
+                ) -> None:
+                    self.some_property = some_property
+
+            __version__ = "dummy"
+            __xml_namespace__ = "https://dummy.com"
+            """
+        )
+
+        symbol_table, error = tests.common.translate_source_to_intermediate(
+            source=source
+        )
+        if error is not None:
+            raise AssertionError(tests.common.most_underlying_messages(error))
+        assert symbol_table is not None
+
+        some_class = symbol_table.must_find_concrete_class(Identifier("Some_class"))
+        some_property = some_class.properties[0]
+        type_annotation = some_property.type_annotation
+
+        pickled_data = pickle.dumps(type_annotation)
+        unpickled = pickle.loads(pickled_data)
+
+        self.assertIsInstance(unpickled, intermediate_types.TupleTypeAnnotation)
+
     def test_meta_model(self) -> None:
         source = textwrap.dedent(
             """\

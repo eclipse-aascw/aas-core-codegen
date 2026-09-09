@@ -7,6 +7,7 @@ package aas_core.aas3_0.copying;
 
 import java.util.List;
 import java.util.ArrayList;
+import aas_core.aas3_0.common.*;
 import aas_core.aas3_0.types.model.IClass;
 import aas_core.aas3_0.visitation.AbstractTransformer;
 import aas_core.aas3_0.types.enums.*;

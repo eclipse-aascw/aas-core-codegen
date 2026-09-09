@@ -5,6 +5,7 @@
 
 package aas_core.aas3_0.types.model;
 
+import aas_core.aas3_0.common.*;
 import aas_core.aas3_0.types.enums.*;
 import aas_core.aas3_0.types.impl.*;
 import aas_core.aas3_0.types.model.*;

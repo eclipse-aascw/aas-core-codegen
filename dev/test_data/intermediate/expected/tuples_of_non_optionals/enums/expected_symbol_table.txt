@@ -1,0 +1,115 @@
+SymbolTable(
+  our_types=[
+    Enumeration(
+      name='Result',
+      literals=[
+        EnumerationLiteral(
+          name='Ok',
+          value='ok',
+          description=None,
+          parsed=...),
+        EnumerationLiteral(
+          name='Fail',
+          value='fail',
+          description=None,
+          parsed=...)],
+      description=None,
+      literals_by_name=...,
+      literals_by_value=...,
+      literal_id_set=...,
+      literal_value_set=...,
+      parsed=...),
+    ConcreteClass(
+      name='Something',
+      inheritances=[],
+      inheritance_id_set=...,
+      ancestors=[],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=None,
+      descendant_id_set=...,
+      descendants=[],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[],
+      properties=[
+        Property(
+          name='some_results',
+          type_annotation=TupleTypeAnnotation(
+            items=[
+              OurTypeAnnotation(
+                our_type='Reference to our type Result',
+                parsed=...),
+              OurTypeAnnotation(
+                our_type='Reference to our type Result',
+                parsed=...)],
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='someResults',
+          xml_name='someResults',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='some_results',
+            type_annotation=TupleTypeAnnotation(
+              items=[
+                OurTypeAnnotation(
+                  our_type='Reference to our type Result',
+                  parsed=...),
+                OurTypeAnnotation(
+                  our_type='Reference to our type Result',
+                  parsed=...)],
+              parsed=...),
+            default=None,
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='some_results',
+              argument='some_results',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='some_results',
+              argument='some_results',
+              default=None)""")]),
+      invariants=[],
+      serialization=Serialization(
+        with_model_type=False),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...)],
+  our_types_topologically_sorted=[
+    'Reference to our type Something'],
+  enumerations=[
+    'Reference to our type Result'],
+  constrained_primitives=[],
+  classes=[
+    'Reference to our type Something'],
+  concrete_classes=[
+    'Reference to our type Something'],
+  constants=[],
+  constants_by_name=...,
+  verification_functions=[],
+  verification_functions_by_name=...,
+  meta_model=MetaModel(
+    description=None,
+    version='dummy',
+    xml_namespace='https://dummy.com'))

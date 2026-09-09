@@ -107,6 +107,7 @@ class _ExpectedImportsVisitor(ast.NodeVisitor):
             ("List", "typing"),
             ("Optional", "typing"),
             ("Set", "typing"),
+            ("Tuple", "typing"),
             ("DBC", "icontract"),
             ("invariant", "icontract"),
             ("ensure", "icontract"),
@@ -2405,6 +2406,21 @@ def _verify_arity_of_type_annotation_subscript(
 
     :return: error message, if any
     """
+    if type_annotation.identifier == "Tuple":
+        # NOTE (mristin, 2026-09-02):
+        # A tuple denotes a fixed-length sequence of possibly heterogeneous types,
+        # so, unlike ``List`` or ``Optional``, it has no single expected arity. We
+        # only require that at least one element type is given.
+        if len(type_annotation.subscripts) < 1:
+            return Error(
+                type_annotation.node,
+                f"Expected at least 1 argument of "
+                f"a subscripted type annotation {type_annotation.identifier!r}, "
+                f"but got {len(type_annotation.subscripts)}: {type_annotation}",
+            )
+
+        return None
+
     expected_arity_map = {"List": 1, "Optional": 1}
     expected_arity = expected_arity_map.get(type_annotation.identifier, None)
     if expected_arity is None:

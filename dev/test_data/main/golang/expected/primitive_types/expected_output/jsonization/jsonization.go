@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"math"
 	b64 "encoding/base64"
+	aascommon "github.com/dummy-works/dummy/common"
 	aasreporting "github.com/dummy-works/dummy/reporting"
 	aasstringification "github.com/dummy-works/dummy/stringification"
 	aastypes "github.com/dummy-works/dummy/types"
@@ -466,10 +467,16 @@ func (se *SerializationError) PathString() string {
 	return aasreporting.ToGolangPath(se.Path)
 }
 
-// Try to cast `that` to a float64, or return an error.
+// Try to cast `that` to a float64 and box it as a JSON-able value, or
+// return an error.
+//
+// The result is returned as `interface{}`, not the more specific
+// `float64`, so that this function itself can be passed on as a bare
+// reference wherever a `func(int64) (interface{}, error)` is expected,
+// e.g. as an item (de)serializer in a list or a tuple.
 func int64ToJsonable(
 	that int64,
-) (result float64, err error) {
+) (result interface{}, err error) {
 	if that > 9007199254740991 || that < -9007199254740991 {
 		err = newSerializationError(
 			fmt.Sprintf(
@@ -484,10 +491,16 @@ func int64ToJsonable(
 	return
 }
 
-// Encode `bytes` to a base64 string.
+// Encode `bytes` to a base64 string and box it as a JSON-able value, or
+// return an error.
+//
+// The result is returned as `interface{}`, not the more specific
+// `string`, so that this function itself can be passed on as a bare
+// reference wherever a `func([]byte) (interface{}, error)` is expected,
+// e.g. as an item (de)serializer in a list or a tuple.
 func bytesToJsonable(
 	bytes []byte,
-) (result string, err error) {
+) (result interface{}, err error) {
 	if bytes == nil {
 		err = newSerializationError(
 			"Expected an array of bytes, but got nil",

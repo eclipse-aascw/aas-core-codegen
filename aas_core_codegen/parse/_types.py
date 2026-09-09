@@ -23,7 +23,7 @@ _MODULE_NAME = pathlib.Path(os.path.realpath(__file__)).parent.name
 PRIMITIVE_TYPES = {"bool", "int", "float", "str", "bytearray"}
 
 #: Built-in generic types
-GENERIC_TYPES = {Identifier("List"), Identifier("Optional")}
+GENERIC_TYPES = {Identifier("List"), Identifier("Optional"), Identifier("Tuple")}
 
 
 class AtomicTypeAnnotation:

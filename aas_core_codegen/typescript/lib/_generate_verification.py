@@ -926,6 +926,99 @@ for (const item of that.{prop_name}) {{
             )
         )
 
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        # NOTE (mristin):
+        # Unlike lists, tuples are heterogeneous and fixed-length, so we
+        # verify every item at its own fixed index instead of looping.
+        for i, item_type_anno in enumerate(type_anno.items):
+            assert isinstance(
+                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
+                "Tuple items are restricted to atomic types (primitives, "
+                "constrained primitives, classes and enumerations) by "
+                "intermediate._translate._verify_only_simple_type_patterns, so no "
+                "nested optionals, lists or tuples are expected here."
+            )
+
+            item_access = Stripped(f"that.{prop_name}[{i}]")
+
+            for_error_of_item: Optional[Stripped]
+
+            if isinstance(item_type_anno, intermediate.PrimitiveTypeAnnotation):
+                # There is nothing to verify about the primitive types.
+                for_error_of_item = None
+
+            elif isinstance(item_type_anno, intermediate.OurTypeAnnotation):
+                if isinstance(item_type_anno.our_type, intermediate.Enumeration):
+                    # We rely on the TypeScript compiler to check for valid
+                    # enumerations, so there is nothing to verify here.
+                    for_error_of_item = None
+
+                elif isinstance(
+                    item_type_anno.our_type, intermediate.ConstrainedPrimitive
+                ):
+                    verify_function = typescript_naming.function_name(
+                        Identifier(f"verify_{item_type_anno.our_type.name}")
+                    )
+
+                    for_error_of_item = Stripped(
+                        f"for (const error of {verify_function}({item_access})) {{"
+                    )
+
+                    if len(for_error_of_item) > 70:
+                        for_error_of_item = Stripped(
+                            f"""\
+for (const error of {verify_function}(
+{II}{item_access})
+) {{"""
+                        )
+
+                elif isinstance(
+                    item_type_anno.our_type,
+                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                ):
+                    for_error_of_item = Stripped(
+                        f"""\
+for (const error of this.transformWithContext({item_access}, context)) {{"""
+                    )
+
+                    if len(for_error_of_item) > 70:
+                        for_error_of_item = Stripped(
+                            f"""\
+for (const error of this.transformWithContext(
+{II}{item_access}, context)
+) {{"""
+                        )
+
+                else:
+                    assert_never(item_type_anno.our_type)
+            else:
+                assert_never(item_type_anno)
+
+            if for_error_of_item is None:
+                continue
+
+            stmts.append(
+                Stripped(
+                    f"""\
+{for_error_of_item}
+{I}error.path.prepend(
+{II}new IndexSegment(
+{III}that.{prop_name},
+{III}{i}
+{II})
+{I});
+{I}error.path.prepend(
+{II}new PropertySegment(
+{III}that,
+{III}{prop_name_literal}
+{II})
+{I});
+{I}yield error;
+}}"""
+                )
+            )
+
     else:
         assert_never(type_anno)
 

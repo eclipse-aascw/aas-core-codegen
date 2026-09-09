@@ -458,6 +458,21 @@ std::vector<
 >"""
         )
 
+    elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+        item_types = [
+            generate_type(type_annotation=item, types_namespace=types_namespace)
+            for item in type_annotation.items
+        ]
+
+        item_types_joined = ",\n".join(item_types)
+
+        return Stripped(
+            f"""\
+std::tuple<
+{INDENT}{indent_but_first_line(item_types_joined, INDENT)}
+>"""
+        )
+
     elif isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
         value_type = generate_type(
             type_annotation=type_annotation.value, types_namespace=types_namespace
@@ -515,6 +530,9 @@ def is_referencable(type_annotation: intermediate.TypeAnnotationUnion) -> bool:
                 assert_never(type_annotation.our_type)
 
         elif isinstance(type_annotation, intermediate.ListTypeAnnotation):
+            return True
+
+        elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
             return True
 
         else:

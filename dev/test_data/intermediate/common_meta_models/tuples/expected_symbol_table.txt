@@ -1,0 +1,492 @@
+SymbolTable(
+  our_types=[
+    ConstrainedPrimitive(
+      name='Positive_int',
+      inheritances=[],
+      inheritance_id_set=...,
+      ancestors=[],
+      ancestor_id_set=...,
+      descendants=[],
+      descendant_id_set=...,
+      constrainee='INT',
+      is_implementation_specific=False,
+      invariants=[
+        Invariant(
+          description='Larger than zero',
+          body=textwrap.dedent("""\
+            Comparison(
+              left=Name(
+                identifier='self',
+                original_node=...),
+              op='GT',
+              right=Constant(
+                value=0,
+                original_node=...),
+              original_node=...)"""),
+          specified_for='Reference to ConstrainedPrimitive Positive_int',
+          parsed=...)],
+      invariant_id_set=...,
+      description=None,
+      parsed=...),
+    Enumeration(
+      name='Result',
+      literals=[
+        EnumerationLiteral(
+          name='Ok',
+          value='ok',
+          description=None,
+          parsed=...),
+        EnumerationLiteral(
+          name='Not_ok',
+          value='not-ok',
+          description=None,
+          parsed=...)],
+      description=None,
+      literals_by_name=...,
+      literals_by_value=...,
+      literal_id_set=...,
+      literal_value_set=...,
+      parsed=...),
+    AbstractClass(
+      name='Abstract_item',
+      inheritances=[],
+      inheritance_id_set=...,
+      ancestors=[],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=Interface(
+        base='Reference to AbstractClass Abstract_item',
+        name='Abstract_item',
+        inheritances=[],
+        implementers=[
+          'Reference to ConcreteClass Another_item',
+          'Reference to ConcreteClass Some_item'],
+        properties=[],
+        signatures=[],
+        description=None,
+        parsed=...,
+        properties_by_name=...,
+        property_id_set=...),
+      descendant_id_set=...,
+      descendants=[
+        'Reference to ConcreteClass Another_item',
+        'Reference to ConcreteClass Some_item'],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[
+        'Reference to ConcreteClass Another_item',
+        'Reference to ConcreteClass Some_item'],
+      properties=[],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=None,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[],
+        inlined_statements=[]),
+      invariants=[],
+      serialization=Serialization(
+        with_model_type=True),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...),
+    ConcreteClass(
+      name='Some_item',
+      inheritances=[
+        'Reference to AbstractClass Abstract_item'],
+      inheritance_id_set=...,
+      ancestors=[
+        'Reference to AbstractClass Abstract_item'],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=None,
+      descendant_id_set=...,
+      descendants=[],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[],
+      properties=[
+        Property(
+          name='name',
+          type_annotation=PrimitiveTypeAnnotation(
+            a_type='STR',
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Some_item',
+          json_name='name',
+          xml_name='name',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='name',
+            type_annotation=PrimitiveTypeAnnotation(
+              a_type='STR',
+              parsed=...),
+            default=None,
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='name',
+              argument='name',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='name',
+              argument='name',
+              default=None)""")]),
+      invariants=[],
+      serialization=Serialization(
+        with_model_type=True),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...),
+    ConcreteClass(
+      name='Another_item',
+      inheritances=[
+        'Reference to AbstractClass Abstract_item'],
+      inheritance_id_set=...,
+      ancestors=[
+        'Reference to AbstractClass Abstract_item'],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=None,
+      descendant_id_set=...,
+      descendants=[],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[],
+      properties=[
+        Property(
+          name='serial_number',
+          type_annotation=PrimitiveTypeAnnotation(
+            a_type='INT',
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Another_item',
+          json_name='serialNumber',
+          xml_name='serialNumber',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='serial_number',
+            type_annotation=PrimitiveTypeAnnotation(
+              a_type='INT',
+              parsed=...),
+            default=None,
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='serial_number',
+              argument='serial_number',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='serial_number',
+              argument='serial_number',
+              default=None)""")]),
+      invariants=[],
+      serialization=Serialization(
+        with_model_type=True),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...),
+    ConcreteClass(
+      name='Something',
+      inheritances=[],
+      inheritance_id_set=...,
+      ancestors=[],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=None,
+      descendant_id_set=...,
+      descendants=[],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[],
+      properties=[
+        Property(
+          name='pair',
+          type_annotation=TupleTypeAnnotation(
+            items=[
+              PrimitiveTypeAnnotation(
+                a_type='STR',
+                parsed=...),
+              PrimitiveTypeAnnotation(
+                a_type='INT',
+                parsed=...)],
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='pair',
+          xml_name='pair',
+          parsed=...),
+        Property(
+          name='items',
+          type_annotation=TupleTypeAnnotation(
+            items=[
+              OurTypeAnnotation(
+                our_type='Reference to our type Abstract_item',
+                parsed=...),
+              OurTypeAnnotation(
+                our_type='Reference to our type Abstract_item',
+                parsed=...)],
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='items',
+          xml_name='items',
+          parsed=...),
+        Property(
+          name='tricky',
+          type_annotation=TupleTypeAnnotation(
+            items=[
+              PrimitiveTypeAnnotation(
+                a_type='INT',
+                parsed=...),
+              OurTypeAnnotation(
+                our_type='Reference to our type Some_item',
+                parsed=...),
+              OurTypeAnnotation(
+                our_type='Reference to our type Abstract_item',
+                parsed=...),
+              OurTypeAnnotation(
+                our_type='Reference to our type Some_item',
+                parsed=...),
+              OurTypeAnnotation(
+                our_type='Reference to our type Positive_int',
+                parsed=...),
+              OurTypeAnnotation(
+                our_type='Reference to our type Result',
+                parsed=...)],
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='tricky',
+          xml_name='tricky',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='pair',
+            type_annotation=TupleTypeAnnotation(
+              items=[
+                PrimitiveTypeAnnotation(
+                  a_type='STR',
+                  parsed=...),
+                PrimitiveTypeAnnotation(
+                  a_type='INT',
+                  parsed=...)],
+              parsed=...),
+            default=None,
+            parsed=...),
+          Argument(
+            name='items',
+            type_annotation=TupleTypeAnnotation(
+              items=[
+                OurTypeAnnotation(
+                  our_type='Reference to our type Abstract_item',
+                  parsed=...),
+                OurTypeAnnotation(
+                  our_type='Reference to our type Abstract_item',
+                  parsed=...)],
+              parsed=...),
+            default=None,
+            parsed=...),
+          Argument(
+            name='tricky',
+            type_annotation=TupleTypeAnnotation(
+              items=[
+                PrimitiveTypeAnnotation(
+                  a_type='INT',
+                  parsed=...),
+                OurTypeAnnotation(
+                  our_type='Reference to our type Some_item',
+                  parsed=...),
+                OurTypeAnnotation(
+                  our_type='Reference to our type Abstract_item',
+                  parsed=...),
+                OurTypeAnnotation(
+                  our_type='Reference to our type Some_item',
+                  parsed=...),
+                OurTypeAnnotation(
+                  our_type='Reference to our type Positive_int',
+                  parsed=...),
+                OurTypeAnnotation(
+                  our_type='Reference to our type Result',
+                  parsed=...)],
+              parsed=...),
+            default=None,
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='pair',
+              argument='pair',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='items',
+              argument='items',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='tricky',
+              argument='tricky',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='pair',
+              argument='pair',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='items',
+              argument='items',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='tricky',
+              argument='tricky',
+              default=None)""")]),
+      invariants=[
+        Invariant(
+          description='The second item of the pair must be positive',
+          body=textwrap.dedent("""\
+            Comparison(
+              left=Index(
+                collection=Member(
+                  instance=Name(
+                    identifier='self',
+                    original_node=...),
+                  name='pair',
+                  original_node=...),
+                index=Constant(
+                  value=1,
+                  original_node=...),
+                original_node=...),
+              op='GT',
+              right=Constant(
+                value=0,
+                original_node=...),
+              original_node=...)"""),
+          specified_for='Reference to ConcreteClass Something',
+          parsed=...)],
+      serialization=Serialization(
+        with_model_type=False),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...)],
+  our_types_topologically_sorted=[
+    'Reference to our type Abstract_item',
+    'Reference to our type Another_item',
+    'Reference to our type Positive_int',
+    'Reference to our type Some_item',
+    'Reference to our type Something'],
+  enumerations=[
+    'Reference to our type Result'],
+  constrained_primitives=[
+    'Reference to our type Positive_int'],
+  classes=[
+    'Reference to our type Abstract_item',
+    'Reference to our type Some_item',
+    'Reference to our type Another_item',
+    'Reference to our type Something'],
+  concrete_classes=[
+    'Reference to our type Some_item',
+    'Reference to our type Another_item',
+    'Reference to our type Something'],
+  constants=[],
+  constants_by_name=...,
+  verification_functions=[
+    TranspilableVerification(
+      name='some_verification',
+      arguments=[
+        Argument(
+          name='x',
+          type_annotation=PrimitiveTypeAnnotation(
+            a_type='STR',
+            parsed=...),
+          default=None,
+          parsed=...),
+        Argument(
+          name='y',
+          type_annotation=PrimitiveTypeAnnotation(
+            a_type='INT',
+            parsed=...),
+          default=None,
+          parsed=...)],
+      returns=PrimitiveTypeAnnotation(
+        a_type='BOOL',
+        parsed=...),
+      description=None,
+      contracts=Contracts(
+        preconditions=[],
+        snapshots=[],
+        postconditions=[]),
+      parsed=...,
+      arguments_by_name=...)],
+  verification_functions_by_name=...,
+  meta_model=MetaModel(
+    description=None,
+    version='dummy',
+    xml_namespace='https://dummy.com'))

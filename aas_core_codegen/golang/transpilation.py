@@ -122,6 +122,37 @@ def generate_type(
 
         return value_type, None
 
+    elif isinstance(type_annotation, intermediate_type_inference.TupleTypeAnnotation):
+        item_types = []  # type: List[Stripped]
+        for item in type_annotation.items:
+            item_type, error_msg = generate_type(
+                type_annotation=item, types_package=types_package
+            )
+
+            if error_msg is not None:
+                return None, error_msg
+
+            assert item_type is not None
+            item_types.append(item_type)
+
+        if len(item_types) > golang_common.MAX_TUPLE_ARITY:
+            return None, (
+                f"We only pre-generate Tuple1 .. Tuple{golang_common.MAX_TUPLE_ARITY} "
+                f"in {golang_common.COMMON_PACKAGE}, but got a tuple of "
+                f"arity {len(item_types)}. Please contact the developers if you "
+                f"need larger tuples."
+            )
+
+        joined_item_types = ", ".join(item_types)
+        tuple_type_name = f"Tuple{len(item_types)}"
+
+        return (
+            Stripped(
+                f"{golang_common.COMMON_PACKAGE}.{tuple_type_name}[{joined_item_types}]"
+            ),
+            None,
+        )
+
     else:
         return None, (
             f"(mristin, 2023-06-01): We do not handle "
@@ -315,6 +346,39 @@ class Transpiler(
         if error is not None:
             return None, error
         assert collection is not None
+
+        collection_type = intermediate_type_inference.beneath_optional(
+            self.type_map[node.collection]
+        )
+
+        if isinstance(collection_type, intermediate_type_inference.TupleTypeAnnotation):
+            # NOTE (mristin, 2026-09-03):
+            # Tuples are heterogeneous, so the index must be a literal integer which
+            # we resolve statically to the corresponding ``ItemN`` field. This has
+            # already been verified in
+            # :py:class:`aas_core_codegen.intermediate.type_inference.Inferrer`.
+            assert isinstance(node.index, parse_tree.Constant) and isinstance(
+                node.index.value, int
+            )
+
+            index_value = node.index.value
+            if index_value < 0:
+                index_value += len(collection_type.items)
+
+            no_parentheses_types = (
+                parse_tree.Member,
+                parse_tree.FunctionCall,
+                parse_tree.MethodCall,
+                parse_tree.Name,
+                parse_tree.Constant,
+                parse_tree.Index,
+                parse_tree.IsIn,
+            )
+
+            if not isinstance(node.collection, no_parentheses_types):
+                collection = Stripped(f"({collection})")
+
+            return Stripped(f"{collection}.Item{index_value + 1}"), None
 
         index, error = self.transform(node.index)
         if error is not None:
@@ -661,6 +725,48 @@ len(
             assert_never(node.value)
 
         raise AssertionError("Should not have gotten here")
+
+    def transform_tuple(
+        self, node: parse_tree.Tuple
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        errors = []  # type: List[Error]
+        item_exprs = []  # type: List[Stripped]
+
+        for value_node in node.values:
+            item_expr, error = self._transform_and_dereference_if_necessary(value_node)
+            if error is not None:
+                errors.append(error)
+                continue
+
+            assert item_expr is not None
+            item_exprs.append(item_expr)
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the tuple", errors
+            )
+
+        tuple_type_anno = self.type_map[node]
+
+        go_tuple_type, error_msg = generate_type(
+            type_annotation=tuple_type_anno, types_package=self._types_package
+        )
+        if error_msg is not None:
+            return None, Error(node.original_node, error_msg)
+
+        assert go_tuple_type is not None
+
+        joined_item_exprs = ",\n".join(item_exprs)
+
+        return (
+            Stripped(
+                f"""\
+{go_tuple_type}{{
+{I}{indent_but_first_line(joined_item_exprs, I)},
+}}"""
+            ),
+            None,
+        )
 
     def transform_is_none(
         self, node: parse_tree.IsNone

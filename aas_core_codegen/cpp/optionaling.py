@@ -140,12 +140,23 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
             self._type_map[node.collection]
         )
 
+        if isinstance(
+            collection_type_anno, intermediate_type_inference.TupleTypeAnnotation
+        ):
+            # NOTE (mristin):
+            # Tuple items are restricted to atomic types (primitives, constrained
+            # primitives, classes and enumerations) by
+            # intermediate._translate._verify_only_simple_type_patterns, so none of
+            # them can ever be optional.
+            self.is_optional_map[node] = False
+            return None
+
         if not isinstance(
             collection_type_anno, intermediate_type_inference.ListTypeAnnotation
         ):
             error = Error(
                 node.collection.original_node,
-                f"Expected the collection to be a list in the index, "
+                f"Expected the collection to be a list or a tuple in the index, "
                 f"but got: {collection_type_anno}",
             )
             self.errors.append(error)
@@ -299,6 +310,24 @@ class Inferrer(parse_tree.Transformer[Optional[Error]]):
         return None
 
     def transform_constant(self, node: parse_tree.Constant) -> Optional[Error]:
+        self.is_optional_map[node] = False
+        return None
+
+    def transform_tuple(self, node: parse_tree.Tuple) -> Optional[Error]:
+        last_error = None  # type: Optional[Error]
+        for value in node.values:
+            error = self.transform(value)
+
+            # NOTE (mristin):
+            # Do not immediately return so that other values are processed as well.
+            # This way we get a longer list of errors which the caller can report
+            # using :py:prop:`errors`.
+            if error is not None:
+                last_error = error
+
+        if last_error is not None:
+            return last_error
+
         self.is_optional_map[node] = False
         return None
 

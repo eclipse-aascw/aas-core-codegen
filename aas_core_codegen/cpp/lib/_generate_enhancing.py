@@ -466,8 +466,81 @@ that->{setter_name}(
                 f"you need this feature."
             )
 
+        elif isinstance(type_anno.items, intermediate.TupleTypeAnnotation):
+            raise NotImplementedError(
+                f"NOTE (mristin): We do not currently support "
+                f"the generation of enhancing code for lists of tuples, "
+                f"but you specified {type_anno}. Please contact the developers if "
+                f"you need this feature."
+            )
+
         else:
             assert_never(type_anno.items)
+
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        class_indices = []  # type: List[int]
+        for i, item_type_anno in enumerate(type_anno.items):
+            assert isinstance(
+                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
+                "Tuple items are restricted to atomic types (primitives, "
+                "constrained primitives, classes and enumerations) by "
+                "intermediate._translate._verify_only_simple_type_patterns, so no "
+                "nested optionals, lists or tuples are expected here."
+            )
+
+            if isinstance(
+                item_type_anno, intermediate.OurTypeAnnotation
+            ) and isinstance(
+                item_type_anno.our_type,
+                (intermediate.AbstractClass, intermediate.ConcreteClass),
+            ):
+                class_indices.append(i)
+
+        if len(class_indices) == 0:
+            # Nothing to recurse into.
+            return Stripped("")
+
+        getter_name = cpp_naming.getter_name(prop.name)
+
+        const_ref_prop_type = cpp_common.generate_type_with_const_ref_if_applicable(
+            type_annotation=type_anno, types_namespace=Identifier("types")
+        )
+
+        prop_type = cpp_common.generate_type(
+            type_annotation=type_anno,
+            types_namespace=cpp_common.TYPES_NAMESPACE,
+        )
+
+        wrap_stmts = [
+            Stripped(
+                f"""\
+std::get<{i}>(wrapped) = Wrap<E>(
+{I}std::get<{i}>(value),
+{I}factory
+);"""
+            )
+            for i in class_indices
+        ]
+
+        wrap_stmts_joined = "\n\n".join(wrap_stmts)
+
+        return Stripped(
+            f"""\
+{{
+{I}{indent_but_first_line(const_ref_prop_type, I)} value(
+{II}that->{getter_name}()
+{I});
+
+{I}{indent_but_first_line(prop_type, I)} wrapped(value);
+
+{I}{indent_but_first_line(wrap_stmts_joined, I)}
+
+{I}that->{setter_name}(
+{II}std::move(wrapped)
+{I});
+}}"""
+        )
 
     else:
         # noinspection PyTypeChecker
@@ -588,6 +661,67 @@ if (that->{getter_name}().has_value()) {{
 {III})
 {II});
 {I}}}
+
+{I}that->{setter_name}(
+{II}common::make_optional(
+{III}std::move(wrapped)
+{II})
+{I});
+}}"""
+        )
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        class_indices = []  # type: List[int]
+        for i, item_type_anno in enumerate(type_anno.items):
+            assert isinstance(
+                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
+                "Tuple items are restricted to atomic types (primitives, "
+                "constrained primitives, classes and enumerations) by "
+                "intermediate._translate._verify_only_simple_type_patterns, so no "
+                "nested optionals, lists or tuples are expected here."
+            )
+
+            if isinstance(
+                item_type_anno, intermediate.OurTypeAnnotation
+            ) and isinstance(
+                item_type_anno.our_type,
+                (intermediate.AbstractClass, intermediate.ConcreteClass),
+            ):
+                class_indices.append(i)
+
+        if len(class_indices) == 0:
+            # Nothing to recurse into.
+            return Stripped("")
+
+        getter_name = cpp_naming.getter_name(prop.name)
+
+        value_type = cpp_common.generate_type(
+            type_annotation=type_anno, types_namespace=cpp_common.TYPES_NAMESPACE
+        )
+
+        wrap_stmts = [
+            Stripped(
+                f"""\
+std::get<{i}>(wrapped) = Wrap<E>(
+{I}std::get<{i}>(value),
+{I}factory
+);"""
+            )
+            for i in class_indices
+        ]
+
+        wrap_stmts_joined = "\n\n".join(wrap_stmts)
+
+        return Stripped(
+            f"""\
+if (that->{getter_name}().has_value()) {{
+{I}const {indent_but_first_line(value_type, II)}& value(
+{II}that->{getter_name}().value()
+{I});
+
+{I}{indent_but_first_line(value_type, I)} wrapped(value);
+
+{I}{indent_but_first_line(wrap_stmts_joined, I)}
 
 {I}that->{setter_name}(
 {II}common::make_optional(

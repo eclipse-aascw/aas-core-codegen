@@ -799,7 +799,8 @@ def _read_v_element(
     delegate the reading of its content to :paramref:`read_content`.
 
     This is used to read a single positional item wrapped in a named element,
-    such as ``<v>`` for a list item.
+    such as ``<v>`` for a list item, or ``<v1>``, ``<v2>``, *etc.* for
+    a tuple item.
 
     :param element: look-ahead element
     :param iterator:

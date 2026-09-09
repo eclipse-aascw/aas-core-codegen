@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<something xmlns="https://dummy.com">
+    <pair>
+        <v1>world</v1>
+        <v2>70</v2>
+    </pair>
+    <items>
+        <anotherItem>
+            <serialNumber>1</serialNumber>
+        </anotherItem>
+        <someItem>
+            <name>another-thing</name>
+        </someItem>
+    </items>
+    <tricky>
+        <v1>-3</v1>
+        <someItem>
+            <name>third</name>
+        </someItem>
+        <someItem>
+            <name>fourth</name>
+        </someItem>
+        <someItem>
+            <name>fifth</name>
+        </someItem>
+        <v5>123</v5>
+        <v6>not-ok</v6>
+    </tricky>
+</something>

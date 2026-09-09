@@ -202,6 +202,65 @@ for i := range {that_var} {{
 }}"""
                 )
 
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            item_cmp_blocks = []  # type: List[Stripped]
+
+            for i, item_type_anno in enumerate(type_anno.items):
+                item_that = f"{that_var}.Item{i + 1}"
+                item_other = f"{other_var}.Item{i + 1}"
+
+                if isinstance(
+                    item_type_anno, intermediate.OurTypeAnnotation
+                ) and isinstance(
+                    item_type_anno.our_type,
+                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                ):
+                    item_cmp_blocks.append(
+                        Stripped(
+                            f"""\
+if !DeepEqual(
+{I}{item_that},
+{I}{item_other},
+) {{
+{I}return false
+}}"""
+                        )
+                    )
+                else:
+                    if isinstance(
+                        item_type_anno, intermediate.OurTypeAnnotation
+                    ) and isinstance(item_type_anno.our_type, intermediate.Enumeration):
+                        items_primitive_type = None
+                    else:
+                        items_primitive_type = intermediate.try_primitive_type(
+                            item_type_anno
+                        )
+                        assert items_primitive_type is not None
+
+                    if items_primitive_type is intermediate.PrimitiveType.BYTEARRAY:
+                        item_cmp_blocks.append(
+                            Stripped(
+                                f"""\
+if !bytes.Equal(
+{I}{item_that},
+{I}{item_other},
+) {{
+{I}return false
+}}"""
+                            )
+                        )
+                    else:
+                        item_cmp_blocks.append(
+                            Stripped(
+                                f"""\
+if {item_that} != {item_other} {{
+{I}return false
+}}"""
+                            )
+                        )
+
+            cmp_subblock = Stripped("\n".join(item_cmp_blocks))
+
         assert cmp_subblock is not None
 
         if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):

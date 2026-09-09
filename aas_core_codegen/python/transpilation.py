@@ -144,6 +144,7 @@ class Transpiler(
             parse_tree.Name,
             parse_tree.Constant,
             parse_tree.Index,
+            parse_tree.Tuple,
         )
 
         if not isinstance(node.collection, no_parentheses_types):
@@ -467,6 +468,27 @@ not (
             assert_never(node.value)
 
         raise AssertionError("Should not have gotten here")
+
+    def transform_tuple(
+        self, node: parse_tree.Tuple
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        value_reprs = []  # type: List[Stripped]
+        for value_node in node.values:
+            value_repr, error = self.transform(value_node)
+            if error is not None:
+                return None, error
+
+            assert value_repr is not None
+            value_reprs.append(value_repr)
+
+        if len(value_reprs) == 1:
+            # NOTE (mristin):
+            # A single-element Python tuple needs a trailing comma to be
+            # distinguished from a parenthesized expression.
+            return Stripped(f"({value_reprs[0]},)"), None
+
+        joined_values = ", ".join(value_reprs)
+        return Stripped(f"({joined_values})"), None
 
     def transform_is_none(
         self, node: parse_tree.IsNone

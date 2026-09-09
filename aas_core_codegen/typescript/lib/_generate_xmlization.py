@@ -418,6 +418,174 @@ if (parsedItemsOrError.error !== null) {{
     )
 
 
+def _generate_parse_tuple_function(arity: int) -> Stripped:
+    """
+    Generate a generic function to parse a tuple of the given ``arity``.
+
+    Each positional item is parsed by its own ``parseItem{i}`` callback, which
+    is expected to have already consumed its own opening and closing tags (if
+    any) -- see, for example, ``parseNamedVElement``, ``parseNamedClassElement``
+    or a dispatch-parse function, all of which already conform to this shape.
+    """
+    type_params_joined = ", ".join(f"T{i}" for i in range(arity))
+    tuple_type = f"[{', '.join(f'T{i}' for i in range(arity))}]"
+
+    params_joined = ",\n".join(
+        f"{I}parseItem{i}: (cursor: XmlCursor) => "
+        f"AasCommon.Either<T{i}, DeserializationError>"
+        for i in range(arity)
+    )
+
+    item_blocks = []  # type: List[str]
+    for i in range(arity):
+        item_blocks.append(
+            f"""\
+const item{i}OrError = parseItem{i}(cursor);
+if (item{i}OrError.error !== null) {{
+{I}item{i}OrError.error.path.prepend(new IndexSegment({i}));
+{I}return new AasCommon.Either<{tuple_type}, DeserializationError>(
+{II}null,
+{II}item{i}OrError.error
+{I});
+}}"""
+        )
+    item_blocks_joined = "\n\n".join(item_blocks)
+
+    values_joined = ",\n".join(f"item{i}OrError.mustValue()" for i in range(arity))
+
+    return Stripped(
+        f"""\
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function parseTuple{arity}<{type_params_joined}>(
+{I}cursor: XmlCursor,
+{params_joined}
+): AasCommon.Either<{tuple_type}, DeserializationError> {{
+{I}{indent_but_first_line(item_blocks_joined, I)}
+
+{I}return new AasCommon.Either<{tuple_type}, DeserializationError>(
+{II}[
+{III}{indent_but_first_line(values_joined, III)}
+{II}],
+{II}null
+{I});
+}}"""
+    )
+
+
+def _parse_tuple_property(
+    type_anno: intermediate.TupleTypeAnnotation,
+) -> Tuple[Stripped, Stripped]:
+    """
+    Generate the statements to parse a property of a tuple type, and the
+    expression of the parsed value.
+
+    The closing tag of the property is *not* consumed by the generated
+    statements; the caller is expected to read and verify it afterwards, and
+    assign the returned value expression to the property's variable.
+
+    :param type_anno: the property's (optional-stripped) tuple type annotation
+    :return: generated TS statements, and the expression of the parsed value
+    """
+    item_types = []  # type: List[Stripped]
+    item_parsers = []  # type: List[Stripped]
+
+    for i, item_type_anno in enumerate(type_anno.items):
+        assert isinstance(item_type_anno, intermediate.AtomicTypeAnnotationAsTuple), (
+            "Tuple items are restricted to atomic types (primitives, "
+            "constrained primitives, classes and enumerations) by "
+            "intermediate._translate._verify_only_simple_type_patterns, so no "
+            "nested optionals, lists or tuples are expected here."
+        )
+
+        if not (
+            isinstance(item_type_anno, intermediate.OurTypeAnnotation)
+            and isinstance(
+                item_type_anno.our_type,
+                (intermediate.AbstractClass, intermediate.ConcreteClass),
+            )
+        ):
+            parse_function = _parse_function_for_atomic_type(item_type_anno)
+            v_name_literal = typescript_common.string_literal(f"v{i + 1}")
+
+            item_types.append(
+                typescript_common.generate_type(
+                    item_type_anno, types_module=Identifier("AasTypes")
+                )
+            )
+            item_parsers.append(
+                Stripped(
+                    f"(aCursor) => parseNamedVElement(\n"
+                    f"{I}aCursor, {v_name_literal}, {parse_function}\n"
+                    f")"
+                )
+            )
+            continue
+
+        our_type = item_type_anno.our_type
+
+        if (
+            isinstance(our_type, intermediate.ConcreteClass)
+            and len(our_type.concrete_descendants) == 0
+        ):
+            # NOTE (mristin):
+            # The concrete type is statically known, so we can directly check
+            # the local name of the element and parse it with the concrete
+            # class's own parse function -- no dispatch is necessary.
+            xml_name_literal_for_item = typescript_common.string_literal(
+                naming.xml_class_name(our_type.name)
+            )
+            parse_sequence_function_name = (
+                _parse_sequence_function_name_for_concrete_class(cls=our_type)
+            )
+
+            item_types.append(
+                Stripped(f"AasTypes.{typescript_naming.class_name(our_type.name)}")
+            )
+            item_parsers.append(
+                Stripped(
+                    f"(aCursor) => parseNamedClassElement(\n"
+                    f"{I}aCursor,\n"
+                    f"{I}{xml_name_literal_for_item},\n"
+                    f"{I}{parse_sequence_function_name}\n"
+                    f")"
+                )
+            )
+            continue
+
+        assert our_type.interface is not None, (
+            "Expected an interface on an abstract class, or on a concrete "
+            "class with concrete descendants"
+        )
+
+        if isinstance(our_type, intermediate.AbstractClass):
+            expected_name = typescript_naming.interface_name(our_type.name)
+        else:
+            expected_name = typescript_naming.class_name(our_type.name)
+
+        item_types.append(Stripped(f"AasTypes.{expected_name}"))
+        item_parsers.append(_dispatch_parse_element_function_name(our_type.interface))
+
+    arity = len(type_anno.items)
+    parse_tuple_function_name = f"parseTuple{arity}"
+    item_types_joined = ", ".join(item_types)
+    item_parsers_joined = ",\n".join(item_parsers)
+
+    return (
+        Stripped(
+            f"""\
+const tupleOrError = {parse_tuple_function_name}<{item_types_joined}>(
+{I}cursor,
+{I}{indent_but_first_line(item_parsers_joined, I)}
+);
+if (tupleOrError.error !== null) {{
+{I}propertyError = tupleOrError.error;
+{I}break;
+}}"""
+        ),
+        Stripped("tupleOrError.mustValue()"),
+    )
+
+
 @require(lambda cls, prop: id(prop) in cls.property_id_set)
 def _generate_parse_case_for_property(
     cls: intermediate.ConcreteClass,
@@ -452,6 +620,8 @@ if ({var_name} !== null) {{
         statements, value_expr = _parse_atomic_property(type_anno=type_anno)
     elif isinstance(type_anno, intermediate.ListTypeAnnotation):
         statements, value_expr = _parse_list_property(type_anno=type_anno)
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        statements, value_expr = _parse_tuple_property(type_anno=type_anno)
     else:
         assert_never(type_anno)
 
@@ -909,6 +1079,49 @@ parts.push(closeTag({xml_name_literal}));"""
                 f"for a list of type {type_anno}. Please contact the "
                 f"developers if you need this feature."
             )
+
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        item_write_stmts = []  # type: List[Stripped]
+        for i, item_type_anno in enumerate(type_anno.items):
+            assert isinstance(
+                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
+                "Tuple items are restricted to atomic types (primitives, "
+                "constrained primitives, classes and enumerations) by "
+                "intermediate._translate._verify_only_simple_type_patterns, so no "
+                "nested optionals, lists or tuples are expected here."
+            )
+
+            item_access = Stripped(f"{access_expr}[{i}]")
+
+            if isinstance(
+                item_type_anno, intermediate.OurTypeAnnotation
+            ) and isinstance(
+                item_type_anno.our_type,
+                (intermediate.AbstractClass, intermediate.ConcreteClass),
+            ):
+                item_write_stmts.append(
+                    _generate_serialize_class_element(access_expr=item_access)
+                )
+            else:
+                serialize_function = _serialize_function_for_atomic_type(item_type_anno)
+                v_name_literal = typescript_common.string_literal(f"v{i + 1}")
+                item_write_stmts.append(
+                    _generate_serialize_atomic_element(
+                        element_name_literal=v_name_literal,
+                        serialize_function=serialize_function,
+                        access_expr=item_access,
+                    )
+                )
+
+        item_write_stmts_joined = "\n".join(item_write_stmts)
+
+        body = Stripped(
+            f"""\
+parts.push(openTag({xml_name_literal}));
+{item_write_stmts_joined}
+parts.push(closeTag({xml_name_literal}));"""
+        )
 
     else:
         assert_never(type_anno)
@@ -1829,6 +2042,9 @@ function parseTextContent(cursor: XmlCursor): string {{
 
     for enumeration in symbol_table.enumerations:
         blocks.append(_generate_serialize_text_as_enumeration(enumeration))
+
+    for arity in intermediate.tuple_arities(symbol_table=symbol_table):
+        blocks.append(_generate_parse_tuple_function(arity))
 
     for concrete_cls in symbol_table.concrete_classes:
         blocks.append(_generate_parse_concrete_class(cls=concrete_cls))

@@ -5,6 +5,7 @@
 
 package aas_core.aas3_0.jsonization;
 
+import aas_core.aas3_0.common.*;
 import aas_core.aas3_0.reporting.Reporting;
 import aas_core.aas3_0.types.enums.*;
 import aas_core.aas3_0.types.impl.*;
@@ -10204,9 +10205,7 @@ public class Jsonization {
         if (that.getSupplementalSemanticIds().isPresent()) {
           final ArrayNode arraySupplementalSemanticIds = serializeArray(
             that.getSupplementalSemanticIds().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
         }
 
@@ -10226,9 +10225,7 @@ public class Jsonization {
         if (that.getRefersTo().isPresent()) {
           final ArrayNode arrayRefersTo = serializeArray(
             that.getRefersTo().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("refersTo", arrayRefersTo);
         }
 
@@ -10244,9 +10241,7 @@ public class Jsonization {
         if (that.getEmbeddedDataSpecifications().isPresent()) {
           final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
             that.getEmbeddedDataSpecifications().get(),
-            (IEmbeddedDataSpecification item) ->
-              transform(
-                item));
+            this::transform);
           result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
         }
 
@@ -10287,9 +10282,7 @@ public class Jsonization {
         if (that.getSupplementalSemanticIds().isPresent()) {
           final ArrayNode arraySupplementalSemanticIds = serializeArray(
             that.getSupplementalSemanticIds().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
         }
 
@@ -10326,9 +10319,7 @@ public class Jsonization {
         if (that.getExtensions().isPresent()) {
           final ArrayNode arrayExtensions = serializeArray(
             that.getExtensions().get(),
-            (IExtension item) ->
-              transform(
-                item));
+            this::transform);
           result.set("extensions", arrayExtensions);
         }
 
@@ -10345,18 +10336,14 @@ public class Jsonization {
         if (that.getDisplayName().isPresent()) {
           final ArrayNode arrayDisplayName = serializeArray(
             that.getDisplayName().get(),
-            (ILangStringNameType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("displayName", arrayDisplayName);
         }
 
         if (that.getDescription().isPresent()) {
           final ArrayNode arrayDescription = serializeArray(
             that.getDescription().get(),
-            (ILangStringTextType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("description", arrayDescription);
         }
 
@@ -10371,9 +10358,7 @@ public class Jsonization {
         if (that.getEmbeddedDataSpecifications().isPresent()) {
           final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
             that.getEmbeddedDataSpecifications().get(),
-            (IEmbeddedDataSpecification item) ->
-              transform(
-                item));
+            this::transform);
           result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
         }
 
@@ -10388,9 +10373,7 @@ public class Jsonization {
         if (that.getSubmodels().isPresent()) {
           final ArrayNode arraySubmodels = serializeArray(
             that.getSubmodels().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("submodels", arraySubmodels);
         }
 
@@ -10416,9 +10399,7 @@ public class Jsonization {
         if (that.getSpecificAssetIds().isPresent()) {
           final ArrayNode arraySpecificAssetIds = serializeArray(
             that.getSpecificAssetIds().get(),
-            (ISpecificAssetId item) ->
-              transform(
-                item));
+            this::transform);
           result.set("specificAssetIds", arraySpecificAssetIds);
         }
 
@@ -10466,9 +10447,7 @@ public class Jsonization {
         if (that.getSupplementalSemanticIds().isPresent()) {
           final ArrayNode arraySupplementalSemanticIds = serializeArray(
             that.getSupplementalSemanticIds().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
         }
 
@@ -10495,9 +10474,7 @@ public class Jsonization {
         if (that.getExtensions().isPresent()) {
           final ArrayNode arrayExtensions = serializeArray(
             that.getExtensions().get(),
-            (IExtension item) ->
-              transform(
-                item));
+            this::transform);
           result.set("extensions", arrayExtensions);
         }
 
@@ -10514,18 +10491,14 @@ public class Jsonization {
         if (that.getDisplayName().isPresent()) {
           final ArrayNode arrayDisplayName = serializeArray(
             that.getDisplayName().get(),
-            (ILangStringNameType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("displayName", arrayDisplayName);
         }
 
         if (that.getDescription().isPresent()) {
           final ArrayNode arrayDescription = serializeArray(
             that.getDescription().get(),
-            (ILangStringTextType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("description", arrayDescription);
         }
 
@@ -10550,36 +10523,28 @@ public class Jsonization {
         if (that.getSupplementalSemanticIds().isPresent()) {
           final ArrayNode arraySupplementalSemanticIds = serializeArray(
             that.getSupplementalSemanticIds().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
         }
 
         if (that.getQualifiers().isPresent()) {
           final ArrayNode arrayQualifiers = serializeArray(
             that.getQualifiers().get(),
-            (IQualifier item) ->
-              transform(
-                item));
+            this::transform);
           result.set("qualifiers", arrayQualifiers);
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
           final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
             that.getEmbeddedDataSpecifications().get(),
-            (IEmbeddedDataSpecification item) ->
-              transform(
-                item));
+            this::transform);
           result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
         }
 
         if (that.getSubmodelElements().isPresent()) {
           final ArrayNode arraySubmodelElements = serializeArray(
             that.getSubmodelElements().get(),
-            (ISubmodelElement item) ->
-              transform(
-                item));
+            this::transform);
           result.set("submodelElements", arraySubmodelElements);
         }
 
@@ -10597,9 +10562,7 @@ public class Jsonization {
         if (that.getExtensions().isPresent()) {
           final ArrayNode arrayExtensions = serializeArray(
             that.getExtensions().get(),
-            (IExtension item) ->
-              transform(
-                item));
+            this::transform);
           result.set("extensions", arrayExtensions);
         }
 
@@ -10616,18 +10579,14 @@ public class Jsonization {
         if (that.getDisplayName().isPresent()) {
           final ArrayNode arrayDisplayName = serializeArray(
             that.getDisplayName().get(),
-            (ILangStringNameType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("displayName", arrayDisplayName);
         }
 
         if (that.getDescription().isPresent()) {
           final ArrayNode arrayDescription = serializeArray(
             that.getDescription().get(),
-            (ILangStringTextType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("description", arrayDescription);
         }
 
@@ -10639,27 +10598,21 @@ public class Jsonization {
         if (that.getSupplementalSemanticIds().isPresent()) {
           final ArrayNode arraySupplementalSemanticIds = serializeArray(
             that.getSupplementalSemanticIds().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
         }
 
         if (that.getQualifiers().isPresent()) {
           final ArrayNode arrayQualifiers = serializeArray(
             that.getQualifiers().get(),
-            (IQualifier item) ->
-              transform(
-                item));
+            this::transform);
           result.set("qualifiers", arrayQualifiers);
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
           final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
             that.getEmbeddedDataSpecifications().get(),
-            (IEmbeddedDataSpecification item) ->
-              transform(
-                item));
+            this::transform);
           result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
         }
 
@@ -10683,9 +10636,7 @@ public class Jsonization {
         if (that.getExtensions().isPresent()) {
           final ArrayNode arrayExtensions = serializeArray(
             that.getExtensions().get(),
-            (IExtension item) ->
-              transform(
-                item));
+            this::transform);
           result.set("extensions", arrayExtensions);
         }
 
@@ -10702,18 +10653,14 @@ public class Jsonization {
         if (that.getDisplayName().isPresent()) {
           final ArrayNode arrayDisplayName = serializeArray(
             that.getDisplayName().get(),
-            (ILangStringNameType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("displayName", arrayDisplayName);
         }
 
         if (that.getDescription().isPresent()) {
           final ArrayNode arrayDescription = serializeArray(
             that.getDescription().get(),
-            (ILangStringTextType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("description", arrayDescription);
         }
 
@@ -10725,27 +10672,21 @@ public class Jsonization {
         if (that.getSupplementalSemanticIds().isPresent()) {
           final ArrayNode arraySupplementalSemanticIds = serializeArray(
             that.getSupplementalSemanticIds().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
         }
 
         if (that.getQualifiers().isPresent()) {
           final ArrayNode arrayQualifiers = serializeArray(
             that.getQualifiers().get(),
-            (IQualifier item) ->
-              transform(
-                item));
+            this::transform);
           result.set("qualifiers", arrayQualifiers);
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
           final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
             that.getEmbeddedDataSpecifications().get(),
-            (IEmbeddedDataSpecification item) ->
-              transform(
-                item));
+            this::transform);
           result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
         }
 
@@ -10770,9 +10711,7 @@ public class Jsonization {
         if (that.getValue().isPresent()) {
           final ArrayNode arrayValue = serializeArray(
             that.getValue().get(),
-            (ISubmodelElement item) ->
-              transform(
-                item));
+            this::transform);
           result.set("value", arrayValue);
         }
 
@@ -10790,9 +10729,7 @@ public class Jsonization {
         if (that.getExtensions().isPresent()) {
           final ArrayNode arrayExtensions = serializeArray(
             that.getExtensions().get(),
-            (IExtension item) ->
-              transform(
-                item));
+            this::transform);
           result.set("extensions", arrayExtensions);
         }
 
@@ -10809,18 +10746,14 @@ public class Jsonization {
         if (that.getDisplayName().isPresent()) {
           final ArrayNode arrayDisplayName = serializeArray(
             that.getDisplayName().get(),
-            (ILangStringNameType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("displayName", arrayDisplayName);
         }
 
         if (that.getDescription().isPresent()) {
           final ArrayNode arrayDescription = serializeArray(
             that.getDescription().get(),
-            (ILangStringTextType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("description", arrayDescription);
         }
 
@@ -10832,36 +10765,28 @@ public class Jsonization {
         if (that.getSupplementalSemanticIds().isPresent()) {
           final ArrayNode arraySupplementalSemanticIds = serializeArray(
             that.getSupplementalSemanticIds().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
         }
 
         if (that.getQualifiers().isPresent()) {
           final ArrayNode arrayQualifiers = serializeArray(
             that.getQualifiers().get(),
-            (IQualifier item) ->
-              transform(
-                item));
+            this::transform);
           result.set("qualifiers", arrayQualifiers);
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
           final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
             that.getEmbeddedDataSpecifications().get(),
-            (IEmbeddedDataSpecification item) ->
-              transform(
-                item));
+            this::transform);
           result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
         }
 
         if (that.getValue().isPresent()) {
           final ArrayNode arrayValue = serializeArray(
             that.getValue().get(),
-            (ISubmodelElement item) ->
-              transform(
-                item));
+            this::transform);
           result.set("value", arrayValue);
         }
 
@@ -10879,9 +10804,7 @@ public class Jsonization {
         if (that.getExtensions().isPresent()) {
           final ArrayNode arrayExtensions = serializeArray(
             that.getExtensions().get(),
-            (IExtension item) ->
-              transform(
-                item));
+            this::transform);
           result.set("extensions", arrayExtensions);
         }
 
@@ -10898,18 +10821,14 @@ public class Jsonization {
         if (that.getDisplayName().isPresent()) {
           final ArrayNode arrayDisplayName = serializeArray(
             that.getDisplayName().get(),
-            (ILangStringNameType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("displayName", arrayDisplayName);
         }
 
         if (that.getDescription().isPresent()) {
           final ArrayNode arrayDescription = serializeArray(
             that.getDescription().get(),
-            (ILangStringTextType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("description", arrayDescription);
         }
 
@@ -10921,27 +10840,21 @@ public class Jsonization {
         if (that.getSupplementalSemanticIds().isPresent()) {
           final ArrayNode arraySupplementalSemanticIds = serializeArray(
             that.getSupplementalSemanticIds().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
         }
 
         if (that.getQualifiers().isPresent()) {
           final ArrayNode arrayQualifiers = serializeArray(
             that.getQualifiers().get(),
-            (IQualifier item) ->
-              transform(
-                item));
+            this::transform);
           result.set("qualifiers", arrayQualifiers);
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
           final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
             that.getEmbeddedDataSpecifications().get(),
-            (IEmbeddedDataSpecification item) ->
-              transform(
-                item));
+            this::transform);
           result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
         }
 
@@ -10972,9 +10885,7 @@ public class Jsonization {
         if (that.getExtensions().isPresent()) {
           final ArrayNode arrayExtensions = serializeArray(
             that.getExtensions().get(),
-            (IExtension item) ->
-              transform(
-                item));
+            this::transform);
           result.set("extensions", arrayExtensions);
         }
 
@@ -10991,18 +10902,14 @@ public class Jsonization {
         if (that.getDisplayName().isPresent()) {
           final ArrayNode arrayDisplayName = serializeArray(
             that.getDisplayName().get(),
-            (ILangStringNameType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("displayName", arrayDisplayName);
         }
 
         if (that.getDescription().isPresent()) {
           final ArrayNode arrayDescription = serializeArray(
             that.getDescription().get(),
-            (ILangStringTextType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("description", arrayDescription);
         }
 
@@ -11014,36 +10921,28 @@ public class Jsonization {
         if (that.getSupplementalSemanticIds().isPresent()) {
           final ArrayNode arraySupplementalSemanticIds = serializeArray(
             that.getSupplementalSemanticIds().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
         }
 
         if (that.getQualifiers().isPresent()) {
           final ArrayNode arrayQualifiers = serializeArray(
             that.getQualifiers().get(),
-            (IQualifier item) ->
-              transform(
-                item));
+            this::transform);
           result.set("qualifiers", arrayQualifiers);
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
           final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
             that.getEmbeddedDataSpecifications().get(),
-            (IEmbeddedDataSpecification item) ->
-              transform(
-                item));
+            this::transform);
           result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
         }
 
         if (that.getValue().isPresent()) {
           final ArrayNode arrayValue = serializeArray(
             that.getValue().get(),
-            (ILangStringTextType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("value", arrayValue);
         }
 
@@ -11066,9 +10965,7 @@ public class Jsonization {
         if (that.getExtensions().isPresent()) {
           final ArrayNode arrayExtensions = serializeArray(
             that.getExtensions().get(),
-            (IExtension item) ->
-              transform(
-                item));
+            this::transform);
           result.set("extensions", arrayExtensions);
         }
 
@@ -11085,18 +10982,14 @@ public class Jsonization {
         if (that.getDisplayName().isPresent()) {
           final ArrayNode arrayDisplayName = serializeArray(
             that.getDisplayName().get(),
-            (ILangStringNameType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("displayName", arrayDisplayName);
         }
 
         if (that.getDescription().isPresent()) {
           final ArrayNode arrayDescription = serializeArray(
             that.getDescription().get(),
-            (ILangStringTextType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("description", arrayDescription);
         }
 
@@ -11108,27 +11001,21 @@ public class Jsonization {
         if (that.getSupplementalSemanticIds().isPresent()) {
           final ArrayNode arraySupplementalSemanticIds = serializeArray(
             that.getSupplementalSemanticIds().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
         }
 
         if (that.getQualifiers().isPresent()) {
           final ArrayNode arrayQualifiers = serializeArray(
             that.getQualifiers().get(),
-            (IQualifier item) ->
-              transform(
-                item));
+            this::transform);
           result.set("qualifiers", arrayQualifiers);
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
           final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
             that.getEmbeddedDataSpecifications().get(),
-            (IEmbeddedDataSpecification item) ->
-              transform(
-                item));
+            this::transform);
           result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
         }
 
@@ -11159,9 +11046,7 @@ public class Jsonization {
         if (that.getExtensions().isPresent()) {
           final ArrayNode arrayExtensions = serializeArray(
             that.getExtensions().get(),
-            (IExtension item) ->
-              transform(
-                item));
+            this::transform);
           result.set("extensions", arrayExtensions);
         }
 
@@ -11178,18 +11063,14 @@ public class Jsonization {
         if (that.getDisplayName().isPresent()) {
           final ArrayNode arrayDisplayName = serializeArray(
             that.getDisplayName().get(),
-            (ILangStringNameType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("displayName", arrayDisplayName);
         }
 
         if (that.getDescription().isPresent()) {
           final ArrayNode arrayDescription = serializeArray(
             that.getDescription().get(),
-            (ILangStringTextType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("description", arrayDescription);
         }
 
@@ -11201,27 +11082,21 @@ public class Jsonization {
         if (that.getSupplementalSemanticIds().isPresent()) {
           final ArrayNode arraySupplementalSemanticIds = serializeArray(
             that.getSupplementalSemanticIds().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
         }
 
         if (that.getQualifiers().isPresent()) {
           final ArrayNode arrayQualifiers = serializeArray(
             that.getQualifiers().get(),
-            (IQualifier item) ->
-              transform(
-                item));
+            this::transform);
           result.set("qualifiers", arrayQualifiers);
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
           final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
             that.getEmbeddedDataSpecifications().get(),
-            (IEmbeddedDataSpecification item) ->
-              transform(
-                item));
+            this::transform);
           result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
         }
 
@@ -11244,9 +11119,7 @@ public class Jsonization {
         if (that.getExtensions().isPresent()) {
           final ArrayNode arrayExtensions = serializeArray(
             that.getExtensions().get(),
-            (IExtension item) ->
-              transform(
-                item));
+            this::transform);
           result.set("extensions", arrayExtensions);
         }
 
@@ -11263,18 +11136,14 @@ public class Jsonization {
         if (that.getDisplayName().isPresent()) {
           final ArrayNode arrayDisplayName = serializeArray(
             that.getDisplayName().get(),
-            (ILangStringNameType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("displayName", arrayDisplayName);
         }
 
         if (that.getDescription().isPresent()) {
           final ArrayNode arrayDescription = serializeArray(
             that.getDescription().get(),
-            (ILangStringTextType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("description", arrayDescription);
         }
 
@@ -11286,27 +11155,21 @@ public class Jsonization {
         if (that.getSupplementalSemanticIds().isPresent()) {
           final ArrayNode arraySupplementalSemanticIds = serializeArray(
             that.getSupplementalSemanticIds().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
         }
 
         if (that.getQualifiers().isPresent()) {
           final ArrayNode arrayQualifiers = serializeArray(
             that.getQualifiers().get(),
-            (IQualifier item) ->
-              transform(
-                item));
+            this::transform);
           result.set("qualifiers", arrayQualifiers);
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
           final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
             that.getEmbeddedDataSpecifications().get(),
-            (IEmbeddedDataSpecification item) ->
-              transform(
-                item));
+            this::transform);
           result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
         }
 
@@ -11332,9 +11195,7 @@ public class Jsonization {
         if (that.getExtensions().isPresent()) {
           final ArrayNode arrayExtensions = serializeArray(
             that.getExtensions().get(),
-            (IExtension item) ->
-              transform(
-                item));
+            this::transform);
           result.set("extensions", arrayExtensions);
         }
 
@@ -11351,18 +11212,14 @@ public class Jsonization {
         if (that.getDisplayName().isPresent()) {
           final ArrayNode arrayDisplayName = serializeArray(
             that.getDisplayName().get(),
-            (ILangStringNameType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("displayName", arrayDisplayName);
         }
 
         if (that.getDescription().isPresent()) {
           final ArrayNode arrayDescription = serializeArray(
             that.getDescription().get(),
-            (ILangStringTextType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("description", arrayDescription);
         }
 
@@ -11374,27 +11231,21 @@ public class Jsonization {
         if (that.getSupplementalSemanticIds().isPresent()) {
           final ArrayNode arraySupplementalSemanticIds = serializeArray(
             that.getSupplementalSemanticIds().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
         }
 
         if (that.getQualifiers().isPresent()) {
           final ArrayNode arrayQualifiers = serializeArray(
             that.getQualifiers().get(),
-            (IQualifier item) ->
-              transform(
-                item));
+            this::transform);
           result.set("qualifiers", arrayQualifiers);
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
           final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
             that.getEmbeddedDataSpecifications().get(),
-            (IEmbeddedDataSpecification item) ->
-              transform(
-                item));
+            this::transform);
           result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
         }
 
@@ -11420,9 +11271,7 @@ public class Jsonization {
         if (that.getExtensions().isPresent()) {
           final ArrayNode arrayExtensions = serializeArray(
             that.getExtensions().get(),
-            (IExtension item) ->
-              transform(
-                item));
+            this::transform);
           result.set("extensions", arrayExtensions);
         }
 
@@ -11439,18 +11288,14 @@ public class Jsonization {
         if (that.getDisplayName().isPresent()) {
           final ArrayNode arrayDisplayName = serializeArray(
             that.getDisplayName().get(),
-            (ILangStringNameType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("displayName", arrayDisplayName);
         }
 
         if (that.getDescription().isPresent()) {
           final ArrayNode arrayDescription = serializeArray(
             that.getDescription().get(),
-            (ILangStringTextType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("description", arrayDescription);
         }
 
@@ -11462,27 +11307,21 @@ public class Jsonization {
         if (that.getSupplementalSemanticIds().isPresent()) {
           final ArrayNode arraySupplementalSemanticIds = serializeArray(
             that.getSupplementalSemanticIds().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
         }
 
         if (that.getQualifiers().isPresent()) {
           final ArrayNode arrayQualifiers = serializeArray(
             that.getQualifiers().get(),
-            (IQualifier item) ->
-              transform(
-                item));
+            this::transform);
           result.set("qualifiers", arrayQualifiers);
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
           final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
             that.getEmbeddedDataSpecifications().get(),
-            (IEmbeddedDataSpecification item) ->
-              transform(
-                item));
+            this::transform);
           result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
         }
 
@@ -11495,9 +11334,7 @@ public class Jsonization {
         if (that.getAnnotations().isPresent()) {
           final ArrayNode arrayAnnotations = serializeArray(
             that.getAnnotations().get(),
-            (IDataElement item) ->
-              transform(
-                item));
+            this::transform);
           result.set("annotations", arrayAnnotations);
         }
 
@@ -11515,9 +11352,7 @@ public class Jsonization {
         if (that.getExtensions().isPresent()) {
           final ArrayNode arrayExtensions = serializeArray(
             that.getExtensions().get(),
-            (IExtension item) ->
-              transform(
-                item));
+            this::transform);
           result.set("extensions", arrayExtensions);
         }
 
@@ -11534,18 +11369,14 @@ public class Jsonization {
         if (that.getDisplayName().isPresent()) {
           final ArrayNode arrayDisplayName = serializeArray(
             that.getDisplayName().get(),
-            (ILangStringNameType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("displayName", arrayDisplayName);
         }
 
         if (that.getDescription().isPresent()) {
           final ArrayNode arrayDescription = serializeArray(
             that.getDescription().get(),
-            (ILangStringTextType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("description", arrayDescription);
         }
 
@@ -11557,36 +11388,28 @@ public class Jsonization {
         if (that.getSupplementalSemanticIds().isPresent()) {
           final ArrayNode arraySupplementalSemanticIds = serializeArray(
             that.getSupplementalSemanticIds().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
         }
 
         if (that.getQualifiers().isPresent()) {
           final ArrayNode arrayQualifiers = serializeArray(
             that.getQualifiers().get(),
-            (IQualifier item) ->
-              transform(
-                item));
+            this::transform);
           result.set("qualifiers", arrayQualifiers);
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
           final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
             that.getEmbeddedDataSpecifications().get(),
-            (IEmbeddedDataSpecification item) ->
-              transform(
-                item));
+            this::transform);
           result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
         }
 
         if (that.getStatements().isPresent()) {
           final ArrayNode arrayStatements = serializeArray(
             that.getStatements().get(),
-            (ISubmodelElement item) ->
-              transform(
-                item));
+            this::transform);
           result.set("statements", arrayStatements);
         }
 
@@ -11601,9 +11424,7 @@ public class Jsonization {
         if (that.getSpecificAssetIds().isPresent()) {
           final ArrayNode arraySpecificAssetIds = serializeArray(
             that.getSpecificAssetIds().get(),
-            (ISpecificAssetId item) ->
-              transform(
-                item));
+            this::transform);
           result.set("specificAssetIds", arraySpecificAssetIds);
         }
 
@@ -11664,9 +11485,7 @@ public class Jsonization {
         if (that.getExtensions().isPresent()) {
           final ArrayNode arrayExtensions = serializeArray(
             that.getExtensions().get(),
-            (IExtension item) ->
-              transform(
-                item));
+            this::transform);
           result.set("extensions", arrayExtensions);
         }
 
@@ -11683,18 +11502,14 @@ public class Jsonization {
         if (that.getDisplayName().isPresent()) {
           final ArrayNode arrayDisplayName = serializeArray(
             that.getDisplayName().get(),
-            (ILangStringNameType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("displayName", arrayDisplayName);
         }
 
         if (that.getDescription().isPresent()) {
           final ArrayNode arrayDescription = serializeArray(
             that.getDescription().get(),
-            (ILangStringTextType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("description", arrayDescription);
         }
 
@@ -11706,27 +11521,21 @@ public class Jsonization {
         if (that.getSupplementalSemanticIds().isPresent()) {
           final ArrayNode arraySupplementalSemanticIds = serializeArray(
             that.getSupplementalSemanticIds().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
         }
 
         if (that.getQualifiers().isPresent()) {
           final ArrayNode arrayQualifiers = serializeArray(
             that.getQualifiers().get(),
-            (IQualifier item) ->
-              transform(
-                item));
+            this::transform);
           result.set("qualifiers", arrayQualifiers);
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
           final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
             that.getEmbeddedDataSpecifications().get(),
-            (IEmbeddedDataSpecification item) ->
-              transform(
-                item));
+            this::transform);
           result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
         }
 
@@ -11778,9 +11587,7 @@ public class Jsonization {
         if (that.getExtensions().isPresent()) {
           final ArrayNode arrayExtensions = serializeArray(
             that.getExtensions().get(),
-            (IExtension item) ->
-              transform(
-                item));
+            this::transform);
           result.set("extensions", arrayExtensions);
         }
 
@@ -11797,18 +11604,14 @@ public class Jsonization {
         if (that.getDisplayName().isPresent()) {
           final ArrayNode arrayDisplayName = serializeArray(
             that.getDisplayName().get(),
-            (ILangStringNameType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("displayName", arrayDisplayName);
         }
 
         if (that.getDescription().isPresent()) {
           final ArrayNode arrayDescription = serializeArray(
             that.getDescription().get(),
-            (ILangStringTextType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("description", arrayDescription);
         }
 
@@ -11820,54 +11623,42 @@ public class Jsonization {
         if (that.getSupplementalSemanticIds().isPresent()) {
           final ArrayNode arraySupplementalSemanticIds = serializeArray(
             that.getSupplementalSemanticIds().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
         }
 
         if (that.getQualifiers().isPresent()) {
           final ArrayNode arrayQualifiers = serializeArray(
             that.getQualifiers().get(),
-            (IQualifier item) ->
-              transform(
-                item));
+            this::transform);
           result.set("qualifiers", arrayQualifiers);
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
           final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
             that.getEmbeddedDataSpecifications().get(),
-            (IEmbeddedDataSpecification item) ->
-              transform(
-                item));
+            this::transform);
           result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
         }
 
         if (that.getInputVariables().isPresent()) {
           final ArrayNode arrayInputVariables = serializeArray(
             that.getInputVariables().get(),
-            (IOperationVariable item) ->
-              transform(
-                item));
+            this::transform);
           result.set("inputVariables", arrayInputVariables);
         }
 
         if (that.getOutputVariables().isPresent()) {
           final ArrayNode arrayOutputVariables = serializeArray(
             that.getOutputVariables().get(),
-            (IOperationVariable item) ->
-              transform(
-                item));
+            this::transform);
           result.set("outputVariables", arrayOutputVariables);
         }
 
         if (that.getInoutputVariables().isPresent()) {
           final ArrayNode arrayInoutputVariables = serializeArray(
             that.getInoutputVariables().get(),
-            (IOperationVariable item) ->
-              transform(
-                item));
+            this::transform);
           result.set("inoutputVariables", arrayInoutputVariables);
         }
 
@@ -11897,9 +11688,7 @@ public class Jsonization {
         if (that.getExtensions().isPresent()) {
           final ArrayNode arrayExtensions = serializeArray(
             that.getExtensions().get(),
-            (IExtension item) ->
-              transform(
-                item));
+            this::transform);
           result.set("extensions", arrayExtensions);
         }
 
@@ -11916,18 +11705,14 @@ public class Jsonization {
         if (that.getDisplayName().isPresent()) {
           final ArrayNode arrayDisplayName = serializeArray(
             that.getDisplayName().get(),
-            (ILangStringNameType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("displayName", arrayDisplayName);
         }
 
         if (that.getDescription().isPresent()) {
           final ArrayNode arrayDescription = serializeArray(
             that.getDescription().get(),
-            (ILangStringTextType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("description", arrayDescription);
         }
 
@@ -11939,27 +11724,21 @@ public class Jsonization {
         if (that.getSupplementalSemanticIds().isPresent()) {
           final ArrayNode arraySupplementalSemanticIds = serializeArray(
             that.getSupplementalSemanticIds().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
         }
 
         if (that.getQualifiers().isPresent()) {
           final ArrayNode arrayQualifiers = serializeArray(
             that.getQualifiers().get(),
-            (IQualifier item) ->
-              transform(
-                item));
+            this::transform);
           result.set("qualifiers", arrayQualifiers);
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
           final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
             that.getEmbeddedDataSpecifications().get(),
-            (IEmbeddedDataSpecification item) ->
-              transform(
-                item));
+            this::transform);
           result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
         }
 
@@ -11977,9 +11756,7 @@ public class Jsonization {
         if (that.getExtensions().isPresent()) {
           final ArrayNode arrayExtensions = serializeArray(
             that.getExtensions().get(),
-            (IExtension item) ->
-              transform(
-                item));
+            this::transform);
           result.set("extensions", arrayExtensions);
         }
 
@@ -11996,18 +11773,14 @@ public class Jsonization {
         if (that.getDisplayName().isPresent()) {
           final ArrayNode arrayDisplayName = serializeArray(
             that.getDisplayName().get(),
-            (ILangStringNameType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("displayName", arrayDisplayName);
         }
 
         if (that.getDescription().isPresent()) {
           final ArrayNode arrayDescription = serializeArray(
             that.getDescription().get(),
-            (ILangStringTextType item) ->
-              transform(
-                item));
+            this::transform);
           result.set("description", arrayDescription);
         }
 
@@ -12022,18 +11795,14 @@ public class Jsonization {
         if (that.getEmbeddedDataSpecifications().isPresent()) {
           final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
             that.getEmbeddedDataSpecifications().get(),
-            (IEmbeddedDataSpecification item) ->
-              transform(
-                item));
+            this::transform);
           result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
         }
 
         if (that.getIsCaseOf().isPresent()) {
           final ArrayNode arrayIsCaseOf = serializeArray(
             that.getIsCaseOf().get(),
-            (IReference item) ->
-              transform(
-                item));
+            this::transform);
           result.set("isCaseOf", arrayIsCaseOf);
         }
 
@@ -12058,9 +11827,7 @@ public class Jsonization {
 
         final ArrayNode arrayKeys = serializeArray(
           that.getKeys(),
-          (IKey item) ->
-            transform(
-              item));
+          this::transform);
         result.set("keys", arrayKeys);
 
         return result;
@@ -12120,27 +11887,21 @@ public class Jsonization {
         if (that.getAssetAdministrationShells().isPresent()) {
           final ArrayNode arrayAssetAdministrationShells = serializeArray(
             that.getAssetAdministrationShells().get(),
-            (IAssetAdministrationShell item) ->
-              transform(
-                item));
+            this::transform);
           result.set("assetAdministrationShells", arrayAssetAdministrationShells);
         }
 
         if (that.getSubmodels().isPresent()) {
           final ArrayNode arraySubmodels = serializeArray(
             that.getSubmodels().get(),
-            (ISubmodel item) ->
-              transform(
-                item));
+            this::transform);
           result.set("submodels", arraySubmodels);
         }
 
         if (that.getConceptDescriptions().isPresent()) {
           final ArrayNode arrayConceptDescriptions = serializeArray(
             that.getConceptDescriptions().get(),
-            (IConceptDescription item) ->
-              transform(
-                item));
+            this::transform);
           result.set("conceptDescriptions", arrayConceptDescriptions);
         }
 
@@ -12206,9 +11967,7 @@ public class Jsonization {
 
         final ArrayNode arrayValueReferencePairs = serializeArray(
           that.getValueReferencePairs(),
-          (IValueReferencePair item) ->
-            transform(
-              item));
+          this::transform);
         result.set("valueReferencePairs", arrayValueReferencePairs);
 
         return result;
@@ -12267,17 +12026,13 @@ public class Jsonization {
 
         final ArrayNode arrayPreferredName = serializeArray(
           that.getPreferredName(),
-          (ILangStringPreferredNameTypeIec61360 item) ->
-            transform(
-              item));
+          this::transform);
         result.set("preferredName", arrayPreferredName);
 
         if (that.getShortName().isPresent()) {
           final ArrayNode arrayShortName = serializeArray(
             that.getShortName().get(),
-            (ILangStringShortNameTypeIec61360 item) ->
-              transform(
-                item));
+            this::transform);
           result.set("shortName", arrayShortName);
         }
 
@@ -12309,9 +12064,7 @@ public class Jsonization {
         if (that.getDefinition().isPresent()) {
           final ArrayNode arrayDefinition = serializeArray(
             that.getDefinition().get(),
-            (ILangStringDefinitionTypeIec61360 item) ->
-              transform(
-                item));
+            this::transform);
           result.set("definition", arrayDefinition);
         }
 

@@ -260,6 +260,81 @@ func parseArray[T any](
     )
 
 
+@require(lambda arity: arity > 0)
+def _generate_parse_tuple_helper(arity: int) -> Stripped:
+    """
+    Generate a generic function to parse a tuple of the given ``arity``.
+
+    Every atomic value parser already has the uniform signature
+    ``func(jsonable interface{}) (T, error)`` (the very same shape
+    :py:func:`_generate_parse_array` expects for a list item), so -- unlike
+    XML, where a tuple item additionally needs a positional element name
+    bound in -- a tuple item's parser can be passed on to the generated
+    function as a bare reference, with no adapter or closure needed.
+    """
+    type_params = [f"T{i}" for i in range(arity)]
+    type_params_joined = ", ".join(f"{t} any" for t in type_params)
+
+    tuple_type = f"aascommon.Tuple{arity}[{', '.join(type_params)}]"
+
+    params_joined = ",\n".join(
+        f"parseItem{i} func(jsonable interface{{}}) ({type_params[i]}, error)"
+        for i in range(arity)
+    )
+
+    item_blocks = []  # type: List[Stripped]
+    for i in range(arity):
+        item_blocks.append(
+            Stripped(
+                f"""\
+var item{i} {type_params[i]}
+item{i}, err = parseItem{i}(jsonableArray[{i}])
+if err != nil {{
+{I}if deseriaErr, ok := err.(*DeserializationError); ok {{
+{II}deseriaErr.Path.PrependIndex(
+{III}&aasreporting.IndexSegment{{Index: {i}}},
+{II})
+{I}}}
+{I}return
+}}"""
+            )
+        )
+
+    item_blocks_joined = "\n\n".join(item_blocks)
+
+    item_fields_joined = ",\n".join(f"Item{i + 1}: item{i}" for i in range(arity))
+
+    function_name = f"parseTuple{arity}"
+
+    return Stripped(
+        f"""\
+// Parse `jsonableArray` into a {tuple_type} by calling `parseItem0`,
+// `parseItem1`, *etc.* on the correspondingly positioned item, or return
+// an error.
+func {function_name}[{type_params_joined}](
+{I}jsonableArray []interface{{}},
+{I}{indent_but_first_line(params_joined, I)},
+) (result {tuple_type}, err error) {{
+{I}if len(jsonableArray) != {arity} {{
+{II}err = newDeserializationError(
+{III}fmt.Sprintf(
+{IIII}"Expected exactly {arity} item(s), but got: %d",
+{IIII}len(jsonableArray),
+{III}),
+{II})
+{II}return
+{I}}}
+
+{I}{indent_but_first_line(item_blocks_joined, I)}
+
+{I}result = {tuple_type}{{
+{II}{indent_but_first_line(item_fields_joined, II)},
+{I}}}
+{I}return
+}}"""
+    )
+
+
 def _generate_enumeration_from_jsonable(
     enumeration: intermediate.Enumeration,
 ) -> Stripped:
@@ -704,6 +779,65 @@ if err != nil {{
 }}"""
             )
 
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            arity = len(type_anno.items)
+
+            parse_functions = []  # type: List[str]
+            for item_type_anno in type_anno.items:
+                assert isinstance(
+                    item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+                ), (
+                    f"NOTE (mristin): We expect only atomic items in a tuple "
+                    f"at the moment, but got {item_type_anno} in {type_anno}. "
+                    f"This should have already been verified in "
+                    f"intermediate._translate._verify_only_simple_type_patterns."
+                )
+
+                parse_functions.append(
+                    _determine_parse_function_for_atomic_value(item_type_anno)
+                )
+
+            parse_functions_joined = "\n".join(f"{fn}," for fn in parse_functions)
+
+            case_body = Stripped(
+                f"""\
+jsonableArray, ok := v.([]interface{{}})
+if !ok {{
+{I}deseriaErr := newDeserializationError(
+{II}fmt.Sprintf(
+{III}"Expected an array, but got %T",
+{III}v,
+{II}),
+{I})
+
+{I}deseriaErr.Path.PrependName(
+{II}&aasreporting.NameSegment{{
+{III}Name: {json_prop_literal},
+{II}}},
+{I})
+
+{I}err = deseriaErr
+
+{I}return
+}}
+
+{prop_var}, err = parseTuple{arity}(
+{I}jsonableArray,
+{I}{indent_but_first_line(parse_functions_joined, I)}
+)
+if err != nil {{
+{I}if deseriaErr, ok := err.(*DeserializationError); ok {{
+{II}deseriaErr.Path.PrependName(
+{III}&aasreporting.NameSegment{{
+{IIII}Name: {json_prop_literal},
+{III}}},
+{II})
+{I}}}
+
+{I}return
+}}"""
+            )
+
         else:
             # noinspection PyTypeChecker
             assert_never(type_anno)
@@ -1049,10 +1183,16 @@ def _generate_int64_to_jsonable() -> Stripped:
     """Generate the function to encode an ``int64`` to a JSON-able."""
     return Stripped(
         f"""\
-// Try to cast `that` to a float64, or return an error.
+// Try to cast `that` to a float64 and box it as a JSON-able value, or
+// return an error.
+//
+// The result is returned as `interface{{}}`, not the more specific
+// `float64`, so that this function itself can be passed on as a bare
+// reference wherever a `func(int64) (interface{{}}, error)` is expected,
+// e.g. as an item (de)serializer in a list or a tuple.
 func int64ToJsonable(
 {I}that int64,
-) (result float64, err error) {{
+) (result interface{{}}, err error) {{
 {I}if that > 9007199254740991 || that < -9007199254740991 {{
 {II}err = newSerializationError(
 {III}fmt.Sprintf(
@@ -1073,10 +1213,16 @@ def _generate_bytes_to_jsonable() -> Stripped:
     """Generate the function to encode ``[]byte`` to a string."""
     return Stripped(
         f"""\
-// Encode `bytes` to a base64 string.
+// Encode `bytes` to a base64 string and box it as a JSON-able value, or
+// return an error.
+//
+// The result is returned as `interface{{}}`, not the more specific
+// `string`, so that this function itself can be passed on as a bare
+// reference wherever a `func([]byte) (interface{{}}, error)` is expected,
+// e.g. as an item (de)serializer in a list or a tuple.
 func bytesToJsonable(
 {I}bytes []byte,
-) (result string, err error) {{
+) (result interface{{}}, err error) {{
 {I}if bytes == nil {{
 {II}err = newSerializationError(
 {III}"Expected an array of bytes, but got nil",
@@ -1116,6 +1262,197 @@ func serializeArray[T any](
 {II}}}
 {II}result[i] = jsonable
 {I}}}
+{I}return
+}}"""
+    )
+
+
+def _generate_direct_to_jsonable() -> Stripped:
+    """
+    Generate the generic function to forward a value as a JSON-able as-is.
+
+    ``serializeTupleN`` (see :py:func:`_generate_serialize_tuple_helper`)
+    accepts a plain ``func(item T) (interface{}, error)`` per item, so a
+    tuple item whose serialization already resolves to a single named
+    function of ours with exactly that shape can be passed on directly, with
+    no wrapping closure -- see :py:func:`_tuple_item_serializer_function`.
+
+    A ``bool``/``float64``/``string`` item needs no conversion at all in
+    Go's JSON representation, so this generic identity-like function stands
+    in for those directly, instead of a closure repeated at every such tuple
+    item.
+    """
+    return Stripped(
+        f"""\
+// Forward `item` as a JSON-able value, unconverted.
+func directToJsonable[T any](item T) (interface{{}}, error) {{
+{I}return item, nil
+}}"""
+    )
+
+
+def _generate_class_as_jsonable_interface() -> Stripped:
+    """Generate the wrapper so a class tuple item is a bare function reference."""
+    return Stripped(
+        f"""\
+// Serialize `that` to a JSON-able value, or return an error.
+//
+// `ToJsonable` takes an `aastypes.IClass`, but a tuple item's own
+// (more specific) interface type, e.g., `aastypes.ISomeItem`, can not be
+// unified with that when passing `ToJsonable` itself as a
+// `func(item T) (interface{{}}, error)` value -- Go function values are
+// invariant in their parameter type (no contravariance, unlike, say, a C#
+// delegate). Making this wrapper itself generic (instead of fixing its
+// parameter to `aastypes.IClass`) lets the very same one be passed on bare,
+// uninstantiated, for every class-typed tuple item regardless of its
+// concrete interface: Go infers both the tuple item's type and this
+// wrapper's own type parameter together from the context of the
+// `serializeTupleN` call.
+func classAsJsonableInterface[T aastypes.IClass](that T) (interface{{}}, error) {{
+{I}return ToJsonable(that)
+}}"""
+    )
+
+
+def _generate_enum_as_jsonable_interface(
+    enumeration: intermediate.Enumeration,
+) -> Stripped:
+    """Generate the wrapper so an enum tuple item is a bare function reference."""
+    enum_name = golang_naming.enum_name(identifier=enumeration.name)
+
+    to_jsonable = golang_naming.function_name(
+        Identifier(f"{enumeration.name}_to_jsonable")
+    )
+
+    function_name = golang_naming.private_function_name(
+        Identifier(f"{enumeration.name}_as_jsonable_interface")
+    )
+
+    return Stripped(
+        f"""\
+// Serialize `that` to a JSON-able value, or return an error.
+//
+// `{to_jsonable}` returns `(string, error)`, not `(interface{{}}, error)` --
+// Go function values require an exact signature match (no covariance), so
+// it can not be passed on directly wherever a `func(item T) (interface{{}},
+// error)` is expected, e.g. as an item serializer in a tuple. This wrapper
+// exists solely to have the right signature.
+func {function_name}(that aastypes.{enum_name}) (interface{{}}, error) {{
+{I}return {to_jsonable}(that)
+}}"""
+    )
+
+
+def _tuple_item_serializer_function(
+    type_annotation: intermediate.AtomicTypeAnnotation,
+) -> Stripped:
+    """
+    Determine the function reference to serialize a tuple item.
+
+    ``directToJsonable`` and ``classAsJsonableInterface`` are themselves
+    generic, so -- exactly as for ``asInstanceTupleItemWriter`` in XML
+    de/serialization (see :py:func:`_generate_as_instance_tuple_item_writer`
+    in ``_generate_xmlization.py``) -- we have to instantiate them
+    explicitly at every call site with the item's own Go type. Go can not
+    infer the type parameter for a generic function passed on as a bare,
+    uncalled value without ``go1.21``, and this project intentionally
+    targets ``go1.18``.
+    """
+    if isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
+        primitive_type = type_annotation.a_type
+    elif isinstance(type_annotation, intermediate.OurTypeAnnotation) and isinstance(
+        type_annotation.our_type, intermediate.ConstrainedPrimitive
+    ):
+        primitive_type = type_annotation.our_type.constrainee
+    else:
+        primitive_type = None
+
+    if primitive_type is not None:
+        if primitive_type is intermediate.PrimitiveType.INT:
+            return Stripped("int64ToJsonable")
+        elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
+            return Stripped("bytesToJsonable")
+        else:
+            # NOTE (mristin):
+            # The remaining primitive types (BOOL, FLOAT, STR) all share the
+            # same ``directToJsonable`` reference -- we deliberately do
+            # not enumerate them explicitly with ``assert_never`` at the end,
+            # since mypy can not narrow a literal type through ``in``
+            # membership tests the way it can through ``isinstance``.
+            item_type = golang_common.generate_type(
+                type_annotation=type_annotation, types_package=Identifier("aastypes")
+            )
+            return Stripped(f"directToJsonable[{item_type}]")
+
+    assert isinstance(type_annotation, intermediate.OurTypeAnnotation)
+    our_type = type_annotation.our_type
+
+    if isinstance(our_type, intermediate.Enumeration):
+        return golang_naming.private_function_name(
+            Identifier(f"{our_type.name}_as_jsonable_interface")
+        )
+    elif isinstance(our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)):
+        item_type = golang_common.generate_type(
+            type_annotation=type_annotation, types_package=Identifier("aastypes")
+        )
+        return Stripped(f"classAsJsonableInterface[{item_type}]")
+    elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+        raise AssertionError(
+            f"Unexpected {our_type=}: a constrained primitive should have "
+            f"already been handled above through ``primitive_type``"
+        )
+    else:
+        assert_never(our_type)
+
+
+@require(lambda arity: arity > 0)
+def _generate_serialize_tuple_helper(arity: int) -> Stripped:
+    """Generate a generic function to serialize a tuple of the given ``arity``."""
+    type_params = [f"T{i}" for i in range(arity)]
+    type_params_joined = ", ".join(f"{t} any" for t in type_params)
+
+    tuple_type = f"aascommon.Tuple{arity}[{', '.join(type_params)}]"
+
+    params_joined = ",\n".join(
+        f"serializeItem{i} func(item {type_params[i]}) (interface{{}}, error)"
+        for i in range(arity)
+    )
+
+    item_blocks = []  # type: List[Stripped]
+    for i in range(arity):
+        item_blocks.append(
+            Stripped(
+                f"""\
+var jsonable{i} interface{{}}
+jsonable{i}, err = serializeItem{i}(that.Item{i + 1})
+if err != nil {{
+{I}if seriaErr, ok := err.(*SerializationError); ok {{
+{II}seriaErr.Path.PrependIndex(
+{III}&aasreporting.IndexSegment{{Index: {i}}},
+{II})
+{I}}}
+{I}return
+}}
+result[{i}] = jsonable{i}"""
+            )
+        )
+
+    item_blocks_joined = "\n\n".join(item_blocks)
+
+    function_name = f"serializeTuple{arity}"
+
+    return Stripped(
+        f"""\
+// Serialize `that` with `serializeItem0`, `serializeItem1`, *etc.* into
+// a JSON-able array, or return an error.
+func {function_name}[{type_params_joined}](
+{I}that {tuple_type},
+{I}{indent_but_first_line(params_joined, I)},
+) (result []interface{{}}, err error) {{
+{I}result = make([]interface{{}}, {arity})
+
+{I}{indent_but_first_line(item_blocks_joined, I)}
+
 {I}return
 }}"""
     )
@@ -1169,7 +1506,11 @@ TypeAnnotationExceptList = Union[
 assert_union_without_excluded(
     original_union=intermediate.TypeAnnotationUnion,
     subset_union=TypeAnnotationExceptList,
-    excluded=[intermediate.ListTypeAnnotation],
+    # NOTE (mristin, 2026-09-03):
+    # ``ListTypeAnnotation`` and ``TupleTypeAnnotation`` are handled directly in
+    # the calling code (see ``_generate_cls_to_map``), which unrolls them into
+    # calls of this function on the atomic items.
+    excluded=[intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation],
 )
 
 
@@ -1337,7 +1678,9 @@ def _generate_cls_to_map(cls: intermediate.ConcreteClass) -> Stripped:
         block: Stripped
 
         if isinstance(type_anno, intermediate.ListTypeAnnotation):
-            assert not isinstance(type_anno.items, intermediate.ListTypeAnnotation), (
+            assert isinstance(
+                type_anno.items, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
                 "(mristin): We currently generate only the code to serialize lists of "
                 "atomic values. If you need this feature, please contact "
                 "the developers."
@@ -1347,27 +1690,88 @@ def _generate_cls_to_map(cls: intermediate.ConcreteClass) -> Stripped:
                 type_annotation=type_anno.items, types_package=Identifier("aastypes")
             )
 
-            # fmt: off
-            serialize_expr, needs_error_checking = (
-                _generate_expression_to_serialize_atomic_value(
-                    access_expression="item", type_annotation=type_anno.items
-                )
-            )
-            # fmt: on
+            # NOTE (mristin):
+            # ``int64ToJsonable`` and ``bytesToJsonable`` already have the exact
+            # signature ``func(item T) (interface{}, error)`` that ``serializeArray``
+            # expects, so they can be passed on as a bare function reference. Every
+            # other item type still needs a closure below to adapt its
+            # serialization expression to that signature.
+            item_primitive_type = intermediate.try_primitive_type(type_anno.items)
 
-            if needs_error_checking:
-                closure_body = Stripped(f"return {serialize_expr}")
+            item_serializer_arg: Stripped
+            if item_primitive_type is intermediate.PrimitiveType.INT:
+                item_serializer_arg = Stripped("int64ToJsonable")
+            elif item_primitive_type is intermediate.PrimitiveType.BYTEARRAY:
+                item_serializer_arg = Stripped("bytesToJsonable")
             else:
-                closure_body = Stripped(f"return {serialize_expr}, nil")
+                # fmt: off
+                serialize_expr, needs_error_checking = (
+                    _generate_expression_to_serialize_atomic_value(
+                        access_expression="item", type_annotation=type_anno.items
+                    )
+                )
+                # fmt: on
+
+                if needs_error_checking:
+                    closure_body = Stripped(f"return {serialize_expr}")
+                else:
+                    closure_body = Stripped(f"return {serialize_expr}, nil")
+
+                item_serializer_arg = Stripped(
+                    f"""\
+func(item {item_type}) (interface{{}}, error) {{
+{I}{indent_but_first_line(closure_body, I)}
+}}"""
+                )
 
             block = Stripped(
                 f"""\
 var {prop_jsonable_var} []interface{{}}
 {prop_jsonable_var}, err = serializeArray(
 {I}that.{getter_name}(),
-{I}func(item {item_type}) (interface{{}}, error) {{
-{II}{indent_but_first_line(closure_body, II)}
-{I}}},
+{I}{indent_but_first_line(item_serializer_arg, I)},
+)
+if err != nil {{
+{I}if seriaErr, ok := err.(*SerializationError); ok {{
+{II}seriaErr.Path.PrependName(
+{III}&aasreporting.NameSegment{{
+{IIII}Name: {prop_literal},
+{III}}},
+{II})
+{I}}}
+
+{I}return
+}}
+result[{json_prop_literal}] = {prop_jsonable_var}"""
+            )
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            arity = len(type_anno.items)
+
+            serialize_functions = []  # type: List[str]
+            for item_type_anno in type_anno.items:
+                assert isinstance(
+                    item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+                ), (
+                    f"NOTE (mristin): We expect only atomic items in a tuple "
+                    f"at the moment, but got {item_type_anno} in {type_anno}. "
+                    f"This should have already been verified in "
+                    f"intermediate._translate._verify_only_simple_type_patterns."
+                )
+
+                serialize_functions.append(
+                    _tuple_item_serializer_function(item_type_anno)
+                )
+
+            serialize_functions_joined = "\n".join(
+                f"{fn}," for fn in serialize_functions
+            )
+
+            block = Stripped(
+                f"""\
+var {prop_jsonable_var} []interface{{}}
+{prop_jsonable_var}, err = serializeTuple{arity}(
+{I}that.{getter_name}(),
+{I}{indent_but_first_line(serialize_functions_joined, I)}
 )
 if err != nil {{
 {I}if seriaErr, ok := err.(*SerializationError); ok {{
@@ -1383,7 +1787,18 @@ if err != nil {{
 result[{json_prop_literal}] = {prop_jsonable_var}"""
             )
         else:
-            assert not isinstance(prop.type_annotation, intermediate.ListTypeAnnotation)
+            assert isinstance(
+                prop.type_annotation,
+                (
+                    intermediate.PrimitiveTypeAnnotation,
+                    intermediate.OurTypeAnnotation,
+                    intermediate.OptionalTypeAnnotation,
+                ),
+            ), (
+                f"Since {type_anno} is neither a list nor a tuple, "
+                f"we expect the property to be atomic (optionally wrapped), "
+                f"but got {prop.type_annotation}."
+            )
 
             # fmt: off
             serialize_expr, needs_error_checking = (
@@ -1540,6 +1955,8 @@ def generate(
     """Generate code for JSON de/serialization."""
     aastypes_url_literal = golang_common.string_literal(f"{repo_url}/types")
 
+    aascommon_url_literal = golang_common.string_literal(f"{repo_url}/common")
+
     aasreporting_url_literal = golang_common.string_literal(f"{repo_url}/reporting")
 
     aasstringification_url_literal = golang_common.string_literal(
@@ -1567,6 +1984,7 @@ import (
 {I}"fmt"
 {I}"math"
 {I}b64 "encoding/base64"
+{I}aascommon {aascommon_url_literal}
 {I}aasreporting {aasreporting_url_literal}
 {I}aasstringification {aasstringification_url_literal}
 {I}aastypes {aastypes_url_literal}
@@ -1616,6 +2034,9 @@ func (de *DeserializationError) PathString() string {{
         _generate_bytes_from_jsonable(),
         _generate_parse_array(),
     ]  # type: List[Stripped]
+
+    for arity in intermediate.tuple_arities(symbol_table):
+        blocks.append(_generate_parse_tuple_helper(arity))
 
     errors = []  # type: List[Error]
 
@@ -1714,6 +2135,15 @@ func (se *SerializationError) PathString() string {{
     blocks.append(_generate_int64_to_jsonable())
     blocks.append(_generate_bytes_to_jsonable())
     blocks.append(_generate_serialize_array())
+
+    tuple_arities = intermediate.tuple_arities(symbol_table)
+    if len(tuple_arities) > 0:
+        blocks.append(_generate_direct_to_jsonable())
+        blocks.append(_generate_class_as_jsonable_interface())
+        for enumeration in symbol_table.enumerations:
+            blocks.append(_generate_enum_as_jsonable_interface(enumeration))
+        for arity in tuple_arities:
+            blocks.append(_generate_serialize_tuple_helper(arity))
 
     for enum in symbol_table.enumerations:
         blocks.append(_generate_enumeration_to_jsonable(enum))

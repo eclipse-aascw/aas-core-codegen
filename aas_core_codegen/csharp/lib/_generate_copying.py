@@ -354,6 +354,28 @@ if (that.{prop_name} != null)
                 constructor_arg_exprs.append(
                     csharp_naming.variable_name(Identifier(f"the_{arg.name}"))
                 )
+
+            elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+                # NOTE (mristin):
+                # Tuples are fixed-length and heterogeneous, so, unlike lists, we can
+                # construct the copy directly in-line without a pre-sized collection.
+                item_exprs = []  # type: List[Stripped]
+                for i, item_type_anno in enumerate(type_anno.items):
+                    item_expr = f"that.{prop_name}.Item{i + 1}"
+
+                    if isinstance(
+                        item_type_anno, intermediate.OurTypeAnnotation
+                    ) and isinstance(
+                        item_type_anno.our_type,
+                        (intermediate.AbstractClass, intermediate.ConcreteClass),
+                    ):
+                        item_expr = f"Deep({item_expr})"
+
+                    item_exprs.append(Stripped(item_expr))
+
+                constructor_arg_exprs.append(
+                    csharp_common.generate_tuple_literal(item_exprs)
+                )
             else:
                 # noinspection PyTypeChecker
                 assert_never(type_anno)

@@ -7,6 +7,7 @@ package dummy.copying;
 
 import java.util.List;
 import java.util.ArrayList;
+import dummy.common.*;
 import dummy.types.model.IClass;
 import dummy.visitation.AbstractTransformer;
 import dummy.types.enums.*;

@@ -8,6 +8,7 @@ package aas_core.aas3_0.enhancing;
 import java.lang.Iterable;
 import java.util.Optional;
 import java.util.List;
+import aas_core.aas3_0.common.*;
 import aas_core.aas3_0.visitation.IVisitor;
 import aas_core.aas3_0.visitation.IVisitorWithContext;
 import aas_core.aas3_0.visitation.ITransformer;

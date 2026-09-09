@@ -172,6 +172,30 @@ def generate_type(
 
         return Stripped(f"std::vector<{item_type}>"), None
 
+    elif isinstance(type_annotation, intermediate_type_inference.TupleTypeAnnotation):
+        item_types = []  # type: List[Stripped]
+        for item in type_annotation.items:
+            item_type, error_msg = generate_type(
+                type_annotation=item, types_namespace=types_namespace
+            )
+            if error_msg is not None:
+                return None, error_msg
+
+            assert item_type is not None
+            item_types.append(item_type)
+
+        item_types_joined = ",\n".join(item_types)
+
+        return (
+            Stripped(
+                f"""\
+std::tuple<
+{I}{indent_but_first_line(item_types_joined, I)}
+>"""
+            ),
+            None,
+        )
+
     elif isinstance(
         type_annotation, intermediate_type_inference.OptionalTypeAnnotation
     ):
@@ -231,6 +255,9 @@ def determine_whether_referencable(
             return True, None
 
     elif isinstance(type_annotation, intermediate_type_inference.ListTypeAnnotation):
+        return True, None
+
+    elif isinstance(type_annotation, intermediate_type_inference.TupleTypeAnnotation):
         return True, None
 
     elif isinstance(
@@ -469,6 +496,52 @@ class Transpiler(
     def transform_index(
         self, node: parse_tree.Index
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        collection_type = self.type_map[node.collection]
+
+        if isinstance(
+            intermediate_type_inference.beneath_optional(collection_type),
+            intermediate_type_inference.TupleTypeAnnotation,
+        ):
+            # NOTE (mristin):
+            # Tuples are heterogeneous and fixed-length, so, unlike lists, they can
+            # not be indexed at runtime. Instead, the index must be a literal
+            # integer known at the time of the code generation so that we can
+            # generate a call to ``std::get<...>``.
+            #
+            # This is enforced in
+            # :py:meth:`aas_core_codegen.intermediate.type_inference.Inferrer.transform_index`.
+            assert isinstance(node.index, parse_tree.Constant) and isinstance(
+                node.index.value, int
+            )
+
+            tuple_type = intermediate_type_inference.beneath_optional(collection_type)
+            assert isinstance(
+                tuple_type, intermediate_type_inference.TupleTypeAnnotation
+            )
+
+            index_value = node.index.value
+            if index_value < 0:
+                index_value += len(tuple_type.items)
+
+            collection, error = self._transform_and_value_if_necessary(node.collection)
+            if error is not None:
+                return None, error
+            assert collection is not None
+
+            no_parentheses_types = (
+                parse_tree.Member,
+                parse_tree.FunctionCall,
+                parse_tree.MethodCall,
+                parse_tree.Name,
+                parse_tree.Constant,
+                parse_tree.Index,
+                parse_tree.Tuple,
+            )
+            if not isinstance(node.collection, no_parentheses_types):
+                collection = Stripped(f"({collection})")
+
+            return Stripped(f"std::get<{index_value}>({collection})"), None
+
         collection, error = self._transform_and_value_if_necessary(node.collection)
         if error is not None:
             return None, error
@@ -503,6 +576,41 @@ class Transpiler(
             )
 
         return Stripped(f"{collection}.at({index})"), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_tuple(
+        self, node: parse_tree.Tuple
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        errors = []  # type: List[Error]
+        value_reprs = []  # type: List[Stripped]
+
+        for value_node in node.values:
+            value_repr, error = self._transform_and_value_if_necessary(value_node)
+            if error is not None:
+                errors.append(error)
+                continue
+
+            assert value_repr is not None
+            value_reprs.append(value_repr)
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the tuple", errors
+            )
+
+        if len(value_reprs) == 0:
+            return Stripped("std::make_tuple()"), None
+
+        joined_values = ",\n".join(value_reprs)
+        return (
+            Stripped(
+                f"""\
+std::make_tuple(
+{I}{indent_but_first_line(joined_values, I)}
+)"""
+            ),
+            None,
+        )
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_comparison(

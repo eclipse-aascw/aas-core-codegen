@@ -83,9 +83,32 @@ def generate_type(
             return Stripped(java_naming.interface_name(our_type.name)), None
 
     elif isinstance(type_annotation, intermediate_type_inference.ListTypeAnnotation):
-        item_type = generate_type(type_annotation=type_annotation.items)
+        item_type, error = generate_type(type_annotation=type_annotation.items)
+        if error is not None:
+            return None, error
 
         return Stripped(f"List<{item_type}>"), None
+
+    elif isinstance(type_annotation, intermediate_type_inference.TupleTypeAnnotation):
+        item_types = []  # type: List[Stripped]
+        for item in type_annotation.items:
+            item_type, error = generate_type(type_annotation=item)
+            if error is not None:
+                return None, error
+
+            assert item_type is not None
+            item_types.append(item_type)
+
+        assert len(item_types) <= java_common.MAX_TUPLE_ARITY, (
+            f"We only pre-generate Tuple1 .. Tuple{java_common.MAX_TUPLE_ARITY} "
+            f"in the common package, but got a tuple of arity {len(item_types)}. "
+            f"Please contact the developers if you need larger tuples."
+        )
+
+        joined_item_types = ", ".join(item_types)
+        tuple_type_name = f"Tuple{len(item_types)}"
+
+        return Stripped(f"{tuple_type_name}<{joined_item_types}>"), None
 
     elif isinstance(
         type_annotation, intermediate_type_inference.OptionalTypeAnnotation
@@ -223,6 +246,42 @@ class Transpiler(
     def transform_index(
         self, node: parse_tree.Index
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        collection_type = intermediate_type_inference.beneath_optional(
+            self.type_map[node.collection]
+        )
+
+        if isinstance(collection_type, intermediate_type_inference.TupleTypeAnnotation):
+            collection, error = self.transform(node.collection)
+            if error is not None:
+                return None, error
+
+            assert isinstance(node.index, parse_tree.Constant) and isinstance(
+                node.index.value, int
+            ), (
+                f"We expect only a literal integer constant as the index "
+                f"of a tuple, since the arity of the tuple is fixed and "
+                f"known at the code generation time, but got: {node.index}"
+            )
+
+            index_value = node.index.value
+            if index_value < 0:
+                index_value += len(collection_type.items)
+
+            no_parentheses_types = (
+                parse_tree.Member,
+                parse_tree.FunctionCall,
+                parse_tree.MethodCall,
+                parse_tree.Name,
+                parse_tree.Constant,
+                parse_tree.Index,
+                parse_tree.IsIn,
+            )
+
+            if not isinstance(node.collection, no_parentheses_types):
+                collection = Stripped(f"({collection})")
+
+            return Stripped(f"{collection}.item{index_value + 1}()"), None
+
         collection, error = self.transform(node.collection)
         if error is not None:
             return None, error
@@ -256,6 +315,29 @@ class Transpiler(
             collection = Stripped(f"({collection})")
 
         return Stripped(f"{collection}.get({index})"), None
+
+    @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+    def transform_tuple(
+        self, node: parse_tree.Tuple
+    ) -> Tuple[Optional[Stripped], Optional[Error]]:
+        errors = []  # type: List[Error]
+        item_exprs = []  # type: List[Stripped]
+
+        for value_node in node.values:
+            item_expr, error = self.transform(value_node)
+            if error is not None:
+                errors.append(error)
+                continue
+
+            assert item_expr is not None
+            item_exprs.append(item_expr)
+
+        if len(errors) > 0:
+            return None, Error(
+                node.original_node, "Failed to transpile the tuple literal", errors
+            )
+
+        return java_common.generate_tuple_literal(item_exprs=item_exprs), None
 
     @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
     def transform_comparison(

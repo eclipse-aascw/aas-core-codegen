@@ -168,12 +168,78 @@ def _generate_deep_copy_transform_method(cls: intermediate.ConcreteClass) -> Str
 
             type_anno = intermediate.beneath_optional(arg.type_annotation)
 
+            if isinstance(type_anno, intermediate.TupleTypeAnnotation):
+                if not any(
+                    isinstance(item, intermediate.OurTypeAnnotation)
+                    and isinstance(item.our_type, intermediate.Class)
+                    for item in type_anno.items
+                ):
+                    # NOTE (mristin):
+                    # None of the items is a class, so a shallow copy of the tuple
+                    # itself already gives us a deep copy, since the tuple record
+                    # is immutable and the remaining items (primitives, constrained
+                    # primitives, enumeration literals) are immutable as well.
+                    continue
+
+                variable_name = java_naming.variable_name(Identifier(f"the_{arg.name}"))
+                variable_type = java_common.generate_type(type_anno)
+
+                def _item_expr(
+                    source_expr: str,
+                    i: int,
+                    item_type_anno: intermediate.TypeAnnotationUnion,
+                ) -> Stripped:
+                    """Generate the expression copying the ``i``-th tuple item."""
+                    item_access = f"{source_expr}.item{i + 1}()"
+                    if isinstance(
+                        item_type_anno, intermediate.OurTypeAnnotation
+                    ) and isinstance(item_type_anno.our_type, intermediate.Class):
+                        return Stripped(f"deep({item_access})")
+
+                    return Stripped(item_access)
+
+                if not optional:
+                    source_expr = f"that.{getter_name}()"
+                    tuple_literal = java_common.generate_tuple_literal(
+                        item_exprs=[
+                            _item_expr(source_expr, i, item_type_anno)
+                            for i, item_type_anno in enumerate(type_anno.items)
+                        ]
+                    )
+                    body_blocks.append(
+                        Stripped(
+                            f"""\
+{variable_type} {variable_name} = {indent_but_first_line(tuple_literal, I)};"""
+                        )
+                    )
+                else:
+                    other_property_name = java_naming.variable_name(
+                        Identifier(f"that_{arg.name}")
+                    )
+                    tuple_literal = java_common.generate_tuple_literal(
+                        item_exprs=[
+                            _item_expr(other_property_name, i, item_type_anno)
+                            for i, item_type_anno in enumerate(type_anno.items)
+                        ]
+                    )
+                    body_blocks.append(
+                        Stripped(
+                            f"""\
+{variable_type} {other_property_name} =
+{I}that.{getter_name}().orElse(null);
+{variable_type} {variable_name} = ({other_property_name} == null)
+{I}? null
+{I}: {indent_but_first_line(tuple_literal, I)};"""
+                        )
+                    )
+
+                continue
+
             if not isinstance(type_anno, intermediate.ListTypeAnnotation):
                 continue
 
-            assert not isinstance(
-                type_anno.items,
-                (intermediate.OptionalTypeAnnotation, intermediate.ListTypeAnnotation),
+            assert isinstance(
+                type_anno.items, intermediate.AtomicTypeAnnotationAsTuple
             ), (
                 "We handle only lists of atomic values (primitives, "
                 "constrained primitives, enumeration literals) or lists of "
@@ -302,6 +368,22 @@ if ({other_property_name} != null) {{
                 constructor_arg_exprs.append(
                     java_naming.variable_name(Identifier(f"the_{arg.name}"))
                 )
+            elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+                if any(
+                    isinstance(item, intermediate.OurTypeAnnotation)
+                    and isinstance(item.our_type, intermediate.Class)
+                    for item in type_anno.items
+                ):
+                    # See how this variable is computed above in the generated code.
+                    constructor_arg_exprs.append(
+                        java_naming.variable_name(Identifier(f"the_{arg.name}"))
+                    )
+                elif optional:
+                    constructor_arg_exprs.append(
+                        f"""that.{getter_name}().orElse(null)"""
+                    )
+                else:
+                    constructor_arg_exprs.append(f"""that.{getter_name}()""")
             else:
                 assert_never(type_anno)
 
@@ -409,6 +491,7 @@ def generate(
     imports = [
         Stripped("import java.util.List;"),
         Stripped("import java.util.ArrayList;"),
+        Stripped(f"import {package}.common.*;"),
         Stripped(f"import {package}.types.{java_common.INTERFACE_PKG}.IClass;"),
         Stripped(f"import {package}.visitation.AbstractTransformer;"),
         Stripped(f"import {package}.types.enums.*;"),

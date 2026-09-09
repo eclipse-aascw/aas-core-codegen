@@ -764,13 +764,13 @@ class IteratorQualities:
     relevant_property_id_set: Final[FrozenSet[int]]
 
     #: Set if the class contains a property which is a list of instances
-    cls_contains_a_list_property: Final[bool]
+    cls_contains_a_list_or_tuple_property: Final[bool]
 
     def __init__(self, cls: intermediate.ConcreteClass) -> None:
         """Initialize with the given class."""
         relevant_properties = []  # type: List[intermediate.Property]
 
-        cls_contains_a_list_property = False
+        cls_contains_a_list_or_tuple_property = False
 
         for prop in cls.properties:
             type_anno = intermediate.beneath_optional(prop.type_annotation)
@@ -811,7 +811,7 @@ class IteratorQualities:
                         type_anno.items.our_type,
                         (intermediate.AbstractClass, intermediate.ConcreteClass),
                     ):
-                        cls_contains_a_list_property = True
+                        cls_contains_a_list_or_tuple_property = True
 
                         relevant_properties.append(prop)
 
@@ -826,6 +826,30 @@ class IteratorQualities:
                         f"Please contact the developers if you need this feature."
                     )
 
+            elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+                contains_a_class = False
+                for item_type_anno in type_anno.items:
+                    assert isinstance(
+                        item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+                    ), (
+                        "Tuple items are restricted to atomic types (primitives, "
+                        "constrained primitives, classes and enumerations) by "
+                        "intermediate._translate._verify_only_simple_type_patterns, "
+                        "so no nested optionals, lists or tuples are expected here."
+                    )
+
+                    if isinstance(
+                        item_type_anno, intermediate.OurTypeAnnotation
+                    ) and isinstance(
+                        item_type_anno.our_type,
+                        (intermediate.AbstractClass, intermediate.ConcreteClass),
+                    ):
+                        contains_a_class = True
+
+                if contains_a_class:
+                    cls_contains_a_list_or_tuple_property = True
+                    relevant_properties.append(prop)
+
             else:
                 assert_never(type_anno)
 
@@ -834,7 +858,9 @@ class IteratorQualities:
         self.relevant_property_id_set = frozenset(
             id(prop) for prop in self.relevant_properties
         )
-        self.cls_contains_a_list_property = cls_contains_a_list_property
+        self.cls_contains_a_list_or_tuple_property = (
+            cls_contains_a_list_or_tuple_property
+        )
 
 
 @require(lambda iterator_qualities: len(iterator_qualities.relevant_properties) == 0)
@@ -929,7 +955,7 @@ done_ = false;"""
         )
     ]  # type: List[yielding_flow.Node]
 
-    if iterator_qualities.cls_contains_a_list_property:
+    if iterator_qualities.cls_contains_a_list_or_tuple_property:
         flow.append(yielding_flow.command_from_text("cursor_.reset();"))
 
     for prop in iterator_qualities.relevant_properties:
@@ -1064,6 +1090,72 @@ item_ = std::move(
                 )
                 flow.append(yielding_flow.command_from_text("cursor_.reset();"))
 
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            class_indices = [
+                i
+                for i, item_type_anno in enumerate(type_anno.items)
+                if isinstance(item_type_anno, intermediate.OurTypeAnnotation)
+                and isinstance(
+                    item_type_anno.our_type,
+                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                )
+            ]
+            assert len(class_indices) > 0, (
+                "Expected at least one class item in the tuple as the property "
+                "has been recognized as relevant in ``IteratorQualities``"
+            )
+
+            # NOTE (mristin):
+            # Unlike lists, tuple items live at fixed, compile-time-known positions,
+            # so we do not need a persistent local variable referring to the tuple
+            # itself. Instead, we re-evaluate the getter and index into it with
+            # ``std::get`` directly in each self-contained command, since a local
+            # variable declared in one command would go out of scope after
+            # the following ``Yield`` -- each command ends up in its own ``case``
+            # block once the control flow is linearized into a co-routine.
+            if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
+                tuple_getter_expr = Stripped(f"*(casted_->{getter_name}())")
+            else:
+                tuple_getter_expr = Stripped(f"casted_->{getter_name}()")
+
+            yield_nodes = []  # type: List[yielding_flow.Node]
+            for i in class_indices:
+                yield_nodes.append(
+                    yielding_flow.command_from_text(
+                        f"""\
+cursor_ = {i};
+item_ = std::move(
+{I}std::static_pointer_cast<types::IClass>(
+{II}std::get<{i}>({tuple_getter_expr})
+{I})
+);
+++index_;"""
+                    )
+                )
+                yield_nodes.append(yielding_flow.Yield())
+
+            if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
+                flow.append(
+                    yielding_flow.IfTrue(
+                        f"casted_->{getter_name}().has_value()",
+                        [
+                            yielding_flow.command_from_text(
+                                f"property_ = Property::{property_literal};"
+                            ),
+                            *yield_nodes,
+                            yielding_flow.command_from_text("cursor_.reset();"),
+                        ],
+                    )
+                )
+            else:
+                flow.append(
+                    yielding_flow.command_from_text(
+                        f"property_ = Property::{property_literal};"
+                    )
+                )
+                flow.extend(yield_nodes)
+                flow.append(yielding_flow.command_from_text("cursor_.reset();"))
+
     flow.append(
         yielding_flow.command_from_text(
             """\
@@ -1111,7 +1203,7 @@ const types::{interface_name}* casted_;"""
         Stripped("std::uint32_t state_;"),
         Stripped("common::optional<Property> property_;"),
     ]
-    if iterator_qualities.cls_contains_a_list_property:
+    if iterator_qualities.cls_contains_a_list_or_tuple_property:
         private_properties.append(
             Stripped("common::optional<size_t> cursor_;  // in yield-from loops")
         )
@@ -1130,7 +1222,7 @@ const types::{interface_name}* casted_;"""
         iterator_qualities=iterator_qualities
     )
 
-    if iterator_qualities.cls_contains_a_list_property:
+    if iterator_qualities.cls_contains_a_list_or_tuple_property:
         prepend_to_path_block = Stripped(
             f"""\
 void {iterator_name}::PrependToPath(

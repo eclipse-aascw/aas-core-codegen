@@ -584,6 +584,109 @@ def _value_to_type_element_or_type_identifier(
 
             return _TypeElementOrTypeIdentifier(element=xs_complex_type), None
 
+        elif isinstance(type_annotation, intermediate.TupleTypeAnnotation):
+            # NOTE (mristin):
+            # Tuples of classes are tagged by the class name, exactly as we do for
+            # the lists above, so there is no conflict there: different classes give
+            # different tags, and if the very same class appears twice (directly, or
+            # indirectly through a choice group of an abstract class), the tag and
+            # the type simply repeat identically, which is unproblematic -- XSD's
+            # Element Declarations Consistent constraint (section 3.8.6) only
+            # forbids the *same* tag from ever mapping to *different* types, and
+            # ``xs:sequence`` fixes the order of the particles regardless, so there
+            # is no ambiguity to resolve.
+            #
+            # However, we can *not* tag every primitive/constrained-primitive/
+            # enumeration-literal item with a plain ``<v>``, as we do for the (always
+            # homogeneous) lists above. A tuple can be heterogeneous, *e.g.*,
+            # ``Tuple[str, int]``, and reusing ``<v>`` for both would violate the
+            # very same Element Declarations Consistent constraint -- two element
+            # particles in the same content model may not share a name but have
+            # different types, *regardless of their order in the sequence*. We
+            # verified this with a minimal schema
+            # (``<xs:sequence><xs:element name="v" type="xs:string"/>
+            # <xs:element name="v" type="xs:long"/></xs:sequence>``), which the
+            # ``xmlschema`` library rejects outright.
+            #
+            # We therefore always disambiguate these value items with a 1-based
+            # index over their position in the tuple (``v1``, ``v2``, ...), even
+            # when a single index would not strictly need it, for the sake of
+            # simplicity and predictability.
+
+            xs_complex_type = ET.Element("xs:complexType")
+            xs_sequence = ET.SubElement(xs_complex_type, "xs:sequence")
+
+            for i, item_type_annotation in enumerate(type_annotation.items):
+                assert isinstance(
+                    item_type_annotation, intermediate.AtomicTypeAnnotationAsTuple
+                ), (
+                    "(mristin): Only tuples of atomic types (primitives, "
+                    "constrained primitives, classes and enumerations) are "
+                    "supported at the moment; this should have been caught before "
+                    "by intermediate._translate._verify_only_simple_type_patterns. "
+                    "If you see this, please contact the developers."
+                )
+
+                if isinstance(
+                    item_type_annotation, intermediate.OurTypeAnnotation
+                ) and isinstance(
+                    item_type_annotation.our_type,
+                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                ):
+                    if len(item_type_annotation.our_type.concrete_descendants) > 0:
+                        item_element = ET.Element(
+                            "xs:group",
+                            {
+                                "ref": xsd_naming.choice_group_name(
+                                    item_type_annotation.our_type.name
+                                )
+                            },
+                        )
+                    else:
+                        item_element = ET.Element(
+                            "xs:element",
+                            {
+                                "name": naming.xml_class_name(
+                                    item_type_annotation.our_type.name
+                                ),
+                                "type": xsd_naming.type_name(
+                                    item_type_annotation.our_type.name
+                                ),
+                            },
+                        )
+                else:
+                    (
+                        item_type_element_or_identifier,
+                        translation_error,
+                    ) = _value_to_type_element_or_type_identifier(
+                        type_annotation=item_type_annotation,
+                        constraints_by_value=constraints_by_value,
+                    )
+
+                    if translation_error is not None:
+                        return None, (
+                            f"Failed to translate the type annotation "
+                            f"{type_annotation} to "
+                            f"a type element or a type identifier: "
+                            f"{translation_error}"
+                        )
+
+                    assert item_type_element_or_identifier is not None
+
+                    item_element = ET.Element("xs:element", {"name": f"v{i + 1}"})
+
+                    if item_type_element_or_identifier.tajp is not None:
+                        item_element.attrib[
+                            "type"
+                        ] = item_type_element_or_identifier.tajp
+                    else:
+                        assert item_type_element_or_identifier.element is not None
+                        item_element.append(item_type_element_or_identifier.element)
+
+                xs_sequence.append(item_element)
+
+            return _TypeElementOrTypeIdentifier(element=xs_complex_type), None
+
         else:
             # noinspection PyTypeChecker
             assert_never(type_annotation)

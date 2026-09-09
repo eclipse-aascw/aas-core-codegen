@@ -21,6 +21,7 @@ import java.util.Spliterators;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import aas_core.aas3_0.common.*;
 import aas_core.aas3_0.constants.*;
 import aas_core.aas3_0.reporting.Reporting;
 import aas_core.aas3_0.types.enums.*;
