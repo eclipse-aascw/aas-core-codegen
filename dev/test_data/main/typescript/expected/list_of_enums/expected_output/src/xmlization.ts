@@ -177,6 +177,47 @@ function checkExpectedOpenTagNamespace(
   return null;
 }
 
+/**
+ * Read the next property's opening tag while parsing the sequence of
+ * properties of `className`, advancing `cursor` past it.
+ *
+ * @param cursor - to be read from
+ * @param className - name of the class being parsed, for error reporting
+ * @returns
+ * the next property's opening tag, or `null` if the closing tag of
+ * `className` was reached instead, or an error
+ */
+function nextPropertyOpenTag(
+  cursor: XmlCursor,
+  className: string
+): OpenTagToken | DeserializationError | null {
+  const token = cursor.current();
+  if (token === null) {
+    return new DeserializationError(
+      `Unexpected end of token stream while parsing ${className}`
+    );
+  }
+
+  if (token instanceof CloseTagToken) {
+    return null;
+  }
+
+  if (!(token instanceof OpenTagToken)) {
+    return new DeserializationError(
+      "Expected an XML property start element or the closing element of " +
+      `${className}, but got token kind: ${token.kind}`
+    );
+  }
+
+  const namespaceError = checkExpectedOpenTagNamespace(token);
+  if (namespaceError !== null) {
+    return namespaceError;
+  }
+
+  cursor.advance();
+  return token;
+}
+
 function checkExpectedCloseTag(
   closeTag: CloseTagToken,
   expectedLocalName: string
@@ -659,38 +700,23 @@ function parseSomethingFromSequence(
 ): AasCommon.Either<AasTypes.Something, DeserializationError> {
   let theSomeResults: Array<AasTypes.Result> | null = null;
 
+  const className = AasTypes.Something.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.Something>(
-        `Unexpected end of token stream while parsing Something`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.Something>(
-        "Expected an XML property start element or the closing element of " +
-        `Something, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.Something, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -715,7 +741,7 @@ function parseSomethingFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -855,6 +881,37 @@ function closeTag(localName: string): string {
   return `</${localName}>`;
 }
 
+/**
+ * Push `content` wrapped in its own `localName` element onto `parts`.
+ *
+ * We push the opening tag, the content and the closing tag as three separate
+ * entries instead of pre-concatenating them, so that ``parts.join("")`` at
+ * the top level copies the (possibly large, deeply nested) `content` exactly
+ * once.
+ */
+function writeVElement(
+  parts: Array<string>,
+  localName: string,
+  content: string
+): void {
+  parts.push(openTag(localName));
+  parts.push(content);
+  parts.push(closeTag(localName));
+}
+
+/**
+ * Push a class instance already serialized to XML parts onto `parts`, wrapped
+ * in its own element as given by {@link SerializedElement.localName}.
+ */
+function writeClassElement(
+  parts: Array<string>,
+  serialized: SerializedElement
+): void {
+  parts.push(openTag(serialized.localName));
+  parts.push(serialized.innerXml);
+  parts.push(closeTag(serialized.localName));
+}
+
 function escapeXmlText(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -917,9 +974,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
 
   parts.push(openTag("someResults"));
     for (const itemSomeResults of that.someResults) {
-      parts.push(openTag("v"));
-      parts.push(serializeResultText(itemSomeResults));
-      parts.push(closeTag("v"));
+      writeVElement(parts, "v", serializeResultText(itemSomeResults));
     }
     parts.push(closeTag("someResults"));
 

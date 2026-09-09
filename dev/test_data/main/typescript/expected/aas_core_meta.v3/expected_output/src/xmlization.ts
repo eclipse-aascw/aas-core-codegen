@@ -177,6 +177,47 @@ function checkExpectedOpenTagNamespace(
   return null;
 }
 
+/**
+ * Read the next property's opening tag while parsing the sequence of
+ * properties of `className`, advancing `cursor` past it.
+ *
+ * @param cursor - to be read from
+ * @param className - name of the class being parsed, for error reporting
+ * @returns
+ * the next property's opening tag, or `null` if the closing tag of
+ * `className` was reached instead, or an error
+ */
+function nextPropertyOpenTag(
+  cursor: XmlCursor,
+  className: string
+): OpenTagToken | DeserializationError | null {
+  const token = cursor.current();
+  if (token === null) {
+    return new DeserializationError(
+      `Unexpected end of token stream while parsing ${className}`
+    );
+  }
+
+  if (token instanceof CloseTagToken) {
+    return null;
+  }
+
+  if (!(token instanceof OpenTagToken)) {
+    return new DeserializationError(
+      "Expected an XML property start element or the closing element of " +
+      `${className}, but got token kind: ${token.kind}`
+    );
+  }
+
+  const namespaceError = checkExpectedOpenTagNamespace(token);
+  if (namespaceError !== null) {
+    return namespaceError;
+  }
+
+  cursor.advance();
+  return token;
+}
+
 function checkExpectedCloseTag(
   closeTag: CloseTagToken,
   expectedLocalName: string
@@ -884,38 +925,23 @@ function parseExtensionFromSequence(
   let theValue: string | null = null;
   let theRefersTo: Array<AasTypes.Reference> | null = null;
 
+  const className = AasTypes.Extension.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.Extension>(
-        `Unexpected end of token stream while parsing Extension`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.Extension>(
-        "Expected an XML property start element or the closing element of " +
-        `Extension, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.Extension, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -937,7 +963,7 @@ function parseExtensionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -973,7 +999,7 @@ function parseExtensionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1004,7 +1030,7 @@ function parseExtensionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1035,7 +1061,7 @@ function parseExtensionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1066,7 +1092,7 @@ function parseExtensionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1102,7 +1128,7 @@ function parseExtensionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1169,38 +1195,23 @@ function parseAdministrativeInformationFromSequence(
   let theCreator: AasTypes.Reference | null = null;
   let theTemplateId: string | null = null;
 
+  const className = AasTypes.AdministrativeInformation.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.AdministrativeInformation>(
-        `Unexpected end of token stream while parsing AdministrativeInformation`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.AdministrativeInformation>(
-        "Expected an XML property start element or the closing element of " +
-        `AdministrativeInformation, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.AdministrativeInformation, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -1229,7 +1240,7 @@ function parseAdministrativeInformationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1260,7 +1271,7 @@ function parseAdministrativeInformationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1291,7 +1302,7 @@ function parseAdministrativeInformationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1320,7 +1331,7 @@ function parseAdministrativeInformationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1351,7 +1362,7 @@ function parseAdministrativeInformationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1415,38 +1426,23 @@ function parseQualifierFromSequence(
   let theValue: string | null = null;
   let theValueId: AasTypes.Reference | null = null;
 
+  const className = AasTypes.Qualifier.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.Qualifier>(
-        `Unexpected end of token stream while parsing Qualifier`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.Qualifier>(
-        "Expected an XML property start element or the closing element of " +
-        `Qualifier, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.Qualifier, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -1468,7 +1464,7 @@ function parseQualifierFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1504,7 +1500,7 @@ function parseQualifierFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1535,7 +1531,7 @@ function parseQualifierFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1566,7 +1562,7 @@ function parseQualifierFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1597,7 +1593,7 @@ function parseQualifierFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1628,7 +1624,7 @@ function parseQualifierFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1657,7 +1653,7 @@ function parseQualifierFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1737,38 +1733,23 @@ function parseAssetAdministrationShellFromSequence(
   let theAssetInformation: AasTypes.AssetInformation | null = null;
   let theSubmodels: Array<AasTypes.Reference> | null = null;
 
+  const className = AasTypes.AssetAdministrationShell.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.AssetAdministrationShell>(
-        `Unexpected end of token stream while parsing AssetAdministrationShell`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.AssetAdministrationShell>(
-        "Expected an XML property start element or the closing element of " +
-        `AssetAdministrationShell, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.AssetAdministrationShell, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -1797,7 +1778,7 @@ function parseAssetAdministrationShellFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1828,7 +1809,7 @@ function parseAssetAdministrationShellFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1859,7 +1840,7 @@ function parseAssetAdministrationShellFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1895,7 +1876,7 @@ function parseAssetAdministrationShellFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1931,7 +1912,7 @@ function parseAssetAdministrationShellFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1960,7 +1941,7 @@ function parseAssetAdministrationShellFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -1991,7 +1972,7 @@ function parseAssetAdministrationShellFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -2027,7 +2008,7 @@ function parseAssetAdministrationShellFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -2056,7 +2037,7 @@ function parseAssetAdministrationShellFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -2085,7 +2066,7 @@ function parseAssetAdministrationShellFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -2121,7 +2102,7 @@ function parseAssetAdministrationShellFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -2199,38 +2180,23 @@ function parseAssetInformationFromSequence(
   let theAssetType: string | null = null;
   let theDefaultThumbnail: AasTypes.Resource | null = null;
 
+  const className = AasTypes.AssetInformation.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.AssetInformation>(
-        `Unexpected end of token stream while parsing AssetInformation`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.AssetInformation>(
-        "Expected an XML property start element or the closing element of " +
-        `AssetInformation, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.AssetInformation, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -2254,7 +2220,7 @@ function parseAssetInformationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -2285,7 +2251,7 @@ function parseAssetInformationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -2321,7 +2287,7 @@ function parseAssetInformationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -2352,7 +2318,7 @@ function parseAssetInformationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -2381,7 +2347,7 @@ function parseAssetInformationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -2444,38 +2410,23 @@ function parseResourceFromSequence(
   let thePath: string | null = null;
   let theContentType: string | null = null;
 
+  const className = AasTypes.Resource.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.Resource>(
-        `Unexpected end of token stream while parsing Resource`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.Resource>(
-        "Expected an XML property start element or the closing element of " +
-        `Resource, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.Resource, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -2499,7 +2450,7 @@ function parseResourceFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -2530,7 +2481,7 @@ function parseResourceFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -2593,38 +2544,23 @@ function parseSpecificAssetIdFromSequence(
   let theValue: string | null = null;
   let theExternalSubjectId: AasTypes.Reference | null = null;
 
+  const className = AasTypes.SpecificAssetId.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.SpecificAssetId>(
-        `Unexpected end of token stream while parsing SpecificAssetId`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.SpecificAssetId>(
-        "Expected an XML property start element or the closing element of " +
-        `SpecificAssetId, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.SpecificAssetId, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -2646,7 +2582,7 @@ function parseSpecificAssetIdFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -2682,7 +2618,7 @@ function parseSpecificAssetIdFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -2713,7 +2649,7 @@ function parseSpecificAssetIdFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -2744,7 +2680,7 @@ function parseSpecificAssetIdFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -2773,7 +2709,7 @@ function parseSpecificAssetIdFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -2853,38 +2789,23 @@ function parseSubmodelFromSequence(
   let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
   let theSubmodelElements: Array<AasTypes.ISubmodelElement> | null = null;
 
+  const className = AasTypes.Submodel.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.Submodel>(
-        `Unexpected end of token stream while parsing Submodel`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.Submodel>(
-        "Expected an XML property start element or the closing element of " +
-        `Submodel, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.Submodel, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -2913,7 +2834,7 @@ function parseSubmodelFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -2944,7 +2865,7 @@ function parseSubmodelFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -2975,7 +2896,7 @@ function parseSubmodelFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3011,7 +2932,7 @@ function parseSubmodelFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3047,7 +2968,7 @@ function parseSubmodelFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3076,7 +2997,7 @@ function parseSubmodelFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3107,7 +3028,7 @@ function parseSubmodelFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3138,7 +3059,7 @@ function parseSubmodelFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3167,7 +3088,7 @@ function parseSubmodelFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3203,7 +3124,7 @@ function parseSubmodelFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3239,7 +3160,7 @@ function parseSubmodelFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3275,7 +3196,7 @@ function parseSubmodelFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3307,7 +3228,7 @@ function parseSubmodelFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3387,38 +3308,23 @@ function parseRelationshipElementFromSequence(
   let theFirst: AasTypes.Reference | null = null;
   let theSecond: AasTypes.Reference | null = null;
 
+  const className = AasTypes.RelationshipElement.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.RelationshipElement>(
-        `Unexpected end of token stream while parsing RelationshipElement`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.RelationshipElement>(
-        "Expected an XML property start element or the closing element of " +
-        `RelationshipElement, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.RelationshipElement, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -3447,7 +3353,7 @@ function parseRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3478,7 +3384,7 @@ function parseRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3509,7 +3415,7 @@ function parseRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3545,7 +3451,7 @@ function parseRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3581,7 +3487,7 @@ function parseRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3610,7 +3516,7 @@ function parseRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3646,7 +3552,7 @@ function parseRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3682,7 +3588,7 @@ function parseRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3718,7 +3624,7 @@ function parseRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3747,7 +3653,7 @@ function parseRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3776,7 +3682,7 @@ function parseRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3863,38 +3769,23 @@ function parseSubmodelElementListFromSequence(
   let theValueTypeListElement: AasTypes.DataTypeDefXsd | null = null;
   let theValue: Array<AasTypes.ISubmodelElement> | null = null;
 
+  const className = AasTypes.SubmodelElementList.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.SubmodelElementList>(
-        `Unexpected end of token stream while parsing SubmodelElementList`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.SubmodelElementList>(
-        "Expected an XML property start element or the closing element of " +
-        `SubmodelElementList, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.SubmodelElementList, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -3923,7 +3814,7 @@ function parseSubmodelElementListFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3954,7 +3845,7 @@ function parseSubmodelElementListFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -3985,7 +3876,7 @@ function parseSubmodelElementListFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4021,7 +3912,7 @@ function parseSubmodelElementListFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4057,7 +3948,7 @@ function parseSubmodelElementListFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4086,7 +3977,7 @@ function parseSubmodelElementListFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4122,7 +4013,7 @@ function parseSubmodelElementListFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4158,7 +4049,7 @@ function parseSubmodelElementListFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4194,7 +4085,7 @@ function parseSubmodelElementListFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4225,7 +4116,7 @@ function parseSubmodelElementListFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4254,7 +4145,7 @@ function parseSubmodelElementListFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4285,7 +4176,7 @@ function parseSubmodelElementListFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4316,7 +4207,7 @@ function parseSubmodelElementListFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4348,7 +4239,7 @@ function parseSubmodelElementListFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4428,38 +4319,23 @@ function parseSubmodelElementCollectionFromSequence(
   let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
   let theValue: Array<AasTypes.ISubmodelElement> | null = null;
 
+  const className = AasTypes.SubmodelElementCollection.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.SubmodelElementCollection>(
-        `Unexpected end of token stream while parsing SubmodelElementCollection`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.SubmodelElementCollection>(
-        "Expected an XML property start element or the closing element of " +
-        `SubmodelElementCollection, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.SubmodelElementCollection, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -4488,7 +4364,7 @@ function parseSubmodelElementCollectionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4519,7 +4395,7 @@ function parseSubmodelElementCollectionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4550,7 +4426,7 @@ function parseSubmodelElementCollectionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4586,7 +4462,7 @@ function parseSubmodelElementCollectionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4622,7 +4498,7 @@ function parseSubmodelElementCollectionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4651,7 +4527,7 @@ function parseSubmodelElementCollectionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4687,7 +4563,7 @@ function parseSubmodelElementCollectionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4723,7 +4599,7 @@ function parseSubmodelElementCollectionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4759,7 +4635,7 @@ function parseSubmodelElementCollectionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4791,7 +4667,7 @@ function parseSubmodelElementCollectionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4865,38 +4741,23 @@ function parsePropertyFromSequence(
   let theValue: string | null = null;
   let theValueId: AasTypes.Reference | null = null;
 
+  const className = AasTypes.Property.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.Property>(
-        `Unexpected end of token stream while parsing Property`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.Property>(
-        "Expected an XML property start element or the closing element of " +
-        `Property, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.Property, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -4925,7 +4786,7 @@ function parsePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4956,7 +4817,7 @@ function parsePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -4987,7 +4848,7 @@ function parsePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5023,7 +4884,7 @@ function parsePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5059,7 +4920,7 @@ function parsePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5088,7 +4949,7 @@ function parsePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5124,7 +4985,7 @@ function parsePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5160,7 +5021,7 @@ function parsePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5196,7 +5057,7 @@ function parsePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5227,7 +5088,7 @@ function parsePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5258,7 +5119,7 @@ function parsePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5287,7 +5148,7 @@ function parsePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5366,38 +5227,23 @@ function parseMultiLanguagePropertyFromSequence(
   let theValue: Array<AasTypes.LangStringTextType> | null = null;
   let theValueId: AasTypes.Reference | null = null;
 
+  const className = AasTypes.MultiLanguageProperty.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.MultiLanguageProperty>(
-        `Unexpected end of token stream while parsing MultiLanguageProperty`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.MultiLanguageProperty>(
-        "Expected an XML property start element or the closing element of " +
-        `MultiLanguageProperty, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.MultiLanguageProperty, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -5426,7 +5272,7 @@ function parseMultiLanguagePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5457,7 +5303,7 @@ function parseMultiLanguagePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5488,7 +5334,7 @@ function parseMultiLanguagePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5524,7 +5370,7 @@ function parseMultiLanguagePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5560,7 +5406,7 @@ function parseMultiLanguagePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5589,7 +5435,7 @@ function parseMultiLanguagePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5625,7 +5471,7 @@ function parseMultiLanguagePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5661,7 +5507,7 @@ function parseMultiLanguagePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5697,7 +5543,7 @@ function parseMultiLanguagePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5733,7 +5579,7 @@ function parseMultiLanguagePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5762,7 +5608,7 @@ function parseMultiLanguagePropertyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5837,38 +5683,23 @@ function parseRangeFromSequence(
   let theMin: string | null = null;
   let theMax: string | null = null;
 
+  const className = AasTypes.Range.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.Range>(
-        `Unexpected end of token stream while parsing Range`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.Range>(
-        "Expected an XML property start element or the closing element of " +
-        `Range, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.Range, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -5897,7 +5728,7 @@ function parseRangeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5928,7 +5759,7 @@ function parseRangeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5959,7 +5790,7 @@ function parseRangeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -5995,7 +5826,7 @@ function parseRangeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6031,7 +5862,7 @@ function parseRangeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6060,7 +5891,7 @@ function parseRangeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6096,7 +5927,7 @@ function parseRangeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6132,7 +5963,7 @@ function parseRangeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6168,7 +5999,7 @@ function parseRangeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6199,7 +6030,7 @@ function parseRangeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6230,7 +6061,7 @@ function parseRangeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6261,7 +6092,7 @@ function parseRangeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6339,38 +6170,23 @@ function parseReferenceElementFromSequence(
   let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
   let theValue: AasTypes.Reference | null = null;
 
+  const className = AasTypes.ReferenceElement.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.ReferenceElement>(
-        `Unexpected end of token stream while parsing ReferenceElement`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.ReferenceElement>(
-        "Expected an XML property start element or the closing element of " +
-        `ReferenceElement, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.ReferenceElement, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -6399,7 +6215,7 @@ function parseReferenceElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6430,7 +6246,7 @@ function parseReferenceElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6461,7 +6277,7 @@ function parseReferenceElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6497,7 +6313,7 @@ function parseReferenceElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6533,7 +6349,7 @@ function parseReferenceElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6562,7 +6378,7 @@ function parseReferenceElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6598,7 +6414,7 @@ function parseReferenceElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6634,7 +6450,7 @@ function parseReferenceElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6670,7 +6486,7 @@ function parseReferenceElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6699,7 +6515,7 @@ function parseReferenceElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6772,38 +6588,23 @@ function parseBlobFromSequence(
   let theValue: Uint8Array | null = null;
   let theContentType: string | null = null;
 
+  const className = AasTypes.Blob.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.Blob>(
-        `Unexpected end of token stream while parsing Blob`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.Blob>(
-        "Expected an XML property start element or the closing element of " +
-        `Blob, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.Blob, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -6832,7 +6633,7 @@ function parseBlobFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6863,7 +6664,7 @@ function parseBlobFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6894,7 +6695,7 @@ function parseBlobFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6930,7 +6731,7 @@ function parseBlobFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6966,7 +6767,7 @@ function parseBlobFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -6995,7 +6796,7 @@ function parseBlobFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7031,7 +6832,7 @@ function parseBlobFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7067,7 +6868,7 @@ function parseBlobFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7103,7 +6904,7 @@ function parseBlobFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7134,7 +6935,7 @@ function parseBlobFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7165,7 +6966,7 @@ function parseBlobFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7243,38 +7044,23 @@ function parseFileFromSequence(
   let theValue: string | null = null;
   let theContentType: string | null = null;
 
+  const className = AasTypes.File.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.File>(
-        `Unexpected end of token stream while parsing File`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.File>(
-        "Expected an XML property start element or the closing element of " +
-        `File, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.File, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -7303,7 +7089,7 @@ function parseFileFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7334,7 +7120,7 @@ function parseFileFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7365,7 +7151,7 @@ function parseFileFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7401,7 +7187,7 @@ function parseFileFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7437,7 +7223,7 @@ function parseFileFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7466,7 +7252,7 @@ function parseFileFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7502,7 +7288,7 @@ function parseFileFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7538,7 +7324,7 @@ function parseFileFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7574,7 +7360,7 @@ function parseFileFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7605,7 +7391,7 @@ function parseFileFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7636,7 +7422,7 @@ function parseFileFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7715,38 +7501,23 @@ function parseAnnotatedRelationshipElementFromSequence(
   let theSecond: AasTypes.Reference | null = null;
   let theAnnotations: Array<AasTypes.IDataElement> | null = null;
 
+  const className = AasTypes.AnnotatedRelationshipElement.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.AnnotatedRelationshipElement>(
-        `Unexpected end of token stream while parsing AnnotatedRelationshipElement`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.AnnotatedRelationshipElement>(
-        "Expected an XML property start element or the closing element of " +
-        `AnnotatedRelationshipElement, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.AnnotatedRelationshipElement, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -7775,7 +7546,7 @@ function parseAnnotatedRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7806,7 +7577,7 @@ function parseAnnotatedRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7837,7 +7608,7 @@ function parseAnnotatedRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7873,7 +7644,7 @@ function parseAnnotatedRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7909,7 +7680,7 @@ function parseAnnotatedRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7938,7 +7709,7 @@ function parseAnnotatedRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -7974,7 +7745,7 @@ function parseAnnotatedRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8010,7 +7781,7 @@ function parseAnnotatedRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8046,7 +7817,7 @@ function parseAnnotatedRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8075,7 +7846,7 @@ function parseAnnotatedRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8104,7 +7875,7 @@ function parseAnnotatedRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8136,7 +7907,7 @@ function parseAnnotatedRelationshipElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8223,38 +7994,23 @@ function parseEntityFromSequence(
   let theGlobalAssetId: string | null = null;
   let theSpecificAssetIds: Array<AasTypes.SpecificAssetId> | null = null;
 
+  const className = AasTypes.Entity.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.Entity>(
-        `Unexpected end of token stream while parsing Entity`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.Entity>(
-        "Expected an XML property start element or the closing element of " +
-        `Entity, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.Entity, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -8283,7 +8039,7 @@ function parseEntityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8314,7 +8070,7 @@ function parseEntityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8345,7 +8101,7 @@ function parseEntityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8381,7 +8137,7 @@ function parseEntityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8417,7 +8173,7 @@ function parseEntityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8446,7 +8202,7 @@ function parseEntityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8482,7 +8238,7 @@ function parseEntityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8518,7 +8274,7 @@ function parseEntityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8554,7 +8310,7 @@ function parseEntityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8586,7 +8342,7 @@ function parseEntityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8617,7 +8373,7 @@ function parseEntityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8648,7 +8404,7 @@ function parseEntityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8684,7 +8440,7 @@ function parseEntityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8761,38 +8517,23 @@ function parseEventPayloadFromSequence(
   let theTimeStamp: string | null = null;
   let thePayload: Uint8Array | null = null;
 
+  const className = AasTypes.EventPayload.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.EventPayload>(
-        `Unexpected end of token stream while parsing EventPayload`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.EventPayload>(
-        "Expected an XML property start element or the closing element of " +
-        `EventPayload, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.EventPayload, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -8814,7 +8555,7 @@ function parseEventPayloadFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8843,7 +8584,7 @@ function parseEventPayloadFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8872,7 +8613,7 @@ function parseEventPayloadFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8901,7 +8642,7 @@ function parseEventPayloadFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8932,7 +8673,7 @@ function parseEventPayloadFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8961,7 +8702,7 @@ function parseEventPayloadFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -8992,7 +8733,7 @@ function parseEventPayloadFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9023,7 +8764,7 @@ function parseEventPayloadFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9116,38 +8857,23 @@ function parseBasicEventElementFromSequence(
   let theMinInterval: string | null = null;
   let theMaxInterval: string | null = null;
 
+  const className = AasTypes.BasicEventElement.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.BasicEventElement>(
-        `Unexpected end of token stream while parsing BasicEventElement`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.BasicEventElement>(
-        "Expected an XML property start element or the closing element of " +
-        `BasicEventElement, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.BasicEventElement, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -9176,7 +8902,7 @@ function parseBasicEventElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9207,7 +8933,7 @@ function parseBasicEventElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9238,7 +8964,7 @@ function parseBasicEventElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9274,7 +9000,7 @@ function parseBasicEventElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9310,7 +9036,7 @@ function parseBasicEventElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9339,7 +9065,7 @@ function parseBasicEventElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9375,7 +9101,7 @@ function parseBasicEventElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9411,7 +9137,7 @@ function parseBasicEventElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9447,7 +9173,7 @@ function parseBasicEventElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9476,7 +9202,7 @@ function parseBasicEventElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9507,7 +9233,7 @@ function parseBasicEventElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9538,7 +9264,7 @@ function parseBasicEventElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9569,7 +9295,7 @@ function parseBasicEventElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9598,7 +9324,7 @@ function parseBasicEventElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9629,7 +9355,7 @@ function parseBasicEventElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9660,7 +9386,7 @@ function parseBasicEventElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9691,7 +9417,7 @@ function parseBasicEventElementFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9788,38 +9514,23 @@ function parseOperationFromSequence(
   let theOutputVariables: Array<AasTypes.OperationVariable> | null = null;
   let theInoutputVariables: Array<AasTypes.OperationVariable> | null = null;
 
+  const className = AasTypes.Operation.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.Operation>(
-        `Unexpected end of token stream while parsing Operation`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.Operation>(
-        "Expected an XML property start element or the closing element of " +
-        `Operation, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.Operation, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -9848,7 +9559,7 @@ function parseOperationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9879,7 +9590,7 @@ function parseOperationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9910,7 +9621,7 @@ function parseOperationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9946,7 +9657,7 @@ function parseOperationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -9982,7 +9693,7 @@ function parseOperationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10011,7 +9722,7 @@ function parseOperationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10047,7 +9758,7 @@ function parseOperationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10083,7 +9794,7 @@ function parseOperationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10119,7 +9830,7 @@ function parseOperationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10155,7 +9866,7 @@ function parseOperationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10191,7 +9902,7 @@ function parseOperationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10227,7 +9938,7 @@ function parseOperationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10292,38 +10003,23 @@ function parseOperationVariableFromSequence(
 ): AasCommon.Either<AasTypes.OperationVariable, DeserializationError> {
   let theValue: AasTypes.ISubmodelElement | null = null;
 
+  const className = AasTypes.OperationVariable.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.OperationVariable>(
-        `Unexpected end of token stream while parsing OperationVariable`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.OperationVariable>(
-        "Expected an XML property start element or the closing element of " +
-        `OperationVariable, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.OperationVariable, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -10345,7 +10041,7 @@ function parseOperationVariableFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10411,38 +10107,23 @@ function parseCapabilityFromSequence(
   let theQualifiers: Array<AasTypes.Qualifier> | null = null;
   let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
 
+  const className = AasTypes.Capability.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.Capability>(
-        `Unexpected end of token stream while parsing Capability`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.Capability>(
-        "Expected an XML property start element or the closing element of " +
-        `Capability, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.Capability, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -10471,7 +10152,7 @@ function parseCapabilityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10502,7 +10183,7 @@ function parseCapabilityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10533,7 +10214,7 @@ function parseCapabilityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10569,7 +10250,7 @@ function parseCapabilityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10605,7 +10286,7 @@ function parseCapabilityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10634,7 +10315,7 @@ function parseCapabilityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10670,7 +10351,7 @@ function parseCapabilityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10706,7 +10387,7 @@ function parseCapabilityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10742,7 +10423,7 @@ function parseCapabilityFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10812,38 +10493,23 @@ function parseConceptDescriptionFromSequence(
   let theEmbeddedDataSpecifications: Array<AasTypes.EmbeddedDataSpecification> | null = null;
   let theIsCaseOf: Array<AasTypes.Reference> | null = null;
 
+  const className = AasTypes.ConceptDescription.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.ConceptDescription>(
-        `Unexpected end of token stream while parsing ConceptDescription`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.ConceptDescription>(
-        "Expected an XML property start element or the closing element of " +
-        `ConceptDescription, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.ConceptDescription, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -10872,7 +10538,7 @@ function parseConceptDescriptionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10903,7 +10569,7 @@ function parseConceptDescriptionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10934,7 +10600,7 @@ function parseConceptDescriptionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -10970,7 +10636,7 @@ function parseConceptDescriptionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -11006,7 +10672,7 @@ function parseConceptDescriptionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -11035,7 +10701,7 @@ function parseConceptDescriptionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -11066,7 +10732,7 @@ function parseConceptDescriptionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -11102,7 +10768,7 @@ function parseConceptDescriptionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -11138,7 +10804,7 @@ function parseConceptDescriptionFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -11206,38 +10872,23 @@ function parseReferenceFromSequence(
   let theReferredSemanticId: AasTypes.Reference | null = null;
   let theKeys: Array<AasTypes.Key> | null = null;
 
+  const className = AasTypes.Reference.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.Reference>(
-        `Unexpected end of token stream while parsing Reference`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.Reference>(
-        "Expected an XML property start element or the closing element of " +
-        `Reference, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.Reference, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -11261,7 +10912,7 @@ function parseReferenceFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -11290,7 +10941,7 @@ function parseReferenceFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -11326,7 +10977,7 @@ function parseReferenceFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -11393,38 +11044,23 @@ function parseKeyFromSequence(
   let theType: AasTypes.KeyTypes | null = null;
   let theValue: string | null = null;
 
+  const className = AasTypes.Key.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.Key>(
-        `Unexpected end of token stream while parsing Key`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.Key>(
-        "Expected an XML property start element or the closing element of " +
-        `Key, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.Key, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -11448,7 +11084,7 @@ function parseKeyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -11479,7 +11115,7 @@ function parseKeyFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -11545,38 +11181,23 @@ function parseLangStringNameTypeFromSequence(
   let theLanguage: string | null = null;
   let theText: string | null = null;
 
+  const className = AasTypes.LangStringNameType.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.LangStringNameType>(
-        `Unexpected end of token stream while parsing LangStringNameType`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.LangStringNameType>(
-        "Expected an XML property start element or the closing element of " +
-        `LangStringNameType, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.LangStringNameType, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -11600,7 +11221,7 @@ function parseLangStringNameTypeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -11631,7 +11252,7 @@ function parseLangStringNameTypeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -11697,38 +11318,23 @@ function parseLangStringTextTypeFromSequence(
   let theLanguage: string | null = null;
   let theText: string | null = null;
 
+  const className = AasTypes.LangStringTextType.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.LangStringTextType>(
-        `Unexpected end of token stream while parsing LangStringTextType`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.LangStringTextType>(
-        "Expected an XML property start element or the closing element of " +
-        `LangStringTextType, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.LangStringTextType, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -11752,7 +11358,7 @@ function parseLangStringTextTypeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -11783,7 +11389,7 @@ function parseLangStringTextTypeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -11850,38 +11456,23 @@ function parseEnvironmentFromSequence(
   let theSubmodels: Array<AasTypes.Submodel> | null = null;
   let theConceptDescriptions: Array<AasTypes.ConceptDescription> | null = null;
 
+  const className = AasTypes.Environment.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.Environment>(
-        `Unexpected end of token stream while parsing Environment`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.Environment>(
-        "Expected an XML property start element or the closing element of " +
-        `Environment, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.Environment, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -11910,7 +11501,7 @@ function parseEnvironmentFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -11946,7 +11537,7 @@ function parseEnvironmentFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -11982,7 +11573,7 @@ function parseEnvironmentFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -12039,38 +11630,23 @@ function parseEmbeddedDataSpecificationFromSequence(
   let theDataSpecification: AasTypes.Reference | null = null;
   let theDataSpecificationContent: AasTypes.IDataSpecificationContent | null = null;
 
+  const className = AasTypes.EmbeddedDataSpecification.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.EmbeddedDataSpecification>(
-        `Unexpected end of token stream while parsing EmbeddedDataSpecification`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.EmbeddedDataSpecification>(
-        "Expected an XML property start element or the closing element of " +
-        `EmbeddedDataSpecification, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.EmbeddedDataSpecification, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -12092,7 +11668,7 @@ function parseEmbeddedDataSpecificationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -12121,7 +11697,7 @@ function parseEmbeddedDataSpecificationFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -12189,38 +11765,23 @@ function parseLevelTypeFromSequence(
   let theTyp: boolean | null = null;
   let theMax: boolean | null = null;
 
+  const className = AasTypes.LevelType.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.LevelType>(
-        `Unexpected end of token stream while parsing LevelType`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.LevelType>(
-        "Expected an XML property start element or the closing element of " +
-        `LevelType, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.LevelType, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -12244,7 +11805,7 @@ function parseLevelTypeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -12275,7 +11836,7 @@ function parseLevelTypeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -12306,7 +11867,7 @@ function parseLevelTypeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -12337,7 +11898,7 @@ function parseLevelTypeFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -12417,38 +11978,23 @@ function parseValueReferencePairFromSequence(
   let theValue: string | null = null;
   let theValueId: AasTypes.Reference | null = null;
 
+  const className = AasTypes.ValueReferencePair.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.ValueReferencePair>(
-        `Unexpected end of token stream while parsing ValueReferencePair`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.ValueReferencePair>(
-        "Expected an XML property start element or the closing element of " +
-        `ValueReferencePair, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.ValueReferencePair, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -12472,7 +12018,7 @@ function parseValueReferencePairFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -12501,7 +12047,7 @@ function parseValueReferencePairFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -12566,38 +12112,23 @@ function parseValueListFromSequence(
 ): AasCommon.Either<AasTypes.ValueList, DeserializationError> {
   let theValueReferencePairs: Array<AasTypes.ValueReferencePair> | null = null;
 
+  const className = AasTypes.ValueList.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.ValueList>(
-        `Unexpected end of token stream while parsing ValueList`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.ValueList>(
-        "Expected an XML property start element or the closing element of " +
-        `ValueList, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.ValueList, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -12626,7 +12157,7 @@ function parseValueListFromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -12685,38 +12216,23 @@ function parseLangStringPreferredNameTypeIec61360FromSequence(
   let theLanguage: string | null = null;
   let theText: string | null = null;
 
+  const className = AasTypes.LangStringPreferredNameTypeIec61360.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.LangStringPreferredNameTypeIec61360>(
-        `Unexpected end of token stream while parsing LangStringPreferredNameTypeIec61360`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.LangStringPreferredNameTypeIec61360>(
-        "Expected an XML property start element or the closing element of " +
-        `LangStringPreferredNameTypeIec61360, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.LangStringPreferredNameTypeIec61360, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -12740,7 +12256,7 @@ function parseLangStringPreferredNameTypeIec61360FromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -12771,7 +12287,7 @@ function parseLangStringPreferredNameTypeIec61360FromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -12837,38 +12353,23 @@ function parseLangStringShortNameTypeIec61360FromSequence(
   let theLanguage: string | null = null;
   let theText: string | null = null;
 
+  const className = AasTypes.LangStringShortNameTypeIec61360.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.LangStringShortNameTypeIec61360>(
-        `Unexpected end of token stream while parsing LangStringShortNameTypeIec61360`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.LangStringShortNameTypeIec61360>(
-        "Expected an XML property start element or the closing element of " +
-        `LangStringShortNameTypeIec61360, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.LangStringShortNameTypeIec61360, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -12892,7 +12393,7 @@ function parseLangStringShortNameTypeIec61360FromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -12923,7 +12424,7 @@ function parseLangStringShortNameTypeIec61360FromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -12989,38 +12490,23 @@ function parseLangStringDefinitionTypeIec61360FromSequence(
   let theLanguage: string | null = null;
   let theText: string | null = null;
 
+  const className = AasTypes.LangStringDefinitionTypeIec61360.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.LangStringDefinitionTypeIec61360>(
-        `Unexpected end of token stream while parsing LangStringDefinitionTypeIec61360`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.LangStringDefinitionTypeIec61360>(
-        "Expected an XML property start element or the closing element of " +
-        `LangStringDefinitionTypeIec61360, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.LangStringDefinitionTypeIec61360, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -13044,7 +12530,7 @@ function parseLangStringDefinitionTypeIec61360FromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -13075,7 +12561,7 @@ function parseLangStringDefinitionTypeIec61360FromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -13151,38 +12637,23 @@ function parseDataSpecificationIec61360FromSequence(
   let theValue: string | null = null;
   let theLevelType: AasTypes.LevelType | null = null;
 
+  const className = AasTypes.DataSpecificationIec61360.name;
+
   cursor.skipIgnorable();
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const token = cursor.current();
-    if (token === null) {
-      return newDeserializationError<AasTypes.DataSpecificationIec61360>(
-        `Unexpected end of token stream while parsing DataSpecificationIec61360`
-      );
-    }
-
-    if (token instanceof CloseTagToken) {
+    const nextTagOrError = nextPropertyOpenTag(cursor, className);
+    if (nextTagOrError === null) {
       break;
     }
-
-    if (!(token instanceof OpenTagToken)) {
-      return newDeserializationError<AasTypes.DataSpecificationIec61360>(
-        "Expected an XML property start element or the closing element of " +
-        `DataSpecificationIec61360, but got token kind: ${token.kind}`
-      );
-    }
-
-    const namespaceError = checkExpectedOpenTagNamespace(token);
-    if (namespaceError !== null) {
+    if (nextTagOrError instanceof DeserializationError) {
       return new AasCommon.Either<AasTypes.DataSpecificationIec61360, DeserializationError>(
         null,
-        namespaceError
+        nextTagOrError
       );
     }
 
-    const propertyStartTag = token;
-    const propertyLocalName = localNameOfTag(propertyStartTag.tag);
-    cursor.advance();
+    const propertyLocalName = localNameOfTag(nextTagOrError.tag);
 
     let propertyError: DeserializationError | null = null;
     switch (propertyLocalName) {
@@ -13211,7 +12682,7 @@ function parseDataSpecificationIec61360FromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -13247,7 +12718,7 @@ function parseDataSpecificationIec61360FromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -13278,7 +12749,7 @@ function parseDataSpecificationIec61360FromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -13307,7 +12778,7 @@ function parseDataSpecificationIec61360FromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -13338,7 +12809,7 @@ function parseDataSpecificationIec61360FromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -13369,7 +12840,7 @@ function parseDataSpecificationIec61360FromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -13400,7 +12871,7 @@ function parseDataSpecificationIec61360FromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -13436,7 +12907,7 @@ function parseDataSpecificationIec61360FromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -13467,7 +12938,7 @@ function parseDataSpecificationIec61360FromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -13496,7 +12967,7 @@ function parseDataSpecificationIec61360FromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -13527,7 +12998,7 @@ function parseDataSpecificationIec61360FromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -13556,7 +13027,7 @@ function parseDataSpecificationIec61360FromSequence(
 
         const propertyCloseError = consumeCloseTag(
           cursor,
-          localNameOfTag(propertyStartTag.tag)
+          propertyLocalName
         );
         if (propertyCloseError !== null) {
           propertyError = propertyCloseError;
@@ -15353,6 +14824,37 @@ function closeTag(localName: string): string {
   return `</${localName}>`;
 }
 
+/**
+ * Push `content` wrapped in its own `localName` element onto `parts`.
+ *
+ * We push the opening tag, the content and the closing tag as three separate
+ * entries instead of pre-concatenating them, so that ``parts.join("")`` at
+ * the top level copies the (possibly large, deeply nested) `content` exactly
+ * once.
+ */
+function writeVElement(
+  parts: Array<string>,
+  localName: string,
+  content: string
+): void {
+  parts.push(openTag(localName));
+  parts.push(content);
+  parts.push(closeTag(localName));
+}
+
+/**
+ * Push a class instance already serialized to XML parts onto `parts`, wrapped
+ * in its own element as given by {@link SerializedElement.localName}.
+ */
+function writeClassElement(
+  parts: Array<string>,
+  serialized: SerializedElement
+): void {
+  parts.push(openTag(serialized.localName));
+  parts.push(serialized.innerXml);
+  parts.push(closeTag(serialized.localName));
+}
+
 function escapeXmlText(text: string): string {
   return text
     .replace(/&/g, "&amp;")
@@ -15423,37 +14925,25 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.supplementalSemanticIds !== null) {
       parts.push(openTag("supplementalSemanticIds"));
       for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        const serializedSupplementalSemanticIdsItem = this.transform(itemSupplementalSemanticIds);
-        parts.push(openTag(serializedSupplementalSemanticIdsItem.localName));
-        parts.push(serializedSupplementalSemanticIdsItem.innerXml);
-        parts.push(closeTag(serializedSupplementalSemanticIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
       }
       parts.push(closeTag("supplementalSemanticIds"));
     }
 
-  parts.push(openTag("name"));
-    parts.push(serializeStringText(that.name));
-    parts.push(closeTag("name"));
+  writeVElement(parts, "name", serializeStringText(that.name));
 
   if (that.valueType !== null) {
-      parts.push(openTag("valueType"));
-      parts.push(serializeDataTypeDefXsdText(that.valueType));
-      parts.push(closeTag("valueType"));
+      writeVElement(parts, "valueType", serializeDataTypeDefXsdText(that.valueType));
     }
 
   if (that.value !== null) {
-      parts.push(openTag("value"));
-      parts.push(serializeStringText(that.value));
-      parts.push(closeTag("value"));
+      writeVElement(parts, "value", serializeStringText(that.value));
     }
 
   if (that.refersTo !== null) {
       parts.push(openTag("refersTo"));
       for (const itemRefersTo of that.refersTo) {
-        const serializedRefersToItem = this.transform(itemRefersTo);
-        parts.push(openTag(serializedRefersToItem.localName));
-        parts.push(serializedRefersToItem.innerXml);
-        parts.push(closeTag(serializedRefersToItem.localName));
+        writeClassElement(parts, this.transform(itemRefersTo));
       }
       parts.push(closeTag("refersTo"));
     }
@@ -15478,24 +14968,17 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.embeddedDataSpecifications !== null) {
       parts.push(openTag("embeddedDataSpecifications"));
       for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        const serializedEmbeddedDataSpecificationsItem = this.transform(itemEmbeddedDataSpecifications);
-        parts.push(openTag(serializedEmbeddedDataSpecificationsItem.localName));
-        parts.push(serializedEmbeddedDataSpecificationsItem.innerXml);
-        parts.push(closeTag(serializedEmbeddedDataSpecificationsItem.localName));
+        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
       }
       parts.push(closeTag("embeddedDataSpecifications"));
     }
 
   if (that.version !== null) {
-      parts.push(openTag("version"));
-      parts.push(serializeStringText(that.version));
-      parts.push(closeTag("version"));
+      writeVElement(parts, "version", serializeStringText(that.version));
     }
 
   if (that.revision !== null) {
-      parts.push(openTag("revision"));
-      parts.push(serializeStringText(that.revision));
-      parts.push(closeTag("revision"));
+      writeVElement(parts, "revision", serializeStringText(that.revision));
     }
 
   if (that.creator !== null) {
@@ -15506,9 +14989,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
     }
 
   if (that.templateId !== null) {
-      parts.push(openTag("templateId"));
-      parts.push(serializeStringText(that.templateId));
-      parts.push(closeTag("templateId"));
+      writeVElement(parts, "templateId", serializeStringText(that.templateId));
     }
 
   return {
@@ -15538,32 +15019,21 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.supplementalSemanticIds !== null) {
       parts.push(openTag("supplementalSemanticIds"));
       for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        const serializedSupplementalSemanticIdsItem = this.transform(itemSupplementalSemanticIds);
-        parts.push(openTag(serializedSupplementalSemanticIdsItem.localName));
-        parts.push(serializedSupplementalSemanticIdsItem.innerXml);
-        parts.push(closeTag(serializedSupplementalSemanticIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
       }
       parts.push(closeTag("supplementalSemanticIds"));
     }
 
   if (that.kind !== null) {
-      parts.push(openTag("kind"));
-      parts.push(serializeQualifierKindText(that.kind));
-      parts.push(closeTag("kind"));
+      writeVElement(parts, "kind", serializeQualifierKindText(that.kind));
     }
 
-  parts.push(openTag("type"));
-    parts.push(serializeStringText(that.type));
-    parts.push(closeTag("type"));
+  writeVElement(parts, "type", serializeStringText(that.type));
 
-  parts.push(openTag("valueType"));
-    parts.push(serializeDataTypeDefXsdText(that.valueType));
-    parts.push(closeTag("valueType"));
+  writeVElement(parts, "valueType", serializeDataTypeDefXsdText(that.valueType));
 
   if (that.value !== null) {
-      parts.push(openTag("value"));
-      parts.push(serializeStringText(that.value));
-      parts.push(closeTag("value"));
+      writeVElement(parts, "value", serializeStringText(that.value));
     }
 
   if (that.valueId !== null) {
@@ -15593,33 +15063,23 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.extensions !== null) {
       parts.push(openTag("extensions"));
       for (const itemExtensions of that.extensions) {
-        const serializedExtensionsItem = this.transform(itemExtensions);
-        parts.push(openTag(serializedExtensionsItem.localName));
-        parts.push(serializedExtensionsItem.innerXml);
-        parts.push(closeTag(serializedExtensionsItem.localName));
+        writeClassElement(parts, this.transform(itemExtensions));
       }
       parts.push(closeTag("extensions"));
     }
 
   if (that.category !== null) {
-      parts.push(openTag("category"));
-      parts.push(serializeStringText(that.category));
-      parts.push(closeTag("category"));
+      writeVElement(parts, "category", serializeStringText(that.category));
     }
 
   if (that.idShort !== null) {
-      parts.push(openTag("idShort"));
-      parts.push(serializeStringText(that.idShort));
-      parts.push(closeTag("idShort"));
+      writeVElement(parts, "idShort", serializeStringText(that.idShort));
     }
 
   if (that.displayName !== null) {
       parts.push(openTag("displayName"));
       for (const itemDisplayName of that.displayName) {
-        const serializedDisplayNameItem = this.transform(itemDisplayName);
-        parts.push(openTag(serializedDisplayNameItem.localName));
-        parts.push(serializedDisplayNameItem.innerXml);
-        parts.push(closeTag(serializedDisplayNameItem.localName));
+        writeClassElement(parts, this.transform(itemDisplayName));
       }
       parts.push(closeTag("displayName"));
     }
@@ -15627,10 +15087,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.description !== null) {
       parts.push(openTag("description"));
       for (const itemDescription of that.description) {
-        const serializedDescriptionItem = this.transform(itemDescription);
-        parts.push(openTag(serializedDescriptionItem.localName));
-        parts.push(serializedDescriptionItem.innerXml);
-        parts.push(closeTag(serializedDescriptionItem.localName));
+        writeClassElement(parts, this.transform(itemDescription));
       }
       parts.push(closeTag("description"));
     }
@@ -15642,17 +15099,12 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
       parts.push(closeTag("administration"));
     }
 
-  parts.push(openTag("id"));
-    parts.push(serializeStringText(that.id));
-    parts.push(closeTag("id"));
+  writeVElement(parts, "id", serializeStringText(that.id));
 
   if (that.embeddedDataSpecifications !== null) {
       parts.push(openTag("embeddedDataSpecifications"));
       for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        const serializedEmbeddedDataSpecificationsItem = this.transform(itemEmbeddedDataSpecifications);
-        parts.push(openTag(serializedEmbeddedDataSpecificationsItem.localName));
-        parts.push(serializedEmbeddedDataSpecificationsItem.innerXml);
-        parts.push(closeTag(serializedEmbeddedDataSpecificationsItem.localName));
+        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
       }
       parts.push(closeTag("embeddedDataSpecifications"));
     }
@@ -15672,10 +15124,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.submodels !== null) {
       parts.push(openTag("submodels"));
       for (const itemSubmodels of that.submodels) {
-        const serializedSubmodelsItem = this.transform(itemSubmodels);
-        parts.push(openTag(serializedSubmodelsItem.localName));
-        parts.push(serializedSubmodelsItem.innerXml);
-        parts.push(closeTag(serializedSubmodelsItem.localName));
+        writeClassElement(parts, this.transform(itemSubmodels));
       }
       parts.push(closeTag("submodels"));
     }
@@ -15697,31 +15146,22 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   ): SerializedElement {
   const parts = new Array<string>();
 
-  parts.push(openTag("assetKind"));
-    parts.push(serializeAssetKindText(that.assetKind));
-    parts.push(closeTag("assetKind"));
+  writeVElement(parts, "assetKind", serializeAssetKindText(that.assetKind));
 
   if (that.globalAssetId !== null) {
-      parts.push(openTag("globalAssetId"));
-      parts.push(serializeStringText(that.globalAssetId));
-      parts.push(closeTag("globalAssetId"));
+      writeVElement(parts, "globalAssetId", serializeStringText(that.globalAssetId));
     }
 
   if (that.specificAssetIds !== null) {
       parts.push(openTag("specificAssetIds"));
       for (const itemSpecificAssetIds of that.specificAssetIds) {
-        const serializedSpecificAssetIdsItem = this.transform(itemSpecificAssetIds);
-        parts.push(openTag(serializedSpecificAssetIdsItem.localName));
-        parts.push(serializedSpecificAssetIdsItem.innerXml);
-        parts.push(closeTag(serializedSpecificAssetIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSpecificAssetIds));
       }
       parts.push(closeTag("specificAssetIds"));
     }
 
   if (that.assetType !== null) {
-      parts.push(openTag("assetType"));
-      parts.push(serializeStringText(that.assetType));
-      parts.push(closeTag("assetType"));
+      writeVElement(parts, "assetType", serializeStringText(that.assetType));
     }
 
   if (that.defaultThumbnail !== null) {
@@ -15748,14 +15188,10 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   ): SerializedElement {
   const parts = new Array<string>();
 
-  parts.push(openTag("path"));
-    parts.push(serializeStringText(that.path));
-    parts.push(closeTag("path"));
+  writeVElement(parts, "path", serializeStringText(that.path));
 
   if (that.contentType !== null) {
-      parts.push(openTag("contentType"));
-      parts.push(serializeStringText(that.contentType));
-      parts.push(closeTag("contentType"));
+      writeVElement(parts, "contentType", serializeStringText(that.contentType));
     }
 
   return {
@@ -15785,21 +15221,14 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.supplementalSemanticIds !== null) {
       parts.push(openTag("supplementalSemanticIds"));
       for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        const serializedSupplementalSemanticIdsItem = this.transform(itemSupplementalSemanticIds);
-        parts.push(openTag(serializedSupplementalSemanticIdsItem.localName));
-        parts.push(serializedSupplementalSemanticIdsItem.innerXml);
-        parts.push(closeTag(serializedSupplementalSemanticIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
       }
       parts.push(closeTag("supplementalSemanticIds"));
     }
 
-  parts.push(openTag("name"));
-    parts.push(serializeStringText(that.name));
-    parts.push(closeTag("name"));
+  writeVElement(parts, "name", serializeStringText(that.name));
 
-  parts.push(openTag("value"));
-    parts.push(serializeStringText(that.value));
-    parts.push(closeTag("value"));
+  writeVElement(parts, "value", serializeStringText(that.value));
 
   if (that.externalSubjectId !== null) {
       const serializedExternalSubjectId = this.transform(that.externalSubjectId);
@@ -15828,33 +15257,23 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.extensions !== null) {
       parts.push(openTag("extensions"));
       for (const itemExtensions of that.extensions) {
-        const serializedExtensionsItem = this.transform(itemExtensions);
-        parts.push(openTag(serializedExtensionsItem.localName));
-        parts.push(serializedExtensionsItem.innerXml);
-        parts.push(closeTag(serializedExtensionsItem.localName));
+        writeClassElement(parts, this.transform(itemExtensions));
       }
       parts.push(closeTag("extensions"));
     }
 
   if (that.category !== null) {
-      parts.push(openTag("category"));
-      parts.push(serializeStringText(that.category));
-      parts.push(closeTag("category"));
+      writeVElement(parts, "category", serializeStringText(that.category));
     }
 
   if (that.idShort !== null) {
-      parts.push(openTag("idShort"));
-      parts.push(serializeStringText(that.idShort));
-      parts.push(closeTag("idShort"));
+      writeVElement(parts, "idShort", serializeStringText(that.idShort));
     }
 
   if (that.displayName !== null) {
       parts.push(openTag("displayName"));
       for (const itemDisplayName of that.displayName) {
-        const serializedDisplayNameItem = this.transform(itemDisplayName);
-        parts.push(openTag(serializedDisplayNameItem.localName));
-        parts.push(serializedDisplayNameItem.innerXml);
-        parts.push(closeTag(serializedDisplayNameItem.localName));
+        writeClassElement(parts, this.transform(itemDisplayName));
       }
       parts.push(closeTag("displayName"));
     }
@@ -15862,10 +15281,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.description !== null) {
       parts.push(openTag("description"));
       for (const itemDescription of that.description) {
-        const serializedDescriptionItem = this.transform(itemDescription);
-        parts.push(openTag(serializedDescriptionItem.localName));
-        parts.push(serializedDescriptionItem.innerXml);
-        parts.push(closeTag(serializedDescriptionItem.localName));
+        writeClassElement(parts, this.transform(itemDescription));
       }
       parts.push(closeTag("description"));
     }
@@ -15877,14 +15293,10 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
       parts.push(closeTag("administration"));
     }
 
-  parts.push(openTag("id"));
-    parts.push(serializeStringText(that.id));
-    parts.push(closeTag("id"));
+  writeVElement(parts, "id", serializeStringText(that.id));
 
   if (that.kind !== null) {
-      parts.push(openTag("kind"));
-      parts.push(serializeModellingKindText(that.kind));
-      parts.push(closeTag("kind"));
+      writeVElement(parts, "kind", serializeModellingKindText(that.kind));
     }
 
   if (that.semanticId !== null) {
@@ -15897,10 +15309,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.supplementalSemanticIds !== null) {
       parts.push(openTag("supplementalSemanticIds"));
       for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        const serializedSupplementalSemanticIdsItem = this.transform(itemSupplementalSemanticIds);
-        parts.push(openTag(serializedSupplementalSemanticIdsItem.localName));
-        parts.push(serializedSupplementalSemanticIdsItem.innerXml);
-        parts.push(closeTag(serializedSupplementalSemanticIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
       }
       parts.push(closeTag("supplementalSemanticIds"));
     }
@@ -15908,10 +15317,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.qualifiers !== null) {
       parts.push(openTag("qualifiers"));
       for (const itemQualifiers of that.qualifiers) {
-        const serializedQualifiersItem = this.transform(itemQualifiers);
-        parts.push(openTag(serializedQualifiersItem.localName));
-        parts.push(serializedQualifiersItem.innerXml);
-        parts.push(closeTag(serializedQualifiersItem.localName));
+        writeClassElement(parts, this.transform(itemQualifiers));
       }
       parts.push(closeTag("qualifiers"));
     }
@@ -15919,10 +15325,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.embeddedDataSpecifications !== null) {
       parts.push(openTag("embeddedDataSpecifications"));
       for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        const serializedEmbeddedDataSpecificationsItem = this.transform(itemEmbeddedDataSpecifications);
-        parts.push(openTag(serializedEmbeddedDataSpecificationsItem.localName));
-        parts.push(serializedEmbeddedDataSpecificationsItem.innerXml);
-        parts.push(closeTag(serializedEmbeddedDataSpecificationsItem.localName));
+        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
       }
       parts.push(closeTag("embeddedDataSpecifications"));
     }
@@ -15930,10 +15333,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.submodelElements !== null) {
       parts.push(openTag("submodelElements"));
       for (const itemSubmodelElements of that.submodelElements) {
-        const serializedSubmodelElementsItem = this.transform(itemSubmodelElements);
-        parts.push(openTag(serializedSubmodelElementsItem.localName));
-        parts.push(serializedSubmodelElementsItem.innerXml);
-        parts.push(closeTag(serializedSubmodelElementsItem.localName));
+        writeClassElement(parts, this.transform(itemSubmodelElements));
       }
       parts.push(closeTag("submodelElements"));
     }
@@ -15958,33 +15358,23 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.extensions !== null) {
       parts.push(openTag("extensions"));
       for (const itemExtensions of that.extensions) {
-        const serializedExtensionsItem = this.transform(itemExtensions);
-        parts.push(openTag(serializedExtensionsItem.localName));
-        parts.push(serializedExtensionsItem.innerXml);
-        parts.push(closeTag(serializedExtensionsItem.localName));
+        writeClassElement(parts, this.transform(itemExtensions));
       }
       parts.push(closeTag("extensions"));
     }
 
   if (that.category !== null) {
-      parts.push(openTag("category"));
-      parts.push(serializeStringText(that.category));
-      parts.push(closeTag("category"));
+      writeVElement(parts, "category", serializeStringText(that.category));
     }
 
   if (that.idShort !== null) {
-      parts.push(openTag("idShort"));
-      parts.push(serializeStringText(that.idShort));
-      parts.push(closeTag("idShort"));
+      writeVElement(parts, "idShort", serializeStringText(that.idShort));
     }
 
   if (that.displayName !== null) {
       parts.push(openTag("displayName"));
       for (const itemDisplayName of that.displayName) {
-        const serializedDisplayNameItem = this.transform(itemDisplayName);
-        parts.push(openTag(serializedDisplayNameItem.localName));
-        parts.push(serializedDisplayNameItem.innerXml);
-        parts.push(closeTag(serializedDisplayNameItem.localName));
+        writeClassElement(parts, this.transform(itemDisplayName));
       }
       parts.push(closeTag("displayName"));
     }
@@ -15992,10 +15382,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.description !== null) {
       parts.push(openTag("description"));
       for (const itemDescription of that.description) {
-        const serializedDescriptionItem = this.transform(itemDescription);
-        parts.push(openTag(serializedDescriptionItem.localName));
-        parts.push(serializedDescriptionItem.innerXml);
-        parts.push(closeTag(serializedDescriptionItem.localName));
+        writeClassElement(parts, this.transform(itemDescription));
       }
       parts.push(closeTag("description"));
     }
@@ -16010,10 +15397,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.supplementalSemanticIds !== null) {
       parts.push(openTag("supplementalSemanticIds"));
       for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        const serializedSupplementalSemanticIdsItem = this.transform(itemSupplementalSemanticIds);
-        parts.push(openTag(serializedSupplementalSemanticIdsItem.localName));
-        parts.push(serializedSupplementalSemanticIdsItem.innerXml);
-        parts.push(closeTag(serializedSupplementalSemanticIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
       }
       parts.push(closeTag("supplementalSemanticIds"));
     }
@@ -16021,10 +15405,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.qualifiers !== null) {
       parts.push(openTag("qualifiers"));
       for (const itemQualifiers of that.qualifiers) {
-        const serializedQualifiersItem = this.transform(itemQualifiers);
-        parts.push(openTag(serializedQualifiersItem.localName));
-        parts.push(serializedQualifiersItem.innerXml);
-        parts.push(closeTag(serializedQualifiersItem.localName));
+        writeClassElement(parts, this.transform(itemQualifiers));
       }
       parts.push(closeTag("qualifiers"));
     }
@@ -16032,10 +15413,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.embeddedDataSpecifications !== null) {
       parts.push(openTag("embeddedDataSpecifications"));
       for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        const serializedEmbeddedDataSpecificationsItem = this.transform(itemEmbeddedDataSpecifications);
-        parts.push(openTag(serializedEmbeddedDataSpecificationsItem.localName));
-        parts.push(serializedEmbeddedDataSpecificationsItem.innerXml);
-        parts.push(closeTag(serializedEmbeddedDataSpecificationsItem.localName));
+        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
       }
       parts.push(closeTag("embeddedDataSpecifications"));
     }
@@ -16070,33 +15448,23 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.extensions !== null) {
       parts.push(openTag("extensions"));
       for (const itemExtensions of that.extensions) {
-        const serializedExtensionsItem = this.transform(itemExtensions);
-        parts.push(openTag(serializedExtensionsItem.localName));
-        parts.push(serializedExtensionsItem.innerXml);
-        parts.push(closeTag(serializedExtensionsItem.localName));
+        writeClassElement(parts, this.transform(itemExtensions));
       }
       parts.push(closeTag("extensions"));
     }
 
   if (that.category !== null) {
-      parts.push(openTag("category"));
-      parts.push(serializeStringText(that.category));
-      parts.push(closeTag("category"));
+      writeVElement(parts, "category", serializeStringText(that.category));
     }
 
   if (that.idShort !== null) {
-      parts.push(openTag("idShort"));
-      parts.push(serializeStringText(that.idShort));
-      parts.push(closeTag("idShort"));
+      writeVElement(parts, "idShort", serializeStringText(that.idShort));
     }
 
   if (that.displayName !== null) {
       parts.push(openTag("displayName"));
       for (const itemDisplayName of that.displayName) {
-        const serializedDisplayNameItem = this.transform(itemDisplayName);
-        parts.push(openTag(serializedDisplayNameItem.localName));
-        parts.push(serializedDisplayNameItem.innerXml);
-        parts.push(closeTag(serializedDisplayNameItem.localName));
+        writeClassElement(parts, this.transform(itemDisplayName));
       }
       parts.push(closeTag("displayName"));
     }
@@ -16104,10 +15472,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.description !== null) {
       parts.push(openTag("description"));
       for (const itemDescription of that.description) {
-        const serializedDescriptionItem = this.transform(itemDescription);
-        parts.push(openTag(serializedDescriptionItem.localName));
-        parts.push(serializedDescriptionItem.innerXml);
-        parts.push(closeTag(serializedDescriptionItem.localName));
+        writeClassElement(parts, this.transform(itemDescription));
       }
       parts.push(closeTag("description"));
     }
@@ -16122,10 +15487,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.supplementalSemanticIds !== null) {
       parts.push(openTag("supplementalSemanticIds"));
       for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        const serializedSupplementalSemanticIdsItem = this.transform(itemSupplementalSemanticIds);
-        parts.push(openTag(serializedSupplementalSemanticIdsItem.localName));
-        parts.push(serializedSupplementalSemanticIdsItem.innerXml);
-        parts.push(closeTag(serializedSupplementalSemanticIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
       }
       parts.push(closeTag("supplementalSemanticIds"));
     }
@@ -16133,10 +15495,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.qualifiers !== null) {
       parts.push(openTag("qualifiers"));
       for (const itemQualifiers of that.qualifiers) {
-        const serializedQualifiersItem = this.transform(itemQualifiers);
-        parts.push(openTag(serializedQualifiersItem.localName));
-        parts.push(serializedQualifiersItem.innerXml);
-        parts.push(closeTag(serializedQualifiersItem.localName));
+        writeClassElement(parts, this.transform(itemQualifiers));
       }
       parts.push(closeTag("qualifiers"));
     }
@@ -16144,18 +15503,13 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.embeddedDataSpecifications !== null) {
       parts.push(openTag("embeddedDataSpecifications"));
       for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        const serializedEmbeddedDataSpecificationsItem = this.transform(itemEmbeddedDataSpecifications);
-        parts.push(openTag(serializedEmbeddedDataSpecificationsItem.localName));
-        parts.push(serializedEmbeddedDataSpecificationsItem.innerXml);
-        parts.push(closeTag(serializedEmbeddedDataSpecificationsItem.localName));
+        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
       }
       parts.push(closeTag("embeddedDataSpecifications"));
     }
 
   if (that.orderRelevant !== null) {
-      parts.push(openTag("orderRelevant"));
-      parts.push(serializeBooleanText(that.orderRelevant));
-      parts.push(closeTag("orderRelevant"));
+      writeVElement(parts, "orderRelevant", serializeBooleanText(that.orderRelevant));
     }
 
   if (that.semanticIdListElement !== null) {
@@ -16165,23 +15519,16 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
       parts.push(closeTag("semanticIdListElement"));
     }
 
-  parts.push(openTag("typeValueListElement"));
-    parts.push(serializeAasSubmodelElementsText(that.typeValueListElement));
-    parts.push(closeTag("typeValueListElement"));
+  writeVElement(parts, "typeValueListElement", serializeAasSubmodelElementsText(that.typeValueListElement));
 
   if (that.valueTypeListElement !== null) {
-      parts.push(openTag("valueTypeListElement"));
-      parts.push(serializeDataTypeDefXsdText(that.valueTypeListElement));
-      parts.push(closeTag("valueTypeListElement"));
+      writeVElement(parts, "valueTypeListElement", serializeDataTypeDefXsdText(that.valueTypeListElement));
     }
 
   if (that.value !== null) {
       parts.push(openTag("value"));
       for (const itemValue of that.value) {
-        const serializedValueItem = this.transform(itemValue);
-        parts.push(openTag(serializedValueItem.localName));
-        parts.push(serializedValueItem.innerXml);
-        parts.push(closeTag(serializedValueItem.localName));
+        writeClassElement(parts, this.transform(itemValue));
       }
       parts.push(closeTag("value"));
     }
@@ -16206,33 +15553,23 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.extensions !== null) {
       parts.push(openTag("extensions"));
       for (const itemExtensions of that.extensions) {
-        const serializedExtensionsItem = this.transform(itemExtensions);
-        parts.push(openTag(serializedExtensionsItem.localName));
-        parts.push(serializedExtensionsItem.innerXml);
-        parts.push(closeTag(serializedExtensionsItem.localName));
+        writeClassElement(parts, this.transform(itemExtensions));
       }
       parts.push(closeTag("extensions"));
     }
 
   if (that.category !== null) {
-      parts.push(openTag("category"));
-      parts.push(serializeStringText(that.category));
-      parts.push(closeTag("category"));
+      writeVElement(parts, "category", serializeStringText(that.category));
     }
 
   if (that.idShort !== null) {
-      parts.push(openTag("idShort"));
-      parts.push(serializeStringText(that.idShort));
-      parts.push(closeTag("idShort"));
+      writeVElement(parts, "idShort", serializeStringText(that.idShort));
     }
 
   if (that.displayName !== null) {
       parts.push(openTag("displayName"));
       for (const itemDisplayName of that.displayName) {
-        const serializedDisplayNameItem = this.transform(itemDisplayName);
-        parts.push(openTag(serializedDisplayNameItem.localName));
-        parts.push(serializedDisplayNameItem.innerXml);
-        parts.push(closeTag(serializedDisplayNameItem.localName));
+        writeClassElement(parts, this.transform(itemDisplayName));
       }
       parts.push(closeTag("displayName"));
     }
@@ -16240,10 +15577,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.description !== null) {
       parts.push(openTag("description"));
       for (const itemDescription of that.description) {
-        const serializedDescriptionItem = this.transform(itemDescription);
-        parts.push(openTag(serializedDescriptionItem.localName));
-        parts.push(serializedDescriptionItem.innerXml);
-        parts.push(closeTag(serializedDescriptionItem.localName));
+        writeClassElement(parts, this.transform(itemDescription));
       }
       parts.push(closeTag("description"));
     }
@@ -16258,10 +15592,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.supplementalSemanticIds !== null) {
       parts.push(openTag("supplementalSemanticIds"));
       for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        const serializedSupplementalSemanticIdsItem = this.transform(itemSupplementalSemanticIds);
-        parts.push(openTag(serializedSupplementalSemanticIdsItem.localName));
-        parts.push(serializedSupplementalSemanticIdsItem.innerXml);
-        parts.push(closeTag(serializedSupplementalSemanticIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
       }
       parts.push(closeTag("supplementalSemanticIds"));
     }
@@ -16269,10 +15600,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.qualifiers !== null) {
       parts.push(openTag("qualifiers"));
       for (const itemQualifiers of that.qualifiers) {
-        const serializedQualifiersItem = this.transform(itemQualifiers);
-        parts.push(openTag(serializedQualifiersItem.localName));
-        parts.push(serializedQualifiersItem.innerXml);
-        parts.push(closeTag(serializedQualifiersItem.localName));
+        writeClassElement(parts, this.transform(itemQualifiers));
       }
       parts.push(closeTag("qualifiers"));
     }
@@ -16280,10 +15608,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.embeddedDataSpecifications !== null) {
       parts.push(openTag("embeddedDataSpecifications"));
       for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        const serializedEmbeddedDataSpecificationsItem = this.transform(itemEmbeddedDataSpecifications);
-        parts.push(openTag(serializedEmbeddedDataSpecificationsItem.localName));
-        parts.push(serializedEmbeddedDataSpecificationsItem.innerXml);
-        parts.push(closeTag(serializedEmbeddedDataSpecificationsItem.localName));
+        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
       }
       parts.push(closeTag("embeddedDataSpecifications"));
     }
@@ -16291,10 +15616,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.value !== null) {
       parts.push(openTag("value"));
       for (const itemValue of that.value) {
-        const serializedValueItem = this.transform(itemValue);
-        parts.push(openTag(serializedValueItem.localName));
-        parts.push(serializedValueItem.innerXml);
-        parts.push(closeTag(serializedValueItem.localName));
+        writeClassElement(parts, this.transform(itemValue));
       }
       parts.push(closeTag("value"));
     }
@@ -16319,33 +15641,23 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.extensions !== null) {
       parts.push(openTag("extensions"));
       for (const itemExtensions of that.extensions) {
-        const serializedExtensionsItem = this.transform(itemExtensions);
-        parts.push(openTag(serializedExtensionsItem.localName));
-        parts.push(serializedExtensionsItem.innerXml);
-        parts.push(closeTag(serializedExtensionsItem.localName));
+        writeClassElement(parts, this.transform(itemExtensions));
       }
       parts.push(closeTag("extensions"));
     }
 
   if (that.category !== null) {
-      parts.push(openTag("category"));
-      parts.push(serializeStringText(that.category));
-      parts.push(closeTag("category"));
+      writeVElement(parts, "category", serializeStringText(that.category));
     }
 
   if (that.idShort !== null) {
-      parts.push(openTag("idShort"));
-      parts.push(serializeStringText(that.idShort));
-      parts.push(closeTag("idShort"));
+      writeVElement(parts, "idShort", serializeStringText(that.idShort));
     }
 
   if (that.displayName !== null) {
       parts.push(openTag("displayName"));
       for (const itemDisplayName of that.displayName) {
-        const serializedDisplayNameItem = this.transform(itemDisplayName);
-        parts.push(openTag(serializedDisplayNameItem.localName));
-        parts.push(serializedDisplayNameItem.innerXml);
-        parts.push(closeTag(serializedDisplayNameItem.localName));
+        writeClassElement(parts, this.transform(itemDisplayName));
       }
       parts.push(closeTag("displayName"));
     }
@@ -16353,10 +15665,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.description !== null) {
       parts.push(openTag("description"));
       for (const itemDescription of that.description) {
-        const serializedDescriptionItem = this.transform(itemDescription);
-        parts.push(openTag(serializedDescriptionItem.localName));
-        parts.push(serializedDescriptionItem.innerXml);
-        parts.push(closeTag(serializedDescriptionItem.localName));
+        writeClassElement(parts, this.transform(itemDescription));
       }
       parts.push(closeTag("description"));
     }
@@ -16371,10 +15680,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.supplementalSemanticIds !== null) {
       parts.push(openTag("supplementalSemanticIds"));
       for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        const serializedSupplementalSemanticIdsItem = this.transform(itemSupplementalSemanticIds);
-        parts.push(openTag(serializedSupplementalSemanticIdsItem.localName));
-        parts.push(serializedSupplementalSemanticIdsItem.innerXml);
-        parts.push(closeTag(serializedSupplementalSemanticIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
       }
       parts.push(closeTag("supplementalSemanticIds"));
     }
@@ -16382,10 +15688,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.qualifiers !== null) {
       parts.push(openTag("qualifiers"));
       for (const itemQualifiers of that.qualifiers) {
-        const serializedQualifiersItem = this.transform(itemQualifiers);
-        parts.push(openTag(serializedQualifiersItem.localName));
-        parts.push(serializedQualifiersItem.innerXml);
-        parts.push(closeTag(serializedQualifiersItem.localName));
+        writeClassElement(parts, this.transform(itemQualifiers));
       }
       parts.push(closeTag("qualifiers"));
     }
@@ -16393,22 +15696,15 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.embeddedDataSpecifications !== null) {
       parts.push(openTag("embeddedDataSpecifications"));
       for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        const serializedEmbeddedDataSpecificationsItem = this.transform(itemEmbeddedDataSpecifications);
-        parts.push(openTag(serializedEmbeddedDataSpecificationsItem.localName));
-        parts.push(serializedEmbeddedDataSpecificationsItem.innerXml);
-        parts.push(closeTag(serializedEmbeddedDataSpecificationsItem.localName));
+        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
       }
       parts.push(closeTag("embeddedDataSpecifications"));
     }
 
-  parts.push(openTag("valueType"));
-    parts.push(serializeDataTypeDefXsdText(that.valueType));
-    parts.push(closeTag("valueType"));
+  writeVElement(parts, "valueType", serializeDataTypeDefXsdText(that.valueType));
 
   if (that.value !== null) {
-      parts.push(openTag("value"));
-      parts.push(serializeStringText(that.value));
-      parts.push(closeTag("value"));
+      writeVElement(parts, "value", serializeStringText(that.value));
     }
 
   if (that.valueId !== null) {
@@ -16438,33 +15734,23 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.extensions !== null) {
       parts.push(openTag("extensions"));
       for (const itemExtensions of that.extensions) {
-        const serializedExtensionsItem = this.transform(itemExtensions);
-        parts.push(openTag(serializedExtensionsItem.localName));
-        parts.push(serializedExtensionsItem.innerXml);
-        parts.push(closeTag(serializedExtensionsItem.localName));
+        writeClassElement(parts, this.transform(itemExtensions));
       }
       parts.push(closeTag("extensions"));
     }
 
   if (that.category !== null) {
-      parts.push(openTag("category"));
-      parts.push(serializeStringText(that.category));
-      parts.push(closeTag("category"));
+      writeVElement(parts, "category", serializeStringText(that.category));
     }
 
   if (that.idShort !== null) {
-      parts.push(openTag("idShort"));
-      parts.push(serializeStringText(that.idShort));
-      parts.push(closeTag("idShort"));
+      writeVElement(parts, "idShort", serializeStringText(that.idShort));
     }
 
   if (that.displayName !== null) {
       parts.push(openTag("displayName"));
       for (const itemDisplayName of that.displayName) {
-        const serializedDisplayNameItem = this.transform(itemDisplayName);
-        parts.push(openTag(serializedDisplayNameItem.localName));
-        parts.push(serializedDisplayNameItem.innerXml);
-        parts.push(closeTag(serializedDisplayNameItem.localName));
+        writeClassElement(parts, this.transform(itemDisplayName));
       }
       parts.push(closeTag("displayName"));
     }
@@ -16472,10 +15758,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.description !== null) {
       parts.push(openTag("description"));
       for (const itemDescription of that.description) {
-        const serializedDescriptionItem = this.transform(itemDescription);
-        parts.push(openTag(serializedDescriptionItem.localName));
-        parts.push(serializedDescriptionItem.innerXml);
-        parts.push(closeTag(serializedDescriptionItem.localName));
+        writeClassElement(parts, this.transform(itemDescription));
       }
       parts.push(closeTag("description"));
     }
@@ -16490,10 +15773,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.supplementalSemanticIds !== null) {
       parts.push(openTag("supplementalSemanticIds"));
       for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        const serializedSupplementalSemanticIdsItem = this.transform(itemSupplementalSemanticIds);
-        parts.push(openTag(serializedSupplementalSemanticIdsItem.localName));
-        parts.push(serializedSupplementalSemanticIdsItem.innerXml);
-        parts.push(closeTag(serializedSupplementalSemanticIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
       }
       parts.push(closeTag("supplementalSemanticIds"));
     }
@@ -16501,10 +15781,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.qualifiers !== null) {
       parts.push(openTag("qualifiers"));
       for (const itemQualifiers of that.qualifiers) {
-        const serializedQualifiersItem = this.transform(itemQualifiers);
-        parts.push(openTag(serializedQualifiersItem.localName));
-        parts.push(serializedQualifiersItem.innerXml);
-        parts.push(closeTag(serializedQualifiersItem.localName));
+        writeClassElement(parts, this.transform(itemQualifiers));
       }
       parts.push(closeTag("qualifiers"));
     }
@@ -16512,10 +15789,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.embeddedDataSpecifications !== null) {
       parts.push(openTag("embeddedDataSpecifications"));
       for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        const serializedEmbeddedDataSpecificationsItem = this.transform(itemEmbeddedDataSpecifications);
-        parts.push(openTag(serializedEmbeddedDataSpecificationsItem.localName));
-        parts.push(serializedEmbeddedDataSpecificationsItem.innerXml);
-        parts.push(closeTag(serializedEmbeddedDataSpecificationsItem.localName));
+        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
       }
       parts.push(closeTag("embeddedDataSpecifications"));
     }
@@ -16523,10 +15797,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.value !== null) {
       parts.push(openTag("value"));
       for (const itemValue of that.value) {
-        const serializedValueItem = this.transform(itemValue);
-        parts.push(openTag(serializedValueItem.localName));
-        parts.push(serializedValueItem.innerXml);
-        parts.push(closeTag(serializedValueItem.localName));
+        writeClassElement(parts, this.transform(itemValue));
       }
       parts.push(closeTag("value"));
     }
@@ -16558,33 +15829,23 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.extensions !== null) {
       parts.push(openTag("extensions"));
       for (const itemExtensions of that.extensions) {
-        const serializedExtensionsItem = this.transform(itemExtensions);
-        parts.push(openTag(serializedExtensionsItem.localName));
-        parts.push(serializedExtensionsItem.innerXml);
-        parts.push(closeTag(serializedExtensionsItem.localName));
+        writeClassElement(parts, this.transform(itemExtensions));
       }
       parts.push(closeTag("extensions"));
     }
 
   if (that.category !== null) {
-      parts.push(openTag("category"));
-      parts.push(serializeStringText(that.category));
-      parts.push(closeTag("category"));
+      writeVElement(parts, "category", serializeStringText(that.category));
     }
 
   if (that.idShort !== null) {
-      parts.push(openTag("idShort"));
-      parts.push(serializeStringText(that.idShort));
-      parts.push(closeTag("idShort"));
+      writeVElement(parts, "idShort", serializeStringText(that.idShort));
     }
 
   if (that.displayName !== null) {
       parts.push(openTag("displayName"));
       for (const itemDisplayName of that.displayName) {
-        const serializedDisplayNameItem = this.transform(itemDisplayName);
-        parts.push(openTag(serializedDisplayNameItem.localName));
-        parts.push(serializedDisplayNameItem.innerXml);
-        parts.push(closeTag(serializedDisplayNameItem.localName));
+        writeClassElement(parts, this.transform(itemDisplayName));
       }
       parts.push(closeTag("displayName"));
     }
@@ -16592,10 +15853,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.description !== null) {
       parts.push(openTag("description"));
       for (const itemDescription of that.description) {
-        const serializedDescriptionItem = this.transform(itemDescription);
-        parts.push(openTag(serializedDescriptionItem.localName));
-        parts.push(serializedDescriptionItem.innerXml);
-        parts.push(closeTag(serializedDescriptionItem.localName));
+        writeClassElement(parts, this.transform(itemDescription));
       }
       parts.push(closeTag("description"));
     }
@@ -16610,10 +15868,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.supplementalSemanticIds !== null) {
       parts.push(openTag("supplementalSemanticIds"));
       for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        const serializedSupplementalSemanticIdsItem = this.transform(itemSupplementalSemanticIds);
-        parts.push(openTag(serializedSupplementalSemanticIdsItem.localName));
-        parts.push(serializedSupplementalSemanticIdsItem.innerXml);
-        parts.push(closeTag(serializedSupplementalSemanticIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
       }
       parts.push(closeTag("supplementalSemanticIds"));
     }
@@ -16621,10 +15876,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.qualifiers !== null) {
       parts.push(openTag("qualifiers"));
       for (const itemQualifiers of that.qualifiers) {
-        const serializedQualifiersItem = this.transform(itemQualifiers);
-        parts.push(openTag(serializedQualifiersItem.localName));
-        parts.push(serializedQualifiersItem.innerXml);
-        parts.push(closeTag(serializedQualifiersItem.localName));
+        writeClassElement(parts, this.transform(itemQualifiers));
       }
       parts.push(closeTag("qualifiers"));
     }
@@ -16632,28 +15884,19 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.embeddedDataSpecifications !== null) {
       parts.push(openTag("embeddedDataSpecifications"));
       for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        const serializedEmbeddedDataSpecificationsItem = this.transform(itemEmbeddedDataSpecifications);
-        parts.push(openTag(serializedEmbeddedDataSpecificationsItem.localName));
-        parts.push(serializedEmbeddedDataSpecificationsItem.innerXml);
-        parts.push(closeTag(serializedEmbeddedDataSpecificationsItem.localName));
+        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
       }
       parts.push(closeTag("embeddedDataSpecifications"));
     }
 
-  parts.push(openTag("valueType"));
-    parts.push(serializeDataTypeDefXsdText(that.valueType));
-    parts.push(closeTag("valueType"));
+  writeVElement(parts, "valueType", serializeDataTypeDefXsdText(that.valueType));
 
   if (that.min !== null) {
-      parts.push(openTag("min"));
-      parts.push(serializeStringText(that.min));
-      parts.push(closeTag("min"));
+      writeVElement(parts, "min", serializeStringText(that.min));
     }
 
   if (that.max !== null) {
-      parts.push(openTag("max"));
-      parts.push(serializeStringText(that.max));
-      parts.push(closeTag("max"));
+      writeVElement(parts, "max", serializeStringText(that.max));
     }
 
   return {
@@ -16676,33 +15919,23 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.extensions !== null) {
       parts.push(openTag("extensions"));
       for (const itemExtensions of that.extensions) {
-        const serializedExtensionsItem = this.transform(itemExtensions);
-        parts.push(openTag(serializedExtensionsItem.localName));
-        parts.push(serializedExtensionsItem.innerXml);
-        parts.push(closeTag(serializedExtensionsItem.localName));
+        writeClassElement(parts, this.transform(itemExtensions));
       }
       parts.push(closeTag("extensions"));
     }
 
   if (that.category !== null) {
-      parts.push(openTag("category"));
-      parts.push(serializeStringText(that.category));
-      parts.push(closeTag("category"));
+      writeVElement(parts, "category", serializeStringText(that.category));
     }
 
   if (that.idShort !== null) {
-      parts.push(openTag("idShort"));
-      parts.push(serializeStringText(that.idShort));
-      parts.push(closeTag("idShort"));
+      writeVElement(parts, "idShort", serializeStringText(that.idShort));
     }
 
   if (that.displayName !== null) {
       parts.push(openTag("displayName"));
       for (const itemDisplayName of that.displayName) {
-        const serializedDisplayNameItem = this.transform(itemDisplayName);
-        parts.push(openTag(serializedDisplayNameItem.localName));
-        parts.push(serializedDisplayNameItem.innerXml);
-        parts.push(closeTag(serializedDisplayNameItem.localName));
+        writeClassElement(parts, this.transform(itemDisplayName));
       }
       parts.push(closeTag("displayName"));
     }
@@ -16710,10 +15943,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.description !== null) {
       parts.push(openTag("description"));
       for (const itemDescription of that.description) {
-        const serializedDescriptionItem = this.transform(itemDescription);
-        parts.push(openTag(serializedDescriptionItem.localName));
-        parts.push(serializedDescriptionItem.innerXml);
-        parts.push(closeTag(serializedDescriptionItem.localName));
+        writeClassElement(parts, this.transform(itemDescription));
       }
       parts.push(closeTag("description"));
     }
@@ -16728,10 +15958,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.supplementalSemanticIds !== null) {
       parts.push(openTag("supplementalSemanticIds"));
       for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        const serializedSupplementalSemanticIdsItem = this.transform(itemSupplementalSemanticIds);
-        parts.push(openTag(serializedSupplementalSemanticIdsItem.localName));
-        parts.push(serializedSupplementalSemanticIdsItem.innerXml);
-        parts.push(closeTag(serializedSupplementalSemanticIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
       }
       parts.push(closeTag("supplementalSemanticIds"));
     }
@@ -16739,10 +15966,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.qualifiers !== null) {
       parts.push(openTag("qualifiers"));
       for (const itemQualifiers of that.qualifiers) {
-        const serializedQualifiersItem = this.transform(itemQualifiers);
-        parts.push(openTag(serializedQualifiersItem.localName));
-        parts.push(serializedQualifiersItem.innerXml);
-        parts.push(closeTag(serializedQualifiersItem.localName));
+        writeClassElement(parts, this.transform(itemQualifiers));
       }
       parts.push(closeTag("qualifiers"));
     }
@@ -16750,10 +15974,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.embeddedDataSpecifications !== null) {
       parts.push(openTag("embeddedDataSpecifications"));
       for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        const serializedEmbeddedDataSpecificationsItem = this.transform(itemEmbeddedDataSpecifications);
-        parts.push(openTag(serializedEmbeddedDataSpecificationsItem.localName));
-        parts.push(serializedEmbeddedDataSpecificationsItem.innerXml);
-        parts.push(closeTag(serializedEmbeddedDataSpecificationsItem.localName));
+        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
       }
       parts.push(closeTag("embeddedDataSpecifications"));
     }
@@ -16785,33 +16006,23 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.extensions !== null) {
       parts.push(openTag("extensions"));
       for (const itemExtensions of that.extensions) {
-        const serializedExtensionsItem = this.transform(itemExtensions);
-        parts.push(openTag(serializedExtensionsItem.localName));
-        parts.push(serializedExtensionsItem.innerXml);
-        parts.push(closeTag(serializedExtensionsItem.localName));
+        writeClassElement(parts, this.transform(itemExtensions));
       }
       parts.push(closeTag("extensions"));
     }
 
   if (that.category !== null) {
-      parts.push(openTag("category"));
-      parts.push(serializeStringText(that.category));
-      parts.push(closeTag("category"));
+      writeVElement(parts, "category", serializeStringText(that.category));
     }
 
   if (that.idShort !== null) {
-      parts.push(openTag("idShort"));
-      parts.push(serializeStringText(that.idShort));
-      parts.push(closeTag("idShort"));
+      writeVElement(parts, "idShort", serializeStringText(that.idShort));
     }
 
   if (that.displayName !== null) {
       parts.push(openTag("displayName"));
       for (const itemDisplayName of that.displayName) {
-        const serializedDisplayNameItem = this.transform(itemDisplayName);
-        parts.push(openTag(serializedDisplayNameItem.localName));
-        parts.push(serializedDisplayNameItem.innerXml);
-        parts.push(closeTag(serializedDisplayNameItem.localName));
+        writeClassElement(parts, this.transform(itemDisplayName));
       }
       parts.push(closeTag("displayName"));
     }
@@ -16819,10 +16030,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.description !== null) {
       parts.push(openTag("description"));
       for (const itemDescription of that.description) {
-        const serializedDescriptionItem = this.transform(itemDescription);
-        parts.push(openTag(serializedDescriptionItem.localName));
-        parts.push(serializedDescriptionItem.innerXml);
-        parts.push(closeTag(serializedDescriptionItem.localName));
+        writeClassElement(parts, this.transform(itemDescription));
       }
       parts.push(closeTag("description"));
     }
@@ -16837,10 +16045,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.supplementalSemanticIds !== null) {
       parts.push(openTag("supplementalSemanticIds"));
       for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        const serializedSupplementalSemanticIdsItem = this.transform(itemSupplementalSemanticIds);
-        parts.push(openTag(serializedSupplementalSemanticIdsItem.localName));
-        parts.push(serializedSupplementalSemanticIdsItem.innerXml);
-        parts.push(closeTag(serializedSupplementalSemanticIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
       }
       parts.push(closeTag("supplementalSemanticIds"));
     }
@@ -16848,10 +16053,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.qualifiers !== null) {
       parts.push(openTag("qualifiers"));
       for (const itemQualifiers of that.qualifiers) {
-        const serializedQualifiersItem = this.transform(itemQualifiers);
-        parts.push(openTag(serializedQualifiersItem.localName));
-        parts.push(serializedQualifiersItem.innerXml);
-        parts.push(closeTag(serializedQualifiersItem.localName));
+        writeClassElement(parts, this.transform(itemQualifiers));
       }
       parts.push(closeTag("qualifiers"));
     }
@@ -16859,23 +16061,16 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.embeddedDataSpecifications !== null) {
       parts.push(openTag("embeddedDataSpecifications"));
       for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        const serializedEmbeddedDataSpecificationsItem = this.transform(itemEmbeddedDataSpecifications);
-        parts.push(openTag(serializedEmbeddedDataSpecificationsItem.localName));
-        parts.push(serializedEmbeddedDataSpecificationsItem.innerXml);
-        parts.push(closeTag(serializedEmbeddedDataSpecificationsItem.localName));
+        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
       }
       parts.push(closeTag("embeddedDataSpecifications"));
     }
 
   if (that.value !== null) {
-      parts.push(openTag("value"));
-      parts.push(serializeBase64EncodedBytesText(that.value));
-      parts.push(closeTag("value"));
+      writeVElement(parts, "value", serializeBase64EncodedBytesText(that.value));
     }
 
-  parts.push(openTag("contentType"));
-    parts.push(serializeStringText(that.contentType));
-    parts.push(closeTag("contentType"));
+  writeVElement(parts, "contentType", serializeStringText(that.contentType));
 
   return {
       localName: "blob",
@@ -16897,33 +16092,23 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.extensions !== null) {
       parts.push(openTag("extensions"));
       for (const itemExtensions of that.extensions) {
-        const serializedExtensionsItem = this.transform(itemExtensions);
-        parts.push(openTag(serializedExtensionsItem.localName));
-        parts.push(serializedExtensionsItem.innerXml);
-        parts.push(closeTag(serializedExtensionsItem.localName));
+        writeClassElement(parts, this.transform(itemExtensions));
       }
       parts.push(closeTag("extensions"));
     }
 
   if (that.category !== null) {
-      parts.push(openTag("category"));
-      parts.push(serializeStringText(that.category));
-      parts.push(closeTag("category"));
+      writeVElement(parts, "category", serializeStringText(that.category));
     }
 
   if (that.idShort !== null) {
-      parts.push(openTag("idShort"));
-      parts.push(serializeStringText(that.idShort));
-      parts.push(closeTag("idShort"));
+      writeVElement(parts, "idShort", serializeStringText(that.idShort));
     }
 
   if (that.displayName !== null) {
       parts.push(openTag("displayName"));
       for (const itemDisplayName of that.displayName) {
-        const serializedDisplayNameItem = this.transform(itemDisplayName);
-        parts.push(openTag(serializedDisplayNameItem.localName));
-        parts.push(serializedDisplayNameItem.innerXml);
-        parts.push(closeTag(serializedDisplayNameItem.localName));
+        writeClassElement(parts, this.transform(itemDisplayName));
       }
       parts.push(closeTag("displayName"));
     }
@@ -16931,10 +16116,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.description !== null) {
       parts.push(openTag("description"));
       for (const itemDescription of that.description) {
-        const serializedDescriptionItem = this.transform(itemDescription);
-        parts.push(openTag(serializedDescriptionItem.localName));
-        parts.push(serializedDescriptionItem.innerXml);
-        parts.push(closeTag(serializedDescriptionItem.localName));
+        writeClassElement(parts, this.transform(itemDescription));
       }
       parts.push(closeTag("description"));
     }
@@ -16949,10 +16131,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.supplementalSemanticIds !== null) {
       parts.push(openTag("supplementalSemanticIds"));
       for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        const serializedSupplementalSemanticIdsItem = this.transform(itemSupplementalSemanticIds);
-        parts.push(openTag(serializedSupplementalSemanticIdsItem.localName));
-        parts.push(serializedSupplementalSemanticIdsItem.innerXml);
-        parts.push(closeTag(serializedSupplementalSemanticIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
       }
       parts.push(closeTag("supplementalSemanticIds"));
     }
@@ -16960,10 +16139,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.qualifiers !== null) {
       parts.push(openTag("qualifiers"));
       for (const itemQualifiers of that.qualifiers) {
-        const serializedQualifiersItem = this.transform(itemQualifiers);
-        parts.push(openTag(serializedQualifiersItem.localName));
-        parts.push(serializedQualifiersItem.innerXml);
-        parts.push(closeTag(serializedQualifiersItem.localName));
+        writeClassElement(parts, this.transform(itemQualifiers));
       }
       parts.push(closeTag("qualifiers"));
     }
@@ -16971,23 +16147,16 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.embeddedDataSpecifications !== null) {
       parts.push(openTag("embeddedDataSpecifications"));
       for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        const serializedEmbeddedDataSpecificationsItem = this.transform(itemEmbeddedDataSpecifications);
-        parts.push(openTag(serializedEmbeddedDataSpecificationsItem.localName));
-        parts.push(serializedEmbeddedDataSpecificationsItem.innerXml);
-        parts.push(closeTag(serializedEmbeddedDataSpecificationsItem.localName));
+        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
       }
       parts.push(closeTag("embeddedDataSpecifications"));
     }
 
   if (that.value !== null) {
-      parts.push(openTag("value"));
-      parts.push(serializeStringText(that.value));
-      parts.push(closeTag("value"));
+      writeVElement(parts, "value", serializeStringText(that.value));
     }
 
-  parts.push(openTag("contentType"));
-    parts.push(serializeStringText(that.contentType));
-    parts.push(closeTag("contentType"));
+  writeVElement(parts, "contentType", serializeStringText(that.contentType));
 
   return {
       localName: "file",
@@ -17009,33 +16178,23 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.extensions !== null) {
       parts.push(openTag("extensions"));
       for (const itemExtensions of that.extensions) {
-        const serializedExtensionsItem = this.transform(itemExtensions);
-        parts.push(openTag(serializedExtensionsItem.localName));
-        parts.push(serializedExtensionsItem.innerXml);
-        parts.push(closeTag(serializedExtensionsItem.localName));
+        writeClassElement(parts, this.transform(itemExtensions));
       }
       parts.push(closeTag("extensions"));
     }
 
   if (that.category !== null) {
-      parts.push(openTag("category"));
-      parts.push(serializeStringText(that.category));
-      parts.push(closeTag("category"));
+      writeVElement(parts, "category", serializeStringText(that.category));
     }
 
   if (that.idShort !== null) {
-      parts.push(openTag("idShort"));
-      parts.push(serializeStringText(that.idShort));
-      parts.push(closeTag("idShort"));
+      writeVElement(parts, "idShort", serializeStringText(that.idShort));
     }
 
   if (that.displayName !== null) {
       parts.push(openTag("displayName"));
       for (const itemDisplayName of that.displayName) {
-        const serializedDisplayNameItem = this.transform(itemDisplayName);
-        parts.push(openTag(serializedDisplayNameItem.localName));
-        parts.push(serializedDisplayNameItem.innerXml);
-        parts.push(closeTag(serializedDisplayNameItem.localName));
+        writeClassElement(parts, this.transform(itemDisplayName));
       }
       parts.push(closeTag("displayName"));
     }
@@ -17043,10 +16202,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.description !== null) {
       parts.push(openTag("description"));
       for (const itemDescription of that.description) {
-        const serializedDescriptionItem = this.transform(itemDescription);
-        parts.push(openTag(serializedDescriptionItem.localName));
-        parts.push(serializedDescriptionItem.innerXml);
-        parts.push(closeTag(serializedDescriptionItem.localName));
+        writeClassElement(parts, this.transform(itemDescription));
       }
       parts.push(closeTag("description"));
     }
@@ -17061,10 +16217,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.supplementalSemanticIds !== null) {
       parts.push(openTag("supplementalSemanticIds"));
       for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        const serializedSupplementalSemanticIdsItem = this.transform(itemSupplementalSemanticIds);
-        parts.push(openTag(serializedSupplementalSemanticIdsItem.localName));
-        parts.push(serializedSupplementalSemanticIdsItem.innerXml);
-        parts.push(closeTag(serializedSupplementalSemanticIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
       }
       parts.push(closeTag("supplementalSemanticIds"));
     }
@@ -17072,10 +16225,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.qualifiers !== null) {
       parts.push(openTag("qualifiers"));
       for (const itemQualifiers of that.qualifiers) {
-        const serializedQualifiersItem = this.transform(itemQualifiers);
-        parts.push(openTag(serializedQualifiersItem.localName));
-        parts.push(serializedQualifiersItem.innerXml);
-        parts.push(closeTag(serializedQualifiersItem.localName));
+        writeClassElement(parts, this.transform(itemQualifiers));
       }
       parts.push(closeTag("qualifiers"));
     }
@@ -17083,10 +16233,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.embeddedDataSpecifications !== null) {
       parts.push(openTag("embeddedDataSpecifications"));
       for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        const serializedEmbeddedDataSpecificationsItem = this.transform(itemEmbeddedDataSpecifications);
-        parts.push(openTag(serializedEmbeddedDataSpecificationsItem.localName));
-        parts.push(serializedEmbeddedDataSpecificationsItem.innerXml);
-        parts.push(closeTag(serializedEmbeddedDataSpecificationsItem.localName));
+        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
       }
       parts.push(closeTag("embeddedDataSpecifications"));
     }
@@ -17104,10 +16251,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.annotations !== null) {
       parts.push(openTag("annotations"));
       for (const itemAnnotations of that.annotations) {
-        const serializedAnnotationsItem = this.transform(itemAnnotations);
-        parts.push(openTag(serializedAnnotationsItem.localName));
-        parts.push(serializedAnnotationsItem.innerXml);
-        parts.push(closeTag(serializedAnnotationsItem.localName));
+        writeClassElement(parts, this.transform(itemAnnotations));
       }
       parts.push(closeTag("annotations"));
     }
@@ -17132,33 +16276,23 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.extensions !== null) {
       parts.push(openTag("extensions"));
       for (const itemExtensions of that.extensions) {
-        const serializedExtensionsItem = this.transform(itemExtensions);
-        parts.push(openTag(serializedExtensionsItem.localName));
-        parts.push(serializedExtensionsItem.innerXml);
-        parts.push(closeTag(serializedExtensionsItem.localName));
+        writeClassElement(parts, this.transform(itemExtensions));
       }
       parts.push(closeTag("extensions"));
     }
 
   if (that.category !== null) {
-      parts.push(openTag("category"));
-      parts.push(serializeStringText(that.category));
-      parts.push(closeTag("category"));
+      writeVElement(parts, "category", serializeStringText(that.category));
     }
 
   if (that.idShort !== null) {
-      parts.push(openTag("idShort"));
-      parts.push(serializeStringText(that.idShort));
-      parts.push(closeTag("idShort"));
+      writeVElement(parts, "idShort", serializeStringText(that.idShort));
     }
 
   if (that.displayName !== null) {
       parts.push(openTag("displayName"));
       for (const itemDisplayName of that.displayName) {
-        const serializedDisplayNameItem = this.transform(itemDisplayName);
-        parts.push(openTag(serializedDisplayNameItem.localName));
-        parts.push(serializedDisplayNameItem.innerXml);
-        parts.push(closeTag(serializedDisplayNameItem.localName));
+        writeClassElement(parts, this.transform(itemDisplayName));
       }
       parts.push(closeTag("displayName"));
     }
@@ -17166,10 +16300,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.description !== null) {
       parts.push(openTag("description"));
       for (const itemDescription of that.description) {
-        const serializedDescriptionItem = this.transform(itemDescription);
-        parts.push(openTag(serializedDescriptionItem.localName));
-        parts.push(serializedDescriptionItem.innerXml);
-        parts.push(closeTag(serializedDescriptionItem.localName));
+        writeClassElement(parts, this.transform(itemDescription));
       }
       parts.push(closeTag("description"));
     }
@@ -17184,10 +16315,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.supplementalSemanticIds !== null) {
       parts.push(openTag("supplementalSemanticIds"));
       for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        const serializedSupplementalSemanticIdsItem = this.transform(itemSupplementalSemanticIds);
-        parts.push(openTag(serializedSupplementalSemanticIdsItem.localName));
-        parts.push(serializedSupplementalSemanticIdsItem.innerXml);
-        parts.push(closeTag(serializedSupplementalSemanticIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
       }
       parts.push(closeTag("supplementalSemanticIds"));
     }
@@ -17195,10 +16323,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.qualifiers !== null) {
       parts.push(openTag("qualifiers"));
       for (const itemQualifiers of that.qualifiers) {
-        const serializedQualifiersItem = this.transform(itemQualifiers);
-        parts.push(openTag(serializedQualifiersItem.localName));
-        parts.push(serializedQualifiersItem.innerXml);
-        parts.push(closeTag(serializedQualifiersItem.localName));
+        writeClassElement(parts, this.transform(itemQualifiers));
       }
       parts.push(closeTag("qualifiers"));
     }
@@ -17206,10 +16331,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.embeddedDataSpecifications !== null) {
       parts.push(openTag("embeddedDataSpecifications"));
       for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        const serializedEmbeddedDataSpecificationsItem = this.transform(itemEmbeddedDataSpecifications);
-        parts.push(openTag(serializedEmbeddedDataSpecificationsItem.localName));
-        parts.push(serializedEmbeddedDataSpecificationsItem.innerXml);
-        parts.push(closeTag(serializedEmbeddedDataSpecificationsItem.localName));
+        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
       }
       parts.push(closeTag("embeddedDataSpecifications"));
     }
@@ -17217,31 +16339,21 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.statements !== null) {
       parts.push(openTag("statements"));
       for (const itemStatements of that.statements) {
-        const serializedStatementsItem = this.transform(itemStatements);
-        parts.push(openTag(serializedStatementsItem.localName));
-        parts.push(serializedStatementsItem.innerXml);
-        parts.push(closeTag(serializedStatementsItem.localName));
+        writeClassElement(parts, this.transform(itemStatements));
       }
       parts.push(closeTag("statements"));
     }
 
-  parts.push(openTag("entityType"));
-    parts.push(serializeEntityTypeText(that.entityType));
-    parts.push(closeTag("entityType"));
+  writeVElement(parts, "entityType", serializeEntityTypeText(that.entityType));
 
   if (that.globalAssetId !== null) {
-      parts.push(openTag("globalAssetId"));
-      parts.push(serializeStringText(that.globalAssetId));
-      parts.push(closeTag("globalAssetId"));
+      writeVElement(parts, "globalAssetId", serializeStringText(that.globalAssetId));
     }
 
   if (that.specificAssetIds !== null) {
       parts.push(openTag("specificAssetIds"));
       for (const itemSpecificAssetIds of that.specificAssetIds) {
-        const serializedSpecificAssetIdsItem = this.transform(itemSpecificAssetIds);
-        parts.push(openTag(serializedSpecificAssetIdsItem.localName));
-        parts.push(serializedSpecificAssetIdsItem.innerXml);
-        parts.push(closeTag(serializedSpecificAssetIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSpecificAssetIds));
       }
       parts.push(closeTag("specificAssetIds"));
     }
@@ -17288,9 +16400,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
     }
 
   if (that.topic !== null) {
-      parts.push(openTag("topic"));
-      parts.push(serializeStringText(that.topic));
-      parts.push(closeTag("topic"));
+      writeVElement(parts, "topic", serializeStringText(that.topic));
     }
 
   if (that.subjectId !== null) {
@@ -17300,14 +16410,10 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
       parts.push(closeTag("subjectId"));
     }
 
-  parts.push(openTag("timeStamp"));
-    parts.push(serializeStringText(that.timeStamp));
-    parts.push(closeTag("timeStamp"));
+  writeVElement(parts, "timeStamp", serializeStringText(that.timeStamp));
 
   if (that.payload !== null) {
-      parts.push(openTag("payload"));
-      parts.push(serializeBase64EncodedBytesText(that.payload));
-      parts.push(closeTag("payload"));
+      writeVElement(parts, "payload", serializeBase64EncodedBytesText(that.payload));
     }
 
   return {
@@ -17330,33 +16436,23 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.extensions !== null) {
       parts.push(openTag("extensions"));
       for (const itemExtensions of that.extensions) {
-        const serializedExtensionsItem = this.transform(itemExtensions);
-        parts.push(openTag(serializedExtensionsItem.localName));
-        parts.push(serializedExtensionsItem.innerXml);
-        parts.push(closeTag(serializedExtensionsItem.localName));
+        writeClassElement(parts, this.transform(itemExtensions));
       }
       parts.push(closeTag("extensions"));
     }
 
   if (that.category !== null) {
-      parts.push(openTag("category"));
-      parts.push(serializeStringText(that.category));
-      parts.push(closeTag("category"));
+      writeVElement(parts, "category", serializeStringText(that.category));
     }
 
   if (that.idShort !== null) {
-      parts.push(openTag("idShort"));
-      parts.push(serializeStringText(that.idShort));
-      parts.push(closeTag("idShort"));
+      writeVElement(parts, "idShort", serializeStringText(that.idShort));
     }
 
   if (that.displayName !== null) {
       parts.push(openTag("displayName"));
       for (const itemDisplayName of that.displayName) {
-        const serializedDisplayNameItem = this.transform(itemDisplayName);
-        parts.push(openTag(serializedDisplayNameItem.localName));
-        parts.push(serializedDisplayNameItem.innerXml);
-        parts.push(closeTag(serializedDisplayNameItem.localName));
+        writeClassElement(parts, this.transform(itemDisplayName));
       }
       parts.push(closeTag("displayName"));
     }
@@ -17364,10 +16460,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.description !== null) {
       parts.push(openTag("description"));
       for (const itemDescription of that.description) {
-        const serializedDescriptionItem = this.transform(itemDescription);
-        parts.push(openTag(serializedDescriptionItem.localName));
-        parts.push(serializedDescriptionItem.innerXml);
-        parts.push(closeTag(serializedDescriptionItem.localName));
+        writeClassElement(parts, this.transform(itemDescription));
       }
       parts.push(closeTag("description"));
     }
@@ -17382,10 +16475,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.supplementalSemanticIds !== null) {
       parts.push(openTag("supplementalSemanticIds"));
       for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        const serializedSupplementalSemanticIdsItem = this.transform(itemSupplementalSemanticIds);
-        parts.push(openTag(serializedSupplementalSemanticIdsItem.localName));
-        parts.push(serializedSupplementalSemanticIdsItem.innerXml);
-        parts.push(closeTag(serializedSupplementalSemanticIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
       }
       parts.push(closeTag("supplementalSemanticIds"));
     }
@@ -17393,10 +16483,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.qualifiers !== null) {
       parts.push(openTag("qualifiers"));
       for (const itemQualifiers of that.qualifiers) {
-        const serializedQualifiersItem = this.transform(itemQualifiers);
-        parts.push(openTag(serializedQualifiersItem.localName));
-        parts.push(serializedQualifiersItem.innerXml);
-        parts.push(closeTag(serializedQualifiersItem.localName));
+        writeClassElement(parts, this.transform(itemQualifiers));
       }
       parts.push(closeTag("qualifiers"));
     }
@@ -17404,10 +16491,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.embeddedDataSpecifications !== null) {
       parts.push(openTag("embeddedDataSpecifications"));
       for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        const serializedEmbeddedDataSpecificationsItem = this.transform(itemEmbeddedDataSpecifications);
-        parts.push(openTag(serializedEmbeddedDataSpecificationsItem.localName));
-        parts.push(serializedEmbeddedDataSpecificationsItem.innerXml);
-        parts.push(closeTag(serializedEmbeddedDataSpecificationsItem.localName));
+        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
       }
       parts.push(closeTag("embeddedDataSpecifications"));
     }
@@ -17417,18 +16501,12 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
     parts.push(serializedObserved.innerXml);
     parts.push(closeTag("observed"));
 
-  parts.push(openTag("direction"));
-    parts.push(serializeDirectionText(that.direction));
-    parts.push(closeTag("direction"));
+  writeVElement(parts, "direction", serializeDirectionText(that.direction));
 
-  parts.push(openTag("state"));
-    parts.push(serializeStateOfEventText(that.state));
-    parts.push(closeTag("state"));
+  writeVElement(parts, "state", serializeStateOfEventText(that.state));
 
   if (that.messageTopic !== null) {
-      parts.push(openTag("messageTopic"));
-      parts.push(serializeStringText(that.messageTopic));
-      parts.push(closeTag("messageTopic"));
+      writeVElement(parts, "messageTopic", serializeStringText(that.messageTopic));
     }
 
   if (that.messageBroker !== null) {
@@ -17439,21 +16517,15 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
     }
 
   if (that.lastUpdate !== null) {
-      parts.push(openTag("lastUpdate"));
-      parts.push(serializeStringText(that.lastUpdate));
-      parts.push(closeTag("lastUpdate"));
+      writeVElement(parts, "lastUpdate", serializeStringText(that.lastUpdate));
     }
 
   if (that.minInterval !== null) {
-      parts.push(openTag("minInterval"));
-      parts.push(serializeStringText(that.minInterval));
-      parts.push(closeTag("minInterval"));
+      writeVElement(parts, "minInterval", serializeStringText(that.minInterval));
     }
 
   if (that.maxInterval !== null) {
-      parts.push(openTag("maxInterval"));
-      parts.push(serializeStringText(that.maxInterval));
-      parts.push(closeTag("maxInterval"));
+      writeVElement(parts, "maxInterval", serializeStringText(that.maxInterval));
     }
 
   return {
@@ -17476,33 +16548,23 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.extensions !== null) {
       parts.push(openTag("extensions"));
       for (const itemExtensions of that.extensions) {
-        const serializedExtensionsItem = this.transform(itemExtensions);
-        parts.push(openTag(serializedExtensionsItem.localName));
-        parts.push(serializedExtensionsItem.innerXml);
-        parts.push(closeTag(serializedExtensionsItem.localName));
+        writeClassElement(parts, this.transform(itemExtensions));
       }
       parts.push(closeTag("extensions"));
     }
 
   if (that.category !== null) {
-      parts.push(openTag("category"));
-      parts.push(serializeStringText(that.category));
-      parts.push(closeTag("category"));
+      writeVElement(parts, "category", serializeStringText(that.category));
     }
 
   if (that.idShort !== null) {
-      parts.push(openTag("idShort"));
-      parts.push(serializeStringText(that.idShort));
-      parts.push(closeTag("idShort"));
+      writeVElement(parts, "idShort", serializeStringText(that.idShort));
     }
 
   if (that.displayName !== null) {
       parts.push(openTag("displayName"));
       for (const itemDisplayName of that.displayName) {
-        const serializedDisplayNameItem = this.transform(itemDisplayName);
-        parts.push(openTag(serializedDisplayNameItem.localName));
-        parts.push(serializedDisplayNameItem.innerXml);
-        parts.push(closeTag(serializedDisplayNameItem.localName));
+        writeClassElement(parts, this.transform(itemDisplayName));
       }
       parts.push(closeTag("displayName"));
     }
@@ -17510,10 +16572,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.description !== null) {
       parts.push(openTag("description"));
       for (const itemDescription of that.description) {
-        const serializedDescriptionItem = this.transform(itemDescription);
-        parts.push(openTag(serializedDescriptionItem.localName));
-        parts.push(serializedDescriptionItem.innerXml);
-        parts.push(closeTag(serializedDescriptionItem.localName));
+        writeClassElement(parts, this.transform(itemDescription));
       }
       parts.push(closeTag("description"));
     }
@@ -17528,10 +16587,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.supplementalSemanticIds !== null) {
       parts.push(openTag("supplementalSemanticIds"));
       for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        const serializedSupplementalSemanticIdsItem = this.transform(itemSupplementalSemanticIds);
-        parts.push(openTag(serializedSupplementalSemanticIdsItem.localName));
-        parts.push(serializedSupplementalSemanticIdsItem.innerXml);
-        parts.push(closeTag(serializedSupplementalSemanticIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
       }
       parts.push(closeTag("supplementalSemanticIds"));
     }
@@ -17539,10 +16595,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.qualifiers !== null) {
       parts.push(openTag("qualifiers"));
       for (const itemQualifiers of that.qualifiers) {
-        const serializedQualifiersItem = this.transform(itemQualifiers);
-        parts.push(openTag(serializedQualifiersItem.localName));
-        parts.push(serializedQualifiersItem.innerXml);
-        parts.push(closeTag(serializedQualifiersItem.localName));
+        writeClassElement(parts, this.transform(itemQualifiers));
       }
       parts.push(closeTag("qualifiers"));
     }
@@ -17550,10 +16603,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.embeddedDataSpecifications !== null) {
       parts.push(openTag("embeddedDataSpecifications"));
       for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        const serializedEmbeddedDataSpecificationsItem = this.transform(itemEmbeddedDataSpecifications);
-        parts.push(openTag(serializedEmbeddedDataSpecificationsItem.localName));
-        parts.push(serializedEmbeddedDataSpecificationsItem.innerXml);
-        parts.push(closeTag(serializedEmbeddedDataSpecificationsItem.localName));
+        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
       }
       parts.push(closeTag("embeddedDataSpecifications"));
     }
@@ -17561,10 +16611,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.inputVariables !== null) {
       parts.push(openTag("inputVariables"));
       for (const itemInputVariables of that.inputVariables) {
-        const serializedInputVariablesItem = this.transform(itemInputVariables);
-        parts.push(openTag(serializedInputVariablesItem.localName));
-        parts.push(serializedInputVariablesItem.innerXml);
-        parts.push(closeTag(serializedInputVariablesItem.localName));
+        writeClassElement(parts, this.transform(itemInputVariables));
       }
       parts.push(closeTag("inputVariables"));
     }
@@ -17572,10 +16619,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.outputVariables !== null) {
       parts.push(openTag("outputVariables"));
       for (const itemOutputVariables of that.outputVariables) {
-        const serializedOutputVariablesItem = this.transform(itemOutputVariables);
-        parts.push(openTag(serializedOutputVariablesItem.localName));
-        parts.push(serializedOutputVariablesItem.innerXml);
-        parts.push(closeTag(serializedOutputVariablesItem.localName));
+        writeClassElement(parts, this.transform(itemOutputVariables));
       }
       parts.push(closeTag("outputVariables"));
     }
@@ -17583,10 +16627,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.inoutputVariables !== null) {
       parts.push(openTag("inoutputVariables"));
       for (const itemInoutputVariables of that.inoutputVariables) {
-        const serializedInoutputVariablesItem = this.transform(itemInoutputVariables);
-        parts.push(openTag(serializedInoutputVariablesItem.localName));
-        parts.push(serializedInoutputVariablesItem.innerXml);
-        parts.push(closeTag(serializedInoutputVariablesItem.localName));
+        writeClassElement(parts, this.transform(itemInoutputVariables));
       }
       parts.push(closeTag("inoutputVariables"));
     }
@@ -17609,10 +16650,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   const parts = new Array<string>();
 
   parts.push(openTag("value"));
-    const serializedValue = this.transform(that.value);
-      parts.push(openTag(serializedValue.localName));
-      parts.push(serializedValue.innerXml);
-      parts.push(closeTag(serializedValue.localName));
+    writeClassElement(parts, this.transform(that.value));
     parts.push(closeTag("value"));
 
   return {
@@ -17635,33 +16673,23 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.extensions !== null) {
       parts.push(openTag("extensions"));
       for (const itemExtensions of that.extensions) {
-        const serializedExtensionsItem = this.transform(itemExtensions);
-        parts.push(openTag(serializedExtensionsItem.localName));
-        parts.push(serializedExtensionsItem.innerXml);
-        parts.push(closeTag(serializedExtensionsItem.localName));
+        writeClassElement(parts, this.transform(itemExtensions));
       }
       parts.push(closeTag("extensions"));
     }
 
   if (that.category !== null) {
-      parts.push(openTag("category"));
-      parts.push(serializeStringText(that.category));
-      parts.push(closeTag("category"));
+      writeVElement(parts, "category", serializeStringText(that.category));
     }
 
   if (that.idShort !== null) {
-      parts.push(openTag("idShort"));
-      parts.push(serializeStringText(that.idShort));
-      parts.push(closeTag("idShort"));
+      writeVElement(parts, "idShort", serializeStringText(that.idShort));
     }
 
   if (that.displayName !== null) {
       parts.push(openTag("displayName"));
       for (const itemDisplayName of that.displayName) {
-        const serializedDisplayNameItem = this.transform(itemDisplayName);
-        parts.push(openTag(serializedDisplayNameItem.localName));
-        parts.push(serializedDisplayNameItem.innerXml);
-        parts.push(closeTag(serializedDisplayNameItem.localName));
+        writeClassElement(parts, this.transform(itemDisplayName));
       }
       parts.push(closeTag("displayName"));
     }
@@ -17669,10 +16697,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.description !== null) {
       parts.push(openTag("description"));
       for (const itemDescription of that.description) {
-        const serializedDescriptionItem = this.transform(itemDescription);
-        parts.push(openTag(serializedDescriptionItem.localName));
-        parts.push(serializedDescriptionItem.innerXml);
-        parts.push(closeTag(serializedDescriptionItem.localName));
+        writeClassElement(parts, this.transform(itemDescription));
       }
       parts.push(closeTag("description"));
     }
@@ -17687,10 +16712,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.supplementalSemanticIds !== null) {
       parts.push(openTag("supplementalSemanticIds"));
       for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        const serializedSupplementalSemanticIdsItem = this.transform(itemSupplementalSemanticIds);
-        parts.push(openTag(serializedSupplementalSemanticIdsItem.localName));
-        parts.push(serializedSupplementalSemanticIdsItem.innerXml);
-        parts.push(closeTag(serializedSupplementalSemanticIdsItem.localName));
+        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
       }
       parts.push(closeTag("supplementalSemanticIds"));
     }
@@ -17698,10 +16720,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.qualifiers !== null) {
       parts.push(openTag("qualifiers"));
       for (const itemQualifiers of that.qualifiers) {
-        const serializedQualifiersItem = this.transform(itemQualifiers);
-        parts.push(openTag(serializedQualifiersItem.localName));
-        parts.push(serializedQualifiersItem.innerXml);
-        parts.push(closeTag(serializedQualifiersItem.localName));
+        writeClassElement(parts, this.transform(itemQualifiers));
       }
       parts.push(closeTag("qualifiers"));
     }
@@ -17709,10 +16728,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.embeddedDataSpecifications !== null) {
       parts.push(openTag("embeddedDataSpecifications"));
       for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        const serializedEmbeddedDataSpecificationsItem = this.transform(itemEmbeddedDataSpecifications);
-        parts.push(openTag(serializedEmbeddedDataSpecificationsItem.localName));
-        parts.push(serializedEmbeddedDataSpecificationsItem.innerXml);
-        parts.push(closeTag(serializedEmbeddedDataSpecificationsItem.localName));
+        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
       }
       parts.push(closeTag("embeddedDataSpecifications"));
     }
@@ -17737,33 +16753,23 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.extensions !== null) {
       parts.push(openTag("extensions"));
       for (const itemExtensions of that.extensions) {
-        const serializedExtensionsItem = this.transform(itemExtensions);
-        parts.push(openTag(serializedExtensionsItem.localName));
-        parts.push(serializedExtensionsItem.innerXml);
-        parts.push(closeTag(serializedExtensionsItem.localName));
+        writeClassElement(parts, this.transform(itemExtensions));
       }
       parts.push(closeTag("extensions"));
     }
 
   if (that.category !== null) {
-      parts.push(openTag("category"));
-      parts.push(serializeStringText(that.category));
-      parts.push(closeTag("category"));
+      writeVElement(parts, "category", serializeStringText(that.category));
     }
 
   if (that.idShort !== null) {
-      parts.push(openTag("idShort"));
-      parts.push(serializeStringText(that.idShort));
-      parts.push(closeTag("idShort"));
+      writeVElement(parts, "idShort", serializeStringText(that.idShort));
     }
 
   if (that.displayName !== null) {
       parts.push(openTag("displayName"));
       for (const itemDisplayName of that.displayName) {
-        const serializedDisplayNameItem = this.transform(itemDisplayName);
-        parts.push(openTag(serializedDisplayNameItem.localName));
-        parts.push(serializedDisplayNameItem.innerXml);
-        parts.push(closeTag(serializedDisplayNameItem.localName));
+        writeClassElement(parts, this.transform(itemDisplayName));
       }
       parts.push(closeTag("displayName"));
     }
@@ -17771,10 +16777,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.description !== null) {
       parts.push(openTag("description"));
       for (const itemDescription of that.description) {
-        const serializedDescriptionItem = this.transform(itemDescription);
-        parts.push(openTag(serializedDescriptionItem.localName));
-        parts.push(serializedDescriptionItem.innerXml);
-        parts.push(closeTag(serializedDescriptionItem.localName));
+        writeClassElement(parts, this.transform(itemDescription));
       }
       parts.push(closeTag("description"));
     }
@@ -17786,17 +16789,12 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
       parts.push(closeTag("administration"));
     }
 
-  parts.push(openTag("id"));
-    parts.push(serializeStringText(that.id));
-    parts.push(closeTag("id"));
+  writeVElement(parts, "id", serializeStringText(that.id));
 
   if (that.embeddedDataSpecifications !== null) {
       parts.push(openTag("embeddedDataSpecifications"));
       for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        const serializedEmbeddedDataSpecificationsItem = this.transform(itemEmbeddedDataSpecifications);
-        parts.push(openTag(serializedEmbeddedDataSpecificationsItem.localName));
-        parts.push(serializedEmbeddedDataSpecificationsItem.innerXml);
-        parts.push(closeTag(serializedEmbeddedDataSpecificationsItem.localName));
+        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
       }
       parts.push(closeTag("embeddedDataSpecifications"));
     }
@@ -17804,10 +16802,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.isCaseOf !== null) {
       parts.push(openTag("isCaseOf"));
       for (const itemIsCaseOf of that.isCaseOf) {
-        const serializedIsCaseOfItem = this.transform(itemIsCaseOf);
-        parts.push(openTag(serializedIsCaseOfItem.localName));
-        parts.push(serializedIsCaseOfItem.innerXml);
-        parts.push(closeTag(serializedIsCaseOfItem.localName));
+        writeClassElement(parts, this.transform(itemIsCaseOf));
       }
       parts.push(closeTag("isCaseOf"));
     }
@@ -17829,9 +16824,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   ): SerializedElement {
   const parts = new Array<string>();
 
-  parts.push(openTag("type"));
-    parts.push(serializeReferenceTypesText(that.type));
-    parts.push(closeTag("type"));
+  writeVElement(parts, "type", serializeReferenceTypesText(that.type));
 
   if (that.referredSemanticId !== null) {
       const serializedReferredSemanticId = this.transform(that.referredSemanticId);
@@ -17842,10 +16835,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
 
   parts.push(openTag("keys"));
     for (const itemKeys of that.keys) {
-      const serializedKeysItem = this.transform(itemKeys);
-      parts.push(openTag(serializedKeysItem.localName));
-      parts.push(serializedKeysItem.innerXml);
-      parts.push(closeTag(serializedKeysItem.localName));
+      writeClassElement(parts, this.transform(itemKeys));
     }
     parts.push(closeTag("keys"));
 
@@ -17866,13 +16856,9 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   ): SerializedElement {
   const parts = new Array<string>();
 
-  parts.push(openTag("type"));
-    parts.push(serializeKeyTypesText(that.type));
-    parts.push(closeTag("type"));
+  writeVElement(parts, "type", serializeKeyTypesText(that.type));
 
-  parts.push(openTag("value"));
-    parts.push(serializeStringText(that.value));
-    parts.push(closeTag("value"));
+  writeVElement(parts, "value", serializeStringText(that.value));
 
   return {
       localName: "key",
@@ -17891,13 +16877,9 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   ): SerializedElement {
   const parts = new Array<string>();
 
-  parts.push(openTag("language"));
-    parts.push(serializeStringText(that.language));
-    parts.push(closeTag("language"));
+  writeVElement(parts, "language", serializeStringText(that.language));
 
-  parts.push(openTag("text"));
-    parts.push(serializeStringText(that.text));
-    parts.push(closeTag("text"));
+  writeVElement(parts, "text", serializeStringText(that.text));
 
   return {
       localName: "langStringNameType",
@@ -17916,13 +16898,9 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   ): SerializedElement {
   const parts = new Array<string>();
 
-  parts.push(openTag("language"));
-    parts.push(serializeStringText(that.language));
-    parts.push(closeTag("language"));
+  writeVElement(parts, "language", serializeStringText(that.language));
 
-  parts.push(openTag("text"));
-    parts.push(serializeStringText(that.text));
-    parts.push(closeTag("text"));
+  writeVElement(parts, "text", serializeStringText(that.text));
 
   return {
       localName: "langStringTextType",
@@ -17944,10 +16922,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.assetAdministrationShells !== null) {
       parts.push(openTag("assetAdministrationShells"));
       for (const itemAssetAdministrationShells of that.assetAdministrationShells) {
-        const serializedAssetAdministrationShellsItem = this.transform(itemAssetAdministrationShells);
-        parts.push(openTag(serializedAssetAdministrationShellsItem.localName));
-        parts.push(serializedAssetAdministrationShellsItem.innerXml);
-        parts.push(closeTag(serializedAssetAdministrationShellsItem.localName));
+        writeClassElement(parts, this.transform(itemAssetAdministrationShells));
       }
       parts.push(closeTag("assetAdministrationShells"));
     }
@@ -17955,10 +16930,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.submodels !== null) {
       parts.push(openTag("submodels"));
       for (const itemSubmodels of that.submodels) {
-        const serializedSubmodelsItem = this.transform(itemSubmodels);
-        parts.push(openTag(serializedSubmodelsItem.localName));
-        parts.push(serializedSubmodelsItem.innerXml);
-        parts.push(closeTag(serializedSubmodelsItem.localName));
+        writeClassElement(parts, this.transform(itemSubmodels));
       }
       parts.push(closeTag("submodels"));
     }
@@ -17966,10 +16938,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   if (that.conceptDescriptions !== null) {
       parts.push(openTag("conceptDescriptions"));
       for (const itemConceptDescriptions of that.conceptDescriptions) {
-        const serializedConceptDescriptionsItem = this.transform(itemConceptDescriptions);
-        parts.push(openTag(serializedConceptDescriptionsItem.localName));
-        parts.push(serializedConceptDescriptionsItem.innerXml);
-        parts.push(closeTag(serializedConceptDescriptionsItem.localName));
+        writeClassElement(parts, this.transform(itemConceptDescriptions));
       }
       parts.push(closeTag("conceptDescriptions"));
     }
@@ -17997,10 +16966,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
     parts.push(closeTag("dataSpecification"));
 
   parts.push(openTag("dataSpecificationContent"));
-    const serializedDataSpecificationContent = this.transform(that.dataSpecificationContent);
-      parts.push(openTag(serializedDataSpecificationContent.localName));
-      parts.push(serializedDataSpecificationContent.innerXml);
-      parts.push(closeTag(serializedDataSpecificationContent.localName));
+    writeClassElement(parts, this.transform(that.dataSpecificationContent));
     parts.push(closeTag("dataSpecificationContent"));
 
   return {
@@ -18020,21 +16986,13 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   ): SerializedElement {
   const parts = new Array<string>();
 
-  parts.push(openTag("min"));
-    parts.push(serializeBooleanText(that.min));
-    parts.push(closeTag("min"));
+  writeVElement(parts, "min", serializeBooleanText(that.min));
 
-  parts.push(openTag("nom"));
-    parts.push(serializeBooleanText(that.nom));
-    parts.push(closeTag("nom"));
+  writeVElement(parts, "nom", serializeBooleanText(that.nom));
 
-  parts.push(openTag("typ"));
-    parts.push(serializeBooleanText(that.typ));
-    parts.push(closeTag("typ"));
+  writeVElement(parts, "typ", serializeBooleanText(that.typ));
 
-  parts.push(openTag("max"));
-    parts.push(serializeBooleanText(that.max));
-    parts.push(closeTag("max"));
+  writeVElement(parts, "max", serializeBooleanText(that.max));
 
   return {
       localName: "levelType",
@@ -18053,9 +17011,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   ): SerializedElement {
   const parts = new Array<string>();
 
-  parts.push(openTag("value"));
-    parts.push(serializeStringText(that.value));
-    parts.push(closeTag("value"));
+  writeVElement(parts, "value", serializeStringText(that.value));
 
   const serializedValueId = this.transform(that.valueId);
     parts.push(openTag("valueId"));
@@ -18081,10 +17037,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
 
   parts.push(openTag("valueReferencePairs"));
     for (const itemValueReferencePairs of that.valueReferencePairs) {
-      const serializedValueReferencePairsItem = this.transform(itemValueReferencePairs);
-      parts.push(openTag(serializedValueReferencePairsItem.localName));
-      parts.push(serializedValueReferencePairsItem.innerXml);
-      parts.push(closeTag(serializedValueReferencePairsItem.localName));
+      writeClassElement(parts, this.transform(itemValueReferencePairs));
     }
     parts.push(closeTag("valueReferencePairs"));
 
@@ -18105,13 +17058,9 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   ): SerializedElement {
   const parts = new Array<string>();
 
-  parts.push(openTag("language"));
-    parts.push(serializeStringText(that.language));
-    parts.push(closeTag("language"));
+  writeVElement(parts, "language", serializeStringText(that.language));
 
-  parts.push(openTag("text"));
-    parts.push(serializeStringText(that.text));
-    parts.push(closeTag("text"));
+  writeVElement(parts, "text", serializeStringText(that.text));
 
   return {
       localName: "langStringPreferredNameTypeIec61360",
@@ -18130,13 +17079,9 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   ): SerializedElement {
   const parts = new Array<string>();
 
-  parts.push(openTag("language"));
-    parts.push(serializeStringText(that.language));
-    parts.push(closeTag("language"));
+  writeVElement(parts, "language", serializeStringText(that.language));
 
-  parts.push(openTag("text"));
-    parts.push(serializeStringText(that.text));
-    parts.push(closeTag("text"));
+  writeVElement(parts, "text", serializeStringText(that.text));
 
   return {
       localName: "langStringShortNameTypeIec61360",
@@ -18155,13 +17100,9 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
   ): SerializedElement {
   const parts = new Array<string>();
 
-  parts.push(openTag("language"));
-    parts.push(serializeStringText(that.language));
-    parts.push(closeTag("language"));
+  writeVElement(parts, "language", serializeStringText(that.language));
 
-  parts.push(openTag("text"));
-    parts.push(serializeStringText(that.text));
-    parts.push(closeTag("text"));
+  writeVElement(parts, "text", serializeStringText(that.text));
 
   return {
       localName: "langStringDefinitionTypeIec61360",
@@ -18182,28 +17123,20 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
 
   parts.push(openTag("preferredName"));
     for (const itemPreferredName of that.preferredName) {
-      const serializedPreferredNameItem = this.transform(itemPreferredName);
-      parts.push(openTag(serializedPreferredNameItem.localName));
-      parts.push(serializedPreferredNameItem.innerXml);
-      parts.push(closeTag(serializedPreferredNameItem.localName));
+      writeClassElement(parts, this.transform(itemPreferredName));
     }
     parts.push(closeTag("preferredName"));
 
   if (that.shortName !== null) {
       parts.push(openTag("shortName"));
       for (const itemShortName of that.shortName) {
-        const serializedShortNameItem = this.transform(itemShortName);
-        parts.push(openTag(serializedShortNameItem.localName));
-        parts.push(serializedShortNameItem.innerXml);
-        parts.push(closeTag(serializedShortNameItem.localName));
+        writeClassElement(parts, this.transform(itemShortName));
       }
       parts.push(closeTag("shortName"));
     }
 
   if (that.unit !== null) {
-      parts.push(openTag("unit"));
-      parts.push(serializeStringText(that.unit));
-      parts.push(closeTag("unit"));
+      writeVElement(parts, "unit", serializeStringText(that.unit));
     }
 
   if (that.unitId !== null) {
@@ -18214,38 +17147,27 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
     }
 
   if (that.sourceOfDefinition !== null) {
-      parts.push(openTag("sourceOfDefinition"));
-      parts.push(serializeStringText(that.sourceOfDefinition));
-      parts.push(closeTag("sourceOfDefinition"));
+      writeVElement(parts, "sourceOfDefinition", serializeStringText(that.sourceOfDefinition));
     }
 
   if (that.symbol !== null) {
-      parts.push(openTag("symbol"));
-      parts.push(serializeStringText(that.symbol));
-      parts.push(closeTag("symbol"));
+      writeVElement(parts, "symbol", serializeStringText(that.symbol));
     }
 
   if (that.dataType !== null) {
-      parts.push(openTag("dataType"));
-      parts.push(serializeDataTypeIec61360Text(that.dataType));
-      parts.push(closeTag("dataType"));
+      writeVElement(parts, "dataType", serializeDataTypeIec61360Text(that.dataType));
     }
 
   if (that.definition !== null) {
       parts.push(openTag("definition"));
       for (const itemDefinition of that.definition) {
-        const serializedDefinitionItem = this.transform(itemDefinition);
-        parts.push(openTag(serializedDefinitionItem.localName));
-        parts.push(serializedDefinitionItem.innerXml);
-        parts.push(closeTag(serializedDefinitionItem.localName));
+        writeClassElement(parts, this.transform(itemDefinition));
       }
       parts.push(closeTag("definition"));
     }
 
   if (that.valueFormat !== null) {
-      parts.push(openTag("valueFormat"));
-      parts.push(serializeStringText(that.valueFormat));
-      parts.push(closeTag("valueFormat"));
+      writeVElement(parts, "valueFormat", serializeStringText(that.valueFormat));
     }
 
   if (that.valueList !== null) {
@@ -18256,9 +17178,7 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
     }
 
   if (that.value !== null) {
-      parts.push(openTag("value"));
-      parts.push(serializeStringText(that.value));
-      parts.push(closeTag("value"));
+      writeVElement(parts, "value", serializeStringText(that.value));
     }
 
   if (that.levelType !== null) {

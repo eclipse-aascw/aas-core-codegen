@@ -157,6 +157,87 @@ function newDeserializationError<T>(
 }
 
 /**
+ * Check that `jsonable` looks like a JSON object, without parsing it.
+ *
+ * @param jsonable - to be checked
+ * @returns error, if any
+ */
+function checkIsJsonObject(jsonable: JsonValue): DeserializationError | null {
+  if (jsonable === null) {
+    return new DeserializationError(
+      "Expected a JSON object, but got null"
+    );
+  }
+  if (Array.isArray(jsonable)) {
+    return new DeserializationError(
+      "Expected a JSON object, but got a JSON array"
+    );
+  }
+  if (typeof jsonable !== "object") {
+    return new DeserializationError(
+      `Expected a JSON object, but got: ${typeof jsonable}`
+    );
+  }
+
+  return null;
+}
+
+/**
+ * Check that the parsed `modelType` matches `expected`.
+ *
+ * @param modelType - parsed value of the `modelType` property,
+ * or `null` if it was missing
+ * @param expected - expected model type
+ * @returns error, if any
+ */
+function checkModelType(
+  modelType: string | null,
+  expected: string
+): DeserializationError | null {
+  if (modelType === null) {
+    return new DeserializationError(
+      "The required property 'modelType' is missing"
+    );
+  }
+  if (modelType != expected) {
+    return new DeserializationError(
+      `Expected model type '${expected}', ` +
+      `but got: ${modelType}`
+    );
+  }
+
+  return null;
+}
+
+/**
+ * Check that `jsonable` looks like an iterable which can be parsed
+ * item-by-item, without consuming it.
+ *
+ * @param jsonable - to be checked
+ * @returns error, if any
+ */
+function checkIsIterable(jsonable: JsonValue): DeserializationError | null {
+  if (jsonable === null) {
+    return new DeserializationError(
+      "Expected an iterable, but got null"
+    );
+  }
+  if (typeof jsonable !== "object") {
+    return new DeserializationError(
+      `Expected an iterable, but got: ${typeof jsonable}`
+    );
+  }
+  if (typeof jsonable[Symbol.iterator] !== "function") {
+    return new DeserializationError(
+      "Expected an iterable with iterator function, " +
+        `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
+    );
+  }
+
+  return null;
+}
+
+/**
  * Parse every item of `iterable` with `parseItem`.
  *
  * @param iterable - to be parsed item-by-item
@@ -333,23 +414,19 @@ export function hasSemanticsFromJsonable(
   AasTypes.IHasSemantics,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.IHasSemantics>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.IHasSemantics,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.IHasSemantics>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.IHasSemantics>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonable["modelType"];
+  const modelType = jsonObject["modelType"];
   if (modelType === undefined) {
     return newDeserializationError<AasTypes.IHasSemantics>(
       "The required property modelType is missing"
@@ -418,21 +495,9 @@ class SetterForExtension {
   setSupplementalSemanticIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -518,21 +583,9 @@ class SetterForExtension {
   setRefersToFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -564,26 +617,22 @@ export function extensionFromJsonable(
   AasTypes.Extension,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.Extension>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Extension,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.Extension>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.Extension>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForExtension();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_EXTENSION.get(key);
 
@@ -598,7 +647,7 @@ export function extensionFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.Extension,
@@ -647,23 +696,19 @@ export function hasExtensionsFromJsonable(
   AasTypes.IHasExtensions,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.IHasExtensions>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.IHasExtensions,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.IHasExtensions>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.IHasExtensions>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonable["modelType"];
+  const modelType = jsonObject["modelType"];
   if (modelType === undefined) {
     return newDeserializationError<AasTypes.IHasExtensions>(
       "The required property modelType is missing"
@@ -699,23 +744,19 @@ export function referableFromJsonable(
   AasTypes.IReferable,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.IReferable>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.IReferable,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.IReferable>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.IReferable>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonable["modelType"];
+  const modelType = jsonObject["modelType"];
   if (modelType === undefined) {
     return newDeserializationError<AasTypes.IReferable>(
       "The required property modelType is missing"
@@ -751,23 +792,19 @@ export function identifiableFromJsonable(
   AasTypes.IIdentifiable,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.IIdentifiable>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.IIdentifiable,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.IIdentifiable>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.IIdentifiable>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonable["modelType"];
+  const modelType = jsonObject["modelType"];
   if (modelType === undefined) {
     return newDeserializationError<AasTypes.IIdentifiable>(
       "The required property modelType is missing"
@@ -833,23 +870,19 @@ export function hasKindFromJsonable(
   AasTypes.IHasKind,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.IHasKind>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.IHasKind,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.IHasKind>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.IHasKind>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonable["modelType"];
+  const modelType = jsonObject["modelType"];
   if (modelType === undefined) {
     return newDeserializationError<AasTypes.IHasKind>(
       "The required property modelType is missing"
@@ -885,23 +918,19 @@ export function hasDataSpecificationFromJsonable(
   AasTypes.IHasDataSpecification,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.IHasDataSpecification>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.IHasDataSpecification,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.IHasDataSpecification>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.IHasDataSpecification>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonable["modelType"];
+  const modelType = jsonObject["modelType"];
   if (modelType === undefined) {
     return newDeserializationError<AasTypes.IHasDataSpecification>(
       "The required property modelType is missing"
@@ -948,21 +977,9 @@ class SetterForAdministrativeInformation {
   setEmbeddedDataSpecificationsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -1074,26 +1091,22 @@ export function administrativeInformationFromJsonable(
   AasTypes.AdministrativeInformation,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.AdministrativeInformation>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.AdministrativeInformation,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.AdministrativeInformation>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.AdministrativeInformation>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForAdministrativeInformation();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_ADMINISTRATIVE_INFORMATION.get(key);
 
@@ -1108,7 +1121,7 @@ export function administrativeInformationFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.AdministrativeInformation,
@@ -1148,23 +1161,19 @@ export function qualifiableFromJsonable(
   AasTypes.IQualifiable,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.IQualifiable>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.IQualifiable,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.IQualifiable>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.IQualifiable>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonable["modelType"];
+  const modelType = jsonObject["modelType"];
   if (modelType === undefined) {
     return newDeserializationError<AasTypes.IQualifiable>(
       "The required property modelType is missing"
@@ -1265,21 +1274,9 @@ class SetterForQualifier {
   setSupplementalSemanticIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -1411,26 +1408,22 @@ export function qualifierFromJsonable(
   AasTypes.Qualifier,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.Qualifier>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Qualifier,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.Qualifier>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.Qualifier>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForQualifier();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_QUALIFIER.get(key);
 
@@ -1445,7 +1438,7 @@ export function qualifierFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.Qualifier,
@@ -1529,21 +1522,9 @@ class SetterForAssetAdministrationShell {
   setExtensionsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -1609,21 +1590,9 @@ class SetterForAssetAdministrationShell {
   setDisplayNameFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -1649,21 +1618,9 @@ class SetterForAssetAdministrationShell {
   setDescriptionFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -1729,21 +1686,9 @@ class SetterForAssetAdministrationShell {
   setEmbeddedDataSpecificationsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -1809,21 +1754,9 @@ class SetterForAssetAdministrationShell {
   setSubmodelsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -1877,26 +1810,22 @@ export function assetAdministrationShellFromJsonable(
   AasTypes.AssetAdministrationShell,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.AssetAdministrationShell>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.AssetAdministrationShell,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.AssetAdministrationShell>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.AssetAdministrationShell>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForAssetAdministrationShell();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_ASSET_ADMINISTRATION_SHELL.get(key);
 
@@ -1911,7 +1840,7 @@ export function assetAdministrationShellFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.AssetAdministrationShell,
@@ -1939,18 +1868,14 @@ export function assetAdministrationShellFromJsonable(
     );
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.AssetAdministrationShell
+  const modelTypeError = checkModelType(setter.modelType, "AssetAdministrationShell");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.AssetAdministrationShell,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "AssetAdministrationShell") {
-    return newDeserializationError<
-      AasTypes.AssetAdministrationShell
-    >(
-      "Expected model type 'AssetAdministrationShell', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -2039,21 +1964,9 @@ class SetterForAssetInformation {
   setSpecificAssetIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -2125,26 +2038,22 @@ export function assetInformationFromJsonable(
   AasTypes.AssetInformation,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.AssetInformation>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.AssetInformation,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.AssetInformation>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.AssetInformation>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForAssetInformation();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_ASSET_INFORMATION.get(key);
 
@@ -2159,7 +2068,7 @@ export function assetInformationFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.AssetInformation,
@@ -2258,26 +2167,22 @@ export function resourceFromJsonable(
   AasTypes.Resource,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.Resource>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Resource,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.Resource>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.Resource>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForResource();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_RESOURCE.get(key);
 
@@ -2292,7 +2197,7 @@ export function resourceFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.Resource,
@@ -2398,21 +2303,9 @@ class SetterForSpecificAssetId {
   setSupplementalSemanticIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -2504,26 +2397,22 @@ export function specificAssetIdFromJsonable(
   AasTypes.SpecificAssetId,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.SpecificAssetId>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.SpecificAssetId,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.SpecificAssetId>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.SpecificAssetId>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForSpecificAssetId();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_SPECIFIC_ASSET_ID.get(key);
 
@@ -2538,7 +2427,7 @@ export function specificAssetIdFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.SpecificAssetId,
@@ -2624,21 +2513,9 @@ class SetterForSubmodel {
   setExtensionsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -2704,21 +2581,9 @@ class SetterForSubmodel {
   setDisplayNameFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -2744,21 +2609,9 @@ class SetterForSubmodel {
   setDescriptionFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -2864,21 +2717,9 @@ class SetterForSubmodel {
   setSupplementalSemanticIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -2904,21 +2745,9 @@ class SetterForSubmodel {
   setQualifiersFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -2944,21 +2773,9 @@ class SetterForSubmodel {
   setEmbeddedDataSpecificationsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -2984,21 +2801,9 @@ class SetterForSubmodel {
   setSubmodelElementsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -3052,26 +2857,22 @@ export function submodelFromJsonable(
   AasTypes.Submodel,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.Submodel>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Submodel,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.Submodel>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.Submodel>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForSubmodel();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_SUBMODEL.get(key);
 
@@ -3086,7 +2887,7 @@ export function submodelFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.Submodel,
@@ -3106,18 +2907,14 @@ export function submodelFromJsonable(
     );
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.Submodel
+  const modelTypeError = checkModelType(setter.modelType, "Submodel");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Submodel,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "Submodel") {
-    return newDeserializationError<
-      AasTypes.Submodel
-    >(
-      "Expected model type 'Submodel', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -3157,23 +2954,19 @@ export function submodelElementFromJsonable(
   AasTypes.ISubmodelElement,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.ISubmodelElement>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.ISubmodelElement,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.ISubmodelElement>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.ISubmodelElement>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonable["modelType"];
+  const modelType = jsonObject["modelType"];
   if (modelType === undefined) {
     return newDeserializationError<AasTypes.ISubmodelElement>(
       "The required property modelType is missing"
@@ -3209,23 +3002,19 @@ export function relationshipElementFromJsonable(
   AasTypes.IRelationshipElement,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.IRelationshipElement>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.IRelationshipElement,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.IRelationshipElement>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.IRelationshipElement>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonable["modelType"];
+  const modelType = jsonObject["modelType"];
   if (modelType === undefined) {
     return newDeserializationError<AasTypes.IRelationshipElement>(
       "The required property modelType is missing"
@@ -3287,21 +3076,9 @@ class SetterForRelationshipElement {
   setExtensionsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -3367,21 +3144,9 @@ class SetterForRelationshipElement {
   setDisplayNameFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -3407,21 +3172,9 @@ class SetterForRelationshipElement {
   setDescriptionFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -3467,21 +3220,9 @@ class SetterForRelationshipElement {
   setSupplementalSemanticIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -3507,21 +3248,9 @@ class SetterForRelationshipElement {
   setQualifiersFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -3547,21 +3276,9 @@ class SetterForRelationshipElement {
   setEmbeddedDataSpecificationsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -3662,26 +3379,22 @@ function relationshipElementFromJsonableWithoutDispatch(
   AasTypes.RelationshipElement,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.RelationshipElement>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.RelationshipElement,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.RelationshipElement>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.RelationshipElement>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForRelationshipElement();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_RELATIONSHIP_ELEMENT.get(key);
 
@@ -3696,7 +3409,7 @@ function relationshipElementFromJsonableWithoutDispatch(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.RelationshipElement,
@@ -3724,18 +3437,14 @@ function relationshipElementFromJsonableWithoutDispatch(
     );
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.RelationshipElement
+  const modelTypeError = checkModelType(setter.modelType, "RelationshipElement");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.RelationshipElement,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "RelationshipElement") {
-    return newDeserializationError<
-      AasTypes.RelationshipElement
-    >(
-      "Expected model type 'RelationshipElement', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -3835,21 +3544,9 @@ class SetterForSubmodelElementList {
   setExtensionsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -3915,21 +3612,9 @@ class SetterForSubmodelElementList {
   setDisplayNameFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -3955,21 +3640,9 @@ class SetterForSubmodelElementList {
   setDescriptionFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -4015,21 +3688,9 @@ class SetterForSubmodelElementList {
   setSupplementalSemanticIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -4055,21 +3716,9 @@ class SetterForSubmodelElementList {
   setQualifiersFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -4095,21 +3744,9 @@ class SetterForSubmodelElementList {
   setEmbeddedDataSpecificationsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -4215,21 +3852,9 @@ class SetterForSubmodelElementList {
   setValueFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -4283,26 +3908,22 @@ export function submodelElementListFromJsonable(
   AasTypes.SubmodelElementList,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.SubmodelElementList>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.SubmodelElementList,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.SubmodelElementList>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.SubmodelElementList>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForSubmodelElementList();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_SUBMODEL_ELEMENT_LIST.get(key);
 
@@ -4317,7 +3938,7 @@ export function submodelElementListFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.SubmodelElementList,
@@ -4337,18 +3958,14 @@ export function submodelElementListFromJsonable(
     );
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.SubmodelElementList
+  const modelTypeError = checkModelType(setter.modelType, "SubmodelElementList");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.SubmodelElementList,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "SubmodelElementList") {
-    return newDeserializationError<
-      AasTypes.SubmodelElementList
-    >(
-      "Expected model type 'SubmodelElementList', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -4413,21 +4030,9 @@ class SetterForSubmodelElementCollection {
   setExtensionsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -4493,21 +4098,9 @@ class SetterForSubmodelElementCollection {
   setDisplayNameFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -4533,21 +4126,9 @@ class SetterForSubmodelElementCollection {
   setDescriptionFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -4593,21 +4174,9 @@ class SetterForSubmodelElementCollection {
   setSupplementalSemanticIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -4633,21 +4202,9 @@ class SetterForSubmodelElementCollection {
   setQualifiersFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -4673,21 +4230,9 @@ class SetterForSubmodelElementCollection {
   setEmbeddedDataSpecificationsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -4713,21 +4258,9 @@ class SetterForSubmodelElementCollection {
   setValueFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -4781,26 +4314,22 @@ export function submodelElementCollectionFromJsonable(
   AasTypes.SubmodelElementCollection,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.SubmodelElementCollection>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.SubmodelElementCollection,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.SubmodelElementCollection>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.SubmodelElementCollection>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForSubmodelElementCollection();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_SUBMODEL_ELEMENT_COLLECTION.get(key);
 
@@ -4815,7 +4344,7 @@ export function submodelElementCollectionFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.SubmodelElementCollection,
@@ -4827,18 +4356,14 @@ export function submodelElementCollectionFromJsonable(
     }
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.SubmodelElementCollection
+  const modelTypeError = checkModelType(setter.modelType, "SubmodelElementCollection");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.SubmodelElementCollection,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "SubmodelElementCollection") {
-    return newDeserializationError<
-      AasTypes.SubmodelElementCollection
-    >(
-      "Expected model type 'SubmodelElementCollection', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -4875,23 +4400,19 @@ export function dataElementFromJsonable(
   AasTypes.IDataElement,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.IDataElement>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.IDataElement,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.IDataElement>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.IDataElement>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonable["modelType"];
+  const modelType = jsonObject["modelType"];
   if (modelType === undefined) {
     return newDeserializationError<AasTypes.IDataElement>(
       "The required property modelType is missing"
@@ -4955,21 +4476,9 @@ class SetterForProperty {
   setExtensionsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -5035,21 +4544,9 @@ class SetterForProperty {
   setDisplayNameFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -5075,21 +4572,9 @@ class SetterForProperty {
   setDescriptionFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -5135,21 +4620,9 @@ class SetterForProperty {
   setSupplementalSemanticIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -5175,21 +4648,9 @@ class SetterForProperty {
   setQualifiersFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -5215,21 +4676,9 @@ class SetterForProperty {
   setEmbeddedDataSpecificationsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -5343,26 +4792,22 @@ export function propertyFromJsonable(
   AasTypes.Property,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.Property>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Property,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.Property>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.Property>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForProperty();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_PROPERTY.get(key);
 
@@ -5377,7 +4822,7 @@ export function propertyFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.Property,
@@ -5397,18 +4842,14 @@ export function propertyFromJsonable(
     );
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.Property
+  const modelTypeError = checkModelType(setter.modelType, "Property");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Property,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "Property") {
-    return newDeserializationError<
-      AasTypes.Property
-    >(
-      "Expected model type 'Property', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -5473,21 +4914,9 @@ class SetterForMultiLanguageProperty {
   setExtensionsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -5553,21 +4982,9 @@ class SetterForMultiLanguageProperty {
   setDisplayNameFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -5593,21 +5010,9 @@ class SetterForMultiLanguageProperty {
   setDescriptionFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -5653,21 +5058,9 @@ class SetterForMultiLanguageProperty {
   setSupplementalSemanticIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -5693,21 +5086,9 @@ class SetterForMultiLanguageProperty {
   setQualifiersFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -5733,21 +5114,9 @@ class SetterForMultiLanguageProperty {
   setEmbeddedDataSpecificationsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -5773,21 +5142,9 @@ class SetterForMultiLanguageProperty {
   setValueFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -5861,26 +5218,22 @@ export function multiLanguagePropertyFromJsonable(
   AasTypes.MultiLanguageProperty,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.MultiLanguageProperty>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.MultiLanguageProperty,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.MultiLanguageProperty>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.MultiLanguageProperty>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForMultiLanguageProperty();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_MULTI_LANGUAGE_PROPERTY.get(key);
 
@@ -5895,7 +5248,7 @@ export function multiLanguagePropertyFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.MultiLanguageProperty,
@@ -5907,18 +5260,14 @@ export function multiLanguagePropertyFromJsonable(
     }
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.MultiLanguageProperty
+  const modelTypeError = checkModelType(setter.modelType, "MultiLanguageProperty");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.MultiLanguageProperty,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "MultiLanguageProperty") {
-    return newDeserializationError<
-      AasTypes.MultiLanguageProperty
-    >(
-      "Expected model type 'MultiLanguageProperty', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -5984,21 +5333,9 @@ class SetterForRange {
   setExtensionsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -6064,21 +5401,9 @@ class SetterForRange {
   setDisplayNameFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -6104,21 +5429,9 @@ class SetterForRange {
   setDescriptionFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -6164,21 +5477,9 @@ class SetterForRange {
   setSupplementalSemanticIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -6204,21 +5505,9 @@ class SetterForRange {
   setQualifiersFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -6244,21 +5533,9 @@ class SetterForRange {
   setEmbeddedDataSpecificationsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -6372,26 +5649,22 @@ export function rangeFromJsonable(
   AasTypes.Range,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.Range>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Range,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.Range>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.Range>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForRange();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_RANGE.get(key);
 
@@ -6406,7 +5679,7 @@ export function rangeFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.Range,
@@ -6426,18 +5699,14 @@ export function rangeFromJsonable(
     );
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.Range
+  const modelTypeError = checkModelType(setter.modelType, "Range");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Range,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "Range") {
-    return newDeserializationError<
-      AasTypes.Range
-    >(
-      "Expected model type 'Range', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -6500,21 +5769,9 @@ class SetterForReferenceElement {
   setExtensionsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -6580,21 +5837,9 @@ class SetterForReferenceElement {
   setDisplayNameFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -6620,21 +5865,9 @@ class SetterForReferenceElement {
   setDescriptionFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -6680,21 +5913,9 @@ class SetterForReferenceElement {
   setSupplementalSemanticIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -6720,21 +5941,9 @@ class SetterForReferenceElement {
   setQualifiersFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -6760,21 +5969,9 @@ class SetterForReferenceElement {
   setEmbeddedDataSpecificationsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -6848,26 +6045,22 @@ export function referenceElementFromJsonable(
   AasTypes.ReferenceElement,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.ReferenceElement>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.ReferenceElement,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.ReferenceElement>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.ReferenceElement>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForReferenceElement();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_REFERENCE_ELEMENT.get(key);
 
@@ -6882,7 +6075,7 @@ export function referenceElementFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.ReferenceElement,
@@ -6894,18 +6087,14 @@ export function referenceElementFromJsonable(
     }
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.ReferenceElement
+  const modelTypeError = checkModelType(setter.modelType, "ReferenceElement");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.ReferenceElement,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "ReferenceElement") {
-    return newDeserializationError<
-      AasTypes.ReferenceElement
-    >(
-      "Expected model type 'ReferenceElement', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -6968,21 +6157,9 @@ class SetterForBlob {
   setExtensionsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -7048,21 +6225,9 @@ class SetterForBlob {
   setDisplayNameFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -7088,21 +6253,9 @@ class SetterForBlob {
   setDescriptionFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -7148,21 +6301,9 @@ class SetterForBlob {
   setSupplementalSemanticIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -7188,21 +6329,9 @@ class SetterForBlob {
   setQualifiersFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -7228,21 +6357,9 @@ class SetterForBlob {
   setEmbeddedDataSpecificationsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -7336,26 +6453,22 @@ export function blobFromJsonable(
   AasTypes.Blob,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.Blob>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Blob,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.Blob>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.Blob>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForBlob();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_BLOB.get(key);
 
@@ -7370,7 +6483,7 @@ export function blobFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.Blob,
@@ -7390,18 +6503,14 @@ export function blobFromJsonable(
     );
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.Blob
+  const modelTypeError = checkModelType(setter.modelType, "Blob");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Blob,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "Blob") {
-    return newDeserializationError<
-      AasTypes.Blob
-    >(
-      "Expected model type 'Blob', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -7465,21 +6574,9 @@ class SetterForFile {
   setExtensionsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -7545,21 +6642,9 @@ class SetterForFile {
   setDisplayNameFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -7585,21 +6670,9 @@ class SetterForFile {
   setDescriptionFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -7645,21 +6718,9 @@ class SetterForFile {
   setSupplementalSemanticIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -7685,21 +6746,9 @@ class SetterForFile {
   setQualifiersFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -7725,21 +6774,9 @@ class SetterForFile {
   setEmbeddedDataSpecificationsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -7833,26 +6870,22 @@ export function fileFromJsonable(
   AasTypes.File,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.File>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.File,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.File>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.File>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForFile();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_FILE.get(key);
 
@@ -7867,7 +6900,7 @@ export function fileFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.File,
@@ -7887,18 +6920,14 @@ export function fileFromJsonable(
     );
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.File
+  const modelTypeError = checkModelType(setter.modelType, "File");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.File,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "File") {
-    return newDeserializationError<
-      AasTypes.File
-    >(
-      "Expected model type 'File', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -7964,21 +6993,9 @@ class SetterForAnnotatedRelationshipElement {
   setExtensionsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -8044,21 +7061,9 @@ class SetterForAnnotatedRelationshipElement {
   setDisplayNameFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -8084,21 +7089,9 @@ class SetterForAnnotatedRelationshipElement {
   setDescriptionFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -8144,21 +7137,9 @@ class SetterForAnnotatedRelationshipElement {
   setSupplementalSemanticIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -8184,21 +7165,9 @@ class SetterForAnnotatedRelationshipElement {
   setQualifiersFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -8224,21 +7193,9 @@ class SetterForAnnotatedRelationshipElement {
   setEmbeddedDataSpecificationsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -8304,21 +7261,9 @@ class SetterForAnnotatedRelationshipElement {
   setAnnotationsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -8372,26 +7317,22 @@ export function annotatedRelationshipElementFromJsonable(
   AasTypes.AnnotatedRelationshipElement,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.AnnotatedRelationshipElement>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.AnnotatedRelationshipElement,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.AnnotatedRelationshipElement>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.AnnotatedRelationshipElement>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForAnnotatedRelationshipElement();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_ANNOTATED_RELATIONSHIP_ELEMENT.get(key);
 
@@ -8406,7 +7347,7 @@ export function annotatedRelationshipElementFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.AnnotatedRelationshipElement,
@@ -8434,18 +7375,14 @@ export function annotatedRelationshipElementFromJsonable(
     );
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.AnnotatedRelationshipElement
+  const modelTypeError = checkModelType(setter.modelType, "AnnotatedRelationshipElement");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.AnnotatedRelationshipElement,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "AnnotatedRelationshipElement") {
-    return newDeserializationError<
-      AasTypes.AnnotatedRelationshipElement
-    >(
-      "Expected model type 'AnnotatedRelationshipElement', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -8514,21 +7451,9 @@ class SetterForEntity {
   setExtensionsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -8594,21 +7519,9 @@ class SetterForEntity {
   setDisplayNameFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -8634,21 +7547,9 @@ class SetterForEntity {
   setDescriptionFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -8694,21 +7595,9 @@ class SetterForEntity {
   setSupplementalSemanticIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -8734,21 +7623,9 @@ class SetterForEntity {
   setQualifiersFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -8774,21 +7651,9 @@ class SetterForEntity {
   setEmbeddedDataSpecificationsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -8814,21 +7679,9 @@ class SetterForEntity {
   setStatementsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -8894,21 +7747,9 @@ class SetterForEntity {
   setSpecificAssetIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -8962,26 +7803,22 @@ export function entityFromJsonable(
   AasTypes.Entity,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.Entity>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Entity,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.Entity>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.Entity>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForEntity();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_ENTITY.get(key);
 
@@ -8996,7 +7833,7 @@ export function entityFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.Entity,
@@ -9016,18 +7853,14 @@ export function entityFromJsonable(
     );
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.Entity
+  const modelTypeError = checkModelType(setter.modelType, "Entity");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Entity,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "Entity") {
-    return newDeserializationError<
-      AasTypes.Entity
-    >(
-      "Expected model type 'Entity', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -9340,26 +8173,22 @@ export function eventPayloadFromJsonable(
   AasTypes.EventPayload,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.EventPayload>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.EventPayload,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.EventPayload>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.EventPayload>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForEventPayload();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_EVENT_PAYLOAD.get(key);
 
@@ -9374,7 +8203,7 @@ export function eventPayloadFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.EventPayload,
@@ -9441,23 +8270,19 @@ export function eventElementFromJsonable(
   AasTypes.IEventElement,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.IEventElement>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.IEventElement,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.IEventElement>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.IEventElement>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonable["modelType"];
+  const modelType = jsonObject["modelType"];
   if (modelType === undefined) {
     return newDeserializationError<AasTypes.IEventElement>(
       "The required property modelType is missing"
@@ -9531,21 +8356,9 @@ class SetterForBasicEventElement {
   setExtensionsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -9611,21 +8424,9 @@ class SetterForBasicEventElement {
   setDisplayNameFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -9651,21 +8452,9 @@ class SetterForBasicEventElement {
   setDescriptionFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -9711,21 +8500,9 @@ class SetterForBasicEventElement {
   setSupplementalSemanticIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -9751,21 +8528,9 @@ class SetterForBasicEventElement {
   setQualifiersFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -9791,21 +8556,9 @@ class SetterForBasicEventElement {
   setEmbeddedDataSpecificationsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -10019,26 +8772,22 @@ export function basicEventElementFromJsonable(
   AasTypes.BasicEventElement,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.BasicEventElement>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.BasicEventElement,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.BasicEventElement>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.BasicEventElement>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForBasicEventElement();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_BASIC_EVENT_ELEMENT.get(key);
 
@@ -10053,7 +8802,7 @@ export function basicEventElementFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.BasicEventElement,
@@ -10089,18 +8838,14 @@ export function basicEventElementFromJsonable(
     );
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.BasicEventElement
+  const modelTypeError = checkModelType(setter.modelType, "BasicEventElement");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.BasicEventElement,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "BasicEventElement") {
-    return newDeserializationError<
-      AasTypes.BasicEventElement
-    >(
-      "Expected model type 'BasicEventElement', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -10172,21 +8917,9 @@ class SetterForOperation {
   setExtensionsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -10252,21 +8985,9 @@ class SetterForOperation {
   setDisplayNameFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -10292,21 +9013,9 @@ class SetterForOperation {
   setDescriptionFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -10352,21 +9061,9 @@ class SetterForOperation {
   setSupplementalSemanticIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -10392,21 +9089,9 @@ class SetterForOperation {
   setQualifiersFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -10432,21 +9117,9 @@ class SetterForOperation {
   setEmbeddedDataSpecificationsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -10472,21 +9145,9 @@ class SetterForOperation {
   setInputVariablesFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -10512,21 +9173,9 @@ class SetterForOperation {
   setOutputVariablesFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -10552,21 +9201,9 @@ class SetterForOperation {
   setInoutputVariablesFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -10620,26 +9257,22 @@ export function operationFromJsonable(
   AasTypes.Operation,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.Operation>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Operation,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.Operation>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.Operation>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForOperation();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_OPERATION.get(key);
 
@@ -10654,7 +9287,7 @@ export function operationFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.Operation,
@@ -10666,18 +9299,14 @@ export function operationFromJsonable(
     }
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.Operation
+  const modelTypeError = checkModelType(setter.modelType, "Operation");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Operation,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "Operation") {
-    return newDeserializationError<
-      AasTypes.Operation
-    >(
-      "Expected model type 'Operation', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -10745,26 +9374,22 @@ export function operationVariableFromJsonable(
   AasTypes.OperationVariable,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.OperationVariable>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.OperationVariable,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.OperationVariable>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.OperationVariable>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForOperationVariable();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_OPERATION_VARIABLE.get(key);
 
@@ -10779,7 +9404,7 @@ export function operationVariableFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.OperationVariable,
@@ -10845,21 +9470,9 @@ class SetterForCapability {
   setExtensionsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -10925,21 +9538,9 @@ class SetterForCapability {
   setDisplayNameFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -10965,21 +9566,9 @@ class SetterForCapability {
   setDescriptionFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -11025,21 +9614,9 @@ class SetterForCapability {
   setSupplementalSemanticIdsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -11065,21 +9642,9 @@ class SetterForCapability {
   setQualifiersFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -11105,21 +9670,9 @@ class SetterForCapability {
   setEmbeddedDataSpecificationsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -11173,26 +9726,22 @@ export function capabilityFromJsonable(
   AasTypes.Capability,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.Capability>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Capability,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.Capability>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.Capability>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForCapability();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_CAPABILITY.get(key);
 
@@ -11207,7 +9756,7 @@ export function capabilityFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.Capability,
@@ -11219,18 +9768,14 @@ export function capabilityFromJsonable(
     }
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.Capability
+  const modelTypeError = checkModelType(setter.modelType, "Capability");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Capability,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "Capability") {
-    return newDeserializationError<
-      AasTypes.Capability
-    >(
-      "Expected model type 'Capability', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -11288,21 +9833,9 @@ class SetterForConceptDescription {
   setExtensionsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -11368,21 +9901,9 @@ class SetterForConceptDescription {
   setDisplayNameFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -11408,21 +9929,9 @@ class SetterForConceptDescription {
   setDescriptionFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -11488,21 +9997,9 @@ class SetterForConceptDescription {
   setEmbeddedDataSpecificationsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -11528,21 +10025,9 @@ class SetterForConceptDescription {
   setIsCaseOfFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -11596,26 +10081,22 @@ export function conceptDescriptionFromJsonable(
   AasTypes.ConceptDescription,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.ConceptDescription>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.ConceptDescription,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.ConceptDescription>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.ConceptDescription>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForConceptDescription();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_CONCEPT_DESCRIPTION.get(key);
 
@@ -11630,7 +10111,7 @@ export function conceptDescriptionFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.ConceptDescription,
@@ -11650,18 +10131,14 @@ export function conceptDescriptionFromJsonable(
     );
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.ConceptDescription
+  const modelTypeError = checkModelType(setter.modelType, "ConceptDescription");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.ConceptDescription,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "ConceptDescription") {
-    return newDeserializationError<
-      AasTypes.ConceptDescription
-    >(
-      "Expected model type 'ConceptDescription', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
@@ -11774,21 +10251,9 @@ class SetterForReference {
   setKeysFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -11820,26 +10285,22 @@ export function referenceFromJsonable(
   AasTypes.Reference,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.Reference>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Reference,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.Reference>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.Reference>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForReference();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_REFERENCE.get(key);
 
@@ -11854,7 +10315,7 @@ export function referenceFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.Reference,
@@ -11959,26 +10420,22 @@ export function keyFromJsonable(
   AasTypes.Key,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.Key>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Key,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.Key>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.Key>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForKey();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_KEY.get(key);
 
@@ -11993,7 +10450,7 @@ export function keyFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.Key,
@@ -12106,23 +10563,19 @@ export function abstractLangStringFromJsonable(
   AasTypes.IAbstractLangString,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.IAbstractLangString>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.IAbstractLangString,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.IAbstractLangString>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.IAbstractLangString>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonable["modelType"];
+  const modelType = jsonObject["modelType"];
   if (modelType === undefined) {
     return newDeserializationError<AasTypes.IAbstractLangString>(
       "The required property modelType is missing"
@@ -12209,26 +10662,22 @@ export function langStringNameTypeFromJsonable(
   AasTypes.LangStringNameType,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.LangStringNameType>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.LangStringNameType,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.LangStringNameType>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.LangStringNameType>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForLangStringNameType();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_LANG_STRING_NAME_TYPE.get(key);
 
@@ -12243,7 +10692,7 @@ export function langStringNameTypeFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.LangStringNameType,
@@ -12347,26 +10796,22 @@ export function langStringTextTypeFromJsonable(
   AasTypes.LangStringTextType,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.LangStringTextType>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.LangStringTextType,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.LangStringTextType>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.LangStringTextType>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForLangStringTextType();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_LANG_STRING_TEXT_TYPE.get(key);
 
@@ -12381,7 +10826,7 @@ export function langStringTextTypeFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.LangStringTextType,
@@ -12441,21 +10886,9 @@ class SetterForEnvironment {
   setAssetAdministrationShellsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -12481,21 +10914,9 @@ class SetterForEnvironment {
   setSubmodelsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -12521,21 +10942,9 @@ class SetterForEnvironment {
   setConceptDescriptionsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -12567,26 +10976,22 @@ export function environmentFromJsonable(
   AasTypes.Environment,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.Environment>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.Environment,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.Environment>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.Environment>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForEnvironment();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_ENVIRONMENT.get(key);
 
@@ -12601,7 +11006,7 @@ export function environmentFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.Environment,
@@ -12639,23 +11044,19 @@ export function dataSpecificationContentFromJsonable(
   AasTypes.IDataSpecificationContent,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.IDataSpecificationContent>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.IDataSpecificationContent,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.IDataSpecificationContent>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.IDataSpecificationContent>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
-  const modelType = jsonable["modelType"];
+  const modelType = jsonObject["modelType"];
   if (modelType === undefined) {
     return newDeserializationError<AasTypes.IDataSpecificationContent>(
       "The required property modelType is missing"
@@ -12742,26 +11143,22 @@ export function embeddedDataSpecificationFromJsonable(
   AasTypes.EmbeddedDataSpecification,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.EmbeddedDataSpecification>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.EmbeddedDataSpecification,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.EmbeddedDataSpecification>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.EmbeddedDataSpecification>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForEmbeddedDataSpecification();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_EMBEDDED_DATA_SPECIFICATION.get(key);
 
@@ -12776,7 +11173,7 @@ export function embeddedDataSpecificationFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.EmbeddedDataSpecification,
@@ -12954,26 +11351,22 @@ export function levelTypeFromJsonable(
   AasTypes.LevelType,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.LevelType>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.LevelType,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.LevelType>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.LevelType>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForLevelType();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_LEVEL_TYPE.get(key);
 
@@ -12988,7 +11381,7 @@ export function levelTypeFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.LevelType,
@@ -13110,26 +11503,22 @@ export function valueReferencePairFromJsonable(
   AasTypes.ValueReferencePair,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.ValueReferencePair>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.ValueReferencePair,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.ValueReferencePair>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.ValueReferencePair>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForValueReferencePair();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_VALUE_REFERENCE_PAIR.get(key);
 
@@ -13144,7 +11533,7 @@ export function valueReferencePairFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.ValueReferencePair,
@@ -13200,21 +11589,9 @@ class SetterForValueList {
   setValueReferencePairsFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -13246,26 +11623,22 @@ export function valueListFromJsonable(
   AasTypes.ValueList,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.ValueList>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.ValueList,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.ValueList>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.ValueList>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForValueList();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_VALUE_LIST.get(key);
 
@@ -13280,7 +11653,7 @@ export function valueListFromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.ValueList,
@@ -13375,26 +11748,22 @@ export function langStringPreferredNameTypeIec61360FromJsonable(
   AasTypes.LangStringPreferredNameTypeIec61360,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.LangStringPreferredNameTypeIec61360>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.LangStringPreferredNameTypeIec61360,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.LangStringPreferredNameTypeIec61360>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.LangStringPreferredNameTypeIec61360>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForLangStringPreferredNameTypeIec61360();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_LANG_STRING_PREFERRED_NAME_TYPE_IEC_61360.get(key);
 
@@ -13409,7 +11778,7 @@ export function langStringPreferredNameTypeIec61360FromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.LangStringPreferredNameTypeIec61360,
@@ -13513,26 +11882,22 @@ export function langStringShortNameTypeIec61360FromJsonable(
   AasTypes.LangStringShortNameTypeIec61360,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.LangStringShortNameTypeIec61360>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.LangStringShortNameTypeIec61360,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.LangStringShortNameTypeIec61360>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.LangStringShortNameTypeIec61360>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForLangStringShortNameTypeIec61360();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_LANG_STRING_SHORT_NAME_TYPE_IEC_61360.get(key);
 
@@ -13547,7 +11912,7 @@ export function langStringShortNameTypeIec61360FromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.LangStringShortNameTypeIec61360,
@@ -13651,26 +12016,22 @@ export function langStringDefinitionTypeIec61360FromJsonable(
   AasTypes.LangStringDefinitionTypeIec61360,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.LangStringDefinitionTypeIec61360>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.LangStringDefinitionTypeIec61360,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.LangStringDefinitionTypeIec61360>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.LangStringDefinitionTypeIec61360>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForLangStringDefinitionTypeIec61360();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_LANG_STRING_DEFINITION_TYPE_IEC_61360.get(key);
 
@@ -13685,7 +12046,7 @@ export function langStringDefinitionTypeIec61360FromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.LangStringDefinitionTypeIec61360,
@@ -13766,21 +12127,9 @@ class SetterForDataSpecificationIec61360 {
   setPreferredNameFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -13806,21 +12155,9 @@ class SetterForDataSpecificationIec61360 {
   setShortNameFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -13946,21 +12283,9 @@ class SetterForDataSpecificationIec61360 {
   setDefinitionFromJsonable(
     jsonable: JsonValue
   ): DeserializationError | null {
-    if (jsonable === null) {
-      return new DeserializationError(
-        "Expected an iterable, but got null"
-      );
-    }
-    if (typeof jsonable !== "object") {
-      return new DeserializationError(
-        `Expected an iterable, but got: ${typeof jsonable}`
-      );
-    }
-    if (typeof jsonable[Symbol.iterator] !== "function") {
-      return new DeserializationError(
-        "Expected an iterable with iterator function, " +
-          `but got iterator of type: ${typeof jsonable[Symbol.iterator]}`
-      );
+    const iterableError = checkIsIterable(jsonable);
+    if (iterableError !== null) {
+      return iterableError;
     }
 
     const iterable = <Iterable<JsonValue>>jsonable;
@@ -14094,26 +12419,22 @@ export function dataSpecificationIec61360FromJsonable(
   AasTypes.DataSpecificationIec61360,
   DeserializationError
 > {
-  if (jsonable === null) {
-    return newDeserializationError<AasTypes.DataSpecificationIec61360>(
-      "Expected a JSON object, but got null"
+  const objectError = checkIsJsonObject(jsonable);
+  if (objectError !== null) {
+    return new AasCommon.Either<
+      AasTypes.DataSpecificationIec61360,
+      DeserializationError
+    >(
+      null,
+      objectError
     );
   }
-  if (Array.isArray(jsonable)) {
-    return newDeserializationError<AasTypes.DataSpecificationIec61360>(
-      "Expected a JSON object, but got a JSON array"
-    );
-  }
-  if (typeof jsonable !== "object") {
-    return newDeserializationError<AasTypes.DataSpecificationIec61360>(
-      `Expected a JSON object, but got: ${typeof jsonable}`
-    );
-  }
+  const jsonObject = <JsonObject>jsonable;
 
   const setter = new SetterForDataSpecificationIec61360();
 
-  for (const key in jsonable) {
-    const jsonableValue = jsonable[key];
+  for (const key in jsonObject) {
+    const jsonableValue = jsonObject[key];
     const setterMethod =
       SETTER_MAP_FOR_DATA_SPECIFICATION_IEC_61360.get(key);
 
@@ -14128,7 +12449,7 @@ export function dataSpecificationIec61360FromJsonable(
     const error = setterMethod.call(setter, jsonableValue);
     if (error !== null) {
       error.path.prepend(
-        new PropertySegment(<JsonObject>jsonable, key)
+        new PropertySegment(jsonObject, key)
       );
       return new AasCommon.Either<
         AasTypes.DataSpecificationIec61360,
@@ -14148,18 +12469,14 @@ export function dataSpecificationIec61360FromJsonable(
     );
   }
 
-  if (setter.modelType === null) {
-    return newDeserializationError<
-      AasTypes.DataSpecificationIec61360
+  const modelTypeError = checkModelType(setter.modelType, "DataSpecificationIec61360");
+  if (modelTypeError !== null) {
+    return new AasCommon.Either<
+      AasTypes.DataSpecificationIec61360,
+      DeserializationError
     >(
-      "The required property 'modelType' is missing"
-    );
-  } else if (setter.modelType != "DataSpecificationIec61360") {
-    return newDeserializationError<
-      AasTypes.DataSpecificationIec61360
-    >(
-      "Expected model type 'DataSpecificationIec61360', " +
-      `but got: ${setter.modelType}`
+      null,
+      modelTypeError
     );
   }
 
