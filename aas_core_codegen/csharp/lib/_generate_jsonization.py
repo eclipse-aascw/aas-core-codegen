@@ -98,21 +98,16 @@ if (modelTypeNode == null)
 {II}"Expected a model type, but none is present");
 {I}return null;
 }}
-Nodes.JsonValue? modelTypeValue = modelTypeNode as Nodes.JsonValue;
-if (modelTypeValue == null)
+string? modelType = DeserializeImplementation.StringFrom(
+{I}modelTypeNode, out error);
+if (error != null)
 {{
-{I}error = new Reporting.Error(
-{II}"Expected JsonValue, " +
-{II}$"but got {{modelTypeNode.GetType()}}");
 {I}return null;
 }}
-modelTypeValue.TryGetValue<string>(out string? modelType);
 if (modelType == null)
 {{
-{I}error = new Reporting.Error(
-{II}"Expected a string, " +
-{II}$"but the conversion failed from {{modelTypeValue}}");
-{I}return null;
+{I}throw new System.InvalidOperationException(
+{II}"Unexpected modelType null when error null");
 }}"""
         ),
     ]  # type: List[Stripped]
@@ -215,21 +210,16 @@ if (obj == null)
 Nodes.JsonNode? modelTypeNode = obj["modelType"];
 if (modelTypeNode != null)
 {{
-{I}Nodes.JsonValue? modelTypeValue = modelTypeNode as Nodes.JsonValue;
-{I}if (modelTypeValue == null)
+{I}string? modelType = DeserializeImplementation.StringFrom(
+{II}modelTypeNode, out error);
+{I}if (error != null)
 {I}{{
-{II}error = new Reporting.Error(
-{III}"Expected JsonValue, " +
-{III}$"but got {{modelTypeNode.GetType()}}");
 {II}return null;
 {I}}}
-{I}modelTypeValue.TryGetValue<string>(out string? modelType);
 {I}if (modelType == null)
 {I}{{
-{II}error = new Reporting.Error(
-{III}"Expected a string, " +
-{III}$"but the conversion failed from {{modelTypeValue}}");
-{II}return null;
+{II}throw new System.InvalidOperationException(
+{III}"Unexpected modelType null when error null");
 {I}}}
 
 {I}switch (modelType)
