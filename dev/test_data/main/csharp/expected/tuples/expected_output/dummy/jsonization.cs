@@ -705,21 +705,16 @@ namespace dummy
                         "Expected a model type, but none is present");
                     return null;
                 }
-                Nodes.JsonValue? modelTypeValue = modelTypeNode as Nodes.JsonValue;
-                if (modelTypeValue == null)
+                string? modelType = DeserializeImplementation.StringFrom(
+                    modelTypeNode, out error);
+                if (error != null)
                 {
-                    error = new Reporting.Error(
-                        "Expected JsonValue, " +
-                        $"but got {modelTypeNode.GetType()}");
                     return null;
                 }
-                modelTypeValue.TryGetValue<string>(out string? modelType);
                 if (modelType == null)
                 {
-                    error = new Reporting.Error(
-                        "Expected a string, " +
-                        $"but the conversion failed from {modelTypeValue}");
-                    return null;
+                    throw new System.InvalidOperationException(
+                        "Unexpected modelType null when error null");
                 }
 
                 switch (modelType)
