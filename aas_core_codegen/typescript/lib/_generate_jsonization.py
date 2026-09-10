@@ -623,6 +623,251 @@ export function {function_name}(
     )
 
 
+@require(
+    lambda named_union: any(
+        implementer.serialization.with_model_type
+        for implementer in named_union.implementers
+    )
+)
+def _generate_dispatch_map_for_named_union(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """Generate a mapping model type 🠒 de-serialization function for ``named_union``."""
+    mapping_name = typescript_naming.constant_name(
+        Identifier(f"{named_union.name}_from_jsonable_dispatch")
+    )
+
+    union_name = typescript_naming.union_name(named_union.name)
+
+    with_model_type = [
+        implementer
+        for implementer in named_union.implementers
+        if implementer.serialization.with_model_type
+    ]
+
+    mapping_writer = io.StringIO()
+    mapping_writer.write(
+        f"""\
+const {mapping_name} =
+{I}new Map<
+{II}string,
+{II}(JsonValue) => AasCommon.Either<
+{III}AasTypes.{union_name},
+{III}DeserializationError
+{II}>
+{I}>(
+{II}[
+"""
+    )
+
+    for i, implementer in enumerate(with_model_type):
+        if len(implementer.concrete_descendants) == 0:
+            function_name_for_implementer = typescript_naming.function_name(
+                Identifier(f"{implementer.name}_from_jsonable")
+            )
+        else:
+            # NOTE (mristin):
+            # We can not use the public function as it would end in an endless dispatch
+            # loop. Hence, we introduce a function which assumes the type and explicitly
+            # does not dispatch.
+            function_name_for_implementer = typescript_naming.function_name(
+                Identifier(f"{implementer.name}_from_jsonable_without_dispatch")
+            )
+
+        implementer_literal = typescript_common.string_literal(
+            naming.json_model_type(implementer.name)
+        )
+
+        mapping_writer.write(
+            f"""\
+{III}[
+{IIII}{implementer_literal},
+{IIII}{function_name_for_implementer}
+{III}]"""
+        )
+
+        if i < len(with_model_type) - 1:
+            mapping_writer.write(",\n")
+        else:
+            mapping_writer.write("\n")
+
+    mapping_writer.write(
+        f"""\
+{II}]
+{I});"""
+    )
+
+    return Stripped(mapping_writer.getvalue())
+
+
+def _generate_named_union_from_jsonable(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """
+    Generate the de-serialization dispatch for the named union.
+
+    We dispatch on ``modelType`` for every implementer which sets it, and
+    fall back to testing which implementer's required properties are all
+    present for the remaining implementers. This mirrors the per-implementer
+    partitioning which we already verified in the intermediate
+    representation, so every implementer is covered by exactly one of the
+    two strategies.
+    """
+    function_name = typescript_naming.function_name(
+        Identifier(f"{named_union.name}_from_jsonable")
+    )
+
+    union_name = typescript_naming.union_name(named_union.name)
+
+    with_model_type = [
+        implementer
+        for implementer in named_union.implementers
+        if implementer.serialization.with_model_type
+    ]
+    without_model_type = [
+        implementer
+        for implementer in named_union.implementers
+        if not implementer.serialization.with_model_type
+    ]
+
+    blocks = [
+        Stripped(
+            f"""\
+const objectError = checkIsJsonObject(jsonable);
+if (objectError !== null) {{
+{I}return new AasCommon.Either<
+{II}AasTypes.{union_name},
+{II}DeserializationError
+{I}>(
+{II}null,
+{II}objectError
+{I});
+}}
+const jsonObject = <JsonObject>jsonable;"""
+        )
+    ]  # type: List[Stripped]
+
+    if len(with_model_type) > 0:
+        mapping_name = typescript_naming.constant_name(
+            Identifier(f"{named_union.name}_from_jsonable_dispatch")
+        )
+
+        blocks.append(
+            Stripped(
+                f"""\
+const modelType = jsonObject["modelType"];
+if (modelType !== undefined) {{
+{I}if (typeof modelType !== "string") {{
+{II}return newDeserializationError<AasTypes.{union_name}>(
+{III}`Expected the property modelType to be a string, but got: ${{typeof modelType}}`
+{II});
+{I}}}
+
+{I}const dispatch = {mapping_name}.get(modelType);
+{I}if (dispatch === undefined) {{
+{II}return newDeserializationError<AasTypes.{union_name}>(
+{III}`Unexpected model type for {union_name}: ${{modelType}}`
+{II});
+{I}}}
+
+{I}return dispatch(jsonable);
+}}"""
+            )
+        )
+    else:
+        # NOTE (mristin):
+        # None of the implementers of this named union set ``modelType``, so
+        # a ``modelType`` property on the wire can never be legitimate --
+        # report it immediately instead of silently falling through to the
+        # structural checks below.
+        blocks.append(
+            Stripped(
+                f"""\
+const modelType = jsonObject["modelType"];
+if (modelType !== undefined) {{
+{I}return newDeserializationError<AasTypes.{union_name}>(
+{II}`Unexpected model type for {union_name}: ${{modelType}}`
+{I});
+}}"""
+            )
+        )
+
+    for implementer in without_model_type:
+        required_json_names = [
+            implementer.properties_by_name[arg.name].json_name
+            for arg in implementer.constructor.arguments
+            if not isinstance(arg.type_annotation, intermediate.OptionalTypeAnnotation)
+        ]
+        assert len(required_json_names) > 0, (
+            f"Expected the structurally-dispatched implementer "
+            f"{implementer.name!r} of the named union {named_union.name!r} "
+            f"to have at least one required property; this should have "
+            f"already been verified in the intermediate representation."
+        )
+
+        implementer_function = typescript_naming.function_name(
+            Identifier(f"{implementer.name}_from_jsonable")
+        )
+
+        conditions = [
+            f"jsonObject[{typescript_common.string_literal(json_name)}] "
+            f"!== undefined"
+            for json_name in required_json_names
+        ]
+
+        one_liner = f"if ({' && '.join(conditions)}) {{"
+        if len(one_liner) <= 70:
+            if_stmt = Stripped(one_liner)
+        else:
+            joined_conditions = "\n&& ".join(conditions)
+            if_stmt = Stripped(
+                f"""\
+if (
+{II}{indent_but_first_line(joined_conditions, II)}
+) {{"""
+            )
+
+        blocks.append(
+            Stripped(
+                f"""\
+{if_stmt}
+{I}return {implementer_function}(jsonable);
+}}"""
+            )
+        )
+
+    blocks.append(
+        Stripped(
+            f"""\
+return newDeserializationError<AasTypes.{union_name}>(
+{I}"Could not determine the concrete type of {union_name} for the " +
+{II}"given JSON object"
+);"""
+        )
+    )
+
+    body = "\n\n".join(blocks)
+
+    return Stripped(
+        f"""\
+/**
+ * Parse `jsonable` as an instance
+ * of {{@link {typescript_common.TYPES_MODULE}!{union_name}}}.
+ *
+ * @param jsonable - to be parsed
+ * @returns parsed instance, or error if `jsonable` is invalid
+ */
+function {function_name}(
+{I}jsonable: JsonValue
+): AasCommon.Either<
+{I}AasTypes.{union_name},
+{I}DeserializationError
+> {{
+{I}{indent_but_first_line(body, I)}
+}}"""
+    )
+
+
 _PARSE_FUNCTION_BY_PRIMITIVE_TYPE = {
     intermediate.PrimitiveType.BOOL: "booleanFromJsonable",
     intermediate.PrimitiveType.INT: "integerFromJsonable",
@@ -673,6 +918,11 @@ def _parse_function_for_atomic_value(
 
         elif isinstance(our_type, intermediate.ConstrainedPrimitive):
             function_name = _PARSE_FUNCTION_BY_PRIMITIVE_TYPE[our_type.constrainee]
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            function_name = typescript_naming.function_name(
+                Identifier(f"{our_type.name}_from_jsonable")
+            )
 
         else:
             assert_never(our_type)
@@ -1315,7 +1565,12 @@ AasStringification.{must_to_str_name}(
             raise AssertionError("This case should have been handled before.")
 
         elif isinstance(
-            type_anno.our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+            type_anno.our_type,
+            (
+                intermediate.AbstractClass,
+                intermediate.ConcreteClass,
+                intermediate.NamedUnion,
+            ),
         ):
             return Stripped(f"this.transform({access_expression})")
 
@@ -1406,7 +1661,11 @@ jsonable[{key_literal}] = serializeArray(
 
                 elif isinstance(
                     type_anno.items.our_type,
-                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                    (
+                        intermediate.AbstractClass,
+                        intermediate.ConcreteClass,
+                        intermediate.NamedUnion,
+                    ),
                 ):
                     # NOTE (mristin):
                     # ``this.transform`` needs a bound ``this``, so this is the
@@ -1807,6 +2066,10 @@ function newDeserializationError<T>(
                 blocks.append(_generate_setter(cls=our_type))
 
                 blocks.append(_generate_concrete_class_from_jsonable(cls=our_type))
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            blocks.append(_generate_named_union_from_jsonable(named_union=our_type))
+
         else:
             assert_never(our_type)
 
@@ -1831,6 +2094,19 @@ function newDeserializationError<T>(
 
         else:
             assert_never(cls)
+
+    # NOTE (mristin):
+    # We keep the named unions' own dispatch maps in a loop of their own,
+    # separate from the loop above, since a named union is never a member of
+    # ``symbol_table.classes``.
+    for named_union in symbol_table.named_unions:
+        if any(
+            implementer.serialization.with_model_type
+            for implementer in named_union.implementers
+        ):
+            blocks.append(
+                _generate_dispatch_map_for_named_union(named_union=named_union)
+            )
 
     blocks.append(Stripped("// endregion"))
 

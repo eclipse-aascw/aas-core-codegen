@@ -479,11 +479,10 @@ void IteratorOverSomething::Execute() {
         >& the_some_items(
           casted_->some_items()
         );
+        const auto& item_value = the_some_items[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_some_items[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -517,11 +516,10 @@ void IteratorOverSomething::Execute() {
         >& the_some_simples(
           casted_->some_simples()
         );
+        const auto& item_value = the_some_simples[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_some_simples[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 

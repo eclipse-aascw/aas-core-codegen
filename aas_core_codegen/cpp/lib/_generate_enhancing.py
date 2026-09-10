@@ -26,6 +26,28 @@ from aas_core_codegen.cpp.common import (
 )
 
 
+def _generate_wrap_named_union_declaration(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """Generate the ``Wrap`` overload declaration for a named union."""
+    union_name = cpp_naming.union_name(named_union.name)
+
+    function_name = cpp_naming.function_name(Identifier("wrap"))
+
+    return Stripped(
+        f"""\
+template <typename E>
+types::{union_name} {function_name}(
+{I}const types::{union_name}& that,
+{I}const std::function<
+{II}std::shared_ptr<E>(
+{III}const std::shared_ptr<types::IClass>&
+{II})
+{I}>& factory
+);"""
+    )
+
+
 def _generate_wrap_forward_declarations(
     symbol_table: intermediate.SymbolTable,
 ) -> List[Stripped]:
@@ -55,7 +77,69 @@ std::shared_ptr<
             )
         )
 
+    for named_union in symbol_table.named_unions:
+        result.append(_generate_wrap_named_union_declaration(named_union=named_union))
+
     return result
+
+
+@require(lambda named_union: len(named_union.implementers) > 0)
+def _generate_wrap_for_named_union(named_union: intermediate.NamedUnion) -> Stripped:
+    """
+    Generate the ``Wrap`` overload implementation for a named union.
+
+    A named union's value is a ``std::variant``, not a polymorphic pointer,
+    so there is no need for the ``model_type()``/``dynamic_pointer_cast``
+    dance that the per-class ``Wrap`` overloads need -- the variant already
+    knows which alternative it holds through its own ``index()``. Each case
+    simply delegates to the corresponding implementer's own (already
+    generated) ``Wrap<E>`` overload and re-wraps the result.
+    """
+    union_name = cpp_naming.union_name(named_union.name)
+
+    case_blocks = []  # type: List[Stripped]
+    for i, _ in enumerate(named_union.implementers):
+        case_blocks.append(
+            Stripped(
+                f"""\
+case {i}:
+{I}return types::{union_name}(
+{II}Wrap<E>(
+{III}std::get<{i}>(that),
+{III}factory
+{II})
+{I});"""
+            )
+        )
+
+    case_blocks.append(
+        Stripped(
+            f"""\
+default:
+{I}throw std::logic_error("Invalid variant index");"""
+        )
+    )
+
+    case_blocks_joined = "\n".join(case_blocks)
+
+    function_name = cpp_naming.function_name(Identifier("wrap"))
+
+    return Stripped(
+        f"""\
+template <typename E>
+types::{union_name} {function_name}(
+{I}const types::{union_name}& that,
+{I}const std::function<
+{II}std::shared_ptr<E>(
+{III}const std::shared_ptr<types::IClass>&
+{II})
+{I}>& factory
+) {{
+{I}switch (that.index()) {{
+{II}{indent_but_first_line(case_blocks_joined, II)}
+{I}}}
+}}"""
+    )
 
 
 def _generate_enhanced_interface_definition() -> Stripped:
@@ -329,6 +413,66 @@ class {enhanced_cls_name}
 # in a single function.
 
 
+def _generate_wrap_snippet_for_required_list_of_referencable_items(
+    prop: intermediate.Property,
+    type_anno: intermediate.ListTypeAnnotation,
+    setter_name: Identifier,
+) -> Stripped:
+    """
+    Generate the snippet to recursively wrap a required list of referencable items.
+
+    The list items may be a class or a named union -- ``Wrap<E>`` already
+    has a dedicated overload for each, so the loop body is identical either
+    way. We call this separately from a class-typed items branch and a
+    named-union-typed items branch, and we keep those branches separate so
+    each can diverge independently, *e.g.* if primitive items are ever
+    allowed into a named union.
+    """
+    getter_name = cpp_naming.getter_name(prop.name)
+
+    const_ref_prop_type = cpp_common.generate_type_with_const_ref_if_applicable(
+        type_annotation=type_anno, types_namespace=Identifier("types")
+    )
+
+    prop_type = cpp_common.generate_type(
+        type_annotation=type_anno,
+        types_namespace=cpp_common.TYPES_NAMESPACE,
+    )
+
+    item_type = cpp_common.generate_type_with_const_ref_if_applicable(
+        type_annotation=type_anno.items, types_namespace=cpp_common.TYPES_NAMESPACE
+    )
+
+    return Stripped(
+        f"""\
+{{
+{I}{indent_but_first_line(const_ref_prop_type, I)} value(
+{II}that->{getter_name}()
+{I});
+{I}const std::size_t size = value.size();
+
+{I}{indent_but_first_line(prop_type, I)} wrapped;
+{I}wrapped.reserve(size);
+
+{I}for (
+{II}{indent_but_first_line(item_type, II)} item
+{II}: value
+{I}) {{
+{II}wrapped.emplace_back(
+{III}Wrap<E>(
+{IIII}item,
+{IIII}factory
+{III})
+{II});
+{I}}}
+
+{I}that->{setter_name}(
+{II}std::move(wrapped)
+{I});
+}}"""
+    )
+
+
 @require(lambda prop: not isinstance(prop, intermediate.OptionalTypeAnnotation))
 def _generate_wrap_snippet_for_required_property(
     prop: intermediate.Property,
@@ -376,6 +520,26 @@ that->{setter_name}(
 {I})
 );"""
             )
+
+        elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # The non-mutating getter means here that we will not change the reference,
+            # but we want to recurse into the object. ``Wrap<E>`` already has a
+            # dedicated overload for the union's own value type (see
+            # ``_generate_wrap_for_named_union``), so this call resolves
+            # correctly regardless of the union's alternatives.
+            getter_name = cpp_naming.getter_name(prop.name)
+
+            return Stripped(
+                f"""\
+that->{setter_name}(
+{I}Wrap<E>(
+{II}that->{getter_name}(),
+{II}factory
+{I})
+);"""
+            )
+
         else:
             # noinspection PyTypeChecker
             assert_never(type_anno.our_type)
@@ -400,51 +564,13 @@ that->{setter_name}(
                 type_anno.items.our_type,
                 (intermediate.AbstractClass, intermediate.ConcreteClass),
             ):
-                getter_name = cpp_naming.getter_name(prop.name)
-
-                const_ref_prop_type = (
-                    cpp_common.generate_type_with_const_ref_if_applicable(
-                        type_annotation=type_anno, types_namespace=Identifier("types")
-                    )
+                return _generate_wrap_snippet_for_required_list_of_referencable_items(
+                    prop=prop, type_anno=type_anno, setter_name=setter_name
                 )
 
-                prop_type = cpp_common.generate_type(
-                    type_annotation=type_anno,
-                    types_namespace=cpp_common.TYPES_NAMESPACE,
-                )
-
-                item_type = cpp_common.generate_type_with_const_ref_if_applicable(
-                    type_annotation=type_anno.items,
-                    types_namespace=cpp_common.TYPES_NAMESPACE,
-                )
-
-                return Stripped(
-                    f"""\
-{{
-{I}{indent_but_first_line(const_ref_prop_type, I)} value(
-{II}that->{getter_name}()
-{I});
-{I}const std::size_t size = value.size();
-
-{I}{indent_but_first_line(prop_type, I)} wrapped;
-{I}wrapped.reserve(size);
-
-{I}for (
-{II}{indent_but_first_line(item_type, II)} item
-{II}: value
-{I}) {{
-{II}wrapped.emplace_back(
-{III}Wrap<E>(
-{IIII}item,
-{IIII}factory
-{III})
-{II});
-{I}}}
-
-{I}that->{setter_name}(
-{II}std::move(wrapped)
-{I});
-}}"""
+            elif isinstance(type_anno.items.our_type, intermediate.NamedUnion):
+                return _generate_wrap_snippet_for_required_list_of_referencable_items(
+                    prop=prop, type_anno=type_anno, setter_name=setter_name
                 )
 
             else:
@@ -489,12 +615,18 @@ that->{setter_name}(
                 "nested optionals, lists or tuples are expected here."
             )
 
-            if isinstance(
+            is_class_item = isinstance(
                 item_type_anno, intermediate.OurTypeAnnotation
             ) and isinstance(
                 item_type_anno.our_type,
                 (intermediate.AbstractClass, intermediate.ConcreteClass),
-            ):
+            )
+
+            is_named_union_item = isinstance(
+                item_type_anno, intermediate.OurTypeAnnotation
+            ) and isinstance(item_type_anno.our_type, intermediate.NamedUnion)
+
+            if is_class_item or is_named_union_item:
                 class_indices.append(i)
 
         if len(class_indices) == 0:
@@ -615,17 +747,54 @@ if (that->{getter_name}().has_value()) {{
 {I});
 }}"""
             )
+        elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # Unlike a class, a named union's value is not a pointer, so the
+            # wrapped result is not itself wrapped in a further shared_ptr.
+            getter_name = cpp_naming.getter_name(prop.name)
+
+            value_type = cpp_common.generate_type(
+                type_annotation=type_anno, types_namespace=Identifier("types")
+            )
+
+            return Stripped(
+                f"""\
+if (that->{getter_name}().has_value()) {{
+{I}const {indent_but_first_line(value_type, II)}& value(
+{II}that->{getter_name}().value()
+{I});
+
+{I}{indent_but_first_line(value_type, I)} wrapped(
+{II}Wrap<E>(
+{III}value,
+{III}factory
+{II})
+{I});
+
+{I}that->{setter_name}(
+{II}common::make_optional(
+{III}std::move(wrapped)
+{II})
+{I});
+}}"""
+            )
         else:
             # noinspection PyTypeChecker
             assert_never(type_anno.our_type)
     elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        assert isinstance(
+        is_list_of_classes = isinstance(
             type_anno.items, intermediate.OurTypeAnnotation
         ) and isinstance(
             type_anno.items.our_type,
             (intermediate.AbstractClass, intermediate.ConcreteClass),
-        ), (
-            f"NOTE (mristin): We expect only lists of classes "
+        )
+
+        is_list_of_named_unions = isinstance(
+            type_anno.items, intermediate.OurTypeAnnotation
+        ) and isinstance(type_anno.items.our_type, intermediate.NamedUnion)
+
+        assert is_list_of_classes or is_list_of_named_unions, (
+            f"NOTE (mristin): We expect only lists of classes or named unions "
             f"at the moment, but you specified {type_anno}. "
             f"Please contact the developers if you need this feature."
         )
@@ -681,12 +850,18 @@ if (that->{getter_name}().has_value()) {{
                 "nested optionals, lists or tuples are expected here."
             )
 
-            if isinstance(
+            is_class_item = isinstance(
                 item_type_anno, intermediate.OurTypeAnnotation
             ) and isinstance(
                 item_type_anno.our_type,
                 (intermediate.AbstractClass, intermediate.ConcreteClass),
-            ):
+            )
+
+            is_named_union_item = isinstance(
+                item_type_anno, intermediate.OurTypeAnnotation
+            ) and isinstance(item_type_anno.our_type, intermediate.NamedUnion)
+
+            if is_class_item or is_named_union_item:
                 class_indices.append(i)
 
         if len(class_indices) == 0:
@@ -938,6 +1113,9 @@ def _generate_wrap(symbol_table: intermediate.SymbolTable) -> List[Stripped]:
                 interface_name=interface_name, concrete_classes=concrete_classes
             )
         )
+
+    for named_union in symbol_table.named_unions:
+        blocks.append(_generate_wrap_for_named_union(named_union=named_union))
 
     return [
         Stripped(

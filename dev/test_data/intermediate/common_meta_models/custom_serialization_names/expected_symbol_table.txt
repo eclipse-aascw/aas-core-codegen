@@ -124,6 +124,7 @@ SymbolTable(
     'Reference to our type Query_condition'],
   concrete_classes=[
     'Reference to our type Query_condition'],
+  named_unions=[],
   constants=[],
   constants_by_name=...,
   verification_functions=[],

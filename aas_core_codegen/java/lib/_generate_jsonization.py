@@ -186,6 +186,10 @@ def _parse_method_for_atomic_value(
                 cls_name = java_naming.class_name(our_type.name)
                 parse_method = f"try{cls_name}From"
 
+        elif isinstance(our_type, intermediate.NamedUnion):
+            union_name = java_naming.union_name(our_type.name)
+            parse_method = f"try{union_name}From"
+
         else:
             assert_never(our_type)
     else:
@@ -662,6 +666,151 @@ private static Reporting.Result<{name}> try{name}From(JsonNode node) {{
     return Stripped(writer.getvalue()), None
 
 
+def _generate_from_method_for_named_union(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """
+    Generate the deserialization method for the named union ``named_union``.
+
+    Dispatch on ``modelType`` for every implementer which sets it, and fall
+    back to testing which implementer's required properties are all present
+    for the remaining implementers. This mirrors the per-implementer
+    partitioning already verified in the intermediate representation, so
+    every implementer is covered by exactly one of the two strategies.
+    """
+    name = java_naming.union_name(named_union.name)
+
+    with_model_type = [
+        implementer
+        for implementer in named_union.implementers
+        if implementer.serialization.with_model_type
+    ]
+    without_model_type = [
+        implementer
+        for implementer in named_union.implementers
+        if not implementer.serialization.with_model_type
+    ]
+
+    blocks = [
+        Stripped(
+            f"""\
+if (node == null || !node.isObject()) {{
+{I}final Reporting.Error error = new Reporting.Error(
+{II}"Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
+{I}return Reporting.Result.failure(error);
+}}"""
+        ),
+    ]  # type: List[Stripped]
+
+    if len(with_model_type) > 0:
+        switch_writer = io.StringIO()
+        switch_writer.write("switch (modelTypeResult.getResult()) {\n")
+
+        for implementer in with_model_type:
+            model_type = naming.json_model_type(implementer.name)
+            implementer_name = java_naming.class_name(implementer.name)
+            switch_writer.write(
+                f"""\
+{I}case {java_common.string_literal(model_type)}: {{
+{II}final Reporting.Result<{implementer_name}> result = try{implementer_name}From(node);
+{II}if (result.isError()) {{
+{III}return result.castTo({name}.class);
+{II}}}
+{II}return Reporting.Result.success({name}.from{implementer_name}(result.getResult()));
+{I}}}
+"""
+            )
+
+        switch_writer.write(
+            f"""\
+{I}default: {{
+{II}final Reporting.Error error = new Reporting.Error(
+{III}"Unexpected model type for {name}: " + modelTypeResult.getResult());
+{II}return Reporting.Result.failure(error);
+{I}}}
+}}"""
+        )
+
+        blocks.append(
+            Stripped(
+                f"""\
+final JsonNode modelTypeNode = node.get("modelType");
+if (modelTypeNode != null) {{
+{I}final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
+{I}if (modelTypeResult.isError()) {{
+{II}return modelTypeResult.castTo({name}.class);
+{I}}}
+{I}{indent_but_first_line(Stripped(switch_writer.getvalue()), I)}
+}}"""
+            )
+        )
+
+    for implementer in without_model_type:
+        implementer_name = java_naming.class_name(implementer.name)
+
+        required_json_names = [
+            implementer.properties_by_name[arg.name].json_name
+            for arg in implementer.constructor.arguments
+            if not isinstance(arg.type_annotation, intermediate.OptionalTypeAnnotation)
+        ]
+        assert len(required_json_names) > 0, (
+            f"Expected the structurally-dispatched implementer "
+            f"{implementer.name!r} of the named union {named_union.name!r} "
+            f"to have at least one required property; "
+            f"this should have already been verified in the intermediate "
+            f"representation."
+        )
+
+        condition = " && ".join(
+            f"node.get({java_common.string_literal(json_name)}) != null"
+            for json_name in required_json_names
+        )
+
+        blocks.append(
+            Stripped(
+                f"""\
+if ({condition}) {{
+{I}final Reporting.Result<{implementer_name}> result = try{implementer_name}From(node);
+{I}if (result.isError()) {{
+{II}return result.castTo({name}.class);
+{I}}}
+{I}return Reporting.Result.success({name}.from{implementer_name}(result.getResult()));
+}}"""
+            )
+        )
+
+    blocks.append(
+        Stripped(
+            f"""\
+final Reporting.Error error = new Reporting.Error(
+{I}"Could not determine the concrete type of {name} for the given JSON object");
+return Reporting.Result.failure(error);"""
+        )
+    )
+
+    writer = io.StringIO()
+
+    writer.write(
+        f"""\
+/**
+ * Deserialize an instance of {name} from the {{@code node}}.
+ *
+ * @param node JSON node to be parsed
+ */
+public static Reporting.Result<{name}> try{name}From(JsonNode node) {{
+"""
+    )
+
+    for i, block in enumerate(blocks):
+        if i > 0:
+            writer.write("\n\n")
+        writer.write(textwrap.indent(block, I))
+
+    writer.write("\n}")
+
+    return Stripped(writer.getvalue())
+
+
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_deserialize_impl(
     symbol_table: intermediate.SymbolTable,
@@ -833,6 +982,10 @@ private static <T> Reporting.Result<List<T>> parseArray(
                     else:
                         assert block is not None
                         blocks.append(block)
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            blocks.append(_generate_from_method_for_named_union(named_union=our_type))
+
         else:
             assert_never(our_type)
 
@@ -932,6 +1085,12 @@ def _generate_deserialize(
                         name=java_naming.class_name(our_type.name)
                     )
                 )
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            blocks.append(
+                _generate_deserialize_from(name=java_naming.union_name(our_type.name))
+            )
+
         else:
             assert_never(our_type)
 
@@ -1080,12 +1239,20 @@ def _serialize_method_reference_for_atomic_value(
         elif isinstance(our_type, intermediate.ConstrainedPrimitive):
             return _serialize_method_reference_for_primitive_type(our_type.constrainee)
         elif isinstance(
-            our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+            our_type,
+            (
+                intermediate.AbstractClass,
+                intermediate.ConcreteClass,
+                intermediate.NamedUnion,
+            ),
         ):
             # NOTE (mristin):
             # ``transform`` is an instance method of the enclosing
             # ``_Transformer`` class itself, dispatching through the visitor
-            # pattern, so it is referenced bound to ``this``.
+            # pattern, so it is referenced bound to ``this``. A named union
+            # is matched by its own ``transform`` overload (see
+            # :py:func:`_generate_union_transform_helper`), so it can
+            # be referenced exactly like a class.
             return Stripped("this::transform")
         else:
             assert_never(our_type)
@@ -1156,8 +1323,18 @@ Serialize.{method_name}(
                 primitive_type=our_type.constrainee, source_expr=source_expr
             )
         elif isinstance(
-            our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+            our_type,
+            (
+                intermediate.AbstractClass,
+                intermediate.ConcreteClass,
+                intermediate.NamedUnion,
+            ),
         ):
+            # NOTE (mristin):
+            # A named union is matched by its own ``transform`` overload
+            # (see :py:func:`_generate_union_transform_helper`), so it
+            # can be transformed exactly like a class instance here.
+
             # We can not use textwrap due to indent_but_first_line.
             return Stripped(
                 f"""\
@@ -1333,6 +1510,35 @@ public JsonNode {transform_name}(
     return Stripped(writer.getvalue()), None
 
 
+def _generate_union_transform_helper() -> Stripped:
+    """
+    Generate a single ``transform`` overload shared by every named union.
+
+    A named union is not itself an ``IClass``, so it can not be dispatched by
+    the inherited, ``IClass``-typed ``transform(IClass)`` overload of
+    ``AbstractTransformer``. We add this overload, single-purpose, next to
+    the per-class ``transform_*`` overrides, so that call sites can keep
+    passing ``transform`` around as a plain method reference or calling it
+    directly, regardless of whether the value at hand is a class instance or
+    a named union -- see :py:func:`_generate_serialize_atomic_value` and
+    :py:func:`_serialize_method_reference_for_atomic_value`.
+
+    Dispatching over the common ``IUnion<?>`` (see ``_generate_iunion`` in
+    ``_generate_types.py``) instead of the union's own type means we need
+    only this one overload for *all* named unions, not one per union.
+
+    Should a named union ever be allowed to flatten primitive or enumeration
+    alternatives, only the body of this method has to change (to dispatch on
+    the underlying value's kind) -- every call site stays the same.
+    """
+    return Stripped(
+        f"""\
+private JsonNode transform(IUnion<?> that) {{
+{I}return transform(that.getUnderlying());
+}}"""
+    )
+
+
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_transformer(
     symbol_table: intermediate.SymbolTable,
@@ -1434,8 +1640,18 @@ private static <T> ArrayNode serializeArray(
                 else:
                     assert block is not None
                     blocks.append(block)
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            # A named union is never double-dispatched here directly -- it
+            # is unwrapped by the single shared ``transform(IUnion<?>)``
+            # overload instead (see :py:func:`_generate_union_transform_helper`).
+            pass
+
         else:
             assert_never(our_type)
+
+    if len(symbol_table.named_unions) > 0:
+        blocks.append(_generate_union_transform_helper())
 
     if len(errors) > 0:
         return None, errors

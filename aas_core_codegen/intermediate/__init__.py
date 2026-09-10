@@ -61,6 +61,7 @@ TranspilableVerification = _types.TranspilableVerification
 VerificationUnion = _types.VerificationUnion
 Signature = _types.Signature
 Interface = _types.Interface
+NamedUnion = _types.NamedUnion
 SymbolTable = _types.SymbolTable
 
 type_annotations_equal = _types.type_annotations_equal

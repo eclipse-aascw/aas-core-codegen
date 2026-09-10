@@ -503,6 +503,37 @@ def _generate_enhanced(
     return files, None
 
 
+def _generate_union_transform_helper() -> Stripped:
+    """
+    Generate a single ``transform`` overload shared by every named union.
+
+    A named union is not itself an ``IClass``, so it can not be dispatched
+    by the inherited, ``IClass``-typed ``transform`` overload, and its
+    underlying instance has to be unwrapped, enhanced and wrapped back up.
+    We add this overload, single-purpose, next to the per-class ``transform``
+    overrides, so that call sites can keep calling ``transform`` directly,
+    regardless of whether the value at hand is a class instance or a named
+    union.
+
+    ``T`` is bounded by ``IUnion<T>`` (see ``_generate_iunion`` in
+    ``_generate_types.py``) instead of by the union's own type, so we need
+    only this one overload for *all* named unions, not one per union --
+    while ``T.withUnderlying(...)`` still lets the result come back as the
+    caller's own concrete union type, so call sites need no downcast.
+
+    Should a named union ever be allowed to flatten primitive or enumeration
+    alternatives, only the body of this method has to change (to dispatch on
+    the underlying value's kind) -- every call site stays the same.
+    """
+    return Stripped(
+        f"""\
+private <T extends IUnion<T>> T transform(T that) {{
+{I}return that.withUnderlying(
+{II}transform(that.getUnderlying()));
+}}"""
+    )
+
+
 @require(lambda cls: not cls.is_implementation_specific)
 def _generate_transform(cls: intermediate.ConcreteClass) -> Stripped:
     """Generate the transform method to wrap the instance with an enhancement."""
@@ -586,6 +617,36 @@ if (that.{getter_name}().isPresent()) {{
                     )
 
                 wrap_stmt = Stripped(writer.getvalue())
+            elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # A named union has its own ``transform`` overload (see
+                # :py:func:`_generate_union_transform_helper`), which
+                # already returns the union's own type, so no downcast is
+                # needed here, unlike the class branch above.
+                getter_name = java_naming.getter_name(prop.name)
+                setter_name = java_naming.setter_name(prop.name)
+                union_name = java_naming.union_name(type_anno.our_type.name)
+
+                stmt = Stripped(f"that.{setter_name}(transform({prop_name}));")
+
+                writer = io.StringIO()
+
+                if optional:
+                    writer.write(
+                        f"""\
+if (that.{getter_name}().isPresent()) {{
+{I}{union_name} {prop_name} = that.{getter_name}().get();
+{I}{indent_but_first_line(stmt, I)}
+}}"""
+                    )
+                else:
+                    writer.write(
+                        f"""\
+{union_name} {prop_name} = that.{getter_name}();
+{stmt}"""
+                    )
+
+                wrap_stmt = Stripped(writer.getvalue())
             else:
                 assert_never(type_anno.our_type)
         elif isinstance(type_anno, intermediate.ListTypeAnnotation):
@@ -601,20 +662,21 @@ if (that.{getter_name}().isPresent()) {{
             )
             # fmt: on
 
-            if not (
-                isinstance(type_anno.items, intermediate.OurTypeAnnotation)
-                and isinstance(
-                    type_anno.items.our_type,
-                    (intermediate.AbstractClass, intermediate.ConcreteClass),
-                )
+            if not isinstance(
+                type_anno.items, intermediate.OurTypeAnnotation
+            ) or not isinstance(
+                type_anno.items.our_type,
+                (
+                    intermediate.AbstractClass,
+                    intermediate.ConcreteClass,
+                    intermediate.NamedUnion,
+                ),
             ):
                 # We can not enhance lists of primitives, constrained
                 # primitives or enumeration literals; nothing to do here.
                 continue
 
-            item_interface_name = java_naming.interface_name(
-                type_anno.items.our_type.name
-            )
+            item_type = java_common.generate_type(type_anno.items)
             transformed_name = java_naming.variable_name(
                 Identifier(f"transformed_{prop.name}")
             )
@@ -623,21 +685,40 @@ if (that.{getter_name}().isPresent()) {{
 
             setter_name = java_naming.setter_name(prop.name)
 
-            stmt = Stripped(
-                f"""\
-List<{item_interface_name}> {transformed_name} = {prop_name}.stream()
+            if isinstance(type_anno.items.our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # A named union has its own ``transform`` overload (see
+                # :py:func:`_generate_union_transform_helper`), which
+                # already returns the union's own type, so it can be passed
+                # on as a bare method reference with no wrapping lambda,
+                # unlike the class branch below, which needs one to downcast.
+                stmt = Stripped(
+                    f"""\
+List<{item_type}> {transformed_name} = {prop_name}.stream()
+{I}.map(this::transform).collect(Collectors.toList());
+that.{setter_name}({transformed_name});"""
+                )
+            else:
+                item_transform_stmt = Stripped(
+                    f"""\
+IClass transformed = transform(item);
+if (!(transformed instanceof {item_type})) {{
+{I}throw new UnsupportedOperationException(
+{II}"Expected the transformed value to be a {item_type} " +
+{II}", but got: " + transformed
+{I});
+}}
+return ({item_type}) transformed;"""
+                )
+
+                stmt = Stripped(
+                    f"""\
+List<{item_type}> {transformed_name} = {prop_name}.stream()
 {I}.map(item -> {{
-{II}IClass transformed = transform(item);
-{II}if (!(transformed instanceof {item_interface_name})) {{
-{III}throw new UnsupportedOperationException(
-{IIII}"Expected the transformed value to be a {item_interface_name} " +
-{IIII}", but got: " + transformed
-{III});
-{II}}}
-{II}return ({item_interface_name}) transformed;
+{II}{indent_but_first_line(item_transform_stmt, II)}
 {I}}}).collect(Collectors.toList());
 that.{setter_name}({transformed_name});"""
-            )
+                )
 
             writer = io.StringIO()
 
@@ -645,14 +726,14 @@ that.{setter_name}({transformed_name});"""
                 writer.write(
                     f"""\
 if (that.{getter_name}().isPresent()) {{
-{I}List<{item_interface_name}> {prop_name} = that.{getter_name}().get();
+{I}List<{item_type}> {prop_name} = that.{getter_name}().get();
 {I}{indent_but_first_line(stmt, I)}
 }}"""
                 )
             else:
                 writer.write(
                     f"""\
-List<{item_interface_name}> {prop_name} = that.{getter_name}();
+List<{item_type}> {prop_name} = that.{getter_name}();
 {stmt}"""
                 )
 
@@ -662,12 +743,16 @@ List<{item_interface_name}> {prop_name} = that.{getter_name}();
                 isinstance(item, intermediate.OurTypeAnnotation)
                 and isinstance(
                     item.our_type,
-                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                    (
+                        intermediate.AbstractClass,
+                        intermediate.ConcreteClass,
+                        intermediate.NamedUnion,
+                    ),
                 )
                 for item in type_anno.items
             ):
-                # We can not enhance tuples none of whose items are classes;
-                # nothing to do here.
+                # We can not enhance tuples none of whose items are classes
+                # or named unions; nothing to do here.
                 continue
 
             tuple_type = java_common.generate_type(type_anno)
@@ -712,6 +797,16 @@ if (!({transformed_name} instanceof {item_interface_name})) {{
                     )
 
                     item_exprs.append(Stripped(casted_name))
+                elif isinstance(
+                    item_type_anno, intermediate.OurTypeAnnotation
+                ) and isinstance(item_type_anno.our_type, intermediate.NamedUnion):
+                    # NOTE (mristin):
+                    # A named union has its own ``transform`` overload (see
+                    # :py:func:`_generate_union_transform_helper`),
+                    # which already returns the union's own type, so no
+                    # downcast (and hence no pre-statement) is needed here,
+                    # unlike the class branch above.
+                    item_exprs.append(Stripped(f"transform({item_access})"))
                 else:
                     item_exprs.append(item_access)
 
@@ -836,6 +931,9 @@ _Wrapper(
             continue
 
         body.append(_generate_transform(cls=cls))
+
+    if len(symbol_table.named_unions) > 0:
+        body.append(_generate_union_transform_helper())
 
     writer = io.StringIO()
     writer.write(

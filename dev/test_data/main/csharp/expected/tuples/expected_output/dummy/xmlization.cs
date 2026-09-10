@@ -2029,7 +2029,8 @@ namespace dummy
             /// </summary>
             /// <remarks>
             /// This is shared by all the property kinds (primitive, enumeration, class,
-            /// interface, list) as they all wrap their content in exactly the same way.
+            /// interface, named union, list) as they all wrap their content in exactly
+            /// the same way.
             /// </remarks>
             /// <typeparam name="T">Type of the property value</typeparam>
             private static void SerializeElement<T>(
@@ -2132,14 +2133,14 @@ namespace dummy
             /// A tuple-typed property is written by <c>SerializeTupleN</c> (see
             /// <see cref="SerializeTuple2{T0, T1}" /> for the arity-2 case, *etc.*),
             /// which -- like <see cref="SerializeElement{T}" /> -- expects an
-            /// <see cref="ElementContentSerializer{T}" /> per item. A class item's own
-            /// <c>Visit</c> method already has that shape (writing its own element
-            /// directly, with no wrapping needed), so it can be passed on unchanged.
-            /// A primitive or enumeration item, on the other hand, first needs to be
-            /// wrapped in its own positional <c>v1</c>, <c>v2</c>, *etc.* element -- this
-            /// adapter closes over the element name so that a tuple-typed property does
-            /// not need to spell out that wrapping (start element/write value/end
-            /// element) at every item, mirroring how
+            /// <see cref="ElementContentSerializer{T}" /> per item. A class or named
+            /// union item's own <c>Visit</c> method (or overload) already has that shape
+            /// (writing its own element directly, with no wrapping needed), so it can be
+            /// passed on unchanged. A primitive or enumeration item, on the other hand,
+            /// first needs to be wrapped in its own positional <c>v1</c>, <c>v2</c>,
+            /// *etc.* element -- this adapter closes over the element name so that
+            /// a tuple-typed property does not need to spell out that wrapping (start
+            /// element/write value/end element) at every item, mirroring how
             /// <see cref="AsTupleItemDeserializer{T}(NamedClassItemDeserializer{T}, string)" />
             /// avoids the equivalent on the read side.
             /// </remarks>

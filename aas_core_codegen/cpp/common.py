@@ -397,6 +397,43 @@ def generate_primitive_type_with_const_ref_if_applicable(
     return code
 
 
+@require(lambda named_union: len(named_union.implementers) > 0)
+def generate_named_union_variant_definition(
+    named_union: intermediate.NamedUnion,
+    types_namespace: Optional[Identifier] = None,
+) -> Stripped:
+    """
+    Generate the right-hand side ``std::variant`` type for a named union.
+
+    This is the ``std::variant`` spelled out over the union's flattened
+    ``implementers`` (one alternative per concrete class) that goes into
+    the ``using {UnionName} = ...;`` alias declared once per named union
+    (see ``_generate_types.py``); call sites elsewhere should reference
+    the union by that alias name instead of re-generating this spelling --
+    see :py:func:`generate_type`.
+    """
+    item_types = []  # type: List[Stripped]
+    for implementer in named_union.implementers:
+        interface_name = cpp_naming.interface_name(implementer.name)
+
+        type_identifier = (
+            interface_name
+            if types_namespace is None
+            else f"{types_namespace}::{interface_name}"
+        )
+
+        item_types.append(Stripped(f"std::shared_ptr<{type_identifier}>"))
+
+    item_types_joined = ",\n".join(item_types)
+
+    return Stripped(
+        f"""\
+std::variant<
+{INDENT}{indent_but_first_line(item_types_joined, INDENT)}
+>"""
+    )
+
+
 def generate_type(
     type_annotation: intermediate.TypeAnnotationUnion,
     types_namespace: Optional[Identifier] = None,
@@ -442,6 +479,21 @@ def generate_type(
 
             assert not type_identifier.endswith(">")
             return Stripped(f"std::shared_ptr<{type_identifier}>")
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # A named union is declared once as a ``using {UnionName} =
+            # std::variant<...>;`` alias (see ``_generate_types.py``), so we
+            # only reference that alias here by name -- there is no marker
+            # interface and no change to the class hierarchy, so the same
+            # representation would extend cleanly if primitive types are
+            # ever allowed as union members.
+            union_name = cpp_naming.union_name(our_type.name)
+
+            if types_namespace is None:
+                return Stripped(union_name)
+
+            return Stripped(f"{types_namespace}::{union_name}")
 
     elif isinstance(type_annotation, intermediate.ListTypeAnnotation):
         item_type = generate_type(
@@ -524,6 +576,9 @@ def is_referencable(type_annotation: intermediate.TypeAnnotationUnion) -> bool:
                 type_annotation.our_type,
                 (intermediate.AbstractClass, intermediate.ConcreteClass),
             ):
+                return True
+
+            elif isinstance(type_annotation.our_type, intermediate.NamedUnion):
                 return True
 
             else:

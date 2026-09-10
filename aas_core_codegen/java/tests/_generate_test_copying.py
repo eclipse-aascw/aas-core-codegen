@@ -151,6 +151,29 @@ transform(
 {I}that.{getter_name}(),
 {I}casted.{getter_name}())"""
                     )
+            elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # A named union has its own ``transform`` overload in the
+                # ``_DeepEqualiser`` (see
+                # :py:func:`_generate_union_transform_helper`), so it
+                # can be compared exactly like a class instance here.
+                if optional:
+                    expr = Stripped(
+                        f"""\
+(that.{getter_name}().isPresent()
+{I}? casted.{getter_name}().isPresent()
+{I}&& transform( that.{getter_name}().get(), casted.{getter_name}().get())
+{I}: ! casted.{getter_name}().isPresent())"""
+                    )
+                else:
+                    expr = Stripped(
+                        f"""\
+transform(
+{I}that.{getter_name}(),
+{I}casted.{getter_name}())"""
+                    )
+            else:
+                assert_never(type_anno.our_type)
         elif isinstance(type_anno, intermediate.ListTypeAnnotation):
             assert not isinstance(
                 type_anno.items,
@@ -204,8 +227,17 @@ that.{getter_name}().equals(casted.{getter_name}())"""
                     item_type_anno, intermediate.OurTypeAnnotation
                 ) and isinstance(
                     item_type_anno.our_type,
-                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                    (
+                        intermediate.AbstractClass,
+                        intermediate.ConcreteClass,
+                        intermediate.NamedUnion,
+                    ),
                 ):
+                    # NOTE (mristin):
+                    # A named union has its own ``transform`` overload in the
+                    # ``_DeepEqualiser`` (see
+                    # :py:func:`_generate_union_transform_helper`), so
+                    # it can be compared exactly like a class instance here.
                     item_exprs.append(
                         Stripped(
                             f"""\
@@ -285,6 +317,33 @@ public Boolean {transform_name}({interface_name} that, IClass other) {{
     )
 
 
+def _generate_union_transform_helper() -> Stripped:
+    """
+    Generate a single ``transform`` overload shared by every named union.
+
+    A named union is not itself an ``IClass``, so it can not be dispatched
+    by the inherited, ``IClass``-typed ``transform`` overload. We add this
+    overload, single-purpose, so that call sites can keep passing
+    ``transform`` around or calling it directly, regardless of whether the
+    value at hand is a class instance or a named union.
+
+    Dispatching over the common ``IUnion<?>`` (see ``_generate_iunion`` in
+    ``_generate_types.py``) instead of the union's own type means we need
+    only this one overload for *all* named unions, not one per union -- the
+    result is a plain ``Boolean``, so there is no return type to preserve.
+
+    Should a named union ever be allowed to flatten primitive or enumeration
+    alternatives, only the body of this method has to change (to dispatch on
+    the underlying value's kind) -- every call site stays the same.
+    """
+    return Stripped(
+        f"""\
+private Boolean transform(IUnion<?> that, IUnion<?> other) {{
+{I}return transform(that.getUnderlying(), other.getUnderlying());
+}}"""
+    )
+
+
 def _generate_deep_equals_transformer(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
@@ -306,6 +365,9 @@ def _generate_deep_equals_transformer(
             )
 
         blocks.append(_generate_transform_as_deep_equals(cls=concrete_cls))
+
+    if len(symbol_table.named_unions) > 0:
+        blocks.append(_generate_union_transform_helper())
 
     writer = io.StringIO()
     writer.write(

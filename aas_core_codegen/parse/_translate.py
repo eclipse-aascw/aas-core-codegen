@@ -52,6 +52,7 @@ from aas_core_codegen.parse._types import (
     Class,
     Enumeration,
     EnumerationLiteral,
+    NamedUnion,
     is_string_expr,
     Serialization,
     Property,
@@ -108,6 +109,7 @@ class _ExpectedImportsVisitor(ast.NodeVisitor):
             ("Optional", "typing"),
             ("Set", "typing"),
             ("Tuple", "typing"),
+            ("Union", "typing"),
             ("DBC", "icontract"),
             ("invariant", "icontract"),
             ("ensure", "icontract"),
@@ -2497,6 +2499,11 @@ def _verify_symbol_table(
         "serialization_error",
         "deserialization_error",
         "verification_error",
+        # NOTE (mristin):
+        # ``union`` is reserved separately from the rest of this set: a type named
+        # ``Union`` would be ambiguous with the ``typing.Union[...]`` marker syntax
+        # used to declare a named union of classes (``Xxx = Union[Yyy, Zzz]``).
+        "union",
     }
 
     # NOTE (mristin, 2023-06-30):
@@ -2803,6 +2810,58 @@ def _verify_symbol_table(
 
     # endregion
 
+    # region Check dangling or invalid members of named unions
+
+    for our_type in symbol_table.our_types:
+        if not isinstance(our_type, NamedUnion):
+            continue
+
+        for member in our_type.members:
+            # NOTE (mristin):
+            # Unlike class inheritance, a named union may *not* be defined over
+            # a primitive type — a named union only makes sense over classes,
+            # which can be dispatched on at de-/serialization time.
+            if member in PRIMITIVE_TYPES:
+                errors.append(
+                    Error(
+                        our_type.node,
+                        f"Expected the members of the named union "
+                        f"{our_type.name!r} to be classes, "
+                        f"but the member {member!r} is a primitive type",
+                    )
+                )
+                continue
+
+            member_type = symbol_table.find_our_type(name=member)
+
+            if member_type is None:
+                errors.append(
+                    Error(
+                        our_type.node,
+                        f"A member of the named union {our_type.name!r} "
+                        f"is dangling: {member!r}",
+                    )
+                )
+
+            elif isinstance(member_type, (Class, NamedUnion)):
+                # A named union can be defined over classes and other named unions.
+                pass
+            else:
+                errors.append(
+                    Error(
+                        our_type.node,
+                        f"Expected the members of the named union "
+                        f"{our_type.name!r} to be classes or named unions, "
+                        f"but the member {member_type.name!r} is "
+                        f"a {member_type.__class__.__name__!r}",
+                    )
+                )
+
+    if len(errors) > 0:
+        return None, errors
+
+    # endregion
+
     # region Check dangling subsets in constant sets
 
     for constant in symbol_table.constants:
@@ -2974,6 +3033,7 @@ Symbol = Union[
     AbstractClass,
     ConcreteClass,
     Enumeration,
+    NamedUnion,
     ConstantPrimitive,
     ConstantSet,
     UnderstoodMethod,
@@ -3003,6 +3063,96 @@ def _verify_duplicate_names(
         return errors
 
     return None
+
+
+# noinspection PyTypeChecker
+@require(
+    lambda node: (
+        len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+        and isinstance(node.value, ast.Subscript)
+        and isinstance(node.value.value, ast.Name)
+        and node.value.value.id == "Union"
+    ),
+    "The assignment matches the shape of a named union definition, "
+    "``Xxx = Union[Yyy, Zzz]``",
+)
+@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+def _ast_assign_to_named_union(
+    node: ast.Assign, atok: asttokens.ASTTokens
+) -> Tuple[Optional[NamedUnion], Optional[Error]]:
+    """Parse the definition of a named union, ``Xxx = Union[Yyy, Zzz]``."""
+    assert isinstance(node.targets[0], ast.Name)
+    assert isinstance(node.value, ast.Subscript)
+
+    name = Identifier(node.targets[0].id)
+
+    index_node, error = _subscript_index_node(node=node.value, atok=atok)
+    if error is not None:
+        return None, error
+
+    assert index_node is not None
+
+    member_nodes: List[ast.expr]
+    if isinstance(index_node, ast.Tuple):
+        member_nodes = list(index_node.elts)
+    elif isinstance(index_node, ast.Name):
+        member_nodes = [index_node]
+    else:
+        return (
+            None,
+            Error(
+                index_node,
+                f"Expected only names of classes as the members "
+                f"of the named union {name!r}, "
+                f"but got: {atok.get_text(index_node)}",
+            ),
+        )
+
+    members = []  # type: List[Identifier]
+    for member_node in member_nodes:
+        if not isinstance(member_node, ast.Name):
+            return (
+                None,
+                Error(
+                    member_node,
+                    f"Expected only names of classes as the members "
+                    f"of the named union {name!r}, "
+                    f"but got: {atok.get_text(member_node)}",
+                ),
+            )
+
+        members.append(Identifier(member_node.id))
+
+    if len(members) < 1:
+        return (
+            None,
+            Error(
+                node,
+                f"Expected at least 1 member in the named union {name!r}, "
+                f"but got {len(members)}: {atok.get_text(node.value)}",
+            ),
+        )
+
+    seen: Set[Identifier] = set()
+    duplicates: List[Identifier] = []
+    for member in members:
+        if member in seen and member not in duplicates:
+            duplicates.append(member)
+        seen.add(member)
+
+    if len(duplicates) > 0:
+        return (
+            None,
+            Error(
+                node,
+                f"Expected unique members in the named union {name!r}, "
+                f"but the following member(s) are repeated: "
+                f"{', '.join(repr(duplicate) for duplicate in duplicates)}",
+            ),
+        )
+
+    return NamedUnion(name=name, members=members, node=node), None
 
 
 # noinspection PyTypeChecker,PyUnresolvedReferences
@@ -3165,6 +3315,23 @@ def _atok_to_symbol_table(
                             )
                         )
                         continue
+                elif (
+                    isinstance(node.targets[0], ast.Name)
+                    and isinstance(node.value, ast.Subscript)
+                    and isinstance(node.value.value, ast.Name)
+                    and node.value.value.id == "Union"
+                ):
+                    matched = True
+
+                    named_union, named_union_error = _ast_assign_to_named_union(
+                        node=node, atok=atok
+                    )
+                    if named_union_error is not None:
+                        underlying_errors.append(named_union_error)
+                        continue
+
+                    assert named_union is not None
+                    our_types.append(named_union)
                 else:
                     if (
                         isinstance(node.value, ast.Call)

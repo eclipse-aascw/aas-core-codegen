@@ -1,5 +1,6 @@
 package dummy.generation;
 
+import dummy.common.*;
 import dummy.types.enums.*;
 import dummy.types.impl.*;
 import dummy.types.model.*;

@@ -20,6 +20,7 @@ UnverifiedSymbolTable(
         node=...),
       node=...,
       literals_by_name=...)],
+  named_unions=[],
   constants=[],
   verification_functions=[],
   meta_model=MetaModel(

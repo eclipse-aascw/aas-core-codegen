@@ -331,6 +331,17 @@ def generate_type(
                     f"{types_module}.{python_naming.class_name(our_type.name)}"
                 )
 
+        elif isinstance(our_type, intermediate.NamedUnion):
+            if types_module is None:
+                return Stripped(repr(python_naming.union_name(our_type.name)))
+            else:
+                return Stripped(
+                    f"{types_module}.{python_naming.union_name(our_type.name)}"
+                )
+
+        else:
+            assert_never(our_type)
+
     elif isinstance(type_annotation, intermediate.ListTypeAnnotation):
         item_type = generate_type(
             type_annotation=type_annotation.items, types_module=types_module

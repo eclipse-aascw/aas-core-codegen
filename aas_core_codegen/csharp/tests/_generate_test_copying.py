@@ -126,8 +126,16 @@ ByteSpansEqual(
                 raise AssertionError("Expected to handle this case above")
             elif isinstance(
                 type_anno.our_type,
-                (intermediate.AbstractClass, intermediate.ConcreteClass),
+                (
+                    intermediate.AbstractClass,
+                    intermediate.ConcreteClass,
+                    intermediate.NamedUnion,
+                ),
             ):
+                # A named union has its own ``Transform`` overload in the
+                # ``DeepEqualiser`` (see
+                # :py:func:`_generate_union_transform_helper`), so it
+                # can be compared exactly like a class instance here.
                 expr = Stripped(
                     f"""\
 Transform(
@@ -183,8 +191,17 @@ that.{prop_name}.SequenceEqual(
 
                 elif isinstance(
                     type_anno.items.our_type,
-                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                    (
+                        intermediate.AbstractClass,
+                        intermediate.ConcreteClass,
+                        intermediate.NamedUnion,
+                    ),
                 ):
+                    # A named union has its own ``Transform`` overload in the
+                    # ``DeepEqualiser`` (see
+                    # :py:func:`_generate_union_transform_helper`), so
+                    # it can be passed on as a bare method group just like
+                    # a class item.
                     expr = Stripped(
                         f"""\
 that.{prop_name}.Count == casted.{prop_name}.Count
@@ -215,7 +232,8 @@ that.{prop_name}.Count == casted.{prop_name}.Count
                     item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
                 ), (
                     f"Expected an atomic tuple item (a primitive, a constrained "
-                    f"primitive, an enumeration or a class), but got {item_type_anno}. "
+                    f"primitive, an enumeration, a class or a named union), "
+                    f"but got {item_type_anno}. "
                     f"This should have already been verified in "
                     f"intermediate._translate._verify_only_simple_type_patterns."
                 )
@@ -256,8 +274,17 @@ ByteSpansEqual(
                         raise AssertionError("Expected to handle this case above")
                     elif isinstance(
                         item_type_anno.our_type,
-                        (intermediate.AbstractClass, intermediate.ConcreteClass),
+                        (
+                            intermediate.AbstractClass,
+                            intermediate.ConcreteClass,
+                            intermediate.NamedUnion,
+                        ),
                     ):
+                        # A named union has its own ``Transform`` overload in
+                        # the ``DeepEqualiser`` (see
+                        # :py:func:`_generate_union_transform_helper`),
+                        # so it can be compared exactly like a class instance
+                        # here.
                         item_exprs.append(
                             Stripped(
                                 f"""\
@@ -345,6 +372,35 @@ public override bool {transform_name}(
     )
 
 
+def _generate_union_transform_helper() -> Stripped:
+    """
+    Generate a single ``Transform`` overload shared by every named union.
+
+    A named union is not itself an ``Aas.IClass``, so it can not be dispatched
+    by the inherited, ``Aas.IClass``-typed ``Transform`` overload. We add
+    this overload, single-purpose and non-virtual, so that call sites can
+    keep passing ``Transform`` around as a plain method group or calling it
+    directly, regardless of whether the value at hand is a class instance or
+    a named union.
+
+    Dispatching over the common, non-generic ``Aas.IUnion`` (see ``generate()``
+    in ``_generate_types.py``) instead of the union's own type means we need
+    only this one overload for *all* named unions, not one per union -- the
+    result is a plain ``bool``, so there is no return type to preserve.
+
+    Should a named union ever be allowed to flatten primitive or enumeration
+    alternatives, only the body of this method has to change (to dispatch on
+    the underlying value's kind) -- every call site stays the same.
+    """
+    return Stripped(
+        f"""\
+private bool Transform(Aas.IUnion that, Aas.IUnion other)
+{{
+{I}return Transform(that.Underlying, other.Underlying);
+}}"""
+    )
+
+
 def _generate_deep_equals_transformer(
     symbol_table: intermediate.SymbolTable,
 ) -> Stripped:
@@ -381,6 +437,9 @@ private static bool ByteSpansEqual(
             )
 
         blocks.append(_generate_transform_as_deep_equals(cls=concrete_cls))
+
+    if len(symbol_table.named_unions) > 0:
+        blocks.append(_generate_union_transform_helper())
 
     writer = io.StringIO()
     writer.write(

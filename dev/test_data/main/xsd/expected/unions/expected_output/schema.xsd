@@ -1,0 +1,273 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="https://dummy.com" elementFormDefault="qualified" targetNamespace="https://dummy.com">
+  <xs:group name="mixedAbstractDescendantOne">
+    <xs:sequence>
+      <xs:group ref="mixedAbstractMember"/>
+      <xs:element name="uniqueToAbstractDescendantOne">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:group name="mixedAbstractDescendantTwo">
+    <xs:sequence>
+      <xs:group ref="mixedAbstractMember"/>
+      <xs:element name="uniqueToAbstractDescendantTwo">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:group name="mixedAbstractMember">
+    <xs:sequence/>
+  </xs:group>
+  <xs:group name="mixedAbstractMember_choice">
+    <xs:choice>
+      <xs:element name="mixedAbstractDescendantOne" type="mixedAbstractDescendantOne_t"/>
+      <xs:element name="mixedAbstractDescendantTwo" type="mixedAbstractDescendantTwo_t"/>
+    </xs:choice>
+  </xs:group>
+  <xs:group name="mixedConcreteLeaf">
+    <xs:sequence>
+      <xs:element name="uniqueToConcreteLeaf">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:group name="mixedConcreteWithDescendants">
+    <xs:sequence>
+      <xs:element name="someBaseProperty">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:group name="mixedConcreteWithDescendantsChild">
+    <xs:sequence>
+      <xs:group ref="mixedConcreteWithDescendants"/>
+      <xs:element name="someChildProperty">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:group name="mixedConcreteWithDescendants_choice">
+    <xs:choice>
+      <xs:element name="mixedConcreteWithDescendants" type="mixedConcreteWithDescendants_t"/>
+      <xs:element name="mixedConcreteWithDescendantsChild" type="mixedConcreteWithDescendantsChild_t"/>
+    </xs:choice>
+  </xs:group>
+  <xs:group name="mixedUnion_choice">
+    <xs:choice>
+      <xs:element name="mixedAbstractDescendantOne" type="mixedAbstractDescendantOne_t"/>
+      <xs:element name="mixedAbstractDescendantTwo" type="mixedAbstractDescendantTwo_t"/>
+      <xs:element name="mixedConcreteWithDescendantsChild" type="mixedConcreteWithDescendantsChild_t"/>
+      <xs:element name="mixedConcreteWithDescendants" type="mixedConcreteWithDescendants_t"/>
+      <xs:element name="mixedConcreteLeaf" type="mixedConcreteLeaf_t"/>
+    </xs:choice>
+  </xs:group>
+  <xs:group name="modelTypedFirst">
+    <xs:sequence>
+      <xs:element name="someProperty">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:group name="modelTypedSecond">
+    <xs:sequence>
+      <xs:element name="someProperty">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:group name="modelTypedUnion_choice">
+    <xs:choice>
+      <xs:element name="modelTypedFirst" type="modelTypedFirst_t"/>
+      <xs:element name="modelTypedSecond" type="modelTypedSecond_t"/>
+    </xs:choice>
+  </xs:group>
+  <xs:group name="something">
+    <xs:sequence>
+      <xs:element name="structuralProperty">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:group ref="structuralUnion_choice"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="mixedProperty">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:group ref="mixedUnion_choice"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="modelTypedProperty">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:group ref="modelTypedUnion_choice"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="listStructuralProperty">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:group ref="structuralUnion_choice" minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="listMixedProperty">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:group ref="mixedUnion_choice" minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="listModelTypedProperty">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:group ref="modelTypedUnion_choice" minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="tupleProperty">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:group ref="structuralUnion_choice"/>
+            <xs:group ref="mixedUnion_choice"/>
+            <xs:group ref="modelTypedUnion_choice"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="optionalStructuralProperty" minOccurs="0" maxOccurs="1">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:group ref="structuralUnion_choice"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="optionalMixedProperty" minOccurs="0" maxOccurs="1">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:group ref="mixedUnion_choice"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="optionalModelTypedProperty" minOccurs="0" maxOccurs="1">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:group ref="modelTypedUnion_choice"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:group name="structuralFirst">
+    <xs:sequence>
+      <xs:element name="uniqueToFirst">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:group name="structuralSecond">
+    <xs:sequence>
+      <xs:element name="uniqueToSecond">
+        <xs:simpleType>
+          <xs:restriction base="xs:string">
+            <xs:minLength value="1"/>
+          </xs:restriction>
+        </xs:simpleType>
+      </xs:element>
+    </xs:sequence>
+  </xs:group>
+  <xs:group name="structuralUnion_choice">
+    <xs:choice>
+      <xs:element name="structuralFirst" type="structuralFirst_t"/>
+      <xs:element name="structuralSecond" type="structuralSecond_t"/>
+    </xs:choice>
+  </xs:group>
+  <xs:complexType name="mixedAbstractDescendantOne_t">
+    <xs:sequence>
+      <xs:group ref="mixedAbstractDescendantOne"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="mixedAbstractDescendantTwo_t">
+    <xs:sequence>
+      <xs:group ref="mixedAbstractDescendantTwo"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="mixedAbstractMember_t">
+    <xs:sequence>
+      <xs:group ref="mixedAbstractMember"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="mixedConcreteLeaf_t">
+    <xs:sequence>
+      <xs:group ref="mixedConcreteLeaf"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="mixedConcreteWithDescendantsChild_t">
+    <xs:sequence>
+      <xs:group ref="mixedConcreteWithDescendantsChild"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="mixedConcreteWithDescendants_t">
+    <xs:sequence>
+      <xs:group ref="mixedConcreteWithDescendants"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="modelTypedFirst_t">
+    <xs:sequence>
+      <xs:group ref="modelTypedFirst"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="modelTypedSecond_t">
+    <xs:sequence>
+      <xs:group ref="modelTypedSecond"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="something_t">
+    <xs:sequence>
+      <xs:group ref="something"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="structuralFirst_t">
+    <xs:sequence>
+      <xs:group ref="structuralFirst"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="structuralSecond_t">
+    <xs:sequence>
+      <xs:group ref="structuralSecond"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="something" type="something_t"/>
+</xs:schema>

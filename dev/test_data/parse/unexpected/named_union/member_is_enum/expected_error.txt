@@ -1,0 +1,1 @@
+Expected the members of the named union 'Some_union' to be classes or named unions, but the member 'Some_enum' is a 'Enumeration'

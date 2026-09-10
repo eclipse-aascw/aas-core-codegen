@@ -178,6 +178,194 @@ public static Aas.{name}? {name}From(
     return Stripped(writer.getvalue())
 
 
+def _generate_from_method_for_named_union(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """Generate the deserialization method for a named union."""
+    name = csharp_naming.class_name(named_union.name)
+
+    blocks = [
+        Stripped("error = null;"),
+        Stripped(
+            f"""\
+var obj = node as Nodes.JsonObject;
+if (obj == null)
+{{
+{I}error = new Reporting.Error(
+{II}$"Expected Nodes.JsonObject, but got {{node.GetType()}}");
+{I}return null;
+}}"""
+        ),
+    ]  # type: List[Stripped]
+
+    implementers_with_model_type = []  # type: List[intermediate.ConcreteClass]
+    implementers_without_model_type = []  # type: List[intermediate.ConcreteClass]
+    for implementer in named_union.implementers:
+        if implementer.serialization.with_model_type:
+            implementers_with_model_type.append(implementer)
+        else:
+            implementers_without_model_type.append(implementer)
+
+    # region Dispatch by model type
+
+    if len(implementers_with_model_type) > 0:
+        switch_writer = io.StringIO()
+        switch_writer.write(
+            f"""\
+Nodes.JsonNode? modelTypeNode = obj["modelType"];
+if (modelTypeNode != null)
+{{
+{I}Nodes.JsonValue? modelTypeValue = modelTypeNode as Nodes.JsonValue;
+{I}if (modelTypeValue == null)
+{I}{{
+{II}error = new Reporting.Error(
+{III}"Expected JsonValue, " +
+{III}$"but got {{modelTypeNode.GetType()}}");
+{II}return null;
+{I}}}
+{I}modelTypeValue.TryGetValue<string>(out string? modelType);
+{I}if (modelType == null)
+{I}{{
+{II}error = new Reporting.Error(
+{III}"Expected a string, " +
+{III}$"but the conversion failed from {{modelTypeValue}}");
+{II}return null;
+{I}}}
+
+{I}switch (modelType)
+{I}{{
+"""
+        )
+
+        for implementer in implementers_with_model_type:
+            model_type = naming.json_model_type(implementer.name)
+            implementer_name = csharp_naming.class_name(implementer.name)
+            from_method_name = csharp_naming.method_name(
+                Identifier(f"from_{implementer.name}")
+            )
+
+            case_stmt = Stripped(
+                f"""\
+case {csharp_common.string_literal(model_type)}:
+{{
+{I}Aas.{implementer_name}? instance = {implementer_name}From(
+{II}node, out error);
+{I}if (error != null)
+{I}{{
+{II}return null;
+{I}}}
+{I}if (instance == null)
+{I}{{
+{II}throw new System.InvalidOperationException(
+{III}"Unexpected instance null when error null");
+{I}}}
+{I}return Aas.{name}.{from_method_name}(instance);
+}}"""
+            )
+            switch_writer.write(textwrap.indent(case_stmt, II))
+            switch_writer.write("\n")
+
+        switch_writer.write(
+            f"""\
+{II}default:
+{III}error = new Reporting.Error(
+{IIII}$"Unexpected model type for the union {name}: {{modelType}}");
+{III}return null;
+{I}}}
+}}"""
+        )
+
+        blocks.append(Stripped(switch_writer.getvalue()))
+
+    # endregion
+
+    # region Structural dispatch
+
+    for implementer in implementers_without_model_type:
+        implementer_name = csharp_naming.class_name(implementer.name)
+        from_method_name = csharp_naming.method_name(
+            Identifier(f"from_{implementer.name}")
+        )
+
+        required_props = [
+            prop
+            for prop in implementer.properties
+            if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
+        ]
+        assert len(required_props) > 0, (
+            f"Expected at least one required property for the structurally "
+            f"dispatched implementer {implementer.name!r} of "
+            f"the named union {named_union.name!r}; this should have already "
+            f"been verified in "
+            f"intermediate._translate._verify_named_unions_are_dispatchable_in_json"
+        )
+
+        condition = " &&\n".join(
+            f"obj.ContainsKey({csharp_common.string_literal(prop.json_name)})"
+            for prop in required_props
+        )
+
+        blocks.append(
+            Stripped(
+                f"""\
+if ({indent_but_first_line(condition, I)})
+{{
+{I}Aas.{implementer_name}? instance = {implementer_name}From(
+{II}node, out error);
+{I}if (error != null)
+{I}{{
+{II}return null;
+{I}}}
+{I}if (instance == null)
+{I}{{
+{II}throw new System.InvalidOperationException(
+{III}"Unexpected instance null when error null");
+{I}}}
+{I}return Aas.{name}.{from_method_name}(instance);
+}}"""
+            )
+        )
+
+    # endregion
+
+    blocks.append(
+        Stripped(
+            f"""\
+error = new Reporting.Error(
+{I}"Could not determine the concrete type of the union {name} " +
+{I}"from the given JSON object; none of its implementers matched");
+return null;"""
+        )
+    )
+
+    writer = io.StringIO()
+
+    writer.write(
+        f"""\
+/// <summary>
+/// Deserialize an instance of {name} by dispatching
+/// based on <c>modelType</c> or the properties present in
+/// <paramref name="node" />.
+/// </summary>
+/// <param name="node">JSON node to be parsed</param>
+/// <param name="error">Error, if any, during the deserialization</param>
+public static Aas.{name}? {name}From(
+{I}Nodes.JsonNode node,
+{I}out Reporting.Error? error)
+{{
+"""
+    )
+
+    for i, block in enumerate(blocks):
+        if i > 0:
+            writer.write("\n\n")
+        writer.write(textwrap.indent(block, I))
+
+    writer.write(f"\n}}  // public static Aas.{name} {name}From")
+
+    return Stripped(writer.getvalue())
+
+
 _PARSE_METHOD_BY_PRIMITIVE_TYPE = {
     intermediate.PrimitiveType.BOOL: "DeserializeImplementation.BoolFrom",
     intermediate.PrimitiveType.INT: "DeserializeImplementation.LongFrom",
@@ -217,6 +405,10 @@ def _parse_method_for_atomic_value(
             else:
                 cls_name = csharp_naming.class_name(our_type.name)
                 parse_method = f"DeserializeImplementation.{cls_name}From"
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            union_name = csharp_naming.class_name(our_type.name)
+            parse_method = f"DeserializeImplementation.{union_name}From"
 
         else:
             assert_never(our_type)
@@ -679,7 +871,8 @@ if (error != null)
                 item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
             ), (
                 f"Expected an atomic tuple item (a primitive, a constrained "
-                f"primitive, an enumeration or a class), but got {item_type_anno}. "
+                f"primitive, an enumeration, a class or a named union), "
+                f"but got {item_type_anno}. "
                 f"This should have already been verified in "
                 f"intermediate._translate._verify_only_simple_type_patterns."
             )
@@ -1285,6 +1478,10 @@ internal static byte[]? BytesFrom(
                     else:
                         assert block is not None
                         blocks.append(block)
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            blocks.append(_generate_from_method_for_named_union(named_union=our_type))
+
         else:
             assert_never(our_type)
 
@@ -1399,6 +1596,12 @@ def _generate_deserialize(
                         name=csharp_naming.class_name(our_type.name)
                     )
                 )
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            blocks.append(
+                _generate_deserialize_from(name=csharp_naming.class_name(our_type.name))
+            )
+
         else:
             assert_never(our_type)
 
@@ -1521,9 +1724,19 @@ Serialize.{name}ToJsonValue(
                 primitive_type=our_type.constrainee, source_expr=source_expr
             )
         elif isinstance(
-            our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+            our_type,
+            (
+                intermediate.AbstractClass,
+                intermediate.ConcreteClass,
+                intermediate.NamedUnion,
+            ),
         ):
-            # We can not use textwrap due to indent_but_first_line.
+            # NOTE (mristin):
+            # A named union is not itself an ``Aas.IClass``, but the
+            # ``Transformer`` class defines a ``Transform`` overload for every
+            # named union (see :py:func:`_generate_union_transform_helper`)
+            # that unwraps it to its underlying instance, so we can transform
+            # it exactly like a class instance here.
             return Stripped(
                 f"""\
 Transform(
@@ -1606,9 +1819,9 @@ def _tuple_item_serializer_expr(
     ``Transformer.ToJsonValue`` overloads (see
     :py:func:`_generate_tuple_atomic_serializer_helpers` for why we route
     ``bool``/``float``/``str``/``bytearray`` through overloads of our own
-    instead of the BCL's ``Nodes.JsonValue.Create`` directly), and classes/
-    enums route through their own existing single-overload, non-generic
-    ``Transform``/``...ToJsonValue`` methods.
+    instead of the BCL's ``Nodes.JsonValue.Create`` directly), and classes,
+    named unions and enums route through their own existing single-overload,
+    non-generic ``Transform``/``...ToJsonValue`` methods.
     """
     if isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
         primitive_type = type_annotation.a_type
@@ -1628,7 +1841,18 @@ def _tuple_item_serializer_expr(
     if isinstance(our_type, intermediate.Enumeration):
         name = csharp_naming.enum_name(our_type.name)
         return Stripped(f"Serialize.{name}ToJsonValue")
-    elif isinstance(our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)):
+    elif isinstance(
+        our_type,
+        (
+            intermediate.AbstractClass,
+            intermediate.ConcreteClass,
+            intermediate.NamedUnion,
+        ),
+    ):
+        # A named union has its own ``Transform`` overload in the
+        # ``Transformer`` class (see
+        # :py:func:`_generate_union_transform_helper`), so it can be
+        # passed on as a bare method group just like a class.
         return Stripped("Transform")
     elif isinstance(our_type, intermediate.ConstrainedPrimitive):
         raise AssertionError(
@@ -1752,7 +1976,8 @@ result[{prop_literal}] = {array_var};"""
                 item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
             ), (
                 f"Expected an atomic tuple item (a primitive, a constrained "
-                f"primitive, an enumeration or a class), but got {item_type_anno}. "
+                f"primitive, an enumeration, a class or a named union), "
+                f"but got {item_type_anno}. "
                 f"This should have already been verified in "
                 f"intermediate._translate._verify_only_simple_type_patterns."
             )
@@ -1870,6 +2095,36 @@ public override Nodes.JsonObject {transform_name}(
     return Stripped(writer.getvalue()), None
 
 
+def _generate_union_transform_helper() -> Stripped:
+    """
+    Generate a single ``Transform`` overload shared by every named union.
+
+    A named union is not itself an ``Aas.IClass``, so it can not be dispatched
+    by the inherited, ``IClass``-typed ``Transform`` overload. We add this
+    overload, single-purpose and non-virtual just like the tuple atomic
+    serializer helpers above, so that call sites can keep passing ``Transform``
+    around as a plain method group or calling it directly, regardless of
+    whether the value at hand is a class instance or a named union -- see
+    :py:func:`_generate_serialize_atomic_value` and
+    :py:func:`_tuple_item_serializer_expr`.
+
+    Dispatching over the common, non-generic ``Aas.IUnion`` (see ``generate()``
+    in ``_generate_types.py``) instead of the union's own type means we need
+    only this one overload for *all* named unions, not one per union.
+
+    Should a named union ever be allowed to flatten primitive or enumeration
+    alternatives, only the body of this method has to change (to dispatch on
+    the underlying value's kind) -- every call site stays the same.
+    """
+    return Stripped(
+        f"""\
+private Nodes.JsonObject Transform(Aas.IUnion that)
+{{
+{I}return Transform(that.Underlying);
+}}"""
+    )
+
+
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_transformer(
     symbol_table: intermediate.SymbolTable,
@@ -1970,8 +2225,18 @@ private static Nodes.JsonArray SerializeArray<T>(
                 else:
                     assert block is not None
                     blocks.append(block)
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            # A named union is never double-dispatched here directly -- it
+            # is unwrapped by the single shared ``Transform(Aas.IUnion)``
+            # overload instead (see :py:func:`_generate_union_transform_helper`).
+            pass
+
         else:
             assert_never(our_type)
+
+    if len(symbol_table.named_unions) > 0:
+        blocks.append(_generate_union_transform_helper())
 
     if len(errors) > 0:
         return None, errors

@@ -56,6 +56,34 @@ common::expected<
             )
         )
 
+    for named_union in symbol_table.named_unions:
+        union_name = cpp_naming.union_name(named_union.name)
+        deserialization_name = cpp_naming.function_name(
+            Identifier(f"{named_union.name}_from")
+        )
+
+        blocks.append(
+            Stripped(
+                f"""\
+/**
+ * \\brief Deserialize \\p json value to an instance
+ * of types::{union_name}.
+ *
+ * \\param json value to be de-serialized
+ * \\param additional_properties if not set, check that \\p json contains
+ * no additional properties
+ * \\return The deserialized instance, or a de-serialization error, if any.
+ */
+common::expected<
+{I}types::{union_name},
+{I}DeserializationError
+> {deserialization_name}(
+{I}const nlohmann::json& json,
+{I}bool additional_properties = false
+);"""
+            )
+        )
+
     return blocks
 
 
@@ -1261,10 +1289,7 @@ std::pair<
     )
 
 
-@require(
-    lambda cls: len(cls.concrete_descendants) > 0,
-    "No dispatch possible without concrete descendants",
-)
+@require(lambda cls: len(cls.concrete_descendants) > 0)
 def _generate_dispatch_deserialize_definition(cls: intermediate.ClassUnion) -> Stripped:
     """Generate the def. of the dispatching deserialization function for ``cls``."""
     interface_name = cpp_naming.interface_name(cls.name)
@@ -1286,6 +1311,38 @@ std::pair<
 {I}common::optional<
 {II}std::shared_ptr<types::{interface_name}>
 {I}>,
+{I}common::optional<DeserializationError>
+> {function_name}(
+{I}const nlohmann::json& json,
+{I}bool additional_properties
+);"""
+    )
+
+
+@require(lambda named_union: len(named_union.implementers) > 0)
+def _generate_dispatch_deserialize_definition_for_named_union(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """Generate the def. of the dispatching deserialization function for a union."""
+    union_name = cpp_naming.union_name(named_union.name)
+
+    function_name = cpp_naming.function_name(
+        Identifier(f"deserialize_{named_union.name}")
+    )
+
+    return Stripped(
+        f"""\
+/**
+ * \\brief Dispatch the deserialization for an instance
+ * of types::{union_name}.
+ *
+ * \\param json value to be de-serialized
+ * \\param additional_properties if not set, check that \\p json contains
+ * no additional properties
+ * \\return the deserialized instance, or an error, if any
+ */
+std::pair<
+{I}common::optional<types::{union_name}>,
 {I}common::optional<DeserializationError>
 > {function_name}(
 {I}const nlohmann::json& json,
@@ -1400,7 +1457,9 @@ if (error.has_value()) {{
     )
 
 
-def _determine_deserialize_function_for_class(cls: intermediate.ClassUnion) -> Stripped:
+def _determine_deserialize_function_for_class(
+    cls: intermediate.ClassUnion,
+) -> Stripped:
     """
     Determine the function to be called to de-serialize an instance of ``cls``.
 
@@ -1439,13 +1498,36 @@ def _generate_deserialize_instance_property(
     an ancestor class, and cases where there are no ancestor classes.
     """
     type_anno = intermediate.beneath_optional(prop.type_annotation)
-    assert isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+
+    deserialize_function: Stripped
+
+    if isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
         type_anno.our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
-    )
+    ):
+        deserialize_function = _determine_deserialize_function_for_class(
+            cls=type_anno.our_type
+        )
 
-    cls = type_anno.our_type
+    elif isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+        type_anno.our_type, intermediate.NamedUnion
+    ):
+        # NOTE (mristin):
+        # A named union is not part of the class hierarchy, so there is no
+        # ancestor to upcast to -- the dispatching function is always called
+        # bare, without any template parameter.
+        deserialize_function = Stripped(
+            cpp_naming.function_name(
+                Identifier(f"Deserialize_{type_anno.our_type.name}")
+            )
+        )
 
-    deserialize_function = _determine_deserialize_function_for_class(cls=cls)
+    else:
+        raise AssertionError(
+            f"NOTE (mristin): We expect only classes or named unions "
+            f"as the instance property type, but you specified {prop.type_annotation} "
+            f"in property {prop.name!r}. "
+            f"Please contact the developers if you need this feature."
+        )
 
     var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
     json_prop_name = prop.json_name
@@ -1520,9 +1602,25 @@ def _generate_deserialize_list_property(
                 type_anno.items.our_type,
                 (intermediate.AbstractClass, intermediate.ConcreteClass),
             ):
-                cls = type_anno.items.our_type
+                deserialize_cls = _determine_deserialize_function_for_class(
+                    cls=type_anno.items.our_type
+                )
 
-                deserialize_cls = _determine_deserialize_function_for_class(cls=cls)
+                deserialize_item_expr = Stripped(
+                    f"""\
+[&additional_properties](const nlohmann::json& a_json) {{
+{I}return {deserialize_cls}(a_json, additional_properties);
+}}"""
+                )
+
+            elif isinstance(type_anno.items.our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # A named union is not part of the class hierarchy, so there is no
+                # ancestor to upcast to -- the dispatching function is always
+                # called bare, without any template parameter.
+                deserialize_cls = cpp_naming.function_name(
+                    Identifier(f"Deserialize_{type_anno.items.our_type.name}")
+                )
 
                 deserialize_item_expr = Stripped(
                     f"""\
@@ -1605,6 +1703,22 @@ def _deserialize_expr_for_atomic_item(
         ):
             deserialize_cls = _determine_deserialize_function_for_class(
                 cls=item_type_anno.our_type
+            )
+
+            return Stripped(
+                f"""\
+[&additional_properties](const nlohmann::json& a_json) {{
+{I}return {deserialize_cls}(a_json, additional_properties);
+}}"""
+            )
+
+        elif isinstance(item_type_anno.our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # A named union is not part of the class hierarchy, so there is no
+            # ancestor to upcast to -- the dispatching function is always called
+            # bare, without any template parameter.
+            deserialize_cls = cpp_naming.function_name(
+                Identifier(f"Deserialize_{item_type_anno.our_type.name}")
             )
 
             return Stripped(
@@ -1731,8 +1845,12 @@ def _generate_deserialize_property(
             code = _generate_deserialize_primitive_property(prop=prop, ok_type=ok_type)
 
         elif isinstance(
-            type_anno.our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+            type_anno.our_type,
+            (intermediate.AbstractClass, intermediate.ConcreteClass),
         ):
+            code = _generate_deserialize_instance_property(prop=prop, ok_type=ok_type)
+
+        elif isinstance(type_anno.our_type, intermediate.NamedUnion):
             code = _generate_deserialize_instance_property(prop=prop, ok_type=ok_type)
 
         else:
@@ -2192,13 +2310,29 @@ def _generate_dispatch_deserialize_implementation(
                 Identifier(f"deserialize_{target_cls.name}")
             )
 
+        if len(target_cls.ancestors) > 0:
+            # NOTE (mristin):
+            # ``target_function`` is only templated if ``target_cls`` itself
+            # has ancestors (see ``_generate_concretely_deserialize_definition``)
+            # -- true for every proper descendant (which always has ``cls``
+            # among its ancestors), but *not* necessarily true when
+            # ``target_cls`` is ``cls`` itself (a concrete-with-descendants
+            # class dispatching itself, with no meta-model ancestors of its
+            # own), so we must not add the template argument unconditionally.
+            call = Stripped(
+                f"""\
+{target_function}<
+{I}types::{interface_name}
+>"""
+            )
+        else:
+            call = Stripped(target_function)
+
         case_blocks.append(
             Stripped(
                 f"""\
 case types::ModelType::{literal_name}:
-{I}return {target_function}<
-{II}types::{interface_name}
-{I}>(json, additional_properties);"""
+{I}return {indent_but_first_line(call, I)}(json, additional_properties);"""
             )
         )
 
@@ -2283,25 +2417,342 @@ std::pair<
     ]
 
 
-def _generate_deserialization_implementation(cls: intermediate.ClassUnion) -> Stripped:
-    """Generate the implementation of ``*From`` function."""
-    deserialize_function = _determine_deserialize_function_for_class(cls=cls)
+def _generate_wrap_deserialized_as_variant_function() -> Stripped:
+    """
+    Generate the generic helper to wrap a de-serialized pointer as a variant.
 
-    interface_name = cpp_naming.interface_name(cls.name)
+    Every implementer of a named union is de-serialized through its own
+    canonical entry point (bypassing the union), and the resulting pointer
+    then needs to be wrapped into the union's ``std::variant`` alternative
+    matching its own interface -- no upcasting is involved, since the
+    variant is spelled out over the implementers' own interfaces directly.
+    This shape is identical for every implementer of every union (only the
+    types differ), so we factor it out into a single generic function
+    instead of unrolling it at each dispatch case, mirroring how
+    ``DeserializeTupleN``/``SerializeTupleN`` factor out the per-item
+    boilerplate for tuples.
+    """
+    return Stripped(
+        f"""\
+/**
+ * \\brief Wrap a de-serialized pointer as a named union's variant alternative.
+ *
+ * Every implementer of a named union is de-serialized through its own
+ * canonical entry point (bypassing the union), and the resulting pointer
+ * then needs to be wrapped into the union's std::variant alternative
+ * matching its own interface -- no upcasting is involved, since the
+ * variant is spelled out over the implementers' own interfaces directly.
+ *
+ * \\param result the result of a de-serialization call for one implementer
+ * \\return the result wrapped as a variant, or the propagated error
+ */
+template <typename VariantT, typename T>
+std::pair<
+{I}common::optional<VariantT>,
+{I}common::optional<DeserializationError>
+> WrapDeserializedAsVariant(
+{I}std::pair<
+{II}common::optional<std::shared_ptr<T> >,
+{II}common::optional<DeserializationError>
+{I}> result
+) {{
+{I}if (result.first.has_value()) {{
+{II}return std::make_pair<
+{III}common::optional<VariantT>,
+{III}common::optional<DeserializationError>
+{II}>(
+{III}VariantT(std::move(*result.first)),
+{III}common::nullopt
+{II});
+{I}}}
 
-    deserialization_name = cpp_naming.function_name(Identifier(f"{cls.name}_from"))
+{I}return std::make_pair<
+{II}common::optional<VariantT>,
+{II}common::optional<DeserializationError>
+{I}>(
+{II}common::nullopt,
+{II}std::move(result.second)
+{I});
+}}"""
+    )
+
+
+def _generate_deserialize_and_wrap_snippet_for_named_union_implementer(
+    target_cls: intermediate.ConcreteClass, union_name: Identifier
+) -> Stripped:
+    """
+    Generate the snippet to de-serialize a single implementer and wrap it.
+
+    The implementer is de-serialized through its own canonical entry point
+    (bypassing the union), and the resulting
+    ``pair<optional<shared_ptr<T>>, ...>`` is wrapped into the union's
+    ``std::variant`` in one call via
+    :py:func:`_generate_wrap_deserialized_as_variant_function`.
+    """
+    if len(target_cls.concrete_descendants) > 0:
+        target_function = cpp_naming.function_name(
+            Identifier(f"concretely_deserialize_{target_cls.name}")
+        )
+    else:
+        target_function = cpp_naming.function_name(
+            Identifier(f"deserialize_{target_cls.name}")
+        )
+
+    target_interface_name = cpp_naming.interface_name(target_cls.name)
+
+    call: Stripped
+    if len(target_cls.ancestors) > 0:
+        # NOTE (mristin):
+        # We request the class's own interface explicitly so that we always
+        # obtain ``shared_ptr<types::{target_interface_name}>`` back,
+        # regardless of the union we are dispatching for.
+        call = Stripped(
+            f"""\
+{target_function}<
+{I}types::{target_interface_name}
+>"""
+        )
+    else:
+        call = Stripped(target_function)
 
     return Stripped(
         f"""\
+return WrapDeserializedAsVariant<types::{union_name}>(
+{I}{indent_but_first_line(call, I)}(
+{II}json,
+{II}additional_properties
+{I})
+);"""
+    )
+
+
+@require(lambda named_union: len(named_union.implementers) > 0)
+def _generate_dispatch_deserialize_implementation_for_named_union(
+    named_union: intermediate.NamedUnion,
+) -> List[Stripped]:
+    """
+    Generate the impl. of the dispatching deserialization function for a union.
+
+    Every flattened implementer is de-serialized either by ``modelType`` (if
+    it is marked with :attr:`~intermediate.Serialization.with_model_type`) or
+    -- for the remaining implementers -- structurally, by checking which
+    implementer's required properties are all present in the JSON object.
+    :py:func:`aas_core_codegen.intermediate._translate._verify_named_unions_are_dispatchable_in_json`
+    already ascertained that these two groups are unambiguous, so we do not
+    have to double-check disjointness here.
+    """
+    union_name = cpp_naming.union_name(named_union.name)
+    function_name = cpp_naming.function_name(
+        Identifier(f"deserialize_{named_union.name}")
+    )
+
+    implementers_with_model_type = []  # type: List[intermediate.ConcreteClass]
+    implementers_without_model_type = []  # type: List[intermediate.ConcreteClass]
+    for implementer in named_union.implementers:
+        if implementer.serialization.with_model_type:
+            implementers_with_model_type.append(implementer)
+        else:
+            implementers_without_model_type.append(implementer)
+
+    body_blocks = [
+        Stripped(
+            f"""\
+if (!json.is_object()) {{
+{I}std::wstring message = common::Concat(
+{II}L"Expected an object, but got: ",
+{II}common::Utf8ToWstring(json.type_name())
+{I});
+
+{I}return std::make_pair<
+{II}common::optional<types::{union_name}>,
+{II}common::optional<DeserializationError>
+{I}>(
+{II}common::nullopt,
+{II}common::make_optional<DeserializationError>(
+{III}message
+{II})
+{I});
+}}"""
+        )
+    ]  # type: List[Stripped]
+
+    if len(implementers_with_model_type) > 0:
+        case_blocks = []  # type: List[Stripped]
+        for target_cls in implementers_with_model_type:
+            literal_name = cpp_naming.enum_literal_name(target_cls.name)
+            snippet = (
+                _generate_deserialize_and_wrap_snippet_for_named_union_implementer(
+                    target_cls=target_cls, union_name=union_name
+                )
+            )
+
+            case_blocks.append(
+                Stripped(
+                    f"""\
+case types::ModelType::{literal_name}: {{
+{I}{indent_but_first_line(snippet, I)}
+}}"""
+                )
+            )
+
+        case_blocks_joined = "\n".join(case_blocks)
+
+        body_blocks.append(
+            Stripped(
+                f"""\
+if (json.contains("modelType")) {{
+{I}const std::string* model_type_str;
+{I}common::optional<DeserializationError> error;
+
+{I}std::tie(
+{II}model_type_str,
+{II}error
+{I}) = GetModelTypeFrom(json);
+
+{I}if (error.has_value()) {{
+{II}return std::make_pair<
+{III}common::optional<types::{union_name}>,
+{III}common::optional<DeserializationError>
+{II}>(
+{III}common::nullopt,
+{III}std::move(error)
+{II});
+{I}}}
+
+{I}common::optional<types::ModelType> model_type(
+{II}ModelTypeFromModelTypeString(*model_type_str)
+{I});
+
+{I}if (!model_type.has_value()) {{
+{II}std::wstring message = common::Concat(
+{III}L"The model type does not correspond to any known class: ",
+{III}common::Utf8ToWstring(*model_type_str)
+{II});
+
+{II}return std::make_pair<
+{III}common::optional<types::{union_name}>,
+{III}common::optional<DeserializationError>
+{II}>(
+{III}common::nullopt,
+{III}common::make_optional<DeserializationError>(
+{IIII}message
+{III})
+{II});
+{I}}}
+
+{I}switch (*model_type) {{
+{II}{indent_but_first_line(case_blocks_joined, II)}
+{II}default: {{
+{III}std::wstring message = common::Concat(
+{IIII}L"The dispatch to the JSON de-serialization of "
+{IIII}L"types::{union_name} "
+{IIII}L"is not defined for model type: ",
+{IIII}common::Utf8ToWstring(*model_type_str)
+{III});
+
+{III}return std::make_pair<
+{IIII}common::optional<types::{union_name}>,
+{IIII}common::optional<DeserializationError>
+{III}>(
+{IIII}common::nullopt,
+{IIII}common::make_optional<DeserializationError>(
+{IIIII}message
+{IIII})
+{III});
+{II}}}
+{I}}}
+}}"""
+            )
+        )
+
+    for target_cls in implementers_without_model_type:
+        required_properties = [
+            prop
+            for prop in target_cls.properties
+            if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
+        ]
+        assert len(required_properties) > 0, (
+            f"Expected at least one required property for the structurally "
+            f"dispatched implementer {target_cls.name!r} of "
+            f"the named union {named_union.name!r}, as this should have been "
+            f"verified in the intermediate representation."
+        )
+
+        condition = " &&\n".join(
+            f"json.contains({cpp_common.string_literal(prop.json_name)})"
+            for prop in required_properties
+        )
+
+        snippet = _generate_deserialize_and_wrap_snippet_for_named_union_implementer(
+            target_cls=target_cls, union_name=union_name
+        )
+
+        body_blocks.append(
+            Stripped(
+                f"""\
+if ({indent_but_first_line(condition, I)}) {{
+{I}{indent_but_first_line(snippet, I)}
+}}"""
+            )
+        )
+
+    body_blocks.append(
+        Stripped(
+            f"""\
+std::wstring message(
+{I}L"Could not determine a concrete type to dispatch the JSON "
+{I}L"de-serialization of types::{union_name} to, based neither "
+{I}L"on the modelType nor on the required properties present "
+{I}L"in the object"
+);
+
+return std::make_pair<
+{I}common::optional<types::{union_name}>,
+{I}common::optional<DeserializationError>
+>(
+{I}common::nullopt,
+{I}common::make_optional<DeserializationError>(
+{II}message
+{I})
+);"""
+        )
+    )
+
+    body_blocks_joined = "\n\n".join(body_blocks)
+
+    return [
+        Stripped(
+            f"""\
+std::pair<
+{I}common::optional<types::{union_name}>,
+{I}common::optional<DeserializationError>
+> {function_name}(
+{I}const nlohmann::json& json,
+{I}bool additional_properties
+) {{
+{I}{indent_but_first_line(body_blocks_joined, I)}
+}}"""
+        )
+    ]
+
+
+def _render_deserialization_implementation(
+    deserialize_function: Stripped,
+    value_type: Stripped,
+    deserialization_name: Identifier,
+) -> Stripped:
+    """Render the implementation of the ``*From`` function."""
+    return Stripped(
+        f"""\
 common::expected<
-{I}std::shared_ptr<types::{interface_name}>,
+{I}{indent_but_first_line(value_type, I)},
 {I}DeserializationError
 > {deserialization_name}(
 {I}const nlohmann::json& json,
 {I}bool additional_properties
 ) {{
 {I}common::optional<
-{II}std::shared_ptr<types::{interface_name}>
+{II}{indent_but_first_line(value_type, II)}
 {I}> instance;
 
 {I}common::optional<DeserializationError> error;
@@ -2327,6 +2778,50 @@ common::expected<
 {II}std::move(*error)
 {I});
 }}"""
+    )
+
+
+def _generate_deserialization_implementation(
+    cls: intermediate.ClassUnion,
+) -> Stripped:
+    """Generate the implementation of ``*From`` function."""
+    deserialize_function = _determine_deserialize_function_for_class(cls=cls)
+
+    value_type = Stripped(
+        f"std::shared_ptr<types::{cpp_naming.interface_name(cls.name)}>"
+    )
+
+    deserialization_name = cpp_naming.function_name(Identifier(f"{cls.name}_from"))
+
+    return _render_deserialization_implementation(
+        deserialize_function=deserialize_function,
+        value_type=value_type,
+        deserialization_name=deserialization_name,
+    )
+
+
+def _generate_deserialization_implementation_for_named_union(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """Generate the implementation of ``*From`` function for a named union."""
+    # NOTE (mristin):
+    # A named union is not part of the class hierarchy, so there is no ancestor
+    # to upcast to -- the dispatching function is always called bare, without any
+    # template parameter.
+    deserialize_function = Stripped(
+        cpp_naming.function_name(Identifier(f"Deserialize_{named_union.name}"))
+    )
+
+    value_type = Stripped(f"types::{cpp_naming.union_name(named_union.name)}")
+
+    deserialization_name = cpp_naming.function_name(
+        Identifier(f"{named_union.name}_from")
+    )
+
+    return _render_deserialization_implementation(
+        deserialize_function=deserialize_function,
+        value_type=value_type,
+        deserialization_name=deserialization_name,
     )
 
 
@@ -2905,6 +3400,12 @@ def _generate_serialize_list_property(
 
                 serialize_item_expr = Stripped("SerializeIClassPtr")
 
+            elif isinstance(type_anno.items.our_type, intermediate.NamedUnion):
+                serialize_list = "SerializeListWithFallible"
+
+                union_name = cpp_naming.union_name(type_anno.items.our_type.name)
+                serialize_item_expr = Stripped(f"Serialize{union_name}")
+
             else:
                 # noinspection PyTypeChecker
                 assert_never(type_anno.items.our_type)
@@ -3089,6 +3590,10 @@ def _generate_serialize_tuple_property(
             elif isinstance(item_type_anno.our_type, intermediate.ConstrainedPrimitive):
                 raise AssertionError("Expected this case to be handled before")
 
+            elif isinstance(item_type_anno.our_type, intermediate.NamedUnion):
+                union_name = cpp_naming.union_name(item_type_anno.our_type.name)
+                item_exprs.append(Stripped(f"Serialize{union_name}"))
+
             elif isinstance(
                 item_type_anno.our_type,
                 (intermediate.AbstractClass, intermediate.ConcreteClass),
@@ -3208,6 +3713,40 @@ std::tie(
 {I}error
 ) = SerializeIClass(
 {I}*{indent_but_first_line(getter_expr, I)}
+);
+if (error.has_value()) {{
+{I}error->path.segments.emplace_front(
+{II}common::make_unique<iteration::PropertySegment>(
+{III}iteration::Property::{cpp_naming.enum_literal_name(prop.name)}
+{II})
+{I});
+
+{I}return std::make_pair<
+{II}common::optional<nlohmann::json>,
+{II}common::optional<SerializationError>
+{I}>(
+{II}common::nullopt,
+{II}std::move(error)
+{I});
+}}
+
+result[{cpp_common.string_literal(json_prop_name)}] = std::move(
+{I}*{serialized_var}
+);"""
+            )
+        elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+            serialized_var = cpp_naming.variable_name(Identifier(f"json_{prop.name}"))
+
+            union_name = cpp_naming.union_name(type_anno.our_type.name)
+
+            code = Stripped(
+                f"""\
+common::optional<nlohmann::json> {serialized_var};
+std::tie(
+{I}{serialized_var},
+{I}error
+) = Serialize{union_name}(
+{I}{indent_but_first_line(getter_expr, I)}
 );
 if (error.has_value()) {{
 {I}error->path.segments.emplace_front(
@@ -3460,6 +3999,97 @@ std::pair<
     ]
 
 
+def _generate_serialize_named_union_declaration(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """
+    Generate the forward declaration of a named union's ``Serialize`` function.
+
+    We emit this once per union, before any class's own serialize
+    implementation that might reference it by name (this mirrors
+    :py:func:`_generate_serialize_iclass_definition`) -- otherwise a class
+    with a union-typed property would call a not-yet-declared function.
+    """
+    union_name = cpp_naming.union_name(named_union.name)
+
+    return Stripped(
+        f"""\
+std::pair<
+{I}common::optional<nlohmann::json>,
+{I}common::optional<SerializationError>
+> Serialize{union_name}(
+{I}const types::{union_name}& that
+);"""
+    )
+
+
+@require(lambda named_union: len(named_union.implementers) > 0)
+def _generate_serialize_named_union_implementation(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """
+    Generate the function to serialize a named union, once per union.
+
+    This mirrors :py:func:`_generate_serialize_iclass_implementation`'s
+    ``switch``-based dispatch shape, but switches on the ``std::variant``'s
+    own ``index()`` instead of ``model_type()`` -- the variant already knows
+    which alternative it holds, so no dynamic cast is needed either. We
+    generate this once per named union and reference it *by name* wherever
+    the union appears (property, list item, tuple item), instead of
+    inlining a lambda at every use site.
+    """
+    union_name = cpp_naming.union_name(named_union.name)
+
+    case_blocks = []  # type: List[Stripped]
+    for i, implementer in enumerate(named_union.implementers):
+        # NOTE (mristin):
+        # We call the implementer's own serialize function directly on the
+        # dereferenced pointer, instead of going through ``SerializeIClassPtr``
+        # -- the variant's index already tells us the concrete type
+        # unambiguously, so a second (redundant) dispatch by ``model_type()``
+        # with a ``dynamic_cast`` would be pure waste.
+        serialize_function = cpp_naming.function_name(
+            Identifier(f"serialize_{implementer.name}")
+        )
+
+        case_blocks.append(
+            Stripped(
+                f"""\
+case {i}:
+{I}return {serialize_function}(*std::get<{i}>(that));"""
+            )
+        )
+
+    case_blocks.append(
+        Stripped(
+            f"""\
+default:
+{I}throw std::logic_error(
+{II}common::Concat(
+{III}"Invalid variant index for {union_name}: ",
+{III}std::to_string(that.index())
+{II})
+{I});"""
+        )
+    )
+
+    case_blocks_joined = "\n".join(case_blocks)
+
+    return Stripped(
+        f"""\
+std::pair<
+{I}common::optional<nlohmann::json>,
+{I}common::optional<SerializationError>
+> Serialize{union_name}(
+{I}const types::{union_name}& that
+) {{
+{I}switch (that.index()) {{
+{II}{indent_but_first_line(case_blocks_joined, II)}
+{I}}};
+}}"""
+    )
+
+
 def _generate_serialize_implementation() -> Stripped:
     """Generate the main serialization function."""
     return Stripped(
@@ -3560,8 +4190,15 @@ def generate_implementation(
         _generate_get_model_type(),
     ]
 
-    if any(len(cls.concrete_descendants) > 0 for cls in symbol_table.classes):
+    if any(len(cls.concrete_descendants) > 0 for cls in symbol_table.classes) or any(
+        implementer.serialization.with_model_type
+        for named_union in symbol_table.named_unions
+        for implementer in named_union.implementers
+    ):
         blocks.extend(_generate_model_type_string_to_model_type(symbol_table))
+
+    if len(symbol_table.named_unions) > 0:
+        blocks.append(_generate_wrap_deserialized_as_variant_function())
 
     if any(
         _type_annotation_contains_list(prop.type_annotation)
@@ -3587,6 +4224,13 @@ def generate_implementation(
         if len(cls.concrete_descendants) > 0:
             blocks.append(_generate_dispatch_deserialize_definition(cls=cls))
 
+    for named_union in symbol_table.named_unions:
+        blocks.append(
+            _generate_dispatch_deserialize_definition_for_named_union(
+                named_union=named_union
+            )
+        )
+
     errors = []  # type: List[Error]
 
     for cls in symbol_table.classes:
@@ -3608,8 +4252,22 @@ def generate_implementation(
             )
             blocks.extend(deserialize_dispatch_blocks)
 
+    for named_union in symbol_table.named_unions:
+        blocks.extend(
+            _generate_dispatch_deserialize_implementation_for_named_union(
+                named_union=named_union
+            )
+        )
+
     for cls in symbol_table.classes:
         blocks.append(_generate_deserialization_implementation(cls=cls))
+
+    for named_union in symbol_table.named_unions:
+        blocks.append(
+            _generate_deserialization_implementation_for_named_union(
+                named_union=named_union
+            )
+        )
 
     blocks.extend(
         [
@@ -3658,6 +4316,11 @@ struct SerializationError {{
 
     blocks.extend(_generate_serialize_iclass_definition())
 
+    for named_union in symbol_table.named_unions:
+        blocks.append(
+            _generate_serialize_named_union_declaration(named_union=named_union)
+        )
+
     for cls in symbol_table.concrete_classes:
         serialize_block, error = _generate_serialize_cls(cls=cls, spec_impls=spec_impls)
         if error is not None:
@@ -3667,6 +4330,11 @@ struct SerializationError {{
             blocks.append(serialize_block)
 
     blocks.extend(_generate_serialize_iclass_implementation(symbol_table=symbol_table))
+
+    for named_union in symbol_table.named_unions:
+        blocks.append(
+            _generate_serialize_named_union_implementation(named_union=named_union)
+        )
 
     blocks.append(_generate_serialize_implementation())
 

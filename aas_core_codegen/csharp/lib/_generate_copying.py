@@ -24,6 +24,51 @@ from aas_core_codegen.csharp.common import (
 )
 
 
+def _generate_union_deep_copy_helper() -> Stripped:
+    """
+    Generate a single ``Deep`` overload shared by every named union.
+
+    A named union is not itself an ``Aas.IClass``, so it can not be passed
+    to the generic ``Deep<T>() where T : Aas.IClass``. We add this second
+    generic overload, next to it, so that call sites can keep calling
+    ``Deep`` directly, regardless of whether the value at hand is a class
+    instance or a named union.
+
+    ``T`` is bounded by ``Aas.IUnion<T>`` (see ``generate()`` in
+    ``_generate_types.py``) instead of by the union's own type, so we need
+    only this one overload for *all* named unions, not one per union --
+    while ``T.WithUnderlying(...)`` still lets the result come back as the
+    caller's own concrete union type, with no downcast needed at any
+    property/list-item/tuple-item call site.
+
+    .. note::
+
+        The parameter is typed as ``Aas.IUnion<T>``, not bare ``T``. C# does
+        *not* allow overloading a generic method solely by its type
+        parameter's constraint -- ``Deep<T>(T that) where T : Aas.IUnion<T>``
+        would be flagged as a duplicate member of the existing
+        ``Deep<T>(T that) where T : Aas.IClass`` above (confirmed with a
+        real ``dotnet build``: CS0111). Typing the parameter itself as
+        ``Aas.IUnion<T>`` gives the two overloads genuinely different formal
+        parameter types, which C# *does* allow, while type inference still
+        resolves ``T`` to the caller's own concrete union type from the
+        argument (confirmed with a real ``dotnet run``, including through a
+        bare ``.Select(Deep)`` method-group conversion).
+
+    Should a named union ever be allowed to flatten primitive or enumeration
+    alternatives, only the body of this method has to change (to dispatch on
+    the underlying value's kind) -- every call site stays the same.
+    """
+    return Stripped(
+        f"""\
+public static T Deep<T>(Aas.IUnion<T> that) where T : Aas.IUnion<T>
+{{
+{I}return that.WithUnderlying(
+{II}Deep(that.Underlying));
+}}"""
+    )
+
+
 def _generate_shallow_copy_transform_method(
     cls: intermediate.ConcreteClass,
 ) -> Stripped:
@@ -272,8 +317,15 @@ if (that.{prop_name} != null)
                 type_anno.items, intermediate.OurTypeAnnotation
             ) and isinstance(
                 type_anno.items.our_type,
-                (intermediate.AbstractClass, intermediate.ConcreteClass),
+                (
+                    intermediate.AbstractClass,
+                    intermediate.ConcreteClass,
+                    intermediate.NamedUnion,
+                ),
             ):
+                # A named union has its own ``Deep`` overload (see
+                # :py:func:`_generate_union_deep_copy_helper`), so it
+                # can be deep-copied exactly like a class instance here.
                 if not optional:
                     body_blocks.append(
                         Stripped(
@@ -333,8 +385,16 @@ if (that.{prop_name} != null)
 
                 elif isinstance(
                     type_anno.our_type,
-                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                    (
+                        intermediate.AbstractClass,
+                        intermediate.ConcreteClass,
+                        intermediate.NamedUnion,
+                    ),
                 ):
+                    # A named union has its own ``Deep`` overload (see
+                    # :py:func:`_generate_union_deep_copy_helper`), so
+                    # it can be deep-copied exactly like a class instance
+                    # here.
                     if optional:
                         constructor_arg_exprs.append(
                             f"""\
@@ -344,6 +404,7 @@ if (that.{prop_name} != null)
                         )
                     else:
                         constructor_arg_exprs.append(f"Deep(that.{prop_name})")
+
                 else:
                     # noinspection PyTypeChecker
                     assert_never(type_anno.our_type)
@@ -367,8 +428,16 @@ if (that.{prop_name} != null)
                         item_type_anno, intermediate.OurTypeAnnotation
                     ) and isinstance(
                         item_type_anno.our_type,
-                        (intermediate.AbstractClass, intermediate.ConcreteClass),
+                        (
+                            intermediate.AbstractClass,
+                            intermediate.ConcreteClass,
+                            intermediate.NamedUnion,
+                        ),
                     ):
+                        # A named union has its own ``Deep`` overload (see
+                        # :py:func:`_generate_union_deep_copy_helper`),
+                        # so it can be deep-copied exactly like a class
+                        # instance here.
                         item_expr = f"Deep({item_expr})"
 
                     item_exprs.append(Stripped(item_expr))
@@ -547,6 +616,9 @@ public static T Deep<T>(T that) where T : Aas.IClass
 }}"""
         ),
     ]  # type: List[Stripped]
+
+    if len(symbol_table.named_unions) > 0:
+        copy_blocks.append(_generate_union_deep_copy_helper())
 
     shallow_copier_block, shallow_errors = _generate_shallow_copier(
         symbol_table=symbol_table, spec_impls=spec_impls

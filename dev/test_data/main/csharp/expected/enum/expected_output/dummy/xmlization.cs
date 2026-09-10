@@ -1040,7 +1040,8 @@ namespace dummy
             /// </summary>
             /// <remarks>
             /// This is shared by all the property kinds (primitive, enumeration, class,
-            /// interface, list) as they all wrap their content in exactly the same way.
+            /// interface, named union, list) as they all wrap their content in exactly
+            /// the same way.
             /// </remarks>
             /// <typeparam name="T">Type of the property value</typeparam>
             private static void SerializeElement<T>(

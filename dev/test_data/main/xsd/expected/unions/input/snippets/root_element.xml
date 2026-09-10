@@ -1,0 +1,8 @@
+<xs:schema
+        xmlns:xs="http://www.w3.org/2001/XMLSchema"
+        xmlns="https://dummy.com"
+        elementFormDefault="qualified"
+        targetNamespace="https://dummy.com"
+>
+    <xs:element name="something" type="something_t" />
+</xs:schema>

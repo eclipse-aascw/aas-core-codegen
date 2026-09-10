@@ -791,6 +791,9 @@ class IteratorQualities:
                 ):
                     relevant_properties.append(prop)
 
+                elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+                    relevant_properties.append(prop)
+
                 else:
                     assert_never(type_anno.our_type)
 
@@ -811,6 +814,11 @@ class IteratorQualities:
                         type_anno.items.our_type,
                         (intermediate.AbstractClass, intermediate.ConcreteClass),
                     ):
+                        cls_contains_a_list_or_tuple_property = True
+
+                        relevant_properties.append(prop)
+
+                    elif isinstance(type_anno.items.our_type, intermediate.NamedUnion):
                         cls_contains_a_list_or_tuple_property = True
 
                         relevant_properties.append(prop)
@@ -838,12 +846,18 @@ class IteratorQualities:
                         "so no nested optionals, lists or tuples are expected here."
                     )
 
-                    if isinstance(
+                    is_class_item = isinstance(
                         item_type_anno, intermediate.OurTypeAnnotation
                     ) and isinstance(
                         item_type_anno.our_type,
                         (intermediate.AbstractClass, intermediate.ConcreteClass),
-                    ):
+                    )
+
+                    is_named_union_item = isinstance(
+                        item_type_anno, intermediate.OurTypeAnnotation
+                    ) and isinstance(item_type_anno.our_type, intermediate.NamedUnion)
+
+                    if is_class_item or is_named_union_item:
                         contains_a_class = True
 
                 if contains_a_class:
@@ -938,6 +952,65 @@ class {iterator_over_cls} : public impl::IIterator {{
     ]
 
 
+def _named_union_extraction_function_name(
+    named_union: intermediate.NamedUnion,
+) -> Identifier:
+    """Determine the name of the ``ExtractIClassFrom{UnionName}`` helper."""
+    return cpp_naming.function_name(
+        Identifier(f"extract_i_class_from_{named_union.name}")
+    )
+
+
+@require(lambda named_union: len(named_union.implementers) > 0)
+def _generate_extract_iclass_from_named_union(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """
+    Generate a helper to extract the ``shared_ptr<IClass>`` held in a union.
+
+    A named union's value is a ``std::variant``, not a polymorphic pointer,
+    so it can not be ``static_pointer_cast`` directly -- we switch on the
+    variant's own ``index()`` and return the corresponding
+    ``std::get<i>(...)`` alternative, which upcasts to ``IClass`` like any
+    other class pointer. We generate this once per union and reference it
+    by name wherever a union-typed property/item is iterated (single
+    property, list item, tuple item).
+    """
+    union_name = cpp_naming.union_name(named_union.name)
+    function_name = _named_union_extraction_function_name(named_union)
+
+    case_blocks = []  # type: List[Stripped]
+    for i in range(len(named_union.implementers)):
+        case_blocks.append(
+            Stripped(
+                f"""\
+case {i}:
+{I}return std::get<{i}>(that);"""
+            )
+        )
+
+    case_blocks.append(
+        Stripped(
+            f"""\
+default:
+{I}throw std::logic_error("Invalid variant index");"""
+        )
+    )
+
+    case_blocks_joined = "\n".join(case_blocks)
+
+    return Stripped(
+        f"""\
+std::shared_ptr<types::IClass> {function_name}(
+{I}const types::{union_name}& that
+) {{
+{I}switch (that.index()) {{
+{II}{indent_but_first_line(case_blocks_joined, II)}
+{I}}}
+}}"""
+    )
+
+
 @require(lambda iterator_qualities: len(iterator_qualities.relevant_properties) > 0)
 def _generate_iterator_over_cls_execute_implementation(
     iterator_qualities: IteratorQualities,
@@ -1001,18 +1074,76 @@ item_ = std::move(
                 )
                 flow.append(yielding_flow.Yield())
 
+        elif isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+            type_anno.our_type, intermediate.NamedUnion
+        ):
+            extraction_function = _named_union_extraction_function_name(
+                type_anno.our_type
+            )
+
+            if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
+                flow.append(
+                    yielding_flow.IfTrue(
+                        f"casted_->{getter_name}().has_value()",
+                        [
+                            yielding_flow.command_from_text(
+                                f"""\
+property_ = Property::{property_literal};
+item_ = std::move(
+{I}{extraction_function}(
+{II}*(casted_->{getter_name}())
+{I})
+);
+++index_;"""
+                            ),
+                            yielding_flow.Yield(),
+                        ],
+                    )
+                )
+            else:
+                flow.append(
+                    yielding_flow.command_from_text(
+                        f"""\
+property_ = Property::{property_literal};
+item_ = std::move(
+{I}{extraction_function}(
+{II}casted_->{getter_name}()
+{I})
+);
+++index_;"""
+                    )
+                )
+                flow.append(yielding_flow.Yield())
+
         elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-            assert isinstance(
+            is_list_of_classes = isinstance(
                 type_anno.items, intermediate.OurTypeAnnotation
             ) and isinstance(
                 type_anno.items.our_type,
                 (intermediate.AbstractClass, intermediate.ConcreteClass),
-            ), (
-                f"NOTE (mristin): We expect only lists of classes "
-                f"at the moment, but you specified {prop.type_annotation} "
+            )
+
+            is_list_of_named_unions = isinstance(
+                type_anno.items, intermediate.OurTypeAnnotation
+            ) and isinstance(type_anno.items.our_type, intermediate.NamedUnion)
+
+            assert is_list_of_classes or is_list_of_named_unions, (
+                f"NOTE (mristin): We expect only lists of classes or named "
+                f"unions at the moment, but you specified {prop.type_annotation} "
                 f"in class {cls.name!r} and property {prop.name!r}. "
                 f"Please contact the developers if you need this feature."
             )
+            assert isinstance(type_anno.items, intermediate.OurTypeAnnotation)
+
+            if isinstance(type_anno.items.our_type, intermediate.NamedUnion):
+                extraction_function = _named_union_extraction_function_name(
+                    type_anno.items.our_type
+                )
+                item_extract_expr = Stripped(f"{extraction_function}(item_value)")
+            else:
+                item_extract_expr = Stripped(
+                    "std::static_pointer_cast<types::IClass>(item_value)"
+                )
 
             if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
                 list_type = cpp_common.generate_type_with_const_ref_if_applicable(
@@ -1037,11 +1168,10 @@ item_ = std::move(
 {list_type} {list_var}(
 {I}*(casted_->{getter_name}())
 );
+const auto& item_value = {list_var}[*cursor_];
 
 item_ = std::move(
-{I}std::static_pointer_cast<types::IClass>(
-{II}{list_var}[*cursor_]
-{I})
+{I}{indent_but_first_line(item_extract_expr, I)}
 );
 ++index_;"""
                                     ),
@@ -1075,11 +1205,10 @@ item_ = std::move(
 {list_type} {list_var}(
 {I}casted_->{getter_name}()
 );
+const auto& item_value = {list_var}[*cursor_];
 
 item_ = std::move(
-{I}std::static_pointer_cast<types::IClass>(
-{II}{list_var}[*cursor_]
-{I})
+{I}{indent_but_first_line(item_extract_expr, I)}
 );
 ++index_;"""
                             ),
@@ -1091,16 +1220,23 @@ item_ = std::move(
                 flow.append(yielding_flow.command_from_text("cursor_.reset();"))
 
         elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-            class_indices = [
-                i
-                for i, item_type_anno in enumerate(type_anno.items)
-                if isinstance(item_type_anno, intermediate.OurTypeAnnotation)
-                and isinstance(
+            class_or_union_indices = []  # type: List[Tuple[int, intermediate.OurType]]
+            for i, item_type_anno in enumerate(type_anno.items):
+                if not isinstance(item_type_anno, intermediate.OurTypeAnnotation):
+                    continue
+
+                is_class_item = isinstance(
                     item_type_anno.our_type,
                     (intermediate.AbstractClass, intermediate.ConcreteClass),
                 )
-            ]
-            assert len(class_indices) > 0, (
+                is_named_union_item = isinstance(
+                    item_type_anno.our_type, intermediate.NamedUnion
+                )
+
+                if is_class_item or is_named_union_item:
+                    class_or_union_indices.append((i, item_type_anno.our_type))
+
+            assert len(class_or_union_indices) > 0, (
                 "Expected at least one class item in the tuple as the property "
                 "has been recognized as relevant in ``IteratorQualities``"
             )
@@ -1119,15 +1255,37 @@ item_ = std::move(
                 tuple_getter_expr = Stripped(f"casted_->{getter_name}()")
 
             yield_nodes = []  # type: List[yielding_flow.Node]
-            for i in class_indices:
+            for i, item_our_type in class_or_union_indices:
+                tuple_item_expr = Stripped(
+                    f"""\
+std::get<{i}>({tuple_getter_expr})"""
+                )
+
+                extract_expr: Stripped
+                if isinstance(item_our_type, intermediate.NamedUnion):
+                    extraction_function = _named_union_extraction_function_name(
+                        item_our_type
+                    )
+                    extract_expr = Stripped(
+                        f"""\
+{extraction_function}(
+{I}{indent_but_first_line(tuple_item_expr, I)}
+)"""
+                    )
+                else:
+                    extract_expr = Stripped(
+                        f"""\
+std::static_pointer_cast<types::IClass>(
+{I}{indent_but_first_line(tuple_item_expr, I)}
+)"""
+                    )
+
                 yield_nodes.append(
                     yielding_flow.command_from_text(
                         f"""\
 cursor_ = {i};
 item_ = std::move(
-{I}std::static_pointer_cast<types::IClass>(
-{II}std::get<{i}>({tuple_getter_expr})
-{I})
+{I}{indent_but_first_line(extract_expr, I)}
 );
 ++index_;"""
                     )
@@ -2378,6 +2536,11 @@ def generate_implementation(
     ]  # type: List[Stripped]
 
     errors = []  # type: List[Error]
+
+    for named_union in symbol_table.named_unions:
+        blocks.append(
+            _generate_extract_iclass_from_named_union(named_union=named_union)
+        )
 
     for cls in symbol_table.concrete_classes:
         if cls.is_implementation_specific:

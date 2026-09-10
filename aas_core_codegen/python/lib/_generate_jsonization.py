@@ -512,6 +512,197 @@ def {function_name}(
     )
 
 
+@require(
+    lambda named_union: any(
+        implementer.serialization.with_model_type
+        for implementer in named_union.implementers
+    )
+)
+def _generate_dispatch_map_for_named_union(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """Generate a mapping model type 🠒 de-serialization function."""
+    mapping_name = python_naming.private_constant_name(
+        Identifier(f"{named_union.name}_from_jsonable_dispatch")
+    )
+
+    union_name = python_naming.union_name(named_union.name)
+
+    mapping_writer = io.StringIO()
+    mapping_writer.write(
+        f"""\
+{mapping_name}: Mapping[
+{I}str,
+{I}Callable[[Jsonable], aas_types.{union_name}]
+] = {{
+"""
+    )
+
+    for implementer in named_union.implementers:
+        if not implementer.serialization.with_model_type:
+            continue
+
+        function_name_for_implementer = python_naming.function_name(
+            Identifier(f"{implementer.name}_from_jsonable")
+        )
+
+        implementer_literal = python_common.string_literal(
+            naming.json_model_type(implementer.name)
+        )
+
+        mapping_writer.write(
+            f"""\
+{I}{implementer_literal}: {function_name_for_implementer},
+"""
+        )
+
+    mapping_writer.write("}")
+
+    return Stripped(mapping_writer.getvalue())
+
+
+def _generate_named_union_from_jsonable(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """
+    Generate the de-serialization dispatch for the named union.
+
+    We dispatch on ``modelType`` for every implementer which sets it, and fall
+    back to testing which implementer's required properties are all present
+    for the remaining implementers. This mirrors the per-implementer
+    partitioning already verified in the intermediate representation, so
+    every implementer is covered by exactly one of the two strategies.
+    """
+    function_name = python_naming.function_name(
+        Identifier(f"{named_union.name}_from_jsonable")
+    )
+
+    union_name = python_naming.union_name(named_union.name)
+
+    with_model_type = [
+        implementer
+        for implementer in named_union.implementers
+        if implementer.serialization.with_model_type
+    ]
+    without_model_type = [
+        implementer
+        for implementer in named_union.implementers
+        if not implementer.serialization.with_model_type
+    ]
+
+    blocks = [
+        Stripped(
+            f"""\
+if not isinstance(jsonable, collections.abc.Mapping):
+{I}raise DeserializationException(
+{II}f"Expected a mapping, but got: {{type(jsonable)}}"
+{I})"""
+        )
+    ]  # type: List[Stripped]
+
+    if len(with_model_type) > 0:
+        mapping_name = python_naming.private_constant_name(
+            Identifier(f"{named_union.name}_from_jsonable_dispatch")
+        )
+
+        blocks.append(
+            Stripped(
+                f"""\
+model_type = jsonable.get("modelType", None)
+if model_type is not None:
+{I}if not isinstance(model_type, str):
+{II}raise DeserializationException(
+{III}f"Expected the property modelType to be a str, "
+{III}f"but got: {{type(model_type)}}"
+{II})
+
+{I}dispatch = {mapping_name}.get(model_type, None)
+{I}if dispatch is None:
+{II}raise DeserializationException(
+{III}f"Unexpected model type for {union_name}: {{model_type}}"
+{II})
+
+{I}return dispatch(jsonable)"""
+            )
+        )
+
+    for implementer in without_model_type:
+        required_json_names = [
+            implementer.properties_by_name[arg.name].json_name
+            for arg in implementer.constructor.arguments
+            if not isinstance(arg.type_annotation, intermediate.OptionalTypeAnnotation)
+        ]
+        assert len(required_json_names) > 0, (
+            f"Expected the structurally-dispatched implementer "
+            f"{implementer.name!r} of the named union {named_union.name!r} "
+            f"to have at least one required property; this should have "
+            f"already been verified in the intermediate representation."
+        )
+
+        implementer_function = python_naming.function_name(
+            Identifier(f"{implementer.name}_from_jsonable")
+        )
+
+        conditions = [
+            f"{python_common.string_literal(json_name)} in jsonable"
+            for json_name in required_json_names
+        ]
+
+        one_liner = f"if {' and '.join(conditions)}:"
+        if len(one_liner) <= 70:
+            if_stmt = Stripped(one_liner)
+        else:
+            joined_conditions = f"\n{II}and ".join(conditions)
+            if_stmt = Stripped(
+                f"""\
+if (
+{II}{joined_conditions}
+):"""
+            )
+
+        blocks.append(
+            Stripped(
+                f"""\
+{if_stmt}
+{I}return {implementer_function}(jsonable)"""
+            )
+        )
+
+    blocks.append(
+        Stripped(
+            f"""\
+raise DeserializationException(
+{I}"Could not determine the concrete type of {union_name} "
+{I}"for the given JSON object"
+)"""
+        )
+    )
+
+    writer = io.StringIO()
+    writer.write(
+        f"""\
+def {function_name}(
+{II}jsonable: Jsonable
+) -> aas_types.{union_name}:
+{I}\"\"\"
+{I}Parse an instance of :py:class:`.types.{union_name}` from the JSON-able
+{I}structure :paramref:`jsonable`.
+
+{I}:param jsonable: structure to be parsed
+{I}:return: Concrete instance corresponding to :py:class:`.types.{union_name}`
+{I}:raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+{I}\"\"\"
+"""
+    )
+
+    for i, block in enumerate(blocks):
+        if i > 0:
+            writer.write("\n\n")
+        writer.write(textwrap.indent(block, I))
+
+    return Stripped(writer.getvalue())
+
+
 _PARSE_FUNCTION_BY_PRIMITIVE_TYPE = {
     intermediate.PrimitiveType.BOOL: "_bool_from_jsonable",
     intermediate.PrimitiveType.INT: "_int_from_jsonable",
@@ -545,6 +736,16 @@ def _parse_function_for_atomic_value(
                 intermediate.ConcreteClass,
             ),
         ):
+            function_name = python_naming.function_name(
+                Identifier(f"{our_type.name}_from_jsonable")
+            )
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # We keep this as its own branch, separate from the case above,
+            # even though the code is identical at the moment. We might want
+            # to support unions of primitives in the future, at which point
+            # this branch would need to diverge.
             function_name = python_naming.function_name(
                 Identifier(f"{our_type.name}_from_jsonable")
             )
@@ -1082,8 +1283,17 @@ def _generate_transform_atomic_value(
             raise AssertionError("This case should have been handled before.")
 
         elif isinstance(
-            type_anno.our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+            type_anno.our_type,
+            (intermediate.AbstractClass, intermediate.ConcreteClass),
         ):
+            return Stripped(f"self.transform({access_expression})")
+
+        elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # We keep this as its own branch, separate from the class case
+            # above, even though the code is identical at the moment. We
+            # might want to support unions of primitives in the future, at
+            # which point this branch would need to diverge.
             return Stripped(f"self.transform({access_expression})")
 
         else:
@@ -1521,6 +1731,8 @@ MutableJsonable = Union[
                 blocks.append(_generate_setter(cls=our_type))
 
                 blocks.append(_generate_concrete_class_from_jsonable(cls=our_type))
+        elif isinstance(our_type, intermediate.NamedUnion):
+            blocks.append(_generate_named_union_from_jsonable(named_union=our_type))
         else:
             assert_never(our_type)
 
@@ -1536,6 +1748,15 @@ MutableJsonable = Union[
 
             if not our_type.is_implementation_specific:
                 blocks.append(_generate_setter_map(cls=our_type))
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            if any(
+                implementer.serialization.with_model_type
+                for implementer in our_type.implementers
+            ):
+                blocks.append(
+                    _generate_dispatch_map_for_named_union(named_union=our_type)
+                )
 
         else:
             pass

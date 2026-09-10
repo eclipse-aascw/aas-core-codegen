@@ -31,6 +31,7 @@ from aas_core_codegen.java.common import (
     INDENT as I,
     INDENT2 as II,
     INDENT3 as III,
+    INDENT4 as IIII,
 )
 from aas_core_codegen.intermediate import (
     construction as intermediate_construction,
@@ -42,7 +43,10 @@ from aas_core_codegen.intermediate import (
 
 def _human_readable_identifier(
     something: Union[
-        intermediate.Enumeration, intermediate.AbstractClass, intermediate.ConcreteClass
+        intermediate.Enumeration,
+        intermediate.AbstractClass,
+        intermediate.ConcreteClass,
+        intermediate.NamedUnion,
     ]
 ) -> str:
     """
@@ -58,6 +62,8 @@ def _human_readable_identifier(
         result = f"meta-model abstract class {something.name!r}"
     elif isinstance(something, intermediate.ConcreteClass):
         result = f"meta-model concrete class {something.name!r}"
+    elif isinstance(something, intermediate.NamedUnion):
+        result = f"meta-model named union {something.name!r}"
     else:
         assert_never(something)
 
@@ -155,6 +161,9 @@ def _verify_intra_structure_collisions(
                         f"the meta-model method argument {arg.name!r}"
                     )
 
+    elif isinstance(our_type, intermediate.NamedUnion):
+        pass
+
     else:
         assert_never(our_type)
 
@@ -178,6 +187,7 @@ def _verify_structure_name_collisions(
             intermediate.Enumeration,
             intermediate.AbstractClass,
             intermediate.ConcreteClass,
+            intermediate.NamedUnion,
         ],
     ] = dict()
 
@@ -192,6 +202,7 @@ def _verify_structure_name_collisions(
                 intermediate.Enumeration,
                 intermediate.AbstractClass,
                 intermediate.ConcreteClass,
+                intermediate.NamedUnion,
             ),
         ):
             continue
@@ -249,6 +260,25 @@ def _verify_structure_name_collisions(
                     )
                 else:
                     observed_structure_names[class_name] = our_type
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            union_name = java_naming.union_name(our_type.name)
+
+            other = observed_structure_names.get(union_name, None)
+
+            if other is not None:
+                errors.append(
+                    Error(
+                        our_type.parsed.node,
+                        f"The Java name {union_name!r} "
+                        f"for the named union {our_type.name!r} "
+                        f"collides with the same Java name "
+                        f"coming from the {_human_readable_identifier(other)}",
+                    )
+                )
+            else:
+                observed_structure_names[union_name] = our_type
+
         else:
             assert_never(our_type)
 
@@ -362,6 +392,19 @@ def _generate_descend_body(cls: intermediate.ConcreteClass, recurse: bool) -> St
 Stream.concat(Stream.<IClass>of({class_name}.this.{prop_name}),
 {I}StreamSupport.stream({class_name}.this.{prop_name}.descend().spliterator(), false))"""
                     )
+            elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+                underlying_expr = Stripped(
+                    f"{class_name}.this.{prop_name}.getUnderlying()"
+                )
+
+                if not descendability[type_anno] or not recurse:
+                    prop_expr = Stripped(f"Stream.<IClass>of({underlying_expr})")
+                else:
+                    prop_expr = Stripped(
+                        f"""\
+Stream.concat(Stream.<IClass>of({underlying_expr}),
+{I}StreamSupport.stream({underlying_expr}.descend().spliterator(), false))"""
+                    )
             else:
                 assert_never(type_anno.our_type)
 
@@ -370,19 +413,31 @@ Stream.concat(Stream.<IClass>of({class_name}.this.{prop_name}),
                 type_anno.items, intermediate.OurTypeAnnotation
             ) and isinstance(
                 type_anno.items.our_type,
-                (intermediate.AbstractClass, intermediate.ConcreteClass),
+                (
+                    intermediate.AbstractClass,
+                    intermediate.ConcreteClass,
+                    intermediate.NamedUnion,
+                ),
             ), (
-                f"We expect only list of classes "
+                f"We expect only list of classes or named unions "
                 f"at the moment, but you specified {type_anno}. "
                 f"Please contact the developers if you need this feature."
             )
 
+            if isinstance(type_anno.items.our_type, intermediate.NamedUnion):
+                item_stream = Stripped(
+                    f"{class_name}.this.{prop_name}.stream()"
+                    f".map(item -> item.getUnderlying())"
+                )
+            else:
+                item_stream = Stripped(f"{class_name}.this.{prop_name}.stream()")
+
             if not recurse:
-                prop_expr = Stripped(f"{class_name}.this.{prop_name}.stream()")
+                prop_expr = item_stream
             else:
                 prop_expr = Stripped(
                     f"""\
-{class_name}.this.{prop_name}.stream()
+{item_stream}
 {I}.flatMap(item -> Stream.concat(Stream.<IClass>of(item),
 {II}StreamSupport.stream(item.descend().spliterator(), false)))"""
                 )
@@ -398,15 +453,23 @@ Stream.concat(Stream.<IClass>of({class_name}.this.{prop_name}),
                     item_type_anno, intermediate.OurTypeAnnotation
                 ) and isinstance(
                     item_type_anno.our_type,
-                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                    (
+                        intermediate.AbstractClass,
+                        intermediate.ConcreteClass,
+                        intermediate.NamedUnion,
+                    ),
                 ), (
                     f"We expect only atomic values (primitives, constrained "
-                    f"primitives, enumeration literals) or classes as items "
-                    f"of a tuple at the moment, but you specified {type_anno}. "
+                    f"primitives, enumeration literals), classes or named unions "
+                    f"as items of a tuple at the moment, but you specified "
+                    f"{type_anno}. "
                     f"Please contact the developers if you need this feature."
                 )
 
                 item_access = Stripped(f"{class_name}.this.{prop_name}.item{i + 1}()")
+
+                if isinstance(item_type_anno.our_type, intermediate.NamedUnion):
+                    item_access = Stripped(f"{item_access}.getUnderlying()")
 
                 if not recurse:
                     item_stream_exprs.append(
@@ -1665,6 +1728,259 @@ public interface IClass {{
     return java_common.JavaFile(file_name, file_content)
 
 
+def _generate_iunion(
+    package: java_common.PackageIdentifier,
+) -> java_common.JavaFile:
+    """
+    Generate the common interface implemented by every named union.
+
+    ``T`` is self-bounded (``T extends IUnion<T>``) so that a single generic
+    dispatch method (see, *e.g.*, ``Copying.deep`` or the enhancing
+    ``_Wrapper.transform``) can accept and return any named union's own
+    concrete type with no downcast at the call site, instead of needing one
+    dispatch overload per named union.
+    """
+    structure_name = Stripped("IUnion")
+    file_name = java_common.interface_package_path(structure_name)
+    file_content = f"""\
+{java_common.WARNING}
+
+package {package}.types.model;
+
+/**
+ * Represent an instance of a named union of one or more classes.
+ */
+public interface IUnion<T extends IUnion<T>> {{
+{I}/**
+{I} * Get the underlying instance regardless of the concrete case.
+{I} */
+{I}IClass getUnderlying();
+
+{I}/**
+{I} * Wrap {{@code that}} as an instance of the same union type as this
+{I} * instance, based on its run-time type.
+{I} */
+{I}T withUnderlying(IClass that);
+}}
+
+{java_common.WARNING}\n"""
+
+    return java_common.JavaFile(file_name, file_content)
+
+
+def _generate_named_union_class(named_union: intermediate.NamedUnion) -> Stripped:
+    """
+    Generate the class representing the named union ``named_union``.
+
+    Represent the union as a closed, plain Java class, not an interface,
+    since a union does not need to allow custom enhancements or wrappings
+    the way our model classes do. Store the single active alternative
+    behind a private discriminant enum, in its own separately-typed field
+    per flattened implementer, so that adding an alternative later never
+    requires an open, shared field.
+    """
+    name = java_naming.union_name(named_union.name)
+
+    implementers = named_union.implementers
+
+    interface_names = [
+        java_naming.interface_name(implementer.name) for implementer in implementers
+    ]
+    implementer_class_names = [
+        java_naming.class_name(implementer.name) for implementer in implementers
+    ]
+    value_kinds = [
+        java_naming.enum_literal_name(implementer.name) for implementer in implementers
+    ]
+    field_names = [
+        Stripped(f"as{implementer_class_name}")
+        for implementer_class_name in implementer_class_names
+    ]
+
+    # region Doc comment
+
+    if len(interface_names) == 1:
+        listing = f"{{@link {interface_names[0]}}}"
+    elif len(interface_names) == 2:
+        listing = f"{{@link {interface_names[0]}}} and {{@link {interface_names[1]}}}"
+    else:
+        listing = (
+            ", ".join(
+                f"{{@link {interface_name}}}" for interface_name in interface_names[:-1]
+            )
+            + f", and {{@link {interface_names[-1]}}}"
+        )
+
+    # endregion
+
+    # region Value kind
+
+    value_kind_lines = ",\n".join(value_kinds)
+    value_kind_enum = Stripped(
+        f"""\
+private enum ValueKind {{
+{I}{indent_but_first_line(value_kind_lines, I)}
+}}"""
+    )
+
+    # endregion
+
+    # region Fields and constructor
+
+    field_decls = [Stripped("private final ValueKind valueKind;")] + [
+        Stripped(f"private final {interface_name} {field_name};")
+        for interface_name, field_name in zip(interface_names, field_names)
+    ]
+    fields_block = Stripped("\n".join(field_decls))
+
+    ctor_params = ["ValueKind valueKind"] + [
+        f"{interface_name} {field_name}"
+        for interface_name, field_name in zip(interface_names, field_names)
+    ]
+    ctor_params_joined = ",\n".join(ctor_params)
+
+    ctor_body_lines = ["this.valueKind = valueKind;"] + [
+        f"this.{field_name} = {field_name};" for field_name in field_names
+    ]
+    ctor_body = "\n".join(ctor_body_lines)
+
+    constructor = Stripped(
+        f"""\
+private {name}(
+{I}{indent_but_first_line(ctor_params_joined, I)}) {{
+{I}{indent_but_first_line(ctor_body, I)}
+}}"""
+    )
+
+    # endregion
+
+    # region Factory methods, one per implementer
+
+    factory_methods = []  # type: List[Stripped]
+    for i, (interface_name, implementer_class_name, value_kind) in enumerate(
+        zip(interface_names, implementer_class_names, value_kinds)
+    ):
+        args = [f"ValueKind.{value_kind}"] + [
+            "that" if j == i else "null" for j in range(len(field_names))
+        ]
+        args_joined = ",\n".join(args)
+
+        factory_methods.append(
+            Stripped(
+                f"""\
+/**
+ * Wrap {{@code that}} as an instance of {{@link {name}}}.
+ */
+public static {name} from{implementer_class_name}({interface_name} that) {{
+{I}return new {name}(
+{II}{indent_but_first_line(args_joined, II)});
+}}"""
+            )
+        )
+
+    # endregion
+
+    # region Underlying
+
+    switch_case_lines = []  # type: List[str]
+    for value_kind, field_name in zip(value_kinds, field_names):
+        switch_case_lines.append(f"case {value_kind}:")
+        switch_case_lines.append(f"{I}return {field_name};")
+
+    switch_body = "\n".join(switch_case_lines)
+
+    get_underlying = Stripped(
+        f"""\
+/**
+ * Get the underlying instance regardless of the concrete case.
+ */
+@Override
+public IClass getUnderlying() {{
+{I}switch (valueKind) {{
+{II}{indent_but_first_line(switch_body, II)}
+{II}default:
+{III}throw new IllegalStateException(
+{IIII}String.format("Unexpected value kind: %s", valueKind));
+{I}}}
+}}"""
+    )
+
+    # endregion
+
+    # region From underlying
+
+    from_underlying_lines = []  # type: List[str]
+    for i, (interface_name, implementer_class_name) in enumerate(
+        zip(interface_names, implementer_class_names)
+    ):
+        keyword = "if" if i == 0 else "} else if"
+        from_underlying_lines.append(f"{keyword} (that instanceof {interface_name}) {{")
+        from_underlying_lines.append(
+            f"{I}return from{implementer_class_name}(({interface_name}) that);"
+        )
+
+    from_underlying_lines.append("} else {")
+    from_underlying_lines.append(f"{I}throw new IllegalArgumentException(")
+    from_underlying_lines.append(f"{II}String.format(")
+    from_underlying_lines.append(
+        f'{III}"Unexpected run-time type for the union {name}: %s",'
+    )
+    from_underlying_lines.append(f"{III}that.getClass()));")
+    from_underlying_lines.append("}")
+
+    from_underlying_body = "\n".join(from_underlying_lines)
+
+    from_underlying = Stripped(
+        f"""\
+/**
+ * Wrap {{@code that}} as an instance of {{@link {name}}} based on its run-time type.
+ */
+public static {name} fromUnderlying(IClass that) {{
+{I}{indent_but_first_line(from_underlying_body, I)}
+}}"""
+    )
+
+    # endregion
+
+    # region With underlying
+
+    with_underlying = Stripped(
+        f"""\
+/**
+ * Wrap {{@code that}} as an instance of {{@link {name}}} based on its run-time type.
+ *
+ * <p>This is the instance-level counterpart of {{@link {name}#fromUnderlying}},
+ * needed so that a generic method dispatching on {{@link IUnion}} can re-wrap
+ * a transformed or copied value without knowing the concrete union type at
+ * compile time.
+ */
+@Override
+public {name} withUnderlying(IClass that) {{
+{I}return {name}.fromUnderlying(that);
+}}"""
+    )
+
+    # endregion
+
+    blocks = [value_kind_enum, fields_block, constructor]
+    blocks.extend(factory_methods)
+    blocks.append(get_underlying)
+    blocks.append(from_underlying)
+    blocks.append(with_underlying)
+
+    body = "\n\n".join(blocks)
+
+    return Stripped(
+        f"""\
+/**
+ * Represent a union of {listing}.
+ */
+public class {name} implements IUnion<{name}> {{
+{I}{indent_but_first_line(body, I)}
+}}"""
+    )
+
+
 # fmt: off
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 # fmt: on
@@ -1684,10 +2000,31 @@ def _generate_structure(
             intermediate.Enumeration,
             intermediate.AbstractClass,
             intermediate.ConcreteClass,
+            intermediate.NamedUnion,
         ),
     )
 
     files = []  # List[java_common.JavaFile]
+
+    if isinstance(our_type, intermediate.NamedUnion):
+        structure_name = java_naming.union_name(our_type.name)
+
+        file_name = java_common.interface_package_path(structure_name)
+
+        package_name = java_common.PackageIdentifier(
+            f"{package}.types.{java_common.INTERFACE_PKG}"
+        )
+
+        java_source = _generate_java_file(
+            file_name=file_name,
+            imports=None,
+            code=_generate_named_union_class(named_union=our_type),
+            package=package_name,
+        )
+
+        files.append(java_source)
+
+        return files, None
 
     if isinstance(our_type, intermediate.Class) and our_type.is_implementation_specific:
         implementation_key = specific_implementations.ImplementationKey(
@@ -1825,6 +2162,9 @@ def generate(
 
     files.append(_generate_iclass(package))
 
+    if len(symbol_table.named_unions) > 0:
+        files.append(_generate_iunion(package))
+
     if len(symbol_table.enumerations) == 0:
         files.append(_generate_no_enumerations_defined(package))
 
@@ -1835,6 +2175,7 @@ def generate(
                 intermediate.Enumeration,
                 intermediate.AbstractClass,
                 intermediate.ConcreteClass,
+                intermediate.NamedUnion,
             ),
         ):
             continue

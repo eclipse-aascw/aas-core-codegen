@@ -698,6 +698,7 @@ SymbolTable(
     'Reference to our type Blossom',
     'Reference to our type Something',
     'Reference to our type Container'],
+  named_unions=[],
   constants=[],
   constants_by_name=...,
   verification_functions=[],

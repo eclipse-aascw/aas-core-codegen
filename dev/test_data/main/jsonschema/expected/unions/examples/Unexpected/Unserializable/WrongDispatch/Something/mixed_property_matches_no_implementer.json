@@ -1,0 +1,43 @@
+{
+  "structuralProperty": {
+    "uniqueToFirst": "hello"
+  },
+  "mixedProperty": {
+    "someUnrelatedProperty": "does not match any implementer of Mixed_union"
+  },
+  "modelTypedProperty": {
+    "someProperty": "value",
+    "modelType": "ModelTypedFirst"
+  },
+  "listStructuralProperty": [
+    {
+      "uniqueToFirst": "list-item-1"
+    },
+    {
+      "uniqueToSecond": "list-item-2"
+    }
+  ],
+  "listMixedProperty": [
+    {
+      "uniqueToConcreteLeaf": "list-leaf-value"
+    }
+  ],
+  "listModelTypedProperty": [
+    {
+      "someProperty": "value",
+      "modelType": "ModelTypedFirst"
+    }
+  ],
+  "tupleProperty": [
+    {
+      "uniqueToSecond": "tuple-item-1"
+    },
+    {
+      "uniqueToAbstractDescendantTwo": "tuple-item-2"
+    },
+    {
+      "someProperty": "value",
+      "modelType": "ModelTypedSecond"
+    }
+  ]
+}

@@ -217,6 +217,68 @@ public class {enhanced_name}<TEnhancement>
     return Stripped(writer.getvalue()), None
 
 
+def _generate_union_transform_helper() -> Stripped:
+    """
+    Generate a single ``Transform`` overload shared by every named union.
+
+    A named union is not itself an ``Aas.IClass``, so it can not be dispatched
+    by the inherited, ``IClass``-typed ``Transform`` overload, and its
+    underlying instance has to be unwrapped, enhanced and wrapped back up.
+    We add this overload, single-purpose, next to the per-class ``Transform``
+    overrides, so that call sites can keep passing ``Transform`` around as
+    a plain method group or calling it directly, regardless of whether the
+    value at hand is a class instance or a named union.
+
+    ``T`` is bounded by ``Aas.IUnion<T>`` (see ``generate()`` in
+    ``_generate_types.py``) instead of by the union's own type, so we need
+    only this one overload for *all* named unions, not one per union.
+    Unlike the per-class ``Transform(Aas.IClass that)`` (non-generic, plain
+    ``IClass``-typed, inherited from ``AbstractTransformer<Aas.IClass>``),
+    this overload returns ``T`` itself, since re-wrapping with
+    ``WithUnderlying`` already recovers the caller's own concrete union type
+    exactly -- so call sites need no downcast.
+
+    .. note::
+
+        The parameter is typed as ``Aas.IUnion<T>``, not bare ``T`` --
+        confirmed with a real, minimal ``dotnet build`` reproduction that a
+        bare-``T`` signature here breaks the recursive call inside this
+        very method's own body (``Transform(that.Underlying)``, where
+        ``that.Underlying`` is plain ``Aas.IClass``): C# resolves that call
+        against *this* generic method itself (inferring ``T = Aas.IClass``)
+        rather than falling back to the inherited, non-generic
+        ``Transform(Aas.IClass that)``, and only then fails the ``where T :
+        Aas.IUnion<T>`` constraint (CS0311) -- a tie in "exactness" between
+        a generic method (post-substitution) and a non-generic one is
+        broken in favor of the generic one, so the non-generic overload is
+        effectively unreachable by unqualified calls from inside a
+        bare-``T`` version of this method. Typing the parameter as ``Aas.
+        IUnion<T>`` removes ``Aas.IClass`` from the generic overload's
+        applicable argument types entirely (``Aas.IClass`` does not
+        implement ``Aas.IUnion<T>`` for any ``T``), so
+        ``Transform(that.Underlying)`` has only the non-generic overload to
+        choose from -- no ambiguity. (Copying's ``Deep<T>`` needed the same
+        ``Aas.IUnion<T>`` parameter shape, but for the different reason of
+        avoiding a duplicate-signature clash with its sibling
+        ``Deep<T>(T that) where T : Aas.IClass``, since both of *its*
+        overloads are generic -- see
+        :py:func:`_generate_union_deep_copy_helper` in
+        ``_generate_copying.py``.)
+
+    Should a named union ever be allowed to flatten primitive or enumeration
+    alternatives, only the body of this method has to change (to dispatch on
+    the underlying value's kind) -- every call site stays the same.
+    """
+    return Stripped(
+        f"""\
+private T Transform<T>(Aas.IUnion<T> that) where T : Aas.IUnion<T>
+{{
+{I}return that.WithUnderlying(
+{II}Transform(that.Underlying));
+}}"""
+    )
+
+
 @require(lambda cls: not cls.is_implementation_specific)
 def _generate_transform(cls: intermediate.ConcreteClass) -> Stripped:
     """Generate the transform method to wrap the instance with an enhancement."""
@@ -277,6 +339,14 @@ var {casted_name} = (
 );
 that.{prop_name} = {casted_name};"""
                 )
+
+            elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+                # A named union has its own ``Transform`` overload (see
+                # :py:func:`_generate_union_transform_helper`), which
+                # already returns the union's own type, so no downcast is
+                # needed here (unlike the class branch above).
+                wrap_stmt = Stripped(f"that.{prop_name} = Transform(that.{prop_name});")
+
             else:
                 assert_never(type_anno.our_type)
 
@@ -322,22 +392,37 @@ that.{prop_name} = (
 ).ToList();"""
                     )
 
+                elif isinstance(type_anno.items.our_type, intermediate.NamedUnion):
+                    # A named union has its own ``Transform`` overload (see
+                    # :py:func:`_generate_union_transform_helper`),
+                    # which already returns the union's own type, so it can
+                    # be passed on as a bare method group with no wrapping
+                    # lambda (unlike the class branch above, which needs one
+                    # to downcast).
+                    wrap_stmt = Stripped(
+                        f"""\
+that.{prop_name} = (
+{I}that.{prop_name}
+{I}.Select(Transform)
+).ToList();"""
+                    )
+
                 else:
                     assert_never(type_anno.items.our_type)
             else:
                 raise NotImplementedError(
-                    f"(mristin) We handle only lists of classes in"
-                    f"the enhancing at the moment. The meta-model does not contain "
-                    f"any other lists, so we wanted to keep the code as simple as "
-                    f"possible, and avoid unrolling. However, you desire a list "
-                    f"of type {type_anno} to be enhanced. "
+                    f"(mristin) We handle only lists of classes and named unions "
+                    f"in the enhancing at the moment. The meta-model does not "
+                    f"contain any other lists, so we wanted to keep the code as "
+                    f"simple as possible, and avoid unrolling. However, you desire "
+                    f"a list of type {type_anno} to be enhanced. "
                     f"Please contact the developers if you need this feature."
                 )
 
         elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
             pre_stmts = []  # type: List[Stripped]
             item_exprs = []  # type: List[Stripped]
-            any_class_item = False
+            any_transformable_item = False
 
             for i, item_type_anno in enumerate(type_anno.items):
                 item_access = Stripped(f"that.{prop_name}.Item{i + 1}")
@@ -348,7 +433,7 @@ that.{prop_name} = (
                     item_type_anno.our_type,
                     (intermediate.AbstractClass, intermediate.ConcreteClass),
                 ):
-                    any_class_item = True
+                    any_transformable_item = True
 
                     item_interface_name = csharp_naming.interface_name(
                         item_type_anno.our_type.name
@@ -376,21 +461,37 @@ var {casted_name} = (
                     )
 
                     item_exprs.append(Stripped(casted_name))
+
+                elif isinstance(
+                    item_type_anno, intermediate.OurTypeAnnotation
+                ) and isinstance(item_type_anno.our_type, intermediate.NamedUnion):
+                    # A named union has its own ``Transform`` overload (see
+                    # :py:func:`_generate_union_transform_helper`),
+                    # which already returns the union's own type, so no
+                    # downcast (and hence no pre-statement) is needed here,
+                    # unlike the class branch above.
+                    any_transformable_item = True
+
+                    item_exprs.append(Stripped(f"Transform({item_access})"))
+
                 else:
                     item_exprs.append(item_access)
 
-            if not any_class_item:
+            if not any_transformable_item:
                 # We can not enhance any of the tuple items; nothing to do here.
                 continue
 
             tuple_literal = csharp_common.generate_tuple_literal(item_exprs)
-            joined_pre_stmts = "\n\n".join(pre_stmts)
 
-            wrap_stmt = Stripped(
-                f"""\
+            if len(pre_stmts) == 0:
+                wrap_stmt = Stripped(f"that.{prop_name} = {tuple_literal};")
+            else:
+                joined_pre_stmts = "\n\n".join(pre_stmts)
+                wrap_stmt = Stripped(
+                    f"""\
 {joined_pre_stmts}
 that.{prop_name} = {tuple_literal};"""
-            )
+                )
         else:
             assert_never(type_anno)
 
@@ -480,6 +581,9 @@ internal Wrapper(
             continue
 
         blocks.append(_generate_transform(cls=cls))
+
+    if len(symbol_table.named_unions) > 0:
+        blocks.append(_generate_union_transform_helper())
 
     writer = io.StringIO()
     writer.write(

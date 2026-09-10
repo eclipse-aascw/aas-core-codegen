@@ -5,6 +5,7 @@ SymbolTable(
   constrained_primitives=[],
   classes=[],
   concrete_classes=[],
+  named_unions=[],
   constants=[
     ConstantPrimitive(
       name='Something',

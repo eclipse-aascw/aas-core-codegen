@@ -255,6 +255,9 @@ def generate_type(
         elif isinstance(our_type, intermediate.AbstractClass):
             name = typescript_naming.interface_name(type_annotation.our_type.name)
 
+        elif isinstance(our_type, intermediate.NamedUnion):
+            name = typescript_naming.union_name(type_annotation.our_type.name)
+
         else:
             assert_never(our_type)
 

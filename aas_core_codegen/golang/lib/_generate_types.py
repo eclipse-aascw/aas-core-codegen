@@ -30,6 +30,8 @@ from aas_core_codegen.golang import (
 from aas_core_codegen.golang.common import (
     INDENT as I,
     INDENT2 as II,
+    INDENT3 as III,
+    INDENT4 as IIII,
 )
 
 
@@ -42,6 +44,7 @@ def _human_readable_identifier(
         intermediate.AbstractClass,
         intermediate.ConcreteClass,
         intermediate.EnumerationLiteral,
+        intermediate.NamedUnion,
     ]
 ) -> str:
     """
@@ -66,6 +69,8 @@ def _human_readable_identifier(
         result = f"meta-model abstract class {something.name!r}"
     elif isinstance(something, intermediate.ConcreteClass):
         result = f"meta-model concrete class {something.name!r}"
+    elif isinstance(something, intermediate.NamedUnion):
+        result = f"meta-model named union {something.name!r}"
     else:
         # noinspection PyTypeChecker
         assert_never(something)
@@ -86,6 +91,12 @@ def _verify_intra_structure_collisions(
         # the inter-structure collision checks.
         pass
     elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+        pass
+
+    elif isinstance(our_type, intermediate.NamedUnion):
+        # NOTE (mristin):
+        # A named union has no members of its own, so there is nothing to
+        # check for collisions here.
         pass
 
     elif isinstance(our_type, intermediate.Class):
@@ -223,6 +234,7 @@ def _verify_structure_name_collisions(
             intermediate.AbstractClass,
             intermediate.ConcreteClass,
             intermediate.EnumerationLiteral,
+            intermediate.NamedUnion,
         ],
     ] = dict()
 
@@ -231,7 +243,9 @@ def _verify_structure_name_collisions(
     # region Inter-structure collisions
 
     # noinspection PyTypeChecker
-    for enum_or_cls in itertools.chain(symbol_table.enumerations, symbol_table.classes):
+    for enum_or_cls in itertools.chain(
+        symbol_table.enumerations, symbol_table.classes, symbol_table.named_unions
+    ):
         names: List[Identifier]
 
         if isinstance(enum_or_cls, intermediate.Enumeration):
@@ -243,6 +257,8 @@ def _verify_structure_name_collisions(
                 golang_naming.interface_name(enum_or_cls.name),
                 golang_naming.struct_name(enum_or_cls.name),
             ]
+        elif isinstance(enum_or_cls, intermediate.NamedUnion):
+            names = [golang_naming.union_name(enum_or_cls.name)]
         else:
             # noinspection PyTypeChecker
             assert_never(enum_or_cls)
@@ -590,6 +606,40 @@ if abort {{
                         )
                     )
 
+            elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # A named union is not itself an ``IClass``, so we descend into
+                # the underlying instance instead of the property directly. We
+                # keep this as its own branch, separate from the class branch
+                # above, so that it can diverge independently, *e.g.*, if
+                # primitive alternatives are ever allowed into a named union.
+                underlying_expr = f"{receiver}.{prop_name}.Underlying()"
+
+                prop_blocks.append(
+                    Stripped(
+                        f"""\
+abort = action(
+{I}{underlying_expr},
+)
+if abort {{
+{I}return
+}}"""
+                    )
+                )
+
+                if recurse:
+                    prop_blocks.append(
+                        Stripped(
+                            f"""\
+abort = {underlying_expr}.Descend(
+{I}action,
+)
+if abort {{
+{I}return
+}}"""
+                        )
+                    )
+
             else:
                 # noinspection PyTypeChecker
                 assert_never(type_anno.our_type)
@@ -651,6 +701,48 @@ for _, {loop_var} := range {receiver}.{prop_name} {{
                             )
                         )
 
+                elif isinstance(type_anno.items.our_type, intermediate.NamedUnion):
+                    # NOTE (mristin):
+                    # A named union is not itself an ``IClass``, so we descend
+                    # into the underlying instance instead of the list item
+                    # directly. We keep this as its own branch, separate from
+                    # the class branch above, so that it can diverge
+                    # independently, *e.g.*, if primitive alternatives are
+                    # ever allowed into a named union.
+                    loop_var = next(generator_for_loop_variables)
+
+                    if not recurse:
+                        prop_blocks.append(
+                            Stripped(
+                                f"""\
+for _, {loop_var} := range {receiver}.{prop_name} {{
+{I}abort = action({loop_var}.Underlying());
+{I}if abort {{
+{II}return
+{I}}}
+}}"""
+                            )
+                        )
+                    else:
+                        prop_blocks.append(
+                            Stripped(
+                                f"""\
+for _, {loop_var} := range {receiver}.{prop_name} {{
+{I}abort = action({loop_var}.Underlying());
+{I}if abort {{
+{II}return
+{I}}}
+
+{I}abort = {loop_var}.Underlying().Descend(
+{II}action,
+{I});
+{I}if abort {{
+{II}return
+{I}}}
+}}"""
+                            )
+                        )
+
                 else:
                     # noinspection PyTypeChecker
                     assert_never(type_anno.items)
@@ -660,16 +752,25 @@ for _, {loop_var} := range {receiver}.{prop_name} {{
 
         elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
             for i, item_type_anno in enumerate(type_anno.items):
-                if not (
-                    isinstance(item_type_anno, intermediate.OurTypeAnnotation)
-                    and isinstance(
-                        item_type_anno.our_type,
-                        (intermediate.AbstractClass, intermediate.ConcreteClass),
-                    )
-                ):
+                if not isinstance(item_type_anno, intermediate.OurTypeAnnotation):
                     continue
 
-                item_expr = f"{receiver}.{prop_name}.Item{i + 1}"
+                if isinstance(
+                    item_type_anno.our_type,
+                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                ):
+                    item_expr = f"{receiver}.{prop_name}.Item{i + 1}"
+                elif isinstance(item_type_anno.our_type, intermediate.NamedUnion):
+                    # NOTE (mristin):
+                    # A named union is not itself an ``IClass``, so we descend
+                    # into the underlying instance instead of the tuple item
+                    # directly. We keep this as its own branch, separate from
+                    # the class branch above, so that it can diverge
+                    # independently, *e.g.*, if primitive alternatives are
+                    # ever allowed into a named union.
+                    item_expr = f"{receiver}.{prop_name}.Item{i + 1}.Underlying()"
+                else:
+                    continue
 
                 prop_blocks.append(
                     Stripped(
@@ -1443,6 +1544,162 @@ def _generate_comment_for_meta_model(
     return comment, None
 
 
+def _generate_named_union_struct(named_union: intermediate.NamedUnion) -> Stripped:
+    """
+    Generate the struct representing ``named_union``.
+
+    Unlike a class, a named union is a closed set of alternatives, so we do
+    not want to allow custom enhancements or wrappings around it. Hence we
+    represent it as a plain struct storing exactly one of its flattened
+    implementers, tagged by a private discriminant. This keeps every
+    alternative in its own, separately typed field, so that a future
+    primitive alternative (which can not implement `IClass`) would still fit
+    the same shape.
+    """
+    name = golang_naming.union_name(named_union.name)
+    receiver = Identifier(name[0].lower())
+
+    value_kind = golang_naming.private_struct_name(
+        Identifier(f"{named_union.name}_value_kind")
+    )
+
+    interface_names = [
+        golang_naming.interface_name(implementer.name)
+        for implementer in named_union.implementers
+    ]
+
+    crefs = [f"[{interface_name}]" for interface_name in interface_names]
+    if len(crefs) == 1:
+        crefs_joined = crefs[0]
+    else:
+        crefs_joined = ", ".join(crefs[:-1]) + " and " + crefs[-1]
+
+    discriminant_cases = []  # type: List[Stripped]
+    field_decls = []  # type: List[Stripped]
+    underlying_cases = []  # type: List[Stripped]
+    from_methods = []  # type: List[Stripped]
+    from_underlying_cases = []  # type: List[Stripped]
+
+    field_names = [
+        golang_naming.private_property_name(Identifier(f"as_{implementer.name}"))
+        for implementer in named_union.implementers
+    ]
+
+    for implementer, interface_name, field_name in zip(
+        named_union.implementers, interface_names, field_names
+    ):
+        discriminant_case = golang_naming.private_constant_name(
+            Identifier(f"{named_union.name}_value_kind_{implementer.name}")
+        )
+
+        if len(discriminant_cases) == 0:
+            discriminant_cases.append(
+                Stripped(f"{discriminant_case} {value_kind} = iota")
+            )
+        else:
+            discriminant_cases.append(Stripped(discriminant_case))
+
+        field_decls.append(Stripped(f"{field_name} {interface_name}"))
+
+        underlying_cases.append(
+            Stripped(
+                f"""\
+case {discriminant_case}:
+{I}return {receiver}.{field_name}"""
+            )
+        )
+
+        from_method_name = golang_naming.function_name(
+            Identifier(f"new_{named_union.name}_from_{implementer.name}")
+        )
+
+        from_methods.append(
+            Stripped(
+                f"""\
+// Wrap `that` as an instance of [{name}].
+func {from_method_name}(that {interface_name}) *{name} {{
+{I}return &{name}{{
+{II}valueKind: {discriminant_case},
+{II}{field_name}: that,
+{I}}}
+}}"""
+            )
+        )
+
+        from_underlying_cases.append(
+            Stripped(
+                f"""\
+case {interface_name}:
+{I}return {from_method_name}(casted)"""
+            )
+        )
+
+    discriminant_cases_joined = "\n".join(discriminant_cases)
+    field_decls_joined = "\n".join(field_decls)
+    underlying_cases_joined = "\n".join(underlying_cases)
+    from_methods_joined = "\n\n".join(from_methods)
+    from_underlying_cases_joined = "\n".join(from_underlying_cases)
+
+    from_underlying_name = golang_naming.function_name(
+        Identifier(f"{named_union.name}_from_underlying")
+    )
+
+    return Stripped(
+        f"""\
+type {value_kind} int
+
+const (
+{I}{indent_but_first_line(discriminant_cases_joined, I)}
+)
+
+// Represent a union of {crefs_joined}.
+type {name} struct {{
+{I}valueKind {value_kind}
+{I}{indent_but_first_line(field_decls_joined, I)}
+}}
+
+{from_methods_joined}
+
+// Get the underlying instance regardless of the concrete case.
+func ({receiver} *{name}) Underlying() IClass {{
+{I}switch {receiver}.valueKind {{
+{I}{indent_but_first_line(underlying_cases_joined, I)}
+{I}default:
+{II}panic(
+{III}fmt.Sprintf(
+{IIII}"Unexpected value kind: %v",
+{IIII}{receiver}.valueKind,
+{III}),
+{II})
+{I}}}
+}}
+
+// Wrap `that` as an instance of [{name}] based on its run-time type.
+func {from_underlying_name}(that IClass) *{name} {{
+{I}switch casted := that.(type) {{
+{I}{indent_but_first_line(from_underlying_cases_joined, I)}
+{I}default:
+{II}panic(
+{III}fmt.Sprintf(
+{IIII}"Unexpected run-time type for the union {name}: %T",
+{IIII}that,
+{III}),
+{II})
+{I}}}
+}}
+
+// Wrap `that` as an instance of [{name}] based on its run-time type.
+//
+// This is the method-level counterpart of [{from_underlying_name}], needed
+// so that a generic function constrained to a self-referential union
+// interface can re-wrap a transformed value without knowing the concrete
+// union type at compile time.
+func ({receiver} *{name}) WithUnderlying(that IClass) *{name} {{
+{I}return {from_underlying_name}(that)
+}}"""
+    )
+
+
 # fmt: off
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 @ensure(
@@ -1504,13 +1761,15 @@ package types"""
     model_type_getter = golang_naming.getter_name(Identifier("model_type"))
     model_type_enum = golang_naming.enum_name(Identifier("Model_type"))
 
+    fmt_import = f'{I}"fmt"\n\n' if len(symbol_table.named_unions) > 0 else ""
+
     blocks.extend(
         [
             golang_common.WARNING,
             Stripped(
                 f"""\
 import (
-{I}aascommon {common_url_literal}
+{fmt_import}{I}aascommon {common_url_literal}
 )"""
             ),
             _generate_definition_for_model_type(symbol_table=symbol_table),
@@ -1613,6 +1872,10 @@ type IClass interface {{
                     else:
                         assert methods is not None
                         blocks.extend(methods)
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            blocks.append(_generate_named_union_struct(named_union=our_type))
+
         else:
             # noinspection PyTypeChecker
             assert_never(our_type)

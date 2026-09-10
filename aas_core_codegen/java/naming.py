@@ -166,9 +166,25 @@ def class_name(identifier: Identifier) -> Identifier:
     return aas_core_codegen.naming.capitalized_camel_case(identifier)
 
 
+def union_name(identifier: Identifier) -> Identifier:
+    """
+    Generate a Java name for a named union based on its meta-model ``identifier``.
+
+    >>> union_name(Identifier("something"))
+    'Something'
+
+    >>> union_name(Identifier("URL_to_something"))
+    'UrlToSomething'
+    """
+    return aas_core_codegen.naming.capitalized_camel_case(identifier)
+
+
 def name_of(
     something: Union[
-        intermediate.Enumeration, intermediate.ConcreteClass, intermediate.Interface
+        intermediate.Enumeration,
+        intermediate.ConcreteClass,
+        intermediate.Interface,
+        intermediate.NamedUnion,
     ]
 ) -> Identifier:
     """Dispatch to the appropriate naming function."""
@@ -180,6 +196,9 @@ def name_of(
 
     elif isinstance(something, intermediate.Interface):
         return interface_name(something.name)
+
+    elif isinstance(something, intermediate.NamedUnion):
+        return union_name(something.name)
 
     else:
         assert_never(something)

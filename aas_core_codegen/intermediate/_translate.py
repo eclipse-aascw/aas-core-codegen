@@ -77,6 +77,7 @@ from aas_core_codegen.intermediate._types import (
     AbstractClass,
     SignatureLike,
     Interface,
+    NamedUnion,
     TypeAnnotationUnion,
     ClassUnion,
     VerificationUnion,
@@ -959,6 +960,28 @@ def _to_enumeration(
             name=parsed.name,
             literals=literals,
             description=description,
+            parsed=parsed,
+        ),
+        None,
+    )
+
+
+def _to_named_union(
+    parsed: parse.NamedUnion,
+) -> Tuple[Optional[NamedUnion], Optional[List[Error]]]:
+    """Translate a named union from the meta-model to an intermediate named union."""
+    # NOTE (mristin):
+    # The parse stage does not support descriptions on named unions yet (there is
+    # no established meta-model syntax to attach one to a plain module-level
+    # assignment), so we always translate to ``None`` here.
+    #
+    # The members of the union are resolved in a later, second pass (see
+    # ``_second_pass_to_resolve_named_union_members_in_place``) as the meta-model
+    # may contain forward references which can not be resolved at this point.
+    return (
+        NamedUnion(
+            name=parsed.name,
+            description=None,
             parsed=parsed,
         ),
         None,
@@ -2292,6 +2315,12 @@ def _over_our_type_annotations(
     elif isinstance(something, ConstrainedPrimitive):
         pass
 
+    elif isinstance(something, NamedUnion):
+        # NOTE (mristin):
+        # A named union has no properties, methods or constructor of its own, so
+        # there is nothing to recurse into.
+        pass
+
     elif isinstance(something, Class):
         for prop in something.properties:
             yield from _over_our_type_annotations(prop.type_annotation)
@@ -2443,6 +2472,10 @@ def _over_descriptions_and_our_types(
 
         elif isinstance(our_type, ConstrainedPrimitive):
             # No special sub-descriptions in the constrained primitive
+            pass
+
+        elif isinstance(our_type, NamedUnion):
+            # No special sub-descriptions in the named union
             pass
 
         elif isinstance(our_type, (AbstractClass, ConcreteClass)):
@@ -2873,8 +2906,114 @@ def _second_pass_to_resolve_inheritances_in_place(symbol_table: SymbolTable) -> 
 
             our_type._set_inheritances(resolved_class_inheritances)
 
+        elif isinstance(our_type, NamedUnion):
+            # NOTE (mristin):
+            # A named union has no inheritances of its own -- its members are
+            # resolved separately, see
+            # ``_second_pass_to_resolve_named_union_members_in_place``.
+            continue
+
         else:
             assert_never(our_type)
+
+
+def _topologically_sort_named_unions_or_find_cycle(
+    our_types: Sequence[OurType],
+    our_types_by_name: Mapping[Identifier, OurType],
+) -> Tuple[Optional[List[NamedUnion]], Optional[Error]]:
+    """
+    Topologically sort the named unions by their named-union member dependencies.
+
+    A named union may itself be a member of another named union, so the named
+    unions form their own dependency graph, on top of (and independent of) the
+    class inheritance ontology. This function orders the named unions so that
+    every named union follows all of its (transitive) named-union member
+    dependencies -- this order is needed both to place the named unions
+    correctly in ``our_types_topologically_sorted`` and to flatten the
+    ``implementers`` of a named union only after its named-union members'
+    ``implementers`` have themselves already been flattened.
+
+    :return:
+        the named unions in a valid topological order, or an :class:`Error` if
+        the named unions form a cycle (*e.g.*, a named union that is,
+        transitively, its own member)
+    """
+    # NOTE (mristin):
+    # 0 = not visited, 1 = on the current recursion stack, 2 = done.
+    state = dict()  # type: Dict[Identifier, int]
+    stack = []  # type: List[Identifier]
+    order = []  # type: List[NamedUnion]
+
+    def visit(named_union: NamedUnion) -> Optional[Error]:
+        """Visit the named union and its named-union members, depth-first."""
+        current_state = state.get(named_union.name, 0)
+        if current_state == 2:
+            return None
+
+        if current_state == 1:
+            cycle_start = stack.index(named_union.name)
+            cycle_str = " -> ".join(repr(name) for name in stack[cycle_start:])
+            return Error(
+                named_union.parsed.node,
+                f"The named union {named_union.name!r} is involved in a cycle "
+                f"of named unions, which is not allowed "
+                f"(a named union may not be its own member, "
+                f"directly or transitively): {cycle_str} -> {named_union.name!r}",
+            )
+
+        state[named_union.name] = 1
+        stack.append(named_union.name)
+
+        for member_name in named_union.parsed.members:
+            member_our_type = our_types_by_name[member_name]
+            if isinstance(member_our_type, NamedUnion):
+                error = visit(member_our_type)
+                if error is not None:
+                    return error
+
+        stack.pop()
+        state[named_union.name] = 2
+        order.append(named_union)
+
+        return None
+
+    for our_type in our_types:
+        if not isinstance(our_type, NamedUnion):
+            continue
+
+        maybe_error = visit(our_type)
+        if maybe_error is not None:
+            return None, maybe_error
+
+    return order, None
+
+
+def _second_pass_to_resolve_named_union_members_in_place(
+    symbol_table: SymbolTable,
+) -> None:
+    """
+    Resolve the references in the named union members in-place.
+
+    A member resolves to either a class or another named union. This assumes
+    that the members have already been verified to resolve to one of those (as
+    opposed to, *e.g.*, an enumeration, or a class re-classified as a
+    constrained primitive) -- see the region "Check that the members of named
+    unions are indeed classes or named unions" in :func:`translate`.
+
+    Unlike :func:`_second_pass_to_resolve_named_union_implementers_in_place`,
+    this does *not* need to run in the topological order over the named-union
+    dependency graph -- every named union's object already exists at this point
+    (from the first pass of translation), so wiring up a direct reference to it
+    does not depend on that other named union's own members being resolved yet.
+    """
+    for named_union in symbol_table.named_unions:
+        resolved_members = []  # type: List[Union[ClassUnion, NamedUnion]]
+
+        for member_name in named_union.parsed.members:
+            member = symbol_table.must_find_class_or_named_union(member_name)
+            resolved_members.append(member)
+
+        named_union._set_members(resolved_members)
 
 
 # fmt: off
@@ -2911,6 +3050,12 @@ def _second_pass_to_resolve_ancestors_and_descendants_in_place(
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, Enumeration):
+            pass
+
+        elif isinstance(our_type, NamedUnion):
+            # NOTE (mristin):
+            # A named union is not part of the class hierarchy, so it has no
+            # ancestors or descendants.
             pass
 
         elif isinstance(our_type, ConstrainedPrimitive):
@@ -3221,7 +3366,7 @@ def _second_pass_to_stack_serializations_in_place(
         # Assume that the parents have all the serializations resolved already due to
         # the topological order of the iteration.
 
-        if isinstance(our_type, (Enumeration, ConstrainedPrimitive)):
+        if isinstance(our_type, (Enumeration, NamedUnion, ConstrainedPrimitive)):
             continue
         elif isinstance(our_type, (AbstractClass, ConcreteClass)):
             # NOTE (mristin, 2021-11-03):
@@ -3303,7 +3448,7 @@ def _second_pass_to_stack_serializations_in_place(
         # Assume that the parents have all the serializations resolved already due to
         # the topological order of the iteration.
 
-        if isinstance(our_type, (Enumeration, ConstrainedPrimitive)):
+        if isinstance(our_type, (Enumeration, NamedUnion, ConstrainedPrimitive)):
             continue
         elif isinstance(our_type, (AbstractClass, ConcreteClass)):
             if our_type.serialization is None:
@@ -3327,7 +3472,7 @@ def _second_pass_to_stack_invariants_in_place(symbol_table: SymbolTable) -> None
         # the topological order of the iteration.
 
         # Propagate the invariants from the parents to this one of our types
-        if isinstance(our_type, Enumeration):
+        if isinstance(our_type, (Enumeration, NamedUnion)):
             continue
         elif isinstance(our_type, (ConstrainedPrimitive, AbstractClass, ConcreteClass)):
             inherited_invariants = []  # type: List[Invariant]
@@ -3358,7 +3503,7 @@ def _second_pass_to_stack_properties_in_place(symbol_table: SymbolTable) -> List
         # the topological order of the iteration.
 
         # Propagate the properties from the parents to this one of our types
-        if isinstance(our_type, (Enumeration, ConstrainedPrimitive)):
+        if isinstance(our_type, (Enumeration, NamedUnion, ConstrainedPrimitive)):
             continue
         elif isinstance(our_type, (AbstractClass, ConcreteClass)):
             inherited_properties = []  # type: List[Property]
@@ -3396,7 +3541,7 @@ def _second_pass_to_stack_methods_in_place(symbol_table: SymbolTable) -> List[Er
         # the topological order of the iteration.
 
         # Propagate the methods from the parents to this one of our types
-        if isinstance(our_type, (Enumeration, ConstrainedPrimitive)):
+        if isinstance(our_type, (Enumeration, NamedUnion, ConstrainedPrimitive)):
             continue
         elif isinstance(our_type, (AbstractClass, ConcreteClass)):
             inherited_methods = []  # type: List[MethodUnion]
@@ -3717,6 +3862,16 @@ def _second_pass_to_resolve_references_to_attributes_in_the_descriptions_in_plac
                 )
                 continue
 
+            elif isinstance(target_our_type, NamedUnion):
+                errors.append(
+                    Error(
+                        description.parsed.node,
+                        f"Unexpected references to a property of "
+                        f"a named union {target_our_type.name!r}: {pth}",
+                    )
+                )
+                continue
+
             elif isinstance(target_our_type, (AbstractClass, ConcreteClass)):
                 prop = target_our_type.properties_by_name.get(attr_identifier, None)
 
@@ -3825,6 +3980,59 @@ def _second_pass_to_resolve_interfaces_in_place(
         else:
             assert isinstance(cls, ConcreteClass)
             cls.interface = None
+
+
+def _second_pass_to_resolve_named_union_implementers_in_place(
+    symbol_table: SymbolTable,
+) -> None:
+    """
+    Flatten the members of every named union into their concrete implementers.
+
+    This assumes that the named union members have already been resolved (see
+    :func:`_second_pass_to_resolve_named_union_members_in_place`), every class's
+    ``concrete_descendants`` has already been resolved (see
+    :func:`_second_pass_to_resolve_ancestors_and_descendants_in_place`), and that
+    we iterate the named unions in the topological order over the named-union
+    dependency graph (see
+    :func:`_topologically_sort_named_unions_or_find_cycle`) -- via
+    ``symbol_table.our_types_topologically_sorted``, *not*
+    ``symbol_table.named_unions`` -- so that a named-union member's own
+    ``implementers`` is already resolved by the time we need it here.
+    """
+    for our_type in symbol_table.our_types_topologically_sorted:
+        if not isinstance(our_type, NamedUnion):
+            continue
+
+        named_union = our_type
+
+        implementers = []  # type: List[ConcreteClass]
+        observed_ids = set()  # type: Set[int]
+
+        for member in named_union.members:
+            if isinstance(member, NamedUnion):
+                # NOTE (mristin):
+                # The member's own implementers are already flattened (and
+                # transitively include no further named unions), since we
+                # iterate in the topological order over the named-union
+                # dependency graph.
+                candidates = list(member.implementers)
+            else:
+                # NOTE (mristin):
+                # Mirrors ``Interface.__init__``'s computation of
+                # ``implementers``: a concrete class can be instantiated
+                # directly (so it contributes itself), on top of contributing
+                # all of its concrete descendants (whether it is abstract or
+                # concrete).
+                candidates = list(member.concrete_descendants)
+                if isinstance(member, ConcreteClass):
+                    candidates.append(member)
+
+            for candidate in candidates:
+                if id(candidate) not in observed_ids:
+                    implementers.append(candidate)
+                    observed_ids.add(id(candidate))
+
+        named_union._set_implementers(implementers)
 
 
 class _PropertyOfClass:
@@ -3968,6 +4176,119 @@ def _verify_with_model_type_for_classes_with_at_least_one_concrete_descendant(
                                 f"on model type at the de-serialization",
                             )
                         )
+
+    return errors
+
+
+def _verify_named_unions_are_dispatchable_in_json(
+    symbol_table: SymbolTable,
+) -> List[Error]:
+    """
+    Verify that every named union can be de-serialized from JSON unambiguously.
+
+    Every one of a named union's (flattened) implementers must be dispatchable
+    either:
+
+    * by its ``modelType`` -- if ``with_model_type`` is set on it, a
+      ``modelType`` field is always present on the wire for that implementer to
+      dispatch on, and every class name (hence every ``modelType`` value) is
+      unique across the whole meta-model, so no two such implementers can ever
+      be confused for one another; or
+    * structurally -- among *only* the implementers of the same union which do
+      *not* have ``with_model_type`` set, every required (non-optional)
+      property must be required by at most one such implementer, so the set of
+      keys present in a JSON object lacking a ``modelType`` field is enough to
+      unambiguously tell them apart.
+
+    These two dispatch mechanisms do not need to agree union-wide -- a single
+    union may freely mix implementers dispatched by ``modelType`` with
+    implementers dispatched structurally, as the two are mutually exclusive on
+    the wire (an object either carries a ``modelType`` field or it does not).
+    """
+    errors = []  # type: List[Error]
+
+    for named_union in symbol_table.named_unions:
+        implementers_without_model_type = [
+            implementer
+            for implementer in named_union.implementers
+            if not implementer.serialization.with_model_type
+        ]
+
+        if len(implementers_without_model_type) == 0:
+            continue
+
+        # region Check required properties disjoint among non-modelType implementers
+
+        required_property_names_by_implementer = {
+            implementer: [
+                prop.name
+                for prop in implementer.properties
+                if not isinstance(prop.type_annotation, OptionalTypeAnnotation)
+            ]
+            for implementer in implementers_without_model_type
+        }
+
+        implementers_without_a_required_property = [
+            implementer
+            for implementer, required in required_property_names_by_implementer.items()
+            if len(required) == 0
+        ]
+
+        if len(implementers_without_a_required_property) > 0:
+            names_str = ", ".join(
+                repr(implementer.name)
+                for implementer in implementers_without_a_required_property
+            )
+            errors.append(
+                Error(
+                    named_union.parsed.node,
+                    f"The named union {named_union.name!r} can not be dispatched "
+                    f"unambiguously during the de-serialization from JSON: "
+                    f"the following implementer(s) do not have ``with_model_type`` "
+                    f"set, so we would need to fall back to distinguishing them by "
+                    f"their required properties, but they have no required "
+                    f"properties of their own at all, so they can not be told "
+                    f"apart from any other implementer this way: {names_str}. "
+                    f"Either set ``with_model_type=True`` on the implementer(s) "
+                    f"listed above, or make sure they each have at least one "
+                    f"required property not shared with any other implementer "
+                    f"of the union that also lacks ``with_model_type``.",
+                )
+            )
+            continue
+
+        implementers_by_required_property_name = collections.defaultdict(
+            list
+        )  # type: MutableMapping[Identifier, List[ConcreteClass]]
+
+        for implementer, required in required_property_names_by_implementer.items():
+            for prop_name in required:
+                implementers_by_required_property_name[prop_name].append(implementer)
+
+        conflicts = [
+            f"the required property {prop_name!r} is shared "
+            f"between {', '.join(repr(implementer.name) for implementer in conflicting)}"
+            for prop_name, conflicting in implementers_by_required_property_name.items()
+            if len(conflicting) > 1
+        ]
+
+        if len(conflicts) > 0:
+            errors.append(
+                Error(
+                    named_union.parsed.node,
+                    f"The named union {named_union.name!r} can not be dispatched "
+                    f"unambiguously during the de-serialization from JSON: "
+                    f"the implementer(s) which do not have ``with_model_type`` set "
+                    f"would need to be distinguished by their required properties, "
+                    f"but their required properties are not pairwise disjoint "
+                    f"({'; '.join(conflicts)}). Either set ``with_model_type=True`` "
+                    f"on the conflicting implementer(s), or make sure their "
+                    f"required properties are disjoint from every other "
+                    f"implementer of the union that also lacks ``with_model_type``.",
+                )
+            )
+
+        # endregion
 
     return errors
 
@@ -4302,7 +4623,7 @@ def _verify_constraints_and_constraintrefs(symbol_table: SymbolTable) -> List[Er
                 )
                 observed_constraint_id_set.add(identifier)
 
-        if isinstance(our_type, (Enumeration, ConstrainedPrimitive)):
+        if isinstance(our_type, (Enumeration, NamedUnion, ConstrainedPrimitive)):
             pass
         elif isinstance(our_type, (AbstractClass, ConcreteClass)):
             for prop in our_type.properties:
@@ -4690,7 +5011,7 @@ def _assert_all_class_inheritances_defined_an_interface(
 
 def _assert_self_not_in_concrete_descendants(symbol_table: SymbolTable) -> None:
     for our_type in symbol_table.our_types:
-        if isinstance(our_type, Enumeration):
+        if isinstance(our_type, (Enumeration, NamedUnion)):
             continue
         elif isinstance(our_type, (ConstrainedPrimitive, AbstractClass, ConcreteClass)):
             assert id(our_type) not in our_type.descendant_id_set, (
@@ -4798,6 +5119,10 @@ def _verify(symbol_table: SymbolTable, ontology: _hierarchy.Ontology) -> List[Er
         _verify_with_model_type_for_classes_with_at_least_one_concrete_descendant(
             symbol_table=symbol_table
         )
+    )
+
+    errors.extend(
+        _verify_named_unions_are_dispatchable_in_json(symbol_table=symbol_table)
     )
 
     errors.extend(
@@ -4984,6 +5309,19 @@ def translate(
                 )
                 continue
 
+        elif isinstance(parsed_our_type, parse.NamedUnion):
+            our_type, our_type_errors = _to_named_union(parsed=parsed_our_type)
+            if our_type_errors is not None:
+                underlying_errors.append(
+                    Error(
+                        parsed_our_type.node,
+                        f"Failed to translate the named union "
+                        f"{parsed_our_type.name!r}",
+                        our_type_errors,
+                    )
+                )
+                continue
+
         else:
             assert_never(parsed_our_type)
 
@@ -5030,6 +5368,58 @@ def translate(
 
     our_types_by_name = {our_type.name: our_type for our_type in our_types}
 
+    # region Check that the members of named unions are indeed classes or named unions
+
+    # NOTE (mristin):
+    # The parse stage already verifies that a named union's members resolve to
+    # classes or other named unions (as opposed to enumerations or dangling names)
+    # — see ``parse._verify_symbol_table``. However, a class from the parse stage
+    # can still turn out to be re-classified as a constrained primitive at this
+    # (intermediate) stage, which the parse stage has no way to know about. Catch
+    # that case here, with a clear error, before we resolve the members for real
+    # in the second pass (which assumes the members are already valid).
+    for our_type in our_types:
+        if not isinstance(our_type, NamedUnion):
+            continue
+
+        for member_name in our_type.parsed.members:
+            member_our_type = our_types_by_name[member_name]
+
+            if not isinstance(
+                member_our_type, (AbstractClass, ConcreteClass, NamedUnion)
+            ):
+                underlying_errors.append(
+                    Error(
+                        our_type.parsed.node,
+                        f"Expected the members of the named union "
+                        f"{our_type.name!r} to be classes or named unions, "
+                        f"but the member {member_our_type.name!r} is "
+                        f"a {member_our_type.__class__.__name__!r}",
+                    )
+                )
+
+    if len(underlying_errors) > 0:
+        return None, bundle_underlying_errors()
+
+    # endregion
+
+    # region Topologically sort named unions, checking for cycles
+
+    (
+        named_unions_topologically_sorted,
+        named_union_cycle_error,
+    ) = _topologically_sort_named_unions_or_find_cycle(
+        our_types=our_types, our_types_by_name=our_types_by_name
+    )
+
+    if named_union_cycle_error is not None:
+        underlying_errors.append(named_union_cycle_error)
+        return None, bundle_underlying_errors()
+
+    assert named_unions_topologically_sorted is not None
+
+    # endregion
+
     constants = []  # type: List[ConstantUnion]
     for parsed_constant in parsed_symbol_table.constants:
         constant, errors = _to_constant(
@@ -5048,8 +5438,22 @@ def translate(
     our_types_topologically_sorted = []  # type: List[OurTypeExceptEnumeration]
     for parsed_cls in ontology.classes:
         our_type = our_types_by_name[parsed_cls.name]
-        assert not isinstance(our_type, Enumeration)
+        assert not isinstance(our_type, (Enumeration, NamedUnion)), (
+            "``ontology.classes`` is expected to enumerate only classes, "
+            "so this our type must be a class or a constrained primitive"
+        )
         our_types_topologically_sorted.append(our_type)
+
+    # NOTE (mristin):
+    # Named unions are appended *after* all the classes above, in the topological
+    # order over the named-union dependency graph computed earlier (see
+    # ``named_unions_topologically_sorted``). A named union only ever depends on
+    # classes, all of which already precede every named union in
+    # ``our_types_topologically_sorted`` at this point, and on other named
+    # unions, which is exactly what ``named_unions_topologically_sorted`` already
+    # orders correctly. This ordering matters for code generation targets which
+    # require types to be declared before they are used (*e.g.*, C++).
+    our_types_topologically_sorted.extend(named_unions_topologically_sorted)
 
     symbol_table = SymbolTable(
         our_types=our_types,
@@ -5100,6 +5504,8 @@ def translate(
         return None, bundle_underlying_errors()
 
     _second_pass_to_resolve_inheritances_in_place(symbol_table=symbol_table)
+
+    _second_pass_to_resolve_named_union_members_in_place(symbol_table=symbol_table)
 
     _second_pass_to_resolve_resulting_class_of_specified_for(
         symbol_table=symbol_table,
@@ -5164,6 +5570,11 @@ def translate(
     _second_pass_to_resolve_interfaces_in_place(
         symbol_table=symbol_table, ontology=ontology
     )
+
+    # NOTE (mristin):
+    # This needs the members' ``concrete_descendants`` to be resolved, hence it
+    # runs after ``_second_pass_to_resolve_ancestors_and_descendants_in_place``.
+    _second_pass_to_resolve_named_union_implementers_in_place(symbol_table=symbol_table)
 
     # endregion
 

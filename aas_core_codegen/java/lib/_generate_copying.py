@@ -27,6 +27,41 @@ from aas_core_codegen.csharp.common import (
 # region Generate
 
 
+def _generate_union_deep_copy_helper() -> Stripped:
+    """
+    Generate a single ``deep`` overload shared by every named union.
+
+    A named union is not itself an ``IClass``, so it can not be passed to
+    the generic ``<T extends IClass> T deep(T that)``. We add this second
+    generic overload, next to it, so that call sites can keep calling
+    ``deep`` directly, regardless of whether the value at hand is a class
+    instance or a named union.
+
+    ``T`` is bounded by ``IUnion<T>`` (see ``_generate_iunion`` in
+    ``_generate_types.py``) instead of by the union's own type, so we need
+    only this one overload for *all* named unions, not one per union --
+    while ``T.withUnderlying(...)`` still lets the result come back as the
+    caller's own concrete union type, with no downcast needed at any
+    property/list-item/tuple-item call site.
+
+    Should a named union ever be allowed to flatten primitive or enumeration
+    alternatives, only the body of this method has to change (to dispatch on
+    the underlying value's kind) -- every call site stays the same.
+    """
+    return Stripped(
+        f"""\
+/**
+ * Make a recursively a deep copy of {{@code that}}.
+ *
+ * @param that to be deeply copied in a recursive manner
+ */
+public static <T extends IUnion<T>> T deep(T that) {{
+{I}return that.withUnderlying(
+{II}deep(that.getUnderlying()));
+}}"""
+    )
+
+
 def _generate_shallow_copy_transform_method(
     cls: intermediate.ConcreteClass,
 ) -> Stripped:
@@ -171,14 +206,17 @@ def _generate_deep_copy_transform_method(cls: intermediate.ConcreteClass) -> Str
             if isinstance(type_anno, intermediate.TupleTypeAnnotation):
                 if not any(
                     isinstance(item, intermediate.OurTypeAnnotation)
-                    and isinstance(item.our_type, intermediate.Class)
+                    and isinstance(
+                        item.our_type, (intermediate.Class, intermediate.NamedUnion)
+                    )
                     for item in type_anno.items
                 ):
                     # NOTE (mristin):
-                    # None of the items is a class, so a shallow copy of the tuple
-                    # itself already gives us a deep copy, since the tuple record
-                    # is immutable and the remaining items (primitives, constrained
-                    # primitives, enumeration literals) are immutable as well.
+                    # None of the items is a class or a named union, so a shallow
+                    # copy of the tuple itself already gives us a deep copy, since
+                    # the tuple record is immutable and the remaining items
+                    # (primitives, constrained primitives, enumeration literals)
+                    # are immutable as well.
                     continue
 
                 variable_name = java_naming.variable_name(Identifier(f"the_{arg.name}"))
@@ -191,10 +229,17 @@ def _generate_deep_copy_transform_method(cls: intermediate.ConcreteClass) -> Str
                 ) -> Stripped:
                     """Generate the expression copying the ``i``-th tuple item."""
                     item_access = f"{source_expr}.item{i + 1}()"
-                    if isinstance(
-                        item_type_anno, intermediate.OurTypeAnnotation
-                    ) and isinstance(item_type_anno.our_type, intermediate.Class):
-                        return Stripped(f"deep({item_access})")
+                    if isinstance(item_type_anno, intermediate.OurTypeAnnotation):
+                        if isinstance(
+                            item_type_anno.our_type,
+                            (intermediate.Class, intermediate.NamedUnion),
+                        ):
+                            # NOTE (mristin):
+                            # A named union has its own ``deep`` overload
+                            # (see :py:func:`_generate_union_deep_copy_helper`),
+                            # so it can be deep-copied exactly like a class
+                            # instance here.
+                            return Stripped(f"deep({item_access})")
 
                     return Stripped(item_access)
 
@@ -255,8 +300,16 @@ def _generate_deep_copy_transform_method(cls: intermediate.ConcreteClass) -> Str
 
             if isinstance(
                 type_anno.items, intermediate.OurTypeAnnotation
-            ) and isinstance(type_anno.items.our_type, intermediate.Class):
-                inner_type = java_naming.interface_name(type_anno.items.our_type.name)
+            ) and isinstance(
+                type_anno.items.our_type, (intermediate.Class, intermediate.NamedUnion)
+            ):
+                inner_type = java_common.generate_type(type_anno.items)
+
+                # NOTE (mristin):
+                # A named union has its own ``deep`` overload (see
+                # :py:func:`_generate_union_deep_copy_helper`), so it
+                # can be deep-copied exactly like a class instance here.
+                item_copy_expr = Stripped("deep(item)")
 
                 if not optional:
                     body_blocks.append(
@@ -265,7 +318,7 @@ def _generate_deep_copy_transform_method(cls: intermediate.ConcreteClass) -> Str
 {variable_type} {variable_name} = new ArrayList<>(
 {I}that.{getter_name}().size());
 for ({inner_type} item : that.{getter_name}()) {{
-{I}{variable_name}.add(deep(item));
+{I}{variable_name}.add({item_copy_expr});
 }}"""
                         )
                     )
@@ -285,7 +338,7 @@ if ({other_property_name} != null) {{
 {II}{other_property_name}.size());
 {I}for ({inner_type} item : {other_property_name})
 {I}{{
-{II}{variable_name}.add(deep(item));
+{II}{variable_name}.add({item_copy_expr});
 {I}}}
 }}"""
                         )
@@ -360,6 +413,22 @@ if ({other_property_name} != null) {{
                         )
                     else:
                         constructor_arg_exprs.append(f"deep(that.{getter_name}())")
+
+                elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+                    # NOTE (mristin):
+                    # A named union has its own ``deep`` overload (see
+                    # :py:func:`_generate_union_deep_copy_helper`), so
+                    # it can be deep-copied exactly like a class instance
+                    # here.
+                    if optional:
+                        constructor_arg_exprs.append(
+                            f"""\
+that.{getter_name}().isPresent()
+{I}? deep(that.{getter_name}().get())
+{I}: null"""
+                        )
+                    else:
+                        constructor_arg_exprs.append(f"deep(that.{getter_name}())")
                 else:
                     assert_never(type_anno.our_type)
 
@@ -371,7 +440,9 @@ if ({other_property_name} != null) {{
             elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
                 if any(
                     isinstance(item, intermediate.OurTypeAnnotation)
-                    and isinstance(item.our_type, intermediate.Class)
+                    and isinstance(
+                        item.our_type, (intermediate.Class, intermediate.NamedUnion)
+                    )
                     for item in type_anno.items
                 ):
                     # See how this variable is computed above in the generated code.
@@ -541,6 +612,9 @@ public static <T extends IClass> T deep(T that) {{
 }}"""
         ),
     ]  # type: List[Stripped]
+
+    if len(symbol_table.named_unions) > 0:
+        copy_blocks.append(_generate_union_deep_copy_helper())
 
     shallow_copier_block, shallow_errors = _generate_shallow_copier(
         symbol_table=symbol_table, spec_impls=spec_impls

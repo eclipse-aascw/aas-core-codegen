@@ -1,0 +1,4 @@
+{
+  "someBaseProperty": "base-value",
+  "modelType": "MixedConcreteWithDescendants"
+}

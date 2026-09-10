@@ -228,6 +228,23 @@ def struct_name(identifier: Identifier) -> Identifier:
     return capital_camel_case(identifier)
 
 
+def union_name(identifier: Identifier) -> Identifier:
+    """
+    Generate a Go name for a named union based on its meta-model ``identifier``.
+
+    A named union is represented as a plain Go struct, so the name follows
+    the same convention as :py:func:`struct_name`, but is kept as a separate
+    function since a named union is conceptually distinct from a class.
+
+    >>> union_name(Identifier("something"))
+    'Something'
+
+    >>> union_name(Identifier("URL_to_something"))
+    'URLToSomething'
+    """
+    return capital_camel_case(identifier)
+
+
 def getter_name(identifier: Identifier) -> Identifier:
     """
     Generate a Go name for a public property getter based on its meta-model ``identifier``.

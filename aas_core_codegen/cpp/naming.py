@@ -56,6 +56,24 @@ def class_name(identifier: Identifier) -> Identifier:
     return naming.capitalized_camel_case(identifier)
 
 
+def union_name(identifier: Identifier) -> Identifier:
+    """
+    Generate a C++ name for a named union based on its meta-model ``identifier``.
+
+    The name is used for a ``using`` alias to a ``std::variant``, so it follows
+    the same convention as :py:func:`class_name`/:py:func:`enum_name`, without
+    the ``I``-prefix used by :py:func:`interface_name` -- a named union is
+    not an interface.
+
+    >>> union_name(Identifier("something"))
+    'Something'
+
+    >>> union_name(Identifier("URL_to_something"))
+    'UrlToSomething'
+    """
+    return naming.capitalized_camel_case(identifier)
+
+
 _KEYWORD_SET: Final[FrozenSet[Identifier]] = frozenset(
     {
         Identifier("alignas"),

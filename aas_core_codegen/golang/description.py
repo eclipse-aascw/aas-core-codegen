@@ -110,6 +110,14 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
             name = golang_naming.struct_name(element.our_type.name)
             result = f"`{name}`"
 
+        elif isinstance(element.our_type, intermediate.NamedUnion):
+            name = golang_naming.union_name(element.our_type.name)
+
+            if self.context.package == golang_common.TYPES_PACKAGE:
+                result = f"[{name}]"
+            else:
+                result = f"[{golang_common.TYPES_PACKAGE}.{name}]"
+
         else:
             assert_never(element.our_type)
 

@@ -1,0 +1,294 @@
+{
+  "$schema": "https://json-schema.org/draft/2019-09/schema",
+  "title": "DummyForTest",
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "#/definitions/Something"
+    }
+  ],
+  "$id": "https://dummy.com",
+  "definitions": {
+    "MixedAbstractDescendantOne": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/MixedAbstractMember"
+        },
+        {
+          "properties": {
+            "uniqueToAbstractDescendantOne": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "uniqueToAbstractDescendantOne"
+          ]
+        }
+      ]
+    },
+    "MixedAbstractDescendantTwo": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/MixedAbstractMember"
+        },
+        {
+          "properties": {
+            "uniqueToAbstractDescendantTwo": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "uniqueToAbstractDescendantTwo"
+          ]
+        }
+      ]
+    },
+    "MixedAbstractMember": {
+      "type": "object"
+    },
+    "MixedConcreteLeaf": {
+      "type": "object",
+      "properties": {
+        "uniqueToConcreteLeaf": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "uniqueToConcreteLeaf"
+      ]
+    },
+    "MixedConcreteWithDescendants": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/MixedConcreteWithDescendants_abstract"
+        },
+        {
+          "properties": {
+            "modelType": {
+              "const": "MixedConcreteWithDescendants"
+            }
+          }
+        }
+      ]
+    },
+    "MixedConcreteWithDescendantsChild": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/MixedConcreteWithDescendants_abstract"
+        },
+        {
+          "properties": {
+            "someChildProperty": {
+              "type": "string",
+              "minLength": 1
+            },
+            "modelType": {
+              "const": "MixedConcreteWithDescendantsChild"
+            }
+          },
+          "required": [
+            "someChildProperty"
+          ]
+        }
+      ]
+    },
+    "MixedConcreteWithDescendants_abstract": {
+      "type": "object",
+      "properties": {
+        "someBaseProperty": {
+          "type": "string",
+          "minLength": 1
+        },
+        "modelType": {
+          "$ref": "#/definitions/ModelType"
+        }
+      },
+      "required": [
+        "someBaseProperty",
+        "modelType"
+      ]
+    },
+    "MixedConcreteWithDescendants_choice": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/MixedConcreteWithDescendants"
+        },
+        {
+          "$ref": "#/definitions/MixedConcreteWithDescendantsChild"
+        }
+      ]
+    },
+    "MixedUnion_choice": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/MixedAbstractDescendantOne"
+        },
+        {
+          "$ref": "#/definitions/MixedAbstractDescendantTwo"
+        },
+        {
+          "$ref": "#/definitions/MixedConcreteWithDescendantsChild"
+        },
+        {
+          "$ref": "#/definitions/MixedConcreteWithDescendants"
+        },
+        {
+          "$ref": "#/definitions/MixedConcreteLeaf"
+        }
+      ]
+    },
+    "ModelType": {
+      "type": "string",
+      "enum": [
+        "MixedConcreteWithDescendants",
+        "MixedConcreteWithDescendantsChild",
+        "ModelTypedFirst",
+        "ModelTypedSecond"
+      ]
+    },
+    "ModelTypedFirst": {
+      "type": "object",
+      "properties": {
+        "someProperty": {
+          "type": "string",
+          "minLength": 1
+        },
+        "modelType": {
+          "const": "ModelTypedFirst"
+        }
+      },
+      "required": [
+        "someProperty"
+      ]
+    },
+    "ModelTypedSecond": {
+      "type": "object",
+      "properties": {
+        "someProperty": {
+          "type": "string",
+          "minLength": 1
+        },
+        "modelType": {
+          "const": "ModelTypedSecond"
+        }
+      },
+      "required": [
+        "someProperty"
+      ]
+    },
+    "ModelTypedUnion_choice": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/ModelTypedFirst"
+        },
+        {
+          "$ref": "#/definitions/ModelTypedSecond"
+        }
+      ]
+    },
+    "Something": {
+      "type": "object",
+      "properties": {
+        "structuralProperty": {
+          "$ref": "#/definitions/StructuralUnion_choice"
+        },
+        "mixedProperty": {
+          "$ref": "#/definitions/MixedUnion_choice"
+        },
+        "modelTypedProperty": {
+          "$ref": "#/definitions/ModelTypedUnion_choice"
+        },
+        "listStructuralProperty": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StructuralUnion_choice"
+          }
+        },
+        "listMixedProperty": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/MixedUnion_choice"
+          }
+        },
+        "listModelTypedProperty": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ModelTypedUnion_choice"
+          }
+        },
+        "tupleProperty": {
+          "type": "array",
+          "items": [
+            {
+              "$ref": "#/definitions/StructuralUnion_choice"
+            },
+            {
+              "$ref": "#/definitions/MixedUnion_choice"
+            },
+            {
+              "$ref": "#/definitions/ModelTypedUnion_choice"
+            }
+          ],
+          "minItems": 3,
+          "maxItems": 3,
+          "additionalItems": false
+        },
+        "optionalStructuralProperty": {
+          "$ref": "#/definitions/StructuralUnion_choice"
+        },
+        "optionalMixedProperty": {
+          "$ref": "#/definitions/MixedUnion_choice"
+        },
+        "optionalModelTypedProperty": {
+          "$ref": "#/definitions/ModelTypedUnion_choice"
+        }
+      },
+      "required": [
+        "structuralProperty",
+        "mixedProperty",
+        "modelTypedProperty",
+        "listStructuralProperty",
+        "listMixedProperty",
+        "listModelTypedProperty",
+        "tupleProperty"
+      ]
+    },
+    "StructuralFirst": {
+      "type": "object",
+      "properties": {
+        "uniqueToFirst": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "uniqueToFirst"
+      ]
+    },
+    "StructuralSecond": {
+      "type": "object",
+      "properties": {
+        "uniqueToSecond": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "uniqueToSecond"
+      ]
+    },
+    "StructuralUnion_choice": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/StructuralFirst"
+        },
+        {
+          "$ref": "#/definitions/StructuralSecond"
+        }
+      ]
+    }
+  }
+}

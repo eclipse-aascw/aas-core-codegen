@@ -44,6 +44,7 @@ def _human_readable_identifier(
         intermediate.Enumeration,
         intermediate.AbstractClass,
         intermediate.ConcreteClass,
+        intermediate.NamedUnion,
         intermediate.EnumerationLiteral,
     ]
 ) -> str:
@@ -69,6 +70,8 @@ def _human_readable_identifier(
         result = f"meta-model abstract class {something.name!r}"
     elif isinstance(something, intermediate.ConcreteClass):
         result = f"meta-model concrete class {something.name!r}"
+    elif isinstance(something, intermediate.NamedUnion):
+        result = f"meta-model named union {something.name!r}"
     else:
         # noinspection PyTypeChecker
         assert_never(something)
@@ -100,6 +103,10 @@ def _verify_intra_structure_collisions(
                 observed_literal_names[name] = literal.name
 
     elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+        pass
+
+    elif isinstance(our_type, intermediate.NamedUnion):
+        # A named union has no members of its own to collide.
         pass
 
     elif isinstance(our_type, intermediate.Class):
@@ -251,6 +258,7 @@ def _verify_structure_name_collisions(
             intermediate.Enumeration,
             intermediate.AbstractClass,
             intermediate.ConcreteClass,
+            intermediate.NamedUnion,
         ],
     ] = dict()
 
@@ -259,21 +267,25 @@ def _verify_structure_name_collisions(
     # region Inter-structure collisions
 
     # noinspection PyTypeChecker
-    for enum_or_cls in itertools.chain(symbol_table.enumerations, symbol_table.classes):
+    for enum_or_cls_or_union in itertools.chain(
+        symbol_table.enumerations, symbol_table.classes, symbol_table.named_unions
+    ):
         names: List[Identifier]
 
-        if isinstance(enum_or_cls, intermediate.Enumeration):
-            names = [cpp_naming.enum_name(enum_or_cls.name)]
-        elif isinstance(enum_or_cls, intermediate.AbstractClass):
-            names = [cpp_naming.interface_name(enum_or_cls.name)]
-        elif isinstance(enum_or_cls, intermediate.ConcreteClass):
+        if isinstance(enum_or_cls_or_union, intermediate.Enumeration):
+            names = [cpp_naming.enum_name(enum_or_cls_or_union.name)]
+        elif isinstance(enum_or_cls_or_union, intermediate.AbstractClass):
+            names = [cpp_naming.interface_name(enum_or_cls_or_union.name)]
+        elif isinstance(enum_or_cls_or_union, intermediate.ConcreteClass):
             names = [
-                cpp_naming.interface_name(enum_or_cls.name),
-                cpp_naming.class_name(enum_or_cls.name),
+                cpp_naming.interface_name(enum_or_cls_or_union.name),
+                cpp_naming.class_name(enum_or_cls_or_union.name),
             ]
+        elif isinstance(enum_or_cls_or_union, intermediate.NamedUnion):
+            names = [cpp_naming.union_name(enum_or_cls_or_union.name)]
         else:
             # noinspection PyTypeChecker
-            assert_never(enum_or_cls)
+            assert_never(enum_or_cls_or_union)
 
         for name in names:
             other = observed_type_names.get(name, None)
@@ -281,15 +293,15 @@ def _verify_structure_name_collisions(
             if other is not None:
                 errors.append(
                     Error(
-                        enum_or_cls.parsed.node,
+                        enum_or_cls_or_union.parsed.node,
                         f"The C++ name {name!r} "
-                        f"of the {_human_readable_identifier(enum_or_cls)} "
+                        f"of the {_human_readable_identifier(enum_or_cls_or_union)} "
                         f"collides with the C++ name "
                         f"of the {_human_readable_identifier(other)}",
                     )
                 )
             else:
-                observed_type_names[name] = enum_or_cls
+                observed_type_names[name] = enum_or_cls_or_union
 
     # endregion
 
@@ -553,6 +565,29 @@ enum class {enum_name} : std::uint32_t {{
 enum class {enum_name} : std::uint32_t {{
 {I}{indent_but_first_line(literal_specs_joined, I)}
 }};"""
+    )
+
+
+def _generate_named_union_alias(named_union: intermediate.NamedUnion) -> Stripped:
+    """
+    Generate the ``using`` alias declaring the named union as a ``std::variant``.
+
+    We reference the flattened implementers' interfaces by their bare name
+    (no ``types::`` prefix) since this alias is itself declared inside
+    ``namespace types``.
+    """
+    union_name = cpp_naming.union_name(named_union.name)
+
+    variant_definition = cpp_common.generate_named_union_variant_definition(
+        named_union=named_union
+    )
+
+    return Stripped(
+        f"""\
+/**
+ * Represent a union of classes.
+ */
+using {union_name} = {indent_but_first_line(variant_definition, I)};"""
     )
 
 
@@ -987,6 +1022,10 @@ def generate_header(
 
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
+    variant_include = (
+        "#include <variant>\n" if len(symbol_table.named_unions) > 0 else ""
+    )
+
     blocks = [
         Stripped(
             f"""\
@@ -1003,6 +1042,7 @@ def generate_header(
 #include <cstdint>
 #include <memory>
 #include <string>
+{variant_include}\
 #include <vector>
 #pragma warning(pop)"""
         ),
@@ -1062,6 +1102,21 @@ class IClass {{
 }};"""
         )
     )
+
+    if len(symbol_table.named_unions) > 0:
+        # NOTE (mristin):
+        # A named union's ``using`` alias must be declared before any class
+        # interface that references it as a property type, since (unlike a
+        # class) it can not be forward-declared -- it only needs its
+        # implementers' interfaces forward-declared (already true at this
+        # point), so it is safe to place it right after ``IClass`` and
+        # before any class interface is defined.
+        blocks.append(Stripped("// region Named unions"))
+
+        for named_union in symbol_table.named_unions:
+            blocks.append(_generate_named_union_alias(named_union=named_union))
+
+        blocks.append(Stripped("// endregion"))
 
     for cls in symbol_table.classes:
         block, error = _generate_class_interface(cls=cls)

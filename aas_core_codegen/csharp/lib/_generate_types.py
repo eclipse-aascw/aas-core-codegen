@@ -32,6 +32,9 @@ from aas_core_codegen.csharp import (
 from aas_core_codegen.csharp.common import (
     INDENT as I,
     INDENT2 as II,
+    INDENT3 as III,
+    INDENT4 as IIII,
+    INDENT5 as IIIII,
 )
 from aas_core_codegen.intermediate import (
     construction as intermediate_construction,
@@ -43,7 +46,10 @@ from aas_core_codegen.intermediate import (
 
 def _human_readable_identifier(
     something: Union[
-        intermediate.Enumeration, intermediate.AbstractClass, intermediate.ConcreteClass
+        intermediate.Enumeration,
+        intermediate.AbstractClass,
+        intermediate.ConcreteClass,
+        intermediate.NamedUnion,
     ]
 ) -> str:
     """
@@ -59,6 +65,8 @@ def _human_readable_identifier(
         result = f"meta-model abstract class {something.name!r}"
     elif isinstance(something, intermediate.ConcreteClass):
         result = f"meta-model concrete class {something.name!r}"
+    elif isinstance(something, intermediate.NamedUnion):
+        result = f"meta-model named union {something.name!r}"
     else:
         assert_never(something)
 
@@ -75,6 +83,10 @@ def _verify_intra_structure_collisions(
         pass
 
     elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+        pass
+
+    elif isinstance(our_type, intermediate.NamedUnion):
+        # A named union has no members of its own to check for collisions.
         pass
 
     elif isinstance(our_type, intermediate.Class):
@@ -177,6 +189,7 @@ def _verify_structure_name_collisions(
             intermediate.Enumeration,
             intermediate.AbstractClass,
             intermediate.ConcreteClass,
+            intermediate.NamedUnion,
         ],
     ] = dict()
 
@@ -191,6 +204,7 @@ def _verify_structure_name_collisions(
                 intermediate.Enumeration,
                 intermediate.AbstractClass,
                 intermediate.ConcreteClass,
+                intermediate.NamedUnion,
             ),
         ):
             continue
@@ -248,6 +262,25 @@ def _verify_structure_name_collisions(
                     )
                 else:
                     observed_structure_names[class_name] = our_type
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            union_name = csharp_naming.class_name(our_type.name)
+
+            other = observed_structure_names.get(union_name, None)
+
+            if other is not None:
+                errors.append(
+                    Error(
+                        our_type.parsed.node,
+                        f"The C# name {union_name!r} for the named union "
+                        f"{our_type.name!r} "
+                        f"collides with the same C# name "
+                        f"coming from the {_human_readable_identifier(other)}",
+                    )
+                )
+            else:
+                observed_structure_names[union_name] = our_type
+
         else:
             assert_never(our_type)
 
@@ -593,6 +626,47 @@ class _DescendBodyUnroller(csharp_unrolling.AbstractUnroller):
         elif isinstance(our_type, intermediate.ConstrainedPrimitive):
             # We can not descend into a primitive type.
             return []
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # A named union is not itself an ``IClass``, so we descend into
+            # the underlying instance instead of ``unrollee_expr`` directly. We
+            # keep this as its own branch, separate from the class branch below,
+            # so that it can diverge independently, *e.g.* if primitive
+            # alternatives are ever allowed into a named union.
+            result = [
+                csharp_unrolling.Node(
+                    f"yield return {unrollee_expr}.Underlying;", children=[]
+                )
+            ]
+
+            if self._recurse:
+                if self._descendability[type_annotation]:
+                    recurse_var = csharp_unrolling.AbstractUnroller._loop_var_name(
+                        level=item_level, suffix="Item"
+                    )
+
+                    result.append(
+                        csharp_unrolling.Node(
+                            text=textwrap.dedent(
+                                f"""\
+                            // Recurse
+                            foreach (var {recurse_var} in {unrollee_expr}.Underlying.Descend())
+                            {{
+                                yield return {recurse_var};
+                            }}"""
+                            ),
+                            children=[],
+                        )
+                    )
+                else:
+                    result.append(
+                        csharp_unrolling.Node(
+                            text="// Recursive descent ends here.", children=[]
+                        )
+                    )
+
+            return result
 
         assert isinstance(our_type, intermediate.Class)  # Exhaustively match
 
@@ -1201,6 +1275,181 @@ public T Transform<TContext, T>(
     return Stripped(writer.getvalue()), None
 
 
+def _generate_named_union_class(named_union: intermediate.NamedUnion) -> Stripped:
+    """
+    Generate the class representing the named union ``named_union``.
+
+    Unlike a class, a named union is a closed set of alternatives, so we do not
+    want to allow custom enhancements or wrappings around it. Hence we represent
+    it as a plain class, storing exactly one of its flattened implementers, tagged
+    by a private discriminant enum. This keeps every alternative in its own,
+    separately typed field, so that a future primitive alternative (which can not
+    implement ``IClass``) would still fit the same shape.
+    """
+    name = csharp_naming.class_name(named_union.name)
+
+    interface_names = [
+        csharp_naming.interface_name(implementer.name)
+        for implementer in named_union.implementers
+    ]
+
+    crefs = [f'<see cref="{interface_name}" />' for interface_name in interface_names]
+    if len(crefs) == 1:
+        crefs_joined = crefs[0]
+    else:
+        crefs_joined = ", ".join(crefs[:-1]) + " and " + crefs[-1]
+
+    discriminant_cases = []  # type: List[Stripped]
+    field_decls = []  # type: List[Stripped]
+    constructor_args = []  # type: List[Stripped]
+    constructor_assignments = []  # type: List[Stripped]
+    underlying_cases = []  # type: List[Stripped]
+    from_methods = []  # type: List[Stripped]
+    from_underlying_cases = []  # type: List[Stripped]
+
+    field_names = [
+        csharp_naming.private_property_name(Identifier(f"as_{implementer.name}"))
+        for implementer in named_union.implementers
+    ]
+    constructor_arg_names = [
+        csharp_naming.argument_name(Identifier(f"as_{implementer.name}"))
+        for implementer in named_union.implementers
+    ]
+
+    for implementer, interface_name, field_name, constructor_arg_name in zip(
+        named_union.implementers, interface_names, field_names, constructor_arg_names
+    ):
+        discriminant_case = csharp_naming.enum_literal_name(implementer.name)
+        discriminant_cases.append(Stripped(discriminant_case))
+
+        field_decls.append(
+            Stripped(f"private readonly {interface_name}? {field_name};")
+        )
+
+        constructor_args.append(Stripped(f"{interface_name}? {constructor_arg_name}"))
+        constructor_assignments.append(
+            Stripped(f"{field_name} = {constructor_arg_name};")
+        )
+
+        underlying_cases.append(
+            Stripped(
+                f"""\
+ValueKind.{discriminant_case} => {field_name}
+{I}?? throw new System.InvalidOperationException(
+{II}"Unexpected null {field_name}"),"""
+            )
+        )
+
+        from_method_name = csharp_naming.method_name(
+            Identifier(f"from_{implementer.name}")
+        )
+
+        null_args = ",\n".join(
+            "null" if other_field_name != field_name else "that"
+            for other_field_name in field_names
+        )
+
+        from_methods.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Wrap <paramref name="that" /> as an instance of {name}.
+/// </summary>
+public static {name} {from_method_name}({interface_name} that)
+{{
+{I}return new {name}(
+{II}ValueKind.{discriminant_case},
+{II}{indent_but_first_line(null_args, II)});
+}}"""
+            )
+        )
+
+        from_underlying_cases.append(
+            Stripped(
+                f"""\
+case {interface_name} casted:
+{I}return {from_method_name}(casted);"""
+            )
+        )
+
+    discriminant_cases_joined = ",\n".join(discriminant_cases)
+    field_decls_joined = "\n".join(field_decls)
+    constructor_args_joined = ",\n".join(constructor_args)
+    constructor_assignments_joined = "\n".join(constructor_assignments)
+    underlying_cases_joined = "\n".join(underlying_cases)
+    from_methods_joined = "\n\n".join(from_methods)
+    from_underlying_cases_joined = "\n".join(from_underlying_cases)
+
+    return Stripped(
+        f"""\
+/// <summary>
+/// Represent a union of {crefs_joined}.
+/// </summary>
+public class {name} : IUnion<{name}>
+{{
+{I}private enum ValueKind
+{I}{{
+{II}{indent_but_first_line(discriminant_cases_joined, II)}
+{I}}}
+
+{I}private readonly ValueKind _valueKind;
+{I}{indent_but_first_line(field_decls_joined, I)}
+
+{I}private {name}(
+{II}ValueKind valueKind,
+{II}{indent_but_first_line(constructor_args_joined, II)})
+{I}{{
+{II}_valueKind = valueKind;
+{II}{indent_but_first_line(constructor_assignments_joined, II)}
+{I}}}
+
+{I}/// <summary>
+{I}/// Get the underlying instance regardless of the concrete case.
+{I}/// </summary>
+{I}public IClass Underlying =>
+{II}_valueKind switch
+{II}{{
+{III}{indent_but_first_line(underlying_cases_joined, III)}
+{III}_ => throw new System.InvalidOperationException(
+{IIII}$"Unexpected value kind: {{_valueKind}}")
+{II}}};
+
+{I}{indent_but_first_line(from_methods_joined, I)}
+
+{I}/// <summary>
+{I}/// Wrap <paramref name="that" /> as an instance of {name} based on
+{I}/// its run-time type.
+{I}/// </summary>
+{I}public static {name} FromUnderlying(IClass that)
+{I}{{
+{II}switch (that)
+{II}{{
+{III}{indent_but_first_line(from_underlying_cases_joined, III)}
+{III}default:
+{IIII}throw new System.ArgumentException(
+{IIIII}$"Unexpected run-time type for the union {name}: " +
+{IIIII}$"{{that.GetType()}}");
+{II}}}
+{I}}}
+
+{I}/// <summary>
+{I}/// Wrap <paramref name="that" /> as an instance of {name} based on
+{I}/// its run-time type.
+{I}/// </summary>
+{I}/// <remarks>
+{I}/// This is the instance-level counterpart of <see cref="FromUnderlying" />,
+{I}/// needed so that a generic method dispatching on <see cref="IUnion{{T}}" />
+{I}/// can re-wrap a transformed or copied value without knowing the concrete
+{I}/// union type at compile time.
+{I}/// </remarks>
+{I}public {name} WithUnderlying(IClass that)
+{I}{{
+{II}return {name}.FromUnderlying(that);
+{I}}}
+}}"""
+    )
+
+
 # fmt: off
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 @ensure(
@@ -1269,6 +1518,38 @@ public interface IClass
         )
     ]  # type: List[Stripped]
 
+    if len(symbol_table.named_unions) > 0:
+        code_blocks.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Represent an instance of a named union of one or more classes.
+/// </summary>
+public interface IUnion
+{{
+{I}/// <summary>
+{I}/// Get the underlying instance regardless of the concrete case.
+{I}/// </summary>
+{I}public IClass Underlying {{ get; }}
+}}
+
+/// <summary>
+/// Represent an instance of a named union of one or more classes, allowing
+/// a generic method to re-wrap a transformed or copied value without
+/// knowing the concrete union type at compile time.
+/// </summary>
+/// <typeparam name="T">Concrete union type implementing this interface</typeparam>
+public interface IUnion<T> : IUnion where T : IUnion<T>
+{{
+{I}/// <summary>
+{I}/// Wrap <paramref name="that" /> as an instance of the same union type
+{I}/// as this instance, based on its run-time type.
+{I}/// </summary>
+{I}public T WithUnderlying(IClass that);
+}}"""
+            )
+        )
+
     errors = []  # type: List[Error]
 
     for our_type in symbol_table.our_types:
@@ -1278,8 +1559,13 @@ public interface IClass
                 intermediate.Enumeration,
                 intermediate.AbstractClass,
                 intermediate.ConcreteClass,
+                intermediate.NamedUnion,
             ),
         ):
+            continue
+
+        if isinstance(our_type, intermediate.NamedUnion):
+            code_blocks.append(_generate_named_union_class(named_union=our_type))
             continue
 
         if (

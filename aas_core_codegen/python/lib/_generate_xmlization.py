@@ -528,6 +528,118 @@ def {function_name}(
     )
 
 
+def _generate_dispatch_map_for_named_union(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """Generate the mapping model type 🠒 read-as-sequence function."""
+    mapping_name = python_naming.private_constant_name(
+        Identifier(f"dispatch_for_{named_union.name}")
+    )
+
+    union_name = python_naming.union_name(named_union.name)
+
+    mapping_writer = io.StringIO()
+
+    mapping_writer.write(
+        f"""\
+#: Dispatch XML class names to read-as-sequence functions
+#: corresponding to the implementers of {union_name}
+{mapping_name}: Mapping[
+{I}str,
+{I}Callable[
+{II}[
+{III}Element,
+{III}Iterator[Tuple[str, Element]]
+{II}],
+{II}aas_types.{union_name}
+{I}]
+] = {{
+"""
+    )
+
+    for implementer in named_union.implementers:
+        read_as_sequence_name = python_naming.private_function_name(
+            Identifier(f"read_{implementer.name}_as_sequence")
+        )
+
+        xml_name_literal = python_common.string_literal(
+            naming.xml_class_name(implementer.name)
+        )
+
+        mapping_writer.write(
+            f"""\
+{I}{xml_name_literal}: {read_as_sequence_name},
+"""
+        )
+
+    mapping_writer.write("}")
+
+    return Stripped(mapping_writer.getvalue())
+
+
+def _generate_read_named_union_as_element(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """
+    Generate the read function to dispatch to a concrete instance of the union.
+
+    Unlike a plain, non-polymorphic class, a named union always dispatches on
+    the element's own tag, regardless of how its members disambiguate on the
+    JSON side, since an XML element is always self-tagging.
+    """
+    dispatch_map = python_naming.private_constant_name(
+        Identifier(f"dispatch_for_{named_union.name}")
+    )
+
+    union_name = python_naming.union_name(named_union.name)
+
+    body = Stripped(
+        f"""\
+tag_wo_ns = _parse_element_tag(element)
+read_as_sequence = {dispatch_map}.get(
+{I}tag_wo_ns,
+{I}None
+)
+
+if read_as_sequence is None:
+{I}raise DeserializationException(
+{II}f"Expected the element tag to be a valid model type "
+{II}f"of a concrete instance of '{union_name}', "
+{II}f"but got tag {{tag_wo_ns!r}}"
+{I})
+
+return read_as_sequence(
+{I}element,
+{I}iterator
+)"""
+    )
+
+    function_name = python_naming.function_name(
+        Identifier(f"_read_{named_union.name}_as_element")
+    )
+
+    return Stripped(
+        f"""\
+def {function_name}(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> aas_types.{union_name}:
+{I}\"\"\"
+{I}Read an instance of :py:class:`.types.{union_name}` from
+{I}:paramref:`iterator`, including the end element.
+
+{I}:param element: start element
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed instance
+{I}\"\"\"
+{I}{indent_but_first_line(body, I)}"""
+    )
+
+
 def _generate_read_from_iterparse(
     qualified_module_name: python_common.QualifiedModuleName,
 ) -> Stripped:
@@ -1058,6 +1170,52 @@ self.{prop_name} = {read_prop_cls_as_sequence}(
 )"""
                     )
 
+            elif isinstance(our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # We keep this as its own branch, separate from the
+                # polymorphic-class case above, even though the code is
+                # identical at the moment. We might want to support unions
+                # of primitives in the future, at which point this branch
+                # would need to diverge. Unlike a plain class, a named union
+                # always takes the discriminator-nesting path, regardless of
+                # how many implementers it flattens to.
+                prop_cls_name = python_naming.class_name(our_type.name)
+
+                read_prop_cls_as_element = python_naming.function_name(
+                    Identifier(f"_read_{our_type.name}_as_element")
+                )
+
+                method_body = Stripped(
+                    f"""\
+next_event_element = next(iterator, None)
+if next_event_element is None:
+{I}raise DeserializationException(
+{II}"Expected a discriminator start element corresponding "
+{II}"to {prop_cls_name}, but got end-of-input"
+{I})
+
+next_event, next_element = next_event_element
+if next_event != 'start':
+{I}raise DeserializationException(
+{II}f"Expected a discriminator start element corresponding "
+{II}f"to {prop_cls_name}, "
+{II}f"but got event {{next_event!r}} and element {{next_element.tag!r}}"
+{I})
+
+try:
+{I}result = {read_prop_cls_as_element}(
+{II}next_element,
+{II}iterator
+{I})
+except DeserializationException as exception:
+{I}exception.path._prepend(ElementSegment(next_element))
+{I}raise
+
+_read_end_element(element, iterator)
+
+self.{prop_name} = result"""
+                )
+
         elif isinstance(type_anno, intermediate.ListTypeAnnotation):
             items_primitive_type = intermediate.try_primitive_type(type_anno.items)
 
@@ -1098,6 +1256,20 @@ lambda el, it: _read_v_element(
                         type_anno.items.our_type,
                         (intermediate.AbstractClass, intermediate.ConcreteClass),
                     ):
+                        read_item = python_naming.function_name(
+                            Identifier(
+                                f"_read_{type_anno.items.our_type.name}_as_element"
+                            )
+                        )
+                        read_item_callable = Stripped(read_item)
+
+                    elif isinstance(type_anno.items.our_type, intermediate.NamedUnion):
+                        # NOTE (mristin):
+                        # We keep this as its own branch, separate from the
+                        # class case above, even though the code is
+                        # identical at the moment. We might want to support
+                        # unions of primitives in the future, at which point
+                        # this branch would need to diverge.
                         read_item = python_naming.function_name(
                             Identifier(
                                 f"_read_{type_anno.items.our_type.name}_as_element"
@@ -1175,6 +1347,20 @@ self.{prop_name} = _read_list_of_items(
                         item_type_anno.our_type,
                         (intermediate.AbstractClass, intermediate.ConcreteClass),
                     ):
+                        item_is_v_element = False
+                        read_item = python_naming.function_name(
+                            Identifier(
+                                f"_read_{item_type_anno.our_type.name}_as_element"
+                            )
+                        )
+
+                    elif isinstance(item_type_anno.our_type, intermediate.NamedUnion):
+                        # NOTE (mristin):
+                        # We keep this as its own branch, separate from the
+                        # class case above, even though the code is
+                        # identical at the moment. We might want to support
+                        # unions of primitives in the future, at which point
+                        # this branch would need to diverge.
                         item_is_v_element = False
                         read_item = python_naming.function_name(
                             Identifier(
@@ -1856,6 +2042,23 @@ self._write_end_element({xml_prop_literal})"""
                                     prop=prop
                                 )
                             )
+
+                    elif isinstance(our_type, intermediate.NamedUnion):
+                        # NOTE (mristin):
+                        # We keep this as its own branch, separate from the
+                        # polymorphic-class case above, even though the code
+                        # is identical at the moment. We might want to
+                        # support unions of primitives in the future, at
+                        # which point this branch would need to diverge.
+                        # Unlike a plain class, a named union always takes
+                        # the discriminator-nesting path.
+                        write_prop = Stripped(
+                            f"""\
+self._write_start_element({xml_prop_literal})
+self.visit(that.{prop_name})
+self._write_end_element({xml_prop_literal})"""
+                        )
+
                     else:
                         assert_never(our_type)
 
@@ -1914,6 +2117,25 @@ self._write_list_of_items(
                                     intermediate.ConcreteClass,
                                 ),
                             ):
+                                write_prop = Stripped(
+                                    f"""\
+self._write_list_of_items(
+{I}{xml_prop_literal},
+{I}that.{prop_name},
+{I}self.visit
+)"""
+                                )
+
+                            elif isinstance(
+                                type_anno.items.our_type, intermediate.NamedUnion
+                            ):
+                                # NOTE (mristin):
+                                # We keep this as its own branch, separate
+                                # from the class case above, even though the
+                                # code is identical at the moment. We might
+                                # want to support unions of primitives in
+                                # the future, at which point this branch
+                                # would need to diverge.
                                 write_prop = Stripped(
                                     f"""\
 self._write_list_of_items(
@@ -2006,8 +2228,22 @@ self._write_str_as_element(
                                 # NOTE (mristin):
                                 # Unlike primitives, constrained primitives and
                                 # enumeration literals, a class writes its own
-                                # element tag through ``self.visit``, exactly as we
-                                # do for the lists above.
+                                # element tag through ``self.visit``, exactly
+                                # as we do for the lists above.
+                                item_write_stmts.append(
+                                    Stripped(f"self.visit({item_access})")
+                                )
+
+                            elif isinstance(
+                                item_type_anno.our_type, intermediate.NamedUnion
+                            ):
+                                # NOTE (mristin):
+                                # We keep this as its own branch, separate
+                                # from the class case above, even though the
+                                # code is identical at the moment. We might
+                                # want to support unions of primitives in
+                                # the future, at which point this branch
+                                # would need to diverge.
                                 item_write_stmts.append(
                                     Stripped(f"self.visit({item_access})")
                                 )
@@ -3423,6 +3659,9 @@ def _read_bytes_from_element_text(
 
                 blocks.append(_generate_read_cls_as_element(cls=our_type))
 
+        elif isinstance(our_type, intermediate.NamedUnion):
+            blocks.append(_generate_read_named_union_as_element(named_union=our_type))
+
         else:
             assert_never(our_type)
 
@@ -3440,6 +3679,9 @@ def _read_bytes_from_element_text(
 
         else:
             assert_never(cls)
+
+    for named_union in symbol_table.named_unions:
+        blocks.append(_generate_dispatch_map_for_named_union(named_union=named_union))
 
     blocks.append(_generate_general_dispatch_map(symbol_table=symbol_table))
 
