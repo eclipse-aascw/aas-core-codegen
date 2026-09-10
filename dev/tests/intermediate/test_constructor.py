@@ -1,7 +1,6 @@
 # pylint: disable=missing-docstring
 
 import re
-import textwrap
 import unittest
 from typing import Tuple, Optional, Sequence
 
@@ -55,15 +54,13 @@ def must_find_item_for(
 
 class Test_empty_ok(unittest.TestCase):
     def test_no_constructor(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Something:
-                pass
+        source = """\
+class Something:
+    pass
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         constructor_table, error = understand_constructor_table(source=source)
         assert error is None, tests.common.most_underlying_messages(error)
@@ -76,16 +73,14 @@ class Test_empty_ok(unittest.TestCase):
         self.assertEqual(0, len(statements))
 
     def test_pass(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Something:
-                def __init__(self) -> None:
-                    pass
+        source = """\
+class Something:
+    def __init__(self) -> None:
+        pass
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         constructor_table, error = understand_constructor_table(source=source)
         assert error is None, tests.common.most_underlying_messages(error)
@@ -99,21 +94,19 @@ class Test_empty_ok(unittest.TestCase):
 
 class Test_call_to_super_constructor_ok(unittest.TestCase):
     def test_without_arguments(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @abstract
-            class Parent:
-                def __init__(self) -> None:
-                    pass
+        source = """\
+@abstract
+class Parent:
+    def __init__(self) -> None:
+        pass
 
-            class Something(Parent):
-                def __init__(self) -> None:
-                    Parent.__init__(self)
+class Something(Parent):
+    def __init__(self) -> None:
+        Parent.__init__(self)
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         constructor_table, error = understand_constructor_table(source=source)
         assert error is None, tests.common.most_underlying_messages(error)
@@ -129,25 +122,23 @@ class Test_call_to_super_constructor_ok(unittest.TestCase):
         self.assertEqual("Parent", statement.super_name)
 
     def test_with_arguments(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @abstract
-            class Parent:
-                a: int
-                b: int
+        source = """\
+@abstract
+class Parent:
+    a: int
+    b: int
 
-                def __init__(self, a: int, b: int) -> None:
-                    self.a = a
-                    self.b = b
+    def __init__(self, a: int, b: int) -> None:
+        self.a = a
+        self.b = b
 
-            class Something(Parent):
-                def __init__(self, a: int, b: int) -> None:
-                    Parent.__init__(self, a, b)
+class Something(Parent):
+    def __init__(self, a: int, b: int) -> None:
+        Parent.__init__(self, a, b)
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         constructor_table, error = understand_constructor_table(source=source)
         assert error is None, tests.common.most_underlying_messages(error)
@@ -165,18 +156,16 @@ class Test_call_to_super_constructor_ok(unittest.TestCase):
 
 class Test_assign_property_ok(unittest.TestCase):
     def test_argument_assignment(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Something:
-                x: int
+        source = """\
+class Something:
+    x: int
 
-                def __init__(self, x: int) -> None:
-                    self.x = x
+    def __init__(self, x: int) -> None:
+        self.x = x
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         constructor_table, error = understand_constructor_table(source=source)
         assert error is None, tests.common.most_underlying_messages(error)
@@ -192,19 +181,17 @@ class Test_assign_property_ok(unittest.TestCase):
 
 class Test_assign_fail(unittest.TestCase):
     def test_multiple_targets_in_assignment(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Something:
-                a: int
-                b: int
+        source = """\
+class Something:
+    a: int
+    b: int
 
-                def __init__(self, a: int) -> None:
-                    self.a = self.b = a
+    def __init__(self, a: int) -> None:
+        self.a = self.b = a
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         _, error = understand_constructor_table(source=source)
         assert error is not None
@@ -215,19 +202,17 @@ class Test_assign_fail(unittest.TestCase):
         )
 
     def test_tuple_in_assignment_targets(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Something:
-                a: int
-                b: int
+        source = """\
+class Something:
+    a: int
+    b: int
 
-                def __init__(self, a: int, b: int) -> None:
-                    self.a, self.b = a, b
+    def __init__(self, a: int, b: int) -> None:
+        self.a, self.b = a, b
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         _, error = understand_constructor_table(source=source)
         assert error is not None
@@ -239,19 +224,17 @@ class Test_assign_fail(unittest.TestCase):
         )
 
     def test_variable_instead_of_property_assignment(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Something:
-                a: int
-                b: int
+        source = """\
+class Something:
+    a: int
+    b: int
 
-                def __init__(self, a: int, b: int) -> None:
-                    x = a
+    def __init__(self, a: int, b: int) -> None:
+        x = a
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         _, error = understand_constructor_table(source=source)
         assert error is not None
@@ -262,16 +245,14 @@ class Test_assign_fail(unittest.TestCase):
         )
 
     def test_assignment_to_undefined_property(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Something:
-                def __init__(self, a: int) -> None:
-                    self.a = a
+        source = """\
+class Something:
+    def __init__(self, a: int) -> None:
+        self.a = a
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         _, error = understand_constructor_table(source=source)
         assert error is not None
@@ -282,18 +263,16 @@ class Test_assign_fail(unittest.TestCase):
         )
 
     def test_assignment_value_is_not_a_name(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Something:
-                a: int
+        source = """\
+class Something:
+    a: int
 
-                def __init__(self, a: int) -> None:
-                    self.a = a + 100
+    def __init__(self, a: int) -> None:
+        self.a = a + 100
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         _, error = understand_constructor_table(source=source)
         assert error is not None
@@ -308,19 +287,17 @@ class Test_assign_fail(unittest.TestCase):
         )
 
     def test_argument_and_property_name_differ(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Something:
-                a: int
+        source = """\
+class Something:
+    a: int
 
-                def __init__(self, b: int) -> None:
-                    self.a = b
+    def __init__(self, b: int) -> None:
+        self.a = b
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         _, error = understand_constructor_table(source=source)
         assert error is not None
@@ -334,30 +311,28 @@ class Test_assign_fail(unittest.TestCase):
 
 class Test_call_to_super_constructor_fail(unittest.TestCase):
     def test_super_class_not_a_name(self) -> None:
-        source = textwrap.dedent(
-            '''\
-            @abstract
-            class Parent:
-                """Represent something abstract."""
+        source = '''\
+@abstract
+class Parent:
+    """Represent something abstract."""
 
-                a: int
-                b: int
+    a: int
+    b: int
 
-                @require(lambda a: a > 0)
-                def __init__(self, a: int, b: int) -> None:
-                    self.a = a
-                    self.b = b
+    @require(lambda a: a > 0)
+    def __init__(self, a: int, b: int) -> None:
+        self.a = a
+        self.b = b
 
-            class Something(Parent):
-                """Represent something concrete."""
+class Something(Parent):
+    """Represent something concrete."""
 
-                def __init__(self, a: int, b: int) -> None:
-                    super().__init__(self, a, b)
+    def __init__(self, a: int, b: int) -> None:
+        super().__init__(self, a, b)
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            '''
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         _, error = understand_constructor_table(source=source)
         assert error is not None
@@ -369,30 +344,28 @@ class Test_call_to_super_constructor_fail(unittest.TestCase):
         )
 
     def test_passed_double_start_keyword_argument(self) -> None:
-        source = textwrap.dedent(
-            '''\
-            @abstract
-            class Parent(DBC):
-                """Represent something abstract."""
+        source = '''\
+@abstract
+class Parent(DBC):
+    """Represent something abstract."""
 
-                a: int
-                b: int
+    a: int
+    b: int
 
-                @require(lambda a: a > 0)
-                def __init__(self, a: int, b: int) -> None:
-                    self.a = a
-                    self.b = b
+    @require(lambda a: a > 0)
+    def __init__(self, a: int, b: int) -> None:
+        self.a = a
+        self.b = b
 
-            class Something(DBC, Parent):
-                """Represent something concrete."""
+class Something(DBC, Parent):
+    """Represent something concrete."""
 
-                def __init__(self, a: int, b: int) -> None:
-                    Parent.__init__(self, **{'a': a, 'b': b})
+    def __init__(self, a: int, b: int) -> None:
+        Parent.__init__(self, **{'a': a, 'b': b})
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            '''
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         _, error = understand_constructor_table(source=source)
         assert error is not None
@@ -404,24 +377,22 @@ class Test_call_to_super_constructor_fail(unittest.TestCase):
         )
 
     def test_calling_constructor_from_a_non_super_class(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Unrelated:
-                a: int
-                b: int
+        source = """\
+class Unrelated:
+    a: int
+    b: int
 
-                def __init__(self, a: int, b: int) -> None:
-                    self.a = a
-                    self.b = b
+    def __init__(self, a: int, b: int) -> None:
+        self.a = a
+        self.b = b
 
-            class Something:
-                def __init__(self, a: int, b: int) -> None:
-                    Unrelated.__init__(self, a=a, b=b)
+class Something:
+    def __init__(self, a: int, b: int) -> None:
+        Unrelated.__init__(self, a=a, b=b)
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         _, error = understand_constructor_table(source=source)
         assert error is not None
@@ -433,21 +404,19 @@ class Test_call_to_super_constructor_fail(unittest.TestCase):
         )
 
     def test_super_class_has_no_init(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @abstract
-            class Parent:
-                pass
+        source = """\
+@abstract
+class Parent:
+    pass
 
-            class Something(Parent):
+class Something(Parent):
 
-                def __init__(self, a: int, b: int) -> None:
-                    Parent.__init__(self)
+    def __init__(self, a: int, b: int) -> None:
+        Parent.__init__(self)
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         _, error = understand_constructor_table(source=source)
         assert error is not None
@@ -458,23 +427,21 @@ class Test_call_to_super_constructor_fail(unittest.TestCase):
         )
 
     def test_positional_argument_to_super_init_transformed(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @abstract
-            class Parent(DBC):
-                a: int
+        source = """\
+@abstract
+class Parent(DBC):
+    a: int
 
-                def __init__(self, a: int) -> None:
-                    self.a = a
+    def __init__(self, a: int) -> None:
+        self.a = a
 
-            class Something(DBC, Parent):
-                def __init__(self, a: int) -> None:
-                    Parent.__init__(self, a + 100)
+class Something(DBC, Parent):
+    def __init__(self, a: int) -> None:
+        Parent.__init__(self, a + 100)
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         _, error = understand_constructor_table(source=source)
         assert error is not None
@@ -486,23 +453,21 @@ class Test_call_to_super_constructor_fail(unittest.TestCase):
         )
 
     def test_keyword_argument_to_super_init_transformed(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @abstract
-            class Parent(DBC):
-                a: int
+        source = """\
+@abstract
+class Parent(DBC):
+    a: int
 
-                def __init__(self, a: int) -> None:
-                    self.a = a
+    def __init__(self, a: int) -> None:
+        self.a = a
 
-            class Something(DBC, Parent):
-                def __init__(self, a: int) -> None:
-                    Parent.__init__(self, a=a + 100)
+class Something(DBC, Parent):
+    def __init__(self, a: int) -> None:
+        Parent.__init__(self, a=a + 100)
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         _, error = understand_constructor_table(source=source)
         assert error is not None
@@ -514,25 +479,23 @@ class Test_call_to_super_constructor_fail(unittest.TestCase):
         )
 
     def test_too_many_positional_arguments(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @abstract
-            class Parent:
-                a: int
-                b: int
+        source = """\
+@abstract
+class Parent:
+    a: int
+    b: int
 
-                def __init__(self, a: int, b: int) -> None:
-                    self.a = a
-                    self.b = b
+    def __init__(self, a: int, b: int) -> None:
+        self.a = a
+        self.b = b
 
-            class Something(Parent):
-                def __init__(self, a: int, b: int, c: int) -> None:
-                    Parent.__init__(self, a, b, c)
+class Something(Parent):
+    def __init__(self, a: int, b: int, c: int) -> None:
+        Parent.__init__(self, a, b, c)
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         _, error = understand_constructor_table(source=source)
         assert error is not None
@@ -544,25 +507,23 @@ class Test_call_to_super_constructor_fail(unittest.TestCase):
         )
 
     def test_unexpected_keyword_arguments_supplied_to_super_init(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @abstract
-            class Parent:
-                a: int
-                b: int
+        source = """\
+@abstract
+class Parent:
+    a: int
+    b: int
 
-                def __init__(self, a: int, b: int) -> None:
-                    self.a = a
-                    self.b = b
+    def __init__(self, a: int, b: int) -> None:
+        self.a = a
+        self.b = b
 
-            class Something(DBC, Parent):
-                def __init__(self, a: int, b: int, c: int) -> None:
-                    Parent.__init__(self, a=a, b=b, c=c)
+class Something(DBC, Parent):
+    def __init__(self, a: int, b: int, c: int) -> None:
+        Parent.__init__(self, a=a, b=b, c=c)
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         _, error = understand_constructor_table(source=source)
         assert error is not None
@@ -573,27 +534,25 @@ class Test_call_to_super_constructor_fail(unittest.TestCase):
         )
 
     def test_non_init_names_passed_to_super_init(self) -> None:
-        source = textwrap.dedent(
-            '''\
-            @abstract
-            class Parent:
-                """Represent something abstract."""
+        source = '''\
+@abstract
+class Parent:
+    """Represent something abstract."""
 
-                a: int
-                b: int
+    a: int
+    b: int
 
-                def __init__(self, a: int, b: int) -> None:
-                    self.a = a
-                    self.b = b
+    def __init__(self, a: int, b: int) -> None:
+        self.a = a
+        self.b = b
 
-            class Something(Parent):
-                def __init__(self, a: int) -> None:
-                    Parent.__init__(self, a, b)
+class Something(Parent):
+    def __init__(self, a: int) -> None:
+        Parent.__init__(self, a, b)
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            '''
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         _, error = understand_constructor_table(source=source)
         assert error is not None
@@ -606,25 +565,23 @@ class Test_call_to_super_constructor_fail(unittest.TestCase):
         )
 
     def test_arguments_not_passed_as_are(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @abstract
-            class Parent:
-                a: int
-                b: int
+        source = """\
+@abstract
+class Parent:
+    a: int
+    b: int
 
-                def __init__(self, a: int, b: int) -> None:
-                    self.a = a
-                    self.b = b
+    def __init__(self, a: int, b: int) -> None:
+        self.a = a
+        self.b = b
 
-            class Something(DBC, Parent):
-                def __init__(self, a: int, y: int) -> None:
-                    Parent.__init__(self, a, b=y)
+class Something(DBC, Parent):
+    def __init__(self, a: int, y: int) -> None:
+        Parent.__init__(self, a, b=y)
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         _, error = understand_constructor_table(source=source)
         assert error is not None
@@ -638,25 +595,23 @@ class Test_call_to_super_constructor_fail(unittest.TestCase):
         )
 
     def test_missing_argument_to_super_init(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @abstract
-            class Parent:
-                a: int
-                b: int
+        source = """\
+@abstract
+class Parent:
+    a: int
+    b: int
 
-                def __init__(self, a: int, b: int) -> None:
-                    self.a = a
-                    self.b = b
+    def __init__(self, a: int, b: int) -> None:
+        self.a = a
+        self.b = b
 
-            class Something(Parent):
-                def __init__(self, a: int) -> None:
-                    Parent.__init__(self, a)
+class Something(Parent):
+    def __init__(self, a: int) -> None:
+        Parent.__init__(self, a)
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         _, error = understand_constructor_table(source=source)
         assert error is not None
@@ -669,18 +624,16 @@ class Test_call_to_super_constructor_fail(unittest.TestCase):
 
 class Test_unexpected_statements(unittest.TestCase):
     def test_unexpected_call(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Something:
-                a: int
+        source = """\
+class Something:
+    a: int
 
-                def __init__(self, a: int) -> None:
-                    print("something")
+    def __init__(self, a: int) -> None:
+        print("something")
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         _, error = understand_constructor_table(source=source)
         assert error is not None
@@ -692,18 +645,16 @@ class Test_unexpected_statements(unittest.TestCase):
         )
 
     def test_unexpected_expr(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Something:
-                a: int
+        source = """\
+class Something:
+    a: int
 
-                def __init__(self, a: int) -> None:
-                    1 + 2
+    def __init__(self, a: int) -> None:
+        1 + 2
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         _, error = understand_constructor_table(source=source)
         assert error is not None

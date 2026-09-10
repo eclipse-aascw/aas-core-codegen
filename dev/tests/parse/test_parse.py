@@ -6,7 +6,6 @@ import ast
 import os
 import pathlib
 import re
-import textwrap
 import unittest
 from typing import Optional, Tuple, List
 
@@ -21,23 +20,19 @@ import tests.common
 
 class Test_parsing_AST(unittest.TestCase):
     def test_valid_code(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Something:
-                pass
-            """
-        )
+        source = """\
+class Something:
+    pass
+"""
 
         atok, error = parse.source_to_atok(source=source)
         assert atok is not None
         assert error is None
 
     def test_invalid_code(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Something: 12 this is wrong
-            """
-        )
+        source = """\
+class Something: 12 this is wrong
+"""
 
         _, error = parse.source_to_atok(source=source)
         assert error is not None
@@ -57,11 +52,9 @@ class Test_checking_imports(unittest.TestCase):
         return [re.sub(r"column [0-9]+", "column X", error) for error in errors]
 
     def test_import_reported(self) -> None:
-        source = textwrap.dedent(
-            """\
-            import typing
-            """
-        )
+        source = """\
+import typing
+"""
 
         atok, error = parse.source_to_atok(source=source)
         assert error is None, f"{error=}"
@@ -78,11 +71,9 @@ class Test_checking_imports(unittest.TestCase):
         )
 
     def test_from_import_as_reported(self) -> None:
-        source = textwrap.dedent(
-            """\
-            from typing import List as Lst
-            """
-        )
+        source = """\
+from typing import List as Lst
+"""
 
         atok, error = parse.source_to_atok(source=source)
         assert error is None, f"{error=}"
@@ -102,11 +93,9 @@ class Test_checking_imports(unittest.TestCase):
         )
 
     def test_unexpected_name_from_module(self) -> None:
-        source = textwrap.dedent(
-            """\
-            from enum import List
-            """
-        )
+        source = """\
+from enum import List
+"""
 
         atok, error = parse.source_to_atok(source=source)
         assert atok is not None
@@ -123,11 +112,9 @@ class Test_checking_imports(unittest.TestCase):
         )
 
     def test_unexpected_import_from_a_module(self) -> None:
-        source = textwrap.dedent(
-            """\
-            from something import Else
-            """
-        )
+        source = """\
+from something import Else
+"""
 
         atok, error = parse.source_to_atok(source=source)
         assert atok is not None
@@ -157,30 +144,26 @@ class Test_parsing_docstring(unittest.TestCase):
         return cls.description.document
 
     def test_empty(self) -> None:
-        source = textwrap.dedent(
-            '''\
-            class Some_class:
-                """"""
+        source = '''\
+class Some_class:
+    """"""
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            '''
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         document = Test_parsing_docstring.parse_and_extract_docstring(source=source)
 
         self.assertEqual(0, len(document.children))
 
     def test_simple_single_line(self) -> None:
-        source = textwrap.dedent(
-            '''\
-            class Some_class:
-                """This is some documentation."""
+        source = '''\
+class Some_class:
+    """This is some documentation."""
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            '''
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         document = Test_parsing_docstring.parse_and_extract_docstring(source=source)
 
@@ -188,19 +171,17 @@ class Test_parsing_docstring(unittest.TestCase):
         self.assertIsInstance(document.children[0], docutils.nodes.paragraph)
 
     def test_that_multi_line_docstring_is_not_parsed_as_a_block_quote(self) -> None:
-        source = textwrap.dedent(
-            '''\
-            class Some_class:
-                """
-                This is some documentation.
+        source = '''\
+class Some_class:
+    """
+    This is some documentation.
 
-                Another paragraph.
-                """
+    Another paragraph.
+    """
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            '''
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         document = Test_parsing_docstring.parse_and_extract_docstring(source=source)
         self.assertEqual(2, len(document.children))

@@ -1,6 +1,5 @@
 # pylint: disable=missing-docstring
 
-import textwrap
 import unittest.mock
 
 # noinspection PyProtectedMember
@@ -33,14 +32,12 @@ class Test_to_render_description_of_meta_model(unittest.TestCase):
         return code
 
     def test_empty_description_not_allowed(self) -> None:
-        source = textwrap.dedent(
-            '''\
-            """"""  # Intentionally left empty
+        source = '''\
+""""""  # Intentionally left empty
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            '''
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         _, error = tests.common.translate_source_to_intermediate(source=source)
         assert error is not None
@@ -50,23 +47,19 @@ class Test_to_render_description_of_meta_model(unittest.TestCase):
 
     def test_only_summary(self) -> None:
         comment_code = self.__class__.render(
-            textwrap.dedent(
-                '''\
-                """Do & drink something."""
+            '''\
+"""Do & drink something."""
 
-                __version__ = "dummy"
-                __xml_namespace__ = "https://dummy.com"
-                '''
-            )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
         )
 
         self.assertEqual(
-            textwrap.dedent(
-                """\
-                /// <summary>
-                /// Do &amp; drink something.
-                /// </summary>"""
-            ),
+            """\
+/// <summary>
+/// Do &amp; drink something.
+/// </summary>""",
             comment_code,
         )
 
@@ -99,15 +92,13 @@ class Test_to_render_description_of_our_types(unittest.TestCase):
         return code
 
     def test_empty_description_not_allowed(self) -> None:
-        source = textwrap.dedent(
-            '''\
-            class Some_class:
-                """"""  # Intentionally left empty
+        source = '''\
+class Some_class:
+    """"""  # Intentionally left empty
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            '''
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         _, error = tests.common.translate_source_to_intermediate(source=source)
         assert error is not None
@@ -116,19 +107,17 @@ class Test_to_render_description_of_our_types(unittest.TestCase):
         )
 
     def test_no_summary(self) -> None:
-        source = textwrap.dedent(
-            '''\
-            class Some_class:
-                """
-                * Some
-                * Bullet
-                * List
-                """
+        source = '''\
+class Some_class:
+    """
+    * Some
+    * Bullet
+    * List
+    """
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            '''
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         _, error = tests.common.translate_source_to_intermediate(source=source)
 
@@ -146,20 +135,18 @@ class Test_to_render_description_of_our_types(unittest.TestCase):
         )
 
     def test_unexpected_directive(self) -> None:
-        source = textwrap.dedent(
-            '''\
-            class Some_class:
-                """
-                Do something.
+        source = '''\
+class Some_class:
+    """
+    Do something.
 
-                :someDirective:
-                    I am unexpected.
-                """
+    :someDirective:
+        I am unexpected.
+    """
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            '''
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         _, error = tests.common.translate_source_to_intermediate(source=source)
 
@@ -173,38 +160,32 @@ class Test_to_render_description_of_our_types(unittest.TestCase):
 
     def test_only_summary(self) -> None:
         comment_code = Test_to_render_description_of_our_types.render(
-            textwrap.dedent(
-                '''\
-                class Something:
-                    """Do & drink something."""
+            '''\
+class Something:
+    """Do & drink something."""
 
-                __version__ = "dummy"
-                __xml_namespace__ = "https://dummy.com"
-                '''
-            )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
         )
 
         self.assertEqual(
-            textwrap.dedent(
-                """\
-                /// <summary>
-                /// Do &amp; drink something.
-                /// </summary>"""
-            ),
+            """\
+/// <summary>
+/// Do &amp; drink something.
+/// </summary>""",
             comment_code,
         )
 
     def test_summary_with_class_reference(self) -> None:
         comment_code = Test_to_render_description_of_our_types.render(
-            textwrap.dedent(
-                '''\
-                class Something:
-                    """Do & drink :class:`Something`."""
+            '''\
+class Something:
+    """Do & drink :class:`Something`."""
 
-                __version__ = "dummy"
-                __xml_namespace__ = "https://dummy.com"
-                '''
-            )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
         )
 
         self.assertEqual(
@@ -217,68 +198,58 @@ class Test_to_render_description_of_our_types(unittest.TestCase):
 
     def test_summary_with_interface_reference(self) -> None:
         comment_code = Test_to_render_description_of_our_types.render(
-            textwrap.dedent(
-                '''\
-                @abstract
-                class Something:
-                    """Do & drink :class:`Something`."""
+            '''\
+@abstract
+class Something:
+    """Do & drink :class:`Something`."""
 
-                __version__ = "dummy"
-                __xml_namespace__ = "https://dummy.com"
-                '''
-            )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
         )
 
         self.assertEqual(
-            textwrap.dedent(
-                """\
-                /// <summary>
-                /// Do &amp; drink <see cref="Aas.ISomething" />.
-                /// </summary>"""
-            ),
+            """\
+/// <summary>
+/// Do &amp; drink <see cref="Aas.ISomething" />.
+/// </summary>""",
             comment_code,
         )
 
     def test_summary_with_enumeration_reference(self) -> None:
         comment_code = Test_to_render_description_of_our_types.render(
-            textwrap.dedent(
-                '''\
-                class Something(Enum):
-                    """Do & drink :class:`Something`."""
+            '''\
+class Something(Enum):
+    """Do & drink :class:`Something`."""
 
-                __version__ = "dummy"
-                __xml_namespace__ = "https://dummy.com"
-                '''
-            )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
         )
 
         self.assertEqual(
-            textwrap.dedent(
-                """\
-                /// <summary>
-                /// Do &amp; drink <see cref="Aas.Something" />.
-                /// </summary>"""
-            ),
+            """\
+/// <summary>
+/// Do &amp; drink <see cref="Aas.Something" />.
+/// </summary>""",
             comment_code,
         )
 
     def test_summary_and_remarks(self) -> None:
         comment_code = Test_to_render_description_of_our_types.render(
-            textwrap.dedent(
-                '''\
-                class Something:
-                    """
-                    Do & drink something.
+            '''\
+class Something:
+    """
+    Do & drink something.
 
-                    First & remark.
+    First & remark.
 
-                    Second & remark.
-                    """
+    Second & remark.
+    """
 
-                __version__ = "dummy"
-                __xml_namespace__ = "https://dummy.com"
-                '''
-            )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
         )
 
         self.assertEqual(
@@ -304,33 +275,31 @@ class Test_to_render_description_of_our_types(unittest.TestCase):
             # 1) a single-paragraph constraint,
             # 2) a two-paragraph constraint, and
             # 3) a constraint with an unordered list.
-            textwrap.dedent(
-                '''\
-                class Something:
-                    """
-                    Do & drink something.
+            '''\
+class Something:
+    """
+    Do & drink something.
 
-                    First & remark.
+    First & remark.
 
-                    :constraint AAS-001:
-                        You shall parse.
+    :constraint AAS-001:
+        You shall parse.
 
-                    :constraint AAS-002:
-                        You have to do something.
+    :constraint AAS-002:
+        You have to do something.
 
-                        Really.
+        Really.
 
-                    :constraint AAS-003:
-                        You shall:
+    :constraint AAS-003:
+        You shall:
 
-                        * Do something,
-                        * And do it now.
-                    """
+        * Do something,
+        * And do it now.
+    """
 
-                __version__ = "dummy"
-                __xml_namespace__ = "https://dummy.com"
-                '''
-            )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
         )
         self.assertEqual(
             """\
@@ -383,22 +352,20 @@ class Test_to_render_description_of_our_types(unittest.TestCase):
         # a regression test as we did not render it correctly at first. There was
         # a ``<para>`` nested in the ``<remarks>`` element.
         comment_code = Test_to_render_description_of_our_types.render(
-            textwrap.dedent(
-                '''\
-                class Something:
-                    """
-                    Global reference to the data specification template used by
-                    the element.
+            '''\
+class Something:
+    """
+    Global reference to the data specification template used by
+    the element.
 
-                    .. note::
+    .. note::
 
-                        This is a global reference.
-                    """
+        This is a global reference.
+    """
 
-                __version__ = "dummy"
-                __xml_namespace__ = "https://dummy.com"
-                '''
-            )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
         )
 
         self.assertEqual(
@@ -445,17 +412,15 @@ class Test_to_render_description_of_signature(unittest.TestCase):
         return code
 
     def test_empty_description_not_allowed(self) -> None:
-        source = textwrap.dedent(
-            '''\
-            @verification
-            def verify_something(text: str) -> bool:
-                """"""  # Intentionally left empty
-                return match(r'.*', text) is not None
+        source = '''\
+@verification
+def verify_something(text: str) -> bool:
+    """"""  # Intentionally left empty
+    return match(r'.*', text) is not None
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            '''
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         _, error = tests.common.translate_source_to_intermediate(source=source)
 
@@ -466,58 +431,52 @@ class Test_to_render_description_of_signature(unittest.TestCase):
         )
 
     def test_only_summary(self) -> None:
-        source = textwrap.dedent(
-            '''\
-            @verification
-            def verify_something(text: str) -> bool:
-                """Verify something."""
-                return match(r'^.*$', text) is not None
+        source = '''\
+@verification
+def verify_something(text: str) -> bool:
+    """Verify something."""
+    return match(r'^.*$', text) is not None
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            '''
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         code = Test_to_render_description_of_signature.render(source=source)
 
         self.assertEqual(
-            textwrap.dedent(
-                """\
-                /// <summary>
-                /// Verify something.
-                /// </summary>"""
-            ),
+            """\
+/// <summary>
+/// Verify something.
+/// </summary>""",
             code,
         )
 
     def test_params_and_returns(self) -> None:
         # NOTE (mristin, 2022-07-21):
         # We explicitly check here for multiple paragraphs in the param and returns.
-        source = textwrap.dedent(
-            '''\
-            @verification
-            def verify_something(first: str, second: str) -> bool:
-                """
-                Verify something.
+        source = '''\
+@verification
+def verify_something(first: str, second: str) -> bool:
+    """
+    Verify something.
 
-                :param first: to be checked
-                :param second:
-                    another thing to be checked.
+    :param first: to be checked
+    :param second:
+        another thing to be checked.
 
-                    really to be checked.
+        really to be checked.
 
-                :returns:
-                    True if :paramref:`first` and :paramref:`second` are
-                    a valid something.
+    :returns:
+        True if :paramref:`first` and :paramref:`second` are
+        a valid something.
 
-                    Otherwise, return false.
-                """
-                return match(r'.*', text) is not None
+        Otherwise, return false.
+    """
+    return match(r'.*', text) is not None
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            '''
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         code = Test_to_render_description_of_signature.render(source=source)
 
@@ -575,42 +534,36 @@ class Test_to_render_paragraphs(unittest.TestCase):
 
     def test_single_paragraph(self) -> None:
         comment_code = self.__class__.render(
-            textwrap.dedent(
-                '''\
-                """Write a single paragraph."""
+            '''\
+"""Write a single paragraph."""
 
-                __version__ = "dummy"
-                __xml_namespace__ = "https://dummy.com"
-                '''
-            )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
         )
 
         self.assertEqual(
-            textwrap.dedent(
-                """\
-                /// <summary>
-                /// Write a single paragraph.
-                /// </summary>"""
-            ),
+            """\
+/// <summary>
+/// Write a single paragraph.
+/// </summary>""",
             comment_code,
         )
 
     def test_multiple_text_remarks(self) -> None:
         comment_code = self.__class__.render(
-            textwrap.dedent(
-                '''\
-                """
-                This is summary.
+            '''\
+"""
+This is summary.
 
-                This is first paragraph of remarks.
+This is first paragraph of remarks.
 
-                This is second paragraph of remarks.
-                """
+This is second paragraph of remarks.
+"""
 
-                __version__ = "dummy"
-                __xml_namespace__ = "https://dummy.com"
-                '''
-            )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
         )
 
         self.assertEqual(
@@ -631,25 +584,23 @@ class Test_to_render_paragraphs(unittest.TestCase):
 
     def test_multiple_remarks_of_mixed_lists_and_text(self) -> None:
         comment_code = self.__class__.render(
-            textwrap.dedent(
-                '''\
-                """
-                This is summary.
+            '''\
+"""
+This is summary.
 
-                This is first paragraph of remarks.
+This is first paragraph of remarks.
 
-                This is a list:
+This is a list:
 
-                * First item
-                * Second item
+* First item
+* Second item
 
-                This is the third paragraph.
-                """
+This is the third paragraph.
+"""
 
-                __version__ = "dummy"
-                __xml_namespace__ = "https://dummy.com"
-                '''
-            )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
         )
 
         self.assertEqual(

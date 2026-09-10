@@ -1,6 +1,5 @@
 # pylint: disable=missing-docstring
 
-import textwrap
 import unittest
 from typing import List
 
@@ -139,202 +138,186 @@ class Test_with_smoke(unittest.TestCase):
         self.assertEqual(expected_joined_message, joined_message, source)
 
     def test_enumeration_literal_as_member(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_enum(Enum):
-                Literal_a = "LITERAL-A"
-                Literal_b = "LITERAL-B"
-                Literal_c = "LITERAL-C"
+        source = """\
+class Some_enum(Enum):
+    Literal_a = "LITERAL-A"
+    Literal_b = "LITERAL-B"
+    Literal_c = "LITERAL-C"
 
-            @invariant(
-                lambda self:
-                self.something == Some_enum.Literal_a
-                or self.something == Some_enum.Literal_b,
-                "Something must be either LITERAL-A or LITERAL-B."
-            )
-            class Some_class:
-                something: Some_enum
+@invariant(
+    lambda self:
+    self.something == Some_enum.Literal_a
+    or self.something == Some_enum.Literal_b,
+    "Something must be either LITERAL-A or LITERAL-B."
+)
+class Some_class:
+    something: Some_enum
 
-                def __init__(self, something: Some_enum) -> None:
-                    self.something = something
+    def __init__(self, something: Some_enum) -> None:
+        self.something = something
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         Test_with_smoke.execute(source=source)
 
     def test_class_member(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @invariant(
-                lambda self:
-                self.something >= 1,
-                "Something must be at least 1."
-            )
-            class Some_class:
-                something: int
+        source = """\
+@invariant(
+    lambda self:
+    self.something >= 1,
+    "Something must be at least 1."
+)
+class Some_class:
+    something: int
 
-                def __init__(self, something: int) -> None:
-                    self.something = something
+    def __init__(self, something: int) -> None:
+        self.something = something
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         Test_with_smoke.execute(source=source)
 
     def test_non_nullness_of_members_member_in_implication(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                something: Optional[str]
+        source = """\
+class Some_class:
+    something: Optional[str]
 
-                def __init__(self, something: Optional[str] = None) -> None:
-                    self.something = something
+    def __init__(self, something: Optional[str] = None) -> None:
+        self.something = something
 
-            @invariant(
-                lambda self:
-                not (
-                    self.some_instance is not None
-                    and self.some_instance.something is not None
-                ) or (
-                    self.some_instance.something == "some-literal"
-                ),
-                "If something of some instance is defined, it must be set "
-                "to some-literal."
-            )
-            class Another_class:
-                some_instance: Optional[Some_class]
+@invariant(
+    lambda self:
+    not (
+        self.some_instance is not None
+        and self.some_instance.something is not None
+    ) or (
+        self.some_instance.something == "some-literal"
+    ),
+    "If something of some instance is defined, it must be set "
+    "to some-literal."
+)
+class Another_class:
+    some_instance: Optional[Some_class]
 
-                def __init__(self, some_instance: Optional[Some_class] = None) -> None:
-                    self.some_instance = some_instance
+    def __init__(self, some_instance: Optional[Some_class] = None) -> None:
+        self.some_instance = some_instance
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         Test_with_smoke.execute(source=source)
 
     def test_non_nullness_of_members_member_in_conjunction(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                something: Optional[str]
+        source = """\
+class Some_class:
+    something: Optional[str]
 
-                def __init__(self, something: Optional[str] = None) -> None:
-                    self.something = something
+    def __init__(self, something: Optional[str] = None) -> None:
+        self.something = something
 
-            @invariant(
-                lambda self:
-                self.some_instance is not None
-                and self.some_instance.something is not None
-                and self.some_instance.something == "some-literal",
-                "Something of some instance must be defined and set to some-literal."
-            )
-            class Another_class:
-                some_instance: Optional[Some_class]
+@invariant(
+    lambda self:
+    self.some_instance is not None
+    and self.some_instance.something is not None
+    and self.some_instance.something == "some-literal",
+    "Something of some instance must be defined and set to some-literal."
+)
+class Another_class:
+    some_instance: Optional[Some_class]
 
-                def __init__(self, some_instance: Optional[Some_class] = None) -> None:
-                    self.some_instance = some_instance
+    def __init__(self, some_instance: Optional[Some_class] = None) -> None:
+        self.some_instance = some_instance
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         Test_with_smoke.execute(source=source)
 
     def test_non_nullness_in_disjunction_with_is_none(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @invariant(
-                lambda self:
-                (self.some_property is None) or (self.some_property == "dummy"),
-                "Dummy description"
-            )
-            class Something:
-                some_property: Optional[str]
+        source = """\
+@invariant(
+    lambda self:
+    (self.some_property is None) or (self.some_property == "dummy"),
+    "Dummy description"
+)
+class Something:
+    some_property: Optional[str]
 
-                def __init__(self, some_property: Optional[str] = None) -> None:
-                    self.some_property = some_property
+    def __init__(self, some_property: Optional[str] = None) -> None:
+        self.some_property = some_property
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         Test_with_smoke.execute(source=source)
 
     def test_tuple_literal(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @verification
-            def some_verification(x: str, y: int) -> bool:
-                return (x, y)[0] == x
+        source = """\
+@verification
+def some_verification(x: str, y: int) -> bool:
+    return (x, y)[0] == x
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         Test_with_smoke.execute(source=source)
 
     def test_tuple_of_classes(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                something: int
+        source = """\
+class Some_class:
+    something: int
 
-                def __init__(self, something: int) -> None:
-                    self.something = something
+    def __init__(self, something: int) -> None:
+        self.something = something
 
-            @invariant(
-                lambda self:
-                self.pair[0].something >= 1,
-                "Something of the first item must be at least 1."
-            )
-            class Another_class:
-                pair: Tuple[Some_class, Some_class]
+@invariant(
+    lambda self:
+    self.pair[0].something >= 1,
+    "Something of the first item must be at least 1."
+)
+class Another_class:
+    pair: Tuple[Some_class, Some_class]
 
-                def __init__(self, pair: Tuple[Some_class, Some_class]) -> None:
-                    self.pair = pair
+    def __init__(self, pair: Tuple[Some_class, Some_class]) -> None:
+        self.pair = pair
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         Test_with_smoke.execute(source=source)
 
     def test_is_none_fails_on_non_optional(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @invariant(
-                lambda self:
-                self.something is None,
-                "Dummy invariant description"
-            )
-            class Some_class:
-                something: str
+        source = """\
+@invariant(
+    lambda self:
+    self.something is None,
+    "Dummy invariant description"
+)
+class Some_class:
+    something: str
 
-                def __init__(self, something: str) -> None:
-                    self.something = something
+    def __init__(self, something: str) -> None:
+        self.something = something
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         self.expect_type_inference_to_fail(
             source=source,
@@ -345,23 +328,21 @@ class Test_with_smoke(unittest.TestCase):
         )
 
     def test_is_not_none_fails_on_non_optional(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @invariant(
-                lambda self:
-                self.something is not None,
-                "Dummy invariant description"
-            )
-            class Some_class:
-                something: str
+        source = """\
+@invariant(
+    lambda self:
+    self.something is not None,
+    "Dummy invariant description"
+)
+class Some_class:
+    something: str
 
-                def __init__(self, something: str) -> None:
-                    self.something = something
+    def __init__(self, something: str) -> None:
+        self.something = something
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         self.expect_type_inference_to_fail(
             source=source,

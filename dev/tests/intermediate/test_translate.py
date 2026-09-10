@@ -2,7 +2,6 @@
 
 import os
 import pathlib
-import textwrap
 import unittest
 from typing import List, Tuple
 
@@ -15,44 +14,42 @@ import tests.common
 
 class Test_in_lining_of_constructor_statements(unittest.TestCase):
     def test_case(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @abstract
-            class VeryAbstract:
-                some_property: int
+        source = """\
+@abstract
+class VeryAbstract:
+    some_property: int
 
-                @require(lambda some_property: some_property > 0)
-                def __init__(self, some_property: int) -> None:
-                    self.some_property = some_property
-
-
-            @abstract
-            class SomethingAbstract(VeryAbstract):
-                another_property: int
-
-                @require(lambda another_property: another_property > 0)
-                def __init__(self, some_property: int, another_property: int) -> None:
-                    VeryAbstract.__init__(self, some_property)
-                    self.another_property = another_property
-
-            class Concrete(SomethingAbstract):
-                yet_another_property: int
-
-                @require(lambda yet_another_property: yet_another_property > 0)
-                def __init__(
-                        self,
-                        some_property: int,
-                        another_property: int,
-                        yet_another_property: int
-                ) -> None:
-                    SomethingAbstract.__init__(self, some_property, another_property)
-                    self.yet_another_property = yet_another_property
+    @require(lambda some_property: some_property > 0)
+    def __init__(self, some_property: int) -> None:
+        self.some_property = some_property
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+@abstract
+class SomethingAbstract(VeryAbstract):
+    another_property: int
+
+    @require(lambda another_property: another_property > 0)
+    def __init__(self, some_property: int, another_property: int) -> None:
+        VeryAbstract.__init__(self, some_property)
+        self.another_property = another_property
+
+class Concrete(SomethingAbstract):
+    yet_another_property: int
+
+    @require(lambda yet_another_property: yet_another_property > 0)
+    def __init__(
+            self,
+            some_property: int,
+            another_property: int,
+            yet_another_property: int
+    ) -> None:
+        SomethingAbstract.__init__(self, some_property, another_property)
+        self.yet_another_property = yet_another_property
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -71,19 +68,17 @@ class Test_in_lining_of_constructor_statements(unittest.TestCase):
 
 class Test_parsing_docstrings(unittest.TestCase):
     def test_class_reference(self) -> None:
-        source = textwrap.dedent(
-            '''\
-            class Some_class:
-                """
-                This is some documentation.
+        source = '''\
+class Some_class:
+    """
+    This is some documentation.
 
-                Nested reference :class:`Some_class`
-                """
+    Nested reference :class:`Some_class`
+    """
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            '''
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -107,22 +102,20 @@ class Test_parsing_docstrings(unittest.TestCase):
         self.assertIsInstance(references_to_our_types[0].our_type, intermediate.Class)
 
     def test_constraint_and_constraintref(self) -> None:
-        source = textwrap.dedent(
-            '''\
-            class Some_class:
-                """
-                This is some documentation.
+        source = '''\
+class Some_class:
+    """
+    This is some documentation.
 
-                See :constraintref:`AAS-001`.
+    See :constraintref:`AAS-001`.
 
-                :constraint AAS-001:
-                    some constraint
-                """
+    :constraint AAS-001:
+        some constraint
+    """
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            '''
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source

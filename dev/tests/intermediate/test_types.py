@@ -1,6 +1,5 @@
 # pylint: disable=missing-docstring
 
-import textwrap
 import unittest
 
 import tests.common
@@ -68,20 +67,18 @@ class TestMappingOfPrimitiveTypesProperlyExposed(unittest.TestCase):
 
 class TestIsSubclassOf(unittest.TestCase):
     def test_no_inheritances(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Concrete:
-                pass
+        source = """\
+class Concrete:
+    pass
 
 
-            class AnotherConcrete:
-                pass
+class AnotherConcrete:
+    pass
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -100,24 +97,22 @@ class TestIsSubclassOf(unittest.TestCase):
         self.assertFalse(concrete.is_subclass_of(cls=another_concrete))
 
     def test_one_level_ancestor(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Parent:
-                pass
+        source = """\
+class Parent:
+    pass
 
 
-            class Concrete(Parent):
-                pass
+class Concrete(Parent):
+    pass
 
 
-            class AnotherConcrete:
-                pass
+class AnotherConcrete:
+    pass
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -139,28 +134,26 @@ class TestIsSubclassOf(unittest.TestCase):
         self.assertFalse(concrete.is_subclass_of(cls=another_concrete))
 
     def test_two_level_ancestor(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class GrandParent:
-                pass
+        source = """\
+class GrandParent:
+    pass
 
 
-            class Parent(GrandParent):
-                pass
+class Parent(GrandParent):
+    pass
 
 
-            class Concrete(Parent):
-                pass
+class Concrete(Parent):
+    pass
 
 
-            class AnotherConcrete:
-                pass
+class AnotherConcrete:
+    pass
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -185,24 +178,22 @@ class TestIsSubclassOf(unittest.TestCase):
         self.assertFalse(concrete.is_subclass_of(cls=another_concrete))
 
     def test_common_ancestor_but_no_subclass(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Parent:
-                pass
+        source = """\
+class Parent:
+    pass
 
 
-            class Concrete(Parent):
-                pass
+class Concrete(Parent):
+    pass
 
 
-            class AnotherConcrete(Parent):
-                pass
+class AnotherConcrete(Parent):
+    pass
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -226,19 +217,17 @@ class TestIsSubclassOf(unittest.TestCase):
 
 class TestIsStructuralSubtypeOf(unittest.TestCase):
     def test_self(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Concrete:
-                x: int
+        source = """\
+class Concrete:
+    x: int
 
-                def __init__(self, x: int) -> None:
-                    self.x = x
+    def __init__(self, x: int) -> None:
+        self.x = x
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -251,30 +240,28 @@ class TestIsStructuralSubtypeOf(unittest.TestCase):
         self.assertTrue(concrete.is_structural_subtype_of(cls=concrete))
 
     def test_unrelated_classes_with_same_shape(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Concrete:
-                x: int
-                y: str
+        source = """\
+class Concrete:
+    x: int
+    y: str
 
-                def __init__(self, x: int, y: str) -> None:
-                    self.x = x
-                    self.y = y
-
-
-            class Structurally_same:
-                x: int
-                y: str
-
-                def __init__(self, x: int, y: str) -> None:
-                    self.x = x
-                    self.y = y
+    def __init__(self, x: int, y: str) -> None:
+        self.x = x
+        self.y = y
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+class Structurally_same:
+    x: int
+    y: str
+
+    def __init__(self, x: int, y: str) -> None:
+        self.x = x
+        self.y = y
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -291,26 +278,24 @@ class TestIsStructuralSubtypeOf(unittest.TestCase):
         self.assertTrue(concrete.is_structural_subtype_of(cls=structurally_same))
 
     def test_mismatch_in_property_type(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Concrete:
-                x: int
+        source = """\
+class Concrete:
+    x: int
 
-                def __init__(self, x: int) -> None:
-                    self.x = x
-
-
-            class Different_type:
-                x: str
-
-                def __init__(self, x: str) -> None:
-                    self.x = x
+    def __init__(self, x: int) -> None:
+        self.x = x
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+class Different_type:
+    x: str
+
+    def __init__(self, x: str) -> None:
+        self.x = x
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -327,28 +312,26 @@ class TestIsStructuralSubtypeOf(unittest.TestCase):
         self.assertFalse(concrete.is_structural_subtype_of(cls=different_type))
 
     def test_missing_property(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Concrete:
-                x: int
-                y: str
+        source = """\
+class Concrete:
+    x: int
+    y: str
 
-                def __init__(self, x: int, y: str) -> None:
-                    self.x = x
-                    self.y = y
-
-
-            class Missing_property:
-                x: int
-
-                def __init__(self, x: int) -> None:
-                    self.x = x
+    def __init__(self, x: int, y: str) -> None:
+        self.x = x
+        self.y = y
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+class Missing_property:
+    x: int
+
+    def __init__(self, x: int) -> None:
+        self.x = x
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -370,27 +353,25 @@ class TestIsStructuralSubtypeOf(unittest.TestCase):
     def test_nominal_subclass_is_not_automatically_a_structural_subtype(
         self,
     ) -> None:
-        source = textwrap.dedent(
-            """\
-            class Parent:
-                x: int
+        source = """\
+class Parent:
+    x: int
 
-                def __init__(self, x: int) -> None:
-                    self.x = x
-
-
-            class Concrete(Parent):
-                y: str
-
-                def __init__(self, x: int, y: str) -> None:
-                    Parent.__init__(self, x)
-                    self.y = y
+    def __init__(self, x: int) -> None:
+        self.x = x
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+class Concrete(Parent):
+    y: str
+
+    def __init__(self, x: int, y: str) -> None:
+        Parent.__init__(self, x)
+        self.y = y
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -408,36 +389,34 @@ class TestIsStructuralSubtypeOf(unittest.TestCase):
     def test_matching_primitive_type_but_different_constrained_primitive(
         self,
     ) -> None:
-        source = textwrap.dedent(
-            """\
-            @invariant(lambda self: len(self) > 0, "Non-empty")
-            class Constrained_str_a(str):
-                pass
+        source = """\
+@invariant(lambda self: len(self) > 0, "Non-empty")
+class Constrained_str_a(str):
+    pass
 
 
-            @invariant(lambda self: len(self) < 100, "Not too long")
-            class Constrained_str_b(str):
-                pass
+@invariant(lambda self: len(self) < 100, "Not too long")
+class Constrained_str_b(str):
+    pass
 
 
-            class Concrete:
-                x: Constrained_str_a
+class Concrete:
+    x: Constrained_str_a
 
-                def __init__(self, x: Constrained_str_a) -> None:
-                    self.x = x
-
-
-            class Different_constrained_primitive:
-                x: Constrained_str_b
-
-                def __init__(self, x: Constrained_str_b) -> None:
-                    self.x = x
+    def __init__(self, x: Constrained_str_a) -> None:
+        self.x = x
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+class Different_constrained_primitive:
+    x: Constrained_str_b
+
+    def __init__(self, x: Constrained_str_b) -> None:
+        self.x = x
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -464,31 +443,29 @@ class TestIsStructuralSubtypeOf(unittest.TestCase):
     def test_constrained_primitive_is_not_substitutable_for_plain_primitive(
         self,
     ) -> None:
-        source = textwrap.dedent(
-            """\
-            @invariant(lambda self: len(self) > 0, "Non-empty")
-            class Constrained_str(str):
-                pass
+        source = """\
+@invariant(lambda self: len(self) > 0, "Non-empty")
+class Constrained_str(str):
+    pass
 
 
-            class Concrete:
-                x: str
+class Concrete:
+    x: str
 
-                def __init__(self, x: str) -> None:
-                    self.x = x
-
-
-            class With_constrained_primitive:
-                x: Constrained_str
-
-                def __init__(self, x: Constrained_str) -> None:
-                    self.x = x
+    def __init__(self, x: str) -> None:
+        self.x = x
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+class With_constrained_primitive:
+    x: Constrained_str
+
+    def __init__(self, x: Constrained_str) -> None:
+        self.x = x
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -511,26 +488,24 @@ class TestIsStructuralSubtypeOf(unittest.TestCase):
         )
 
     def test_different_list_items(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Concrete:
-                x: List[int]
+        source = """\
+class Concrete:
+    x: List[int]
 
-                def __init__(self, x: List[int]) -> None:
-                    self.x = x
-
-
-            class Different_list_items:
-                x: List[str]
-
-                def __init__(self, x: List[str]) -> None:
-                    self.x = x
+    def __init__(self, x: List[int]) -> None:
+        self.x = x
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+class Different_list_items:
+    x: List[str]
+
+    def __init__(self, x: List[str]) -> None:
+        self.x = x
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -549,26 +524,24 @@ class TestIsStructuralSubtypeOf(unittest.TestCase):
         self.assertFalse(concrete.is_structural_subtype_of(cls=different_list_items))
 
     def test_matching_list_items(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Concrete:
-                x: List[int]
+        source = """\
+class Concrete:
+    x: List[int]
 
-                def __init__(self, x: List[int]) -> None:
-                    self.x = x
-
-
-            class Structurally_same:
-                x: List[int]
-
-                def __init__(self, x: List[int]) -> None:
-                    self.x = x
+    def __init__(self, x: List[int]) -> None:
+        self.x = x
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+class Structurally_same:
+    x: List[int]
+
+    def __init__(self, x: List[int]) -> None:
+        self.x = x
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -585,26 +558,24 @@ class TestIsStructuralSubtypeOf(unittest.TestCase):
         self.assertTrue(concrete.is_structural_subtype_of(cls=structurally_same))
 
     def test_optional_property_is_invariant(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Required:
-                x: int
+        source = """\
+class Required:
+    x: int
 
-                def __init__(self, x: int) -> None:
-                    self.x = x
-
-
-            class Optional_property:
-                x: Optional[int]
-
-                def __init__(self, x: Optional[int] = None) -> None:
-                    self.x = x
+    def __init__(self, x: int) -> None:
+        self.x = x
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+class Optional_property:
+    x: Optional[int]
+
+    def __init__(self, x: Optional[int] = None) -> None:
+        self.x = x
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -623,26 +594,24 @@ class TestIsStructuralSubtypeOf(unittest.TestCase):
         self.assertFalse(optional_property.is_structural_subtype_of(cls=required))
 
     def test_required_property_is_not_substitutable_for_optional(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Required:
-                x: int
+        source = """\
+class Required:
+    x: int
 
-                def __init__(self, x: int) -> None:
-                    self.x = x
-
-
-            class Optional_property:
-                x: Optional[int]
-
-                def __init__(self, x: Optional[int] = None) -> None:
-                    self.x = x
+    def __init__(self, x: int) -> None:
+        self.x = x
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+class Optional_property:
+    x: Optional[int]
+
+    def __init__(self, x: Optional[int] = None) -> None:
+        self.x = x
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -662,26 +631,24 @@ class TestIsStructuralSubtypeOf(unittest.TestCase):
         self.assertFalse(required.is_structural_subtype_of(cls=optional_property))
 
     def test_matching_optional_property(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Concrete:
-                x: Optional[int]
+        source = """\
+class Concrete:
+    x: Optional[int]
 
-                def __init__(self, x: Optional[int] = None) -> None:
-                    self.x = x
-
-
-            class Structurally_same:
-                x: Optional[int]
-
-                def __init__(self, x: Optional[int] = None) -> None:
-                    self.x = x
+    def __init__(self, x: Optional[int] = None) -> None:
+        self.x = x
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+class Structurally_same:
+    x: Optional[int]
+
+    def __init__(self, x: Optional[int] = None) -> None:
+        self.x = x
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -698,26 +665,24 @@ class TestIsStructuralSubtypeOf(unittest.TestCase):
         self.assertTrue(concrete.is_structural_subtype_of(cls=structurally_same))
 
     def test_optional_list_with_different_items_is_not_a_subtype(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Concrete:
-                x: Optional[List[int]]
+        source = """\
+class Concrete:
+    x: Optional[List[int]]
 
-                def __init__(self, x: Optional[List[int]] = None) -> None:
-                    self.x = x
-
-
-            class Different_list_items:
-                x: Optional[List[str]]
-
-                def __init__(self, x: Optional[List[str]] = None) -> None:
-                    self.x = x
+    def __init__(self, x: Optional[List[int]] = None) -> None:
+        self.x = x
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+class Different_list_items:
+    x: Optional[List[str]]
+
+    def __init__(self, x: Optional[List[str]] = None) -> None:
+        self.x = x
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source

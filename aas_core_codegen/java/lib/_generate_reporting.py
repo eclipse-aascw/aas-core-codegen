@@ -63,8 +63,6 @@ public static class IndexSegment extends Segment{{
             """\
 private static final Pattern variableNameRe = Pattern.compile("^[a-zA-Z_][a-zA-Z_0-9]*$");"""
         ),
-        # We have to indent a lot, so we do not use textwrap.dedent for better
-        # readability.
         Stripped(
             f"""\
 /**
