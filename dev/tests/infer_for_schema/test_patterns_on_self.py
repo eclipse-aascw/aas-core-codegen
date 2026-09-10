@@ -1,6 +1,5 @@
 # pylint: disable=missing-docstring
 
-import textwrap
 import unittest
 
 import tests.common
@@ -10,23 +9,21 @@ from aas_core_codegen import infer_for_schema
 
 class Test_expected(unittest.TestCase):
     def test_no_pattern(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_constrained_primitive(str):
-                pass
+        source = """\
+class Some_constrained_primitive(str):
+    pass
 
 
-            class Something:
-                some_property: Some_constrained_primitive
+class Something:
+    some_property: Some_constrained_primitive
 
-                def __init__(self, some_property: Some_constrained_primitive) -> None:
-                    self.some_property = some_property
+    def __init__(self, some_property: Some_constrained_primitive) -> None:
+        self.some_property = some_property
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         # fmt: off
         (
@@ -48,32 +45,30 @@ class Test_expected(unittest.TestCase):
         assert constraints is None
 
     def test_single_pattern(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @verification
-            def matches_something(text: str) -> bool:
-                prefix = "something"
-                return match(f"^{prefix}-[a-zA-Z]+$", text) is not None
+        source = """\
+@verification
+def matches_something(text: str) -> bool:
+    prefix = "something"
+    return match(f"^{prefix}-[a-zA-Z]+$", text) is not None
 
 
-            @invariant(
-                lambda self: matches_something(self),
-                "Some property must match something."
-            )
-            class Some_constrained_primitive(str):
-                pass
+@invariant(
+    lambda self: matches_something(self),
+    "Some property must match something."
+)
+class Some_constrained_primitive(str):
+    pass
 
-            class Something:
-                some_property: Some_constrained_primitive
+class Something:
+    some_property: Some_constrained_primitive
 
-                def __init__(self, some_property: Some_constrained_primitive) -> None:
-                    self.some_property = some_property
+    def __init__(self, some_property: Some_constrained_primitive) -> None:
+        self.some_property = some_property
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         # fmt: off
         (
@@ -107,39 +102,37 @@ Constraints(
         )
 
     def test_two_patterns(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @verification
-            def matches_something(text: str) -> bool:
-                return match("^something-[a-zA-Z]+$", text) is not None
+        source = """\
+@verification
+def matches_something(text: str) -> bool:
+    return match("^something-[a-zA-Z]+$", text) is not None
 
-            @verification
-            def matches_acme(text: str) -> bool:
-                return match("^.*acme.*$", text) is not None
-
-
-            @invariant(
-                lambda self: matches_acme(self),
-                "Some property must match acme."
-            )
-            @invariant(
-                lambda self: matches_something(self),
-                "Some property must match something."
-            )
-            class Some_constrained_primitive(str):
-                pass
-
-            class Something:
-                some_property: Some_constrained_primitive
-
-                def __init__(self, some_property: Some_constrained_primitive) -> None:
-                    self.some_property = some_property
+@verification
+def matches_acme(text: str) -> bool:
+    return match("^.*acme.*$", text) is not None
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+@invariant(
+    lambda self: matches_acme(self),
+    "Some property must match acme."
+)
+@invariant(
+    lambda self: matches_something(self),
+    "Some property must match something."
+)
+class Some_constrained_primitive(str):
+    pass
+
+class Something:
+    some_property: Some_constrained_primitive
+
+    def __init__(self, some_property: Some_constrained_primitive) -> None:
+        self.some_property = some_property
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         # fmt: off
         (
@@ -175,41 +168,39 @@ Constraints(
         )
 
     def test_inheritance_between_constrained_primitives_parent_first(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @verification
-            def matches_something(text: str) -> bool:
-                return match("^something-[a-zA-Z]+$", text) is not None
+        source = """\
+@verification
+def matches_something(text: str) -> bool:
+    return match("^something-[a-zA-Z]+$", text) is not None
 
-            @verification
-            def matches_acme(text: str) -> bool:
-                return match("^.*acme.*$", text) is not None
+@verification
+def matches_acme(text: str) -> bool:
+    return match("^.*acme.*$", text) is not None
 
-            @invariant(
-                lambda self: matches_something(self),
-                "Some property must match something."
-            )
-            class Parent_constrained_primitive(str):
-                pass
+@invariant(
+    lambda self: matches_something(self),
+    "Some property must match something."
+)
+class Parent_constrained_primitive(str):
+    pass
 
-            @invariant(
-                lambda self: matches_acme(self),
-                "Some property must match acme."
-            )
-            class Some_constrained_primitive(Parent_constrained_primitive):
-                pass
+@invariant(
+    lambda self: matches_acme(self),
+    "Some property must match acme."
+)
+class Some_constrained_primitive(Parent_constrained_primitive):
+    pass
 
-            class Something:
-                some_property: Some_constrained_primitive
+class Something:
+    some_property: Some_constrained_primitive
 
-                def __init__(self, some_property: Some_constrained_primitive) -> None:
-                    self.some_property = some_property
+    def __init__(self, some_property: Some_constrained_primitive) -> None:
+        self.some_property = some_property
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         # fmt: off
         (

@@ -1,6 +1,5 @@
 # pylint: disable=missing-docstring
 
-import textwrap
 import unittest
 
 from aas_core_codegen.intermediate import _hierarchy as intermediate_hierarchy
@@ -12,15 +11,13 @@ import tests.common
 class Test_ontology_ok(unittest.TestCase):
     def test_no_ancestors(self) -> None:
         symbol_table, error = tests.common.parse_source(
-            textwrap.dedent(
-                """\
-                class Something:
-                    pass
+            """\
+class Something:
+    pass
 
-                __version__ = "dummy"
-                __xml_namespace__ = "https://dummy.com"
-                """
-            )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
         )
 
         assert error is None, tests.common.most_underlying_messages(error)
@@ -41,31 +38,29 @@ class Test_ontology_ok(unittest.TestCase):
 
     def test_complex_graph(self) -> None:
         symbol_table, error = tests.common.parse_source(
-            textwrap.dedent(
-                """\
-                @abstract
-                class Another_grand_parent:
-                    pass
+            """\
+@abstract
+class Another_grand_parent:
+    pass
 
-                @abstract
-                class Grand_parent:
-                    pass
+@abstract
+class Grand_parent:
+    pass
 
-                @abstract
-                class Parent(Grand_parent, Another_grand_parent):
-                    pass
+@abstract
+class Parent(Grand_parent, Another_grand_parent):
+    pass
 
-                @abstract
-                class Another_parent(Grand_parent, Another_grand_parent):
-                    pass
+@abstract
+class Another_parent(Grand_parent, Another_grand_parent):
+    pass
 
-                class Something(Parent, Another_parent):
-                    pass
+class Something(Parent, Another_parent):
+    pass
 
-                __version__ = "dummy"
-                __xml_namespace__ = "https://dummy.com"
-                """
-            )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
         )
 
         assert error is None, tests.common.most_underlying_messages(error)
@@ -99,20 +94,18 @@ class Test_ontology_ok(unittest.TestCase):
 class Test_ontology_fail(unittest.TestCase):
     def test_duplicate_properties_in_ancestors(self) -> None:
         symbol_table, error = tests.common.parse_source(
-            textwrap.dedent(
-                """\
-                @abstract
-                class SomethingAbstract:
-                    x: int
+            """\
+@abstract
+class SomethingAbstract:
+    x: int
 
-                @abstract
-                class Something(SomethingAbstract):
-                    x: int
+@abstract
+class Something(SomethingAbstract):
+    x: int
 
-                __version__ = "dummy"
-                __xml_namespace__ = "https://dummy.com"
-                """
-            )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
         )
         assert error is None, tests.common.most_underlying_messages(error)
         assert symbol_table is not None
@@ -128,22 +121,20 @@ class Test_ontology_fail(unittest.TestCase):
 
     def test_duplicate_methods_in_ancestors(self) -> None:
         symbol_table, error = tests.common.parse_source(
-            textwrap.dedent(
-                """\
-                @abstract
-                class SomethingAbstract:
-                    def do_something(self) -> None:
-                        pass
+            """\
+@abstract
+class SomethingAbstract:
+    def do_something(self) -> None:
+        pass
 
-                @abstract
-                class Something(SomethingAbstract):
-                    def do_something(self) -> None:
-                        pass
+@abstract
+class Something(SomethingAbstract):
+    def do_something(self) -> None:
+        pass
 
-                __version__ = "dummy"
-                __xml_namespace__ = "https://dummy.com"
-                """
-            )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
         )
         assert error is None, tests.common.most_underlying_messages(error)
         assert symbol_table is not None
@@ -159,20 +150,18 @@ class Test_ontology_fail(unittest.TestCase):
 
     def test_missing_constructor_when_the_parent_has_one(self) -> None:
         symbol_table, error = tests.common.parse_source(
-            textwrap.dedent(
-                """\
-                @abstract
-                class SomethingAbstract:
-                    def __init__(self, x: int) -> None:
-                        pass
+            """\
+@abstract
+class SomethingAbstract:
+    def __init__(self, x: int) -> None:
+        pass
 
-                class Something(SomethingAbstract):
-                    pass
+class Something(SomethingAbstract):
+    pass
 
-                __version__ = "dummy"
-                __xml_namespace__ = "https://dummy.com"
-                """
-            )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
         )
         assert error is None, tests.common.most_underlying_messages(error)
         assert symbol_table is not None
@@ -189,20 +178,18 @@ class Test_ontology_fail(unittest.TestCase):
 
     def test_cycle_inheritance(self) -> None:
         symbol_table, error = tests.common.parse_source(
-            textwrap.dedent(
-                """\
-                @abstract
-                class Cycle(Something):
-                    pass
+            """\
+@abstract
+class Cycle(Something):
+    pass
 
-                @abstract
-                class Something(Cycle):
-                    pass
+@abstract
+class Something(Cycle):
+    pass
 
-                __version__ = "dummy"
-                __xml_namespace__ = "https://dummy.com"
-                """
-            )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
         )
         assert error is None, tests.common.most_underlying_messages(error)
         assert symbol_table is not None

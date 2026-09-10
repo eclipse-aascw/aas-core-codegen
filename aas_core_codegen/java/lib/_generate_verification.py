@@ -1574,8 +1574,6 @@ private static <A, B> Stream<_Pair<A, B>> zip(
         an_instance_variable = java_naming.variable_name(Identifier("an_instance"))
 
         verification_writer.write(
-            # We can not use textwrap.dedent since we indent everything including the
-            # first line.
             f"""\
 {I} * <p>Here is an example how to verify an instance of {cls_name}:
 {I} * {{@code

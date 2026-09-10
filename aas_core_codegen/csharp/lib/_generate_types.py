@@ -648,14 +648,12 @@ class _DescendBodyUnroller(csharp_unrolling.AbstractUnroller):
 
                     result.append(
                         csharp_unrolling.Node(
-                            text=textwrap.dedent(
-                                f"""\
-                            // Recurse
-                            foreach (var {recurse_var} in {unrollee_expr}.Underlying.Descend())
-                            {{
-                                yield return {recurse_var};
-                            }}"""
-                            ),
+                            text=f"""\
+// Recurse
+foreach (var {recurse_var} in {unrollee_expr}.Underlying.Descend())
+{{
+    yield return {recurse_var};
+}}""",
                             children=[],
                         )
                     )
@@ -680,14 +678,12 @@ class _DescendBodyUnroller(csharp_unrolling.AbstractUnroller):
 
                 result.append(
                     csharp_unrolling.Node(
-                        text=textwrap.dedent(
-                            f"""\
-                        // Recurse
-                        foreach (var {recurse_var} in {unrollee_expr}.Descend())
-                        {{
-                            yield return {recurse_var};
-                        }}"""
-                        ),
+                        text=f"""\
+// Recurse
+foreach (var {recurse_var} in {unrollee_expr}.Descend())
+{{
+    yield return {recurse_var};
+}}""",
                         children=[],
                     )
                 )

@@ -7,7 +7,6 @@ import inspect
 import pathlib
 import pickle
 import re
-import textwrap
 import unittest
 from typing import List, Dict, Optional, Final, Sequence
 
@@ -24,18 +23,16 @@ import tests.common
 
 class TestPickle(unittest.TestCase):
     def test_enumeration(self) -> None:
-        source = textwrap.dedent(
-            """\
-            from enum import Enum
+        source = """\
+from enum import Enum
 
-            class Some_enum(Enum):
-                Literal1 = "literal_1"
-                Literal2 = "literal_2"
+class Some_enum(Enum):
+    Literal1 = "literal_1"
+    Literal2 = "literal_2"
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -71,20 +68,18 @@ class TestPickle(unittest.TestCase):
         self.assertNotEqual(original_id_set, new_id_set)
 
     def test_abstract_class(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @abstract
-            class Some_abstract_class:
-                some_property: int
+        source = """\
+@abstract
+class Some_abstract_class:
+    some_property: int
 
-                @require(lambda some_property: some_property > 0)
-                def __init__(self, some_property: int) -> None:
-                    self.some_property = some_property
+    @require(lambda some_property: some_property > 0)
+    def __init__(self, some_property: int) -> None:
+        self.some_property = some_property
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -108,16 +103,14 @@ class TestPickle(unittest.TestCase):
         self.assertIn(id(unpickled.properties[0]), unpickled.property_id_set)
 
     def test_argument(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                def some_method(self, some_arg: int) -> None:
-                    pass
+        source = """\
+class Some_class:
+    def some_method(self, some_arg: int) -> None:
+        pass
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -136,21 +129,19 @@ class TestPickle(unittest.TestCase):
         self.assertEqual(unpickled.name, "some_arg")
 
     def test_class(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                some_property: int
-                
-                def __init__(
-                        self,
-                        some_property: int
-                ) -> None:
-                    self.some_property = some_property
+        source = """\
+class Some_class:
+    some_property: int
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+    def __init__(
+            self,
+            some_property: int
+    ) -> None:
+        self.some_property = some_property
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -171,21 +162,19 @@ class TestPickle(unittest.TestCase):
         self.assertIn(id(unpickled.properties[0]), unpickled.property_id_set)
 
     def test_concrete_class(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_concrete_class:
-                some_property: int
+        source = """\
+class Some_concrete_class:
+    some_property: int
 
-                def __init__(
-                        self,
-                        some_property: int
-                ) -> None:
-                    self.some_property = some_property
+    def __init__(
+            self,
+            some_property: int
+    ) -> None:
+        self.some_property = some_property
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -209,16 +198,14 @@ class TestPickle(unittest.TestCase):
         self.assertIn(id(unpickled.properties[0]), unpickled.property_id_set)
 
     def test_constant_primitive(self) -> None:
-        source = textwrap.dedent(
-            """\
-            Some_constant: str = constant_str(
-                value="some_value",
-            )
+        source = """\
+Some_constant: str = constant_str(
+    value="some_value",
+)
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -240,20 +227,18 @@ class TestPickle(unittest.TestCase):
         self.assertEqual(unpickled.value, "some_value")
 
     def test_constant_set_of_primitives(self) -> None:
-        source = textwrap.dedent(
-            """\
-            from aas_core_meta.marker import (
-                constant_set
-            )
+        source = """\
+from aas_core_meta.marker import (
+    constant_set
+)
 
-            Some_constant_set: Set[str] = constant_set(
-                values=["value1", "value2"]
-            )
+Some_constant_set: Set[str] = constant_set(
+    values=["value1", "value2"]
+)
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -275,16 +260,14 @@ class TestPickle(unittest.TestCase):
         self.assertEqual(len(unpickled.literals), 2)
 
     def test_constrained_primitive(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @invariant(lambda self: len(self) > 0, "Non-empty")
-            class Some_constrained_primitive(str):
-                pass
+        source = """\
+@invariant(lambda self: len(self) > 0, "Non-empty")
+class Some_constrained_primitive(str):
+    pass
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -307,18 +290,16 @@ class TestPickle(unittest.TestCase):
         self.assertIn(id(unpickled.invariants[0]), unpickled.invariant_id_set)
 
     def test_constructor(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                some_property: int
+        source = """\
+class Some_class:
+    some_property: int
 
-                def __init__(self, some_property: int) -> None:
-                    self.some_property = some_property
+    def __init__(self, some_property: int) -> None:
+        self.some_property = some_property
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -338,18 +319,16 @@ class TestPickle(unittest.TestCase):
         self.assertEqual(len(unpickled.arguments), 1)
 
     def test_contract(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                @require(lambda self: True)
-                @ensure(lambda result: True)
-                def some_method(self) -> bool:
-                    return True
+        source = """\
+class Some_class:
+    @require(lambda self: True)
+    @ensure(lambda result: True)
+    def some_method(self) -> bool:
+        return True
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -370,17 +349,15 @@ class TestPickle(unittest.TestCase):
         self.assertIsNotNone(unpickled.body)
 
     def test_contracts(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                @require(lambda self: True)
-                def some_method(self) -> None:
-                    pass
+        source = """\
+class Some_class:
+    @require(lambda self: True)
+    def some_method(self) -> None:
+        pass
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -401,18 +378,16 @@ class TestPickle(unittest.TestCase):
         self.assertEqual(len(unpickled.preconditions), 1)
 
     def test_default_primitive(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                some_property: str
-            
-                def __init__(self, some_property: str = 'some_default') -> None:
-                    self.some_property = some_property
+        source = """\
+class Some_class:
+    some_property: str
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+    def __init__(self, some_property: str = 'some_default') -> None:
+        self.some_property = some_property
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -433,25 +408,23 @@ class TestPickle(unittest.TestCase):
         assert isinstance(unpickled, intermediate.DefaultPrimitive)
 
     def test_default_enumeration_literal(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_enum(Enum):
-                Literal1 = "literal-1"
-                Literal2 = "literal-2"
-            
-            class Some_class:
-                some_property: Some_enum
+        source = """\
+class Some_enum(Enum):
+    Literal1 = "literal-1"
+    Literal2 = "literal-2"
 
-                def __init__(
-                        self, 
-                        some_property: Some_enum = Some_enum.Literal1
-                ) -> None:
-                    self.some_property = some_property
+class Some_class:
+    some_property: Some_enum
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+    def __init__(
+            self, 
+            some_property: Some_enum = Some_enum.Literal1
+    ) -> None:
+        self.some_property = some_property
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -472,17 +445,15 @@ class TestPickle(unittest.TestCase):
         assert isinstance(unpickled, intermediate.DefaultEnumerationLiteral)
 
     def test_description_of_constant(self) -> None:
-        source = textwrap.dedent(
-            """\
-            Some_constant: str = constant_str(
-                value="some_value",
-                description="This is some constant."
-            )
+        source = """\
+Some_constant: str = constant_str(
+    value="some_value",
+    description="This is some constant."
+)
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -507,18 +478,16 @@ class TestPickle(unittest.TestCase):
         self.assertEqual(unpickled.summary[0], "This is some constant.")
 
     def test_description_of_enumeration_literal(self) -> None:
-        source = textwrap.dedent(
-            """\
-            from enum import Enum
+        source = '''\
+from enum import Enum
 
-            class Some_enum(Enum):
-                literal1 = "value1"
-                \"\"\"Describe the literal.\"\"\"
+class Some_enum(Enum):
+    literal1 = "value1"
+    """Describe the literal."""
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -539,17 +508,15 @@ class TestPickle(unittest.TestCase):
         self.assertEqual(unpickled.summary[0], "Describe the literal.")
 
     def test_description_of_meta_model(self) -> None:
-        source = textwrap.dedent(
-            """\
-            \"\"\"Meta-model description.\"\"\"
+        source = '''\
+"""Meta-model description."""
 
-            class Some_class:
-                pass
+class Some_class:
+    pass
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -569,16 +536,14 @@ class TestPickle(unittest.TestCase):
         self.assertEqual(unpickled.summary[0], "Meta-model description.")
 
     def test_description_of_our_type(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                \"\"\"Describe the class.\"\"\"
-                pass
+        source = '''\
+class Some_class:
+    """Describe the class."""
+    pass
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -598,22 +563,20 @@ class TestPickle(unittest.TestCase):
         self.assertEqual(unpickled.summary[0], "Describe the class.")
 
     def test_description_of_property(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                some_property: int
-                \"\"\"Describe the property.\"\"\"
-                
-                def __init__(
-                        self,
-                        some_property: int
-                ) -> None:
-                    self.some_property = some_property
+        source = '''\
+class Some_class:
+    some_property: int
+    """Describe the property."""
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+    def __init__(
+            self,
+            some_property: int
+    ) -> None:
+        self.some_property = some_property
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -634,17 +597,15 @@ class TestPickle(unittest.TestCase):
         self.assertEqual(unpickled.summary[0], "Describe the property.")
 
     def test_description_of_signature(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                def some_method(self) -> None:
-                    \"\"\"Describe the method.\"\"\"
-                    pass
+        source = '''\
+class Some_class:
+    def some_method(self) -> None:
+        """Describe the method."""
+        pass
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -665,17 +626,15 @@ class TestPickle(unittest.TestCase):
         self.assertEqual(unpickled.summary[0], "Describe the method.")
 
     def test_enumeration_literal(self) -> None:
-        source = textwrap.dedent(
-            """\
-            from enum import Enum
+        source = """\
+from enum import Enum
 
-            class Some_enum(Enum):
-                literal1 = "value1"
+class Some_enum(Enum):
+    literal1 = "value1"
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -696,17 +655,15 @@ class TestPickle(unittest.TestCase):
         self.assertEqual(unpickled.value, "value1")
 
     def test_implementation_specific_method(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                @implementation_specific
-                def some_method(self) -> None:
-                    pass
+        source = """\
+class Some_class:
+    @implementation_specific
+    def some_method(self) -> None:
+        pass
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -726,17 +683,15 @@ class TestPickle(unittest.TestCase):
         self.assertEqual(unpickled.name, "some_method")
 
     def test_implementation_specific_verification(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @verification
-            @implementation_specific
-            def some_verification(x: int) -> bool:
-                pass
+        source = """\
+@verification
+@implementation_specific
+def some_verification(x: int) -> bool:
+    pass
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -755,25 +710,23 @@ class TestPickle(unittest.TestCase):
         self.assertEqual(unpickled.name, "some_verification")
 
     def test_interface(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @abstract
-            class Some_abstract_class:
-                some_property: int
-                
-                def __init__(
-                        self,
-                        some_property: int
-                ) -> None:
-                    self.some_property = some_property
-                
-                def some_func(self) -> None:
-                    pass
+        source = """\
+@abstract
+class Some_abstract_class:
+    some_property: int
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+    def __init__(
+            self,
+            some_property: int
+    ) -> None:
+        self.some_property = some_property
+
+    def some_func(self) -> None:
+        pass
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -798,19 +751,17 @@ class TestPickle(unittest.TestCase):
         self.assertIn(id(unpickled.properties[0]), unpickled.property_id_set)
 
     def test_invariant(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @invariant(lambda self: self.some_property > 0, "Some property is positive")
-            class Some_class:
-                some_property: int                                
+        source = """\
+@invariant(lambda self: self.some_property > 0, "Some property is positive")
+class Some_class:
+    some_property: int                                
 
-                def __init__(self, some_property: int) -> None:
-                    self.some_property = some_property
+    def __init__(self, some_property: int) -> None:
+        self.some_property = some_property
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -830,21 +781,19 @@ class TestPickle(unittest.TestCase):
         self.assertIsNotNone(unpickled.body)
 
     def test_list_type_annotation(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                some_property: List[str]
-                
-                def __init__(
-                        self,
-                        some_property: List[str]
-                ) -> None:
-                    self.some_property = some_property
+        source = """\
+class Some_class:
+    some_property: List[str]
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+    def __init__(
+            self,
+            some_property: List[str]
+    ) -> None:
+        self.some_property = some_property
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -863,21 +812,19 @@ class TestPickle(unittest.TestCase):
         self.assertIsInstance(unpickled, intermediate_types.ListTypeAnnotation)
 
     def test_tuple_type_annotation(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                some_property: Tuple[str, int]
+        source = """\
+class Some_class:
+    some_property: Tuple[str, int]
 
-                def __init__(
-                        self,
-                        some_property: Tuple[str, int]
-                ) -> None:
-                    self.some_property = some_property
+    def __init__(
+            self,
+            some_property: Tuple[str, int]
+    ) -> None:
+        self.some_property = some_property
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -896,15 +843,13 @@ class TestPickle(unittest.TestCase):
         self.assertIsInstance(unpickled, intermediate_types.TupleTypeAnnotation)
 
     def test_meta_model(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                pass
+        source = """\
+class Some_class:
+    pass
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -923,16 +868,14 @@ class TestPickle(unittest.TestCase):
         self.assertEqual(unpickled.version, "dummy")
 
     def test_method(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                def some_method(self) -> None:
-                    pass
+        source = """\
+class Some_class:
+    def some_method(self) -> None:
+        pass
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1004,21 +947,19 @@ __xml_namespace__ = "https://dummy.com"
         )
 
     def test_optional_type_annotation(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                some_property: Optional[str]
+        source = """\
+class Some_class:
+    some_property: Optional[str]
 
-                def __init__(
-                    self,
-                    some_property: Optional[str] = None
-                ) -> None:
-                    self.some_property = some_property
+    def __init__(
+        self,
+        some_property: Optional[str] = None
+    ) -> None:
+        self.some_property = some_property
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1037,24 +978,22 @@ __xml_namespace__ = "https://dummy.com"
         self.assertIsInstance(unpickled, intermediate_types.OptionalTypeAnnotation)
 
     def test_our_type_annotation(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                pass
+        source = """\
+class Some_class:
+    pass
 
-            class Some_another_class:
-                some_property: Some_class
-                
-                def __init__(
-                        self,
-                        some_property: Some_class
-                ) -> None:
-                    self.some_property = some_property
+class Some_another_class:
+    some_property: Some_class
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+    def __init__(
+            self,
+            some_property: Some_class
+    ) -> None:
+        self.some_property = some_property
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1075,16 +1014,14 @@ __xml_namespace__ = "https://dummy.com"
         self.assertIsInstance(unpickled, intermediate_types.OurTypeAnnotation)
 
     def test_pattern_verification(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @verification
-            def some_verification(x: str) -> bool:
-                return match(r"^[a-z]+$", x) is not None
+        source = """\
+@verification
+def some_verification(x: str) -> bool:
+    return match(r"^[a-z]+$", x) is not None
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1103,20 +1040,18 @@ __xml_namespace__ = "https://dummy.com"
         self.assertEqual(unpickled.name, "some_verification")
 
     def test_primitive_set_literal(self) -> None:
-        source = textwrap.dedent(
-            """\
-            from aas_core_meta.marker import (
-                constant_set
-            )
+        source = """\
+from aas_core_meta.marker import (
+    constant_set
+)
 
-            Some_constant_set: Set[str] = constant_set(
-                values=["value1", "value2"]
-            )
+Some_constant_set: Set[str] = constant_set(
+    values=["value1", "value2"]
+)
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1138,21 +1073,19 @@ __xml_namespace__ = "https://dummy.com"
         self.assertEqual(unpickled.value, "value1")
 
     def test_primitive_type(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                some_property: str
-                
-                def __init__(
-                        self,
-                        some_property: str
-                ) -> None:
-                    self.some_property = some_property
+        source = """\
+class Some_class:
+    some_property: str
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+    def __init__(
+            self,
+            some_property: str
+    ) -> None:
+        self.some_property = some_property
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1173,21 +1106,19 @@ __xml_namespace__ = "https://dummy.com"
         self.assertEqual(unpickled, intermediate_types.PrimitiveType.STR)
 
     def test_primitive_type_annotation(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                some_property: str
-                
-                def __init__(
-                        self,
-                        some_property: str
-                ) -> None:
-                    self.some_property = some_property
+        source = """\
+class Some_class:
+    some_property: str
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+    def __init__(
+            self,
+            some_property: str
+    ) -> None:
+        self.some_property = some_property
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1206,21 +1137,19 @@ __xml_namespace__ = "https://dummy.com"
         self.assertIsInstance(unpickled, intermediate_types.PrimitiveTypeAnnotation)
 
     def test_property(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                some_property: str
-                
-                def __init__(
-                        self,
-                        some_property: str
-                ) -> None:
-                    self.some_property = some_property
+        source = """\
+class Some_class:
+    some_property: str
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+    def __init__(
+            self,
+            some_property: str
+    ) -> None:
+        self.some_property = some_property
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1240,19 +1169,17 @@ __xml_namespace__ = "https://dummy.com"
         self.assertEqual(unpickled.name, "some_property")
 
     def test_serialization(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @serialization(with_model_type=True)
-            class Some_class:
-                some_property: str
-                
-                def __init__(self, some_property: str) -> None:
-                    self.some_property = some_property
+        source = """\
+@serialization(with_model_type=True)
+class Some_class:
+    some_property: str
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+    def __init__(self, some_property: str) -> None:
+        self.some_property = some_property
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1272,23 +1199,21 @@ __xml_namespace__ = "https://dummy.com"
         self.assertEqual(unpickled.with_model_type, True)
 
     def test_signature(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @abstract
-            class Some_abstract_class:
-                some_property: int
-            
-                def __init__(self, some_property: int) -> None:
-                    self.some_property = some_property
-            
-                def some_func(self) -> None:
-                    pass
-            
-            
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+        source = """\
+@abstract
+class Some_abstract_class:
+    some_property: int
+
+    def __init__(self, some_property: int) -> None:
+        self.some_property = some_property
+
+    def some_func(self) -> None:
+        pass
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1311,23 +1236,21 @@ __xml_namespace__ = "https://dummy.com"
         self.assertEqual(unpickled.name, "some_func")
 
     def test_signature_like(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @abstract
-            class Some_abstract_class:
-                some_property: int
+        source = """\
+@abstract
+class Some_abstract_class:
+    some_property: int
 
-                def __init__(self, some_property: int) -> None:
-                    self.some_property = some_property
-            
-                def some_func(self) -> None:
-                    pass
-            
-            
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+    def __init__(self, some_property: int) -> None:
+        self.some_property = some_property
+
+    def some_func(self) -> None:
+        pass
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1336,24 +1259,22 @@ __xml_namespace__ = "https://dummy.com"
             raise AssertionError(tests.common.most_underlying_messages(error))
         assert symbol_table is not None
 
-        source = textwrap.dedent(
-            """\
-            @abstract
-            class Some_abstract_class:
-                some_property: int
+        source = """\
+@abstract
+class Some_abstract_class:
+    some_property: int
 
-                @require(lambda some_property: some_property > 0)
-                def __init__(self, some_property: int) -> None:
-                    self.some_property = some_property
+    @require(lambda some_property: some_property > 0)
+    def __init__(self, some_property: int) -> None:
+        self.some_property = some_property
 
-                def some_func(self) -> None:
-                    pass
+    def some_func(self) -> None:
+        pass
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1378,22 +1299,20 @@ __xml_namespace__ = "https://dummy.com"
         self.assertEqual(unpickled.name, "some_func")
 
     def test_snapshot(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                some_property: int
-                
-                def __init__(self, some_property: int) -> None:
-                    self.some_property = some_property
-            
-                @snapshot(lambda self: self.some_property + 1)
-                def some_method(self) -> None:
-                    pass
+        source = """\
+class Some_class:
+    some_property: int
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+    def __init__(self, some_property: int) -> None:
+        self.some_property = some_property
+
+    @snapshot(lambda self: self.some_property + 1)
+    def some_method(self) -> None:
+        pass
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1414,21 +1333,19 @@ __xml_namespace__ = "https://dummy.com"
         self.assertIsNotNone(unpickled.body)
 
     def test_summary_remarks_constraints_description(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                \"\"\"
-                Summary line.
+        source = '''\
+class Some_class:
+    """
+    Summary line.
 
-                Some remark.
-                    
-                :constraint A10: Soem constraint
-                \"\"\"
+    Some remark.
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+    :constraint A10: Soem constraint
+    """
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1448,23 +1365,21 @@ __xml_namespace__ = "https://dummy.com"
         self.assertEqual(unpickled.summary[0], "Summary line.")
 
     def test_summary_remarks_description(self) -> None:
-        source = textwrap.dedent(
-            """\
-            from enum import Enum
+        source = '''\
+from enum import Enum
 
-            class Some_class:
-                \"\"\"
-                Summary line.
+class Some_class:
+    """
+    Summary line.
 
-                Some remarks.
+    Some remarks.
 
-                Some description.
-                \"\"\"
+    Some description.
+    """
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+'''
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1486,15 +1401,13 @@ __xml_namespace__ = "https://dummy.com"
         self.assertEqual(unpickled.summary[0], "Summary line.")
 
     def test_symbol_table(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                pass
+        source = """\
+class Some_class:
+    pass
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1511,16 +1424,14 @@ __xml_namespace__ = "https://dummy.com"
         self.assertEqual(len(unpickled.concrete_classes), 1)
 
     def test_transpilable_verification(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @verification
-            def some_verification(x: int) -> bool:
-                return x > 0
+        source = """\
+@verification
+def some_verification(x: int) -> bool:
+    return x > 0
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1539,21 +1450,19 @@ __xml_namespace__ = "https://dummy.com"
         self.assertEqual(unpickled.name, "some_verification")
 
     def test_type_annotation(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                some_property: str
-                
-                def __init__(
-                        self,
-                        some_property: str
-                ) -> None:
-                    self.some_property = some_property
+        source = """\
+class Some_class:
+    some_property: str
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+    def __init__(
+            self,
+            some_property: str
+    ) -> None:
+        self.some_property = some_property
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1572,16 +1481,14 @@ __xml_namespace__ = "https://dummy.com"
         self.assertIsInstance(unpickled, intermediate_types.TypeAnnotation)
 
     def test_understood_method(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_class:
-                def some_method(self) -> None:
-                    pass
+        source = """\
+class Some_class:
+    def some_method(self) -> None:
+        pass
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1601,16 +1508,14 @@ __xml_namespace__ = "https://dummy.com"
         self.assertEqual(unpickled.name, "some_method")
 
     def test_verification(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @verification
-            def some_verification(x: int) -> bool:
-                return x > 0
+        source = """\
+@verification
+def some_verification(x: int) -> bool:
+    return x > 0
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source
@@ -1629,28 +1534,26 @@ __xml_namespace__ = "https://dummy.com"
         self.assertEqual(unpickled.name, "some_verification")
 
     def test_constant_set_of_enumeration_literals(self) -> None:
-        source = textwrap.dedent(
-            """\
-            from enum import Enum
+        source = """\
+from enum import Enum
 
-            from aas_core_meta.marker import (
-                constant_set
-            )
+from aas_core_meta.marker import (
+    constant_set
+)
 
-            class Some_enum(Enum):
-                Literal1 = "lit1"
-                Literal2 = "lit2"
+class Some_enum(Enum):
+    Literal1 = "lit1"
+    Literal2 = "lit2"
 
-            Some_constant_set: Set[Some_enum] = constant_set(
-                values=[
-                    Some_enum.Literal1
-                ]
-            )
+Some_constant_set: Set[Some_enum] = constant_set(
+    values=[
+        Some_enum.Literal1
+    ]
+)
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         symbol_table, error = tests.common.translate_source_to_intermediate(
             source=source

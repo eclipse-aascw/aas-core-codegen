@@ -9,7 +9,6 @@ import pathlib
 import subprocess
 import sys
 import tempfile
-import textwrap
 
 import aas_core_codegen.main
 import tests.common
@@ -77,19 +76,17 @@ def main() -> int:
             print("Generating the .csproj file...")
             csproj_pth = output_dir / "SomeProject.csproj"
             csproj_pth.write_text(
-                textwrap.dedent(
-                    """\
-                <Project Sdk="Microsoft.NET.Sdk">
-                    <PropertyGroup>
-                        <TargetFramework>net6.0</TargetFramework>
-                        <Nullable>enable</Nullable>
-                        <Configurations>Debug;Release;DebugSlow</Configurations>
-                        <Platforms>AnyCPU</Platforms>
-                        <LangVersion>8</LangVersion>
-                    </PropertyGroup>
-                </Project>
-                """
-                ),
+                """\
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net6.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <Configurations>Debug;Release;DebugSlow</Configurations>
+        <Platforms>AnyCPU</Platforms>
+        <LangVersion>8</LangVersion>
+    </PropertyGroup>
+</Project>
+""",
                 encoding="utf-8",
             )
 

@@ -1,6 +1,5 @@
 # pylint: disable=missing-docstring
 
-import textwrap
 import unittest
 
 import tests.common
@@ -10,23 +9,21 @@ from aas_core_codegen import infer_for_schema
 
 class Test_expected(unittest.TestCase):
     def test_no_constraints(self) -> None:
-        source = textwrap.dedent(
-            """\
-            class Some_constrained_primitive(str):
-                pass
+        source = """\
+class Some_constrained_primitive(str):
+    pass
 
 
-            class Something:
-                some_property: Some_constrained_primitive
+class Something:
+    some_property: Some_constrained_primitive
 
-                def __init__(self, some_property: Some_constrained_primitive) -> None:
-                    self.some_property = some_property
+    def __init__(self, some_property: Some_constrained_primitive) -> None:
+        self.some_property = some_property
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         # fmt: off
         (
@@ -48,27 +45,25 @@ class Test_expected(unittest.TestCase):
         assert constraints is None
 
     def test_min_value_constant_left(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @invariant(
-                lambda self: 10 < len(self),
-                "The string must be more than 10 characters long."
-            )
-            class Some_constrained_primitive(str):
-                pass
+        source = """\
+@invariant(
+    lambda self: 10 < len(self),
+    "The string must be more than 10 characters long."
+)
+class Some_constrained_primitive(str):
+    pass
 
 
-            class Something:
-                some_property: Some_constrained_primitive
+class Something:
+    some_property: Some_constrained_primitive
 
-                def __init__(self, some_property: Some_constrained_primitive) -> None:
-                    self.some_property = some_property
+    def __init__(self, some_property: Some_constrained_primitive) -> None:
+        self.some_property = some_property
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         # fmt: off
         (
@@ -102,27 +97,25 @@ Constraints(
         )
 
     def test_min_value_constant_right(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @invariant(
-                lambda self: len(self) > 10,
-                "The string must be more than 10 characters long."
-            )
-            class Some_constrained_primitive(str):
-                pass
+        source = """\
+@invariant(
+    lambda self: len(self) > 10,
+    "The string must be more than 10 characters long."
+)
+class Some_constrained_primitive(str):
+    pass
 
 
-            class Something:
-                some_property: Some_constrained_primitive
+class Something:
+    some_property: Some_constrained_primitive
 
-                def __init__(self, some_property: Some_constrained_primitive) -> None:
-                    self.some_property = some_property
+    def __init__(self, some_property: Some_constrained_primitive) -> None:
+        self.some_property = some_property
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         # fmt: off
         (
@@ -156,27 +149,25 @@ Constraints(
         )
 
     def test_max_value_constant_right(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @invariant(
-                lambda self: len(self) < 10,
-                "The string must be less than 10 characters long."
-            )
-            class Some_constrained_primitive(str):
-                pass
+        source = """\
+@invariant(
+    lambda self: len(self) < 10,
+    "The string must be less than 10 characters long."
+)
+class Some_constrained_primitive(str):
+    pass
 
 
-            class Something:
-                some_property: Some_constrained_primitive
+class Something:
+    some_property: Some_constrained_primitive
 
-                def __init__(self, some_property: Some_constrained_primitive) -> None:
-                    self.some_property = some_property
+    def __init__(self, some_property: Some_constrained_primitive) -> None:
+        self.some_property = some_property
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         # fmt: off
         (
@@ -210,27 +201,25 @@ Constraints(
         )
 
     def test_max_value_constant_left(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @invariant(
-                lambda self: 10 > len(self),
-                "The string must be less than 10 characters long."
-            )
-            class Some_constrained_primitive(str):
-                pass
+        source = """\
+@invariant(
+    lambda self: 10 > len(self),
+    "The string must be less than 10 characters long."
+)
+class Some_constrained_primitive(str):
+    pass
 
 
-            class Something:
-                some_property: Some_constrained_primitive
+class Something:
+    some_property: Some_constrained_primitive
 
-                def __init__(self, some_property: Some_constrained_primitive) -> None:
-                    self.some_property = some_property
+    def __init__(self, some_property: Some_constrained_primitive) -> None:
+        self.some_property = some_property
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         # fmt: off
         (
@@ -264,27 +253,25 @@ Constraints(
         )
 
     def test_exact_value_constant_left(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @invariant(
-                lambda self: 10 == len(self),
-                "The string must be exactly 10 characters long."
-            )
-            class Some_constrained_primitive(str):
-                pass
+        source = """\
+@invariant(
+    lambda self: 10 == len(self),
+    "The string must be exactly 10 characters long."
+)
+class Some_constrained_primitive(str):
+    pass
 
 
-            class Something:
-                some_property: Some_constrained_primitive
+class Something:
+    some_property: Some_constrained_primitive
 
-                def __init__(self, some_property: Some_constrained_primitive) -> None:
-                    self.some_property = some_property
+    def __init__(self, some_property: Some_constrained_primitive) -> None:
+        self.some_property = some_property
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         # fmt: off
         (
@@ -318,27 +305,25 @@ Constraints(
         )
 
     def test_exact_value_constant_right(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @invariant(
-                lambda self: len(self) == 10,
-                "The string must be exactly 10 characters long."
-            )
-            class Some_constrained_primitive(str):
-                pass
+        source = """\
+@invariant(
+    lambda self: len(self) == 10,
+    "The string must be exactly 10 characters long."
+)
+class Some_constrained_primitive(str):
+    pass
 
 
-            class Something:
-                some_property: Some_constrained_primitive
+class Something:
+    some_property: Some_constrained_primitive
 
-                def __init__(self, some_property: Some_constrained_primitive) -> None:
-                    self.some_property = some_property
+    def __init__(self, some_property: Some_constrained_primitive) -> None:
+        self.some_property = some_property
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         # fmt: off
         (
@@ -372,35 +357,33 @@ Constraints(
         )
 
     def test_inheritance_between_constrained_primitives(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @invariant(
-                lambda self: len(self) > 3,
-                "The string must be more than 3 characters long."
-            )
-            class Parent_constrained_primitive(str):
-                pass
+        source = """\
+@invariant(
+    lambda self: len(self) > 3,
+    "The string must be more than 3 characters long."
+)
+class Parent_constrained_primitive(str):
+    pass
 
 
-            @invariant(
-                lambda self: len(self) < 6,
-                "The string must be less than 6 characters long."
-            )
-            class Some_constrained_primitive(Parent_constrained_primitive):
-                pass
+@invariant(
+    lambda self: len(self) < 6,
+    "The string must be less than 6 characters long."
+)
+class Some_constrained_primitive(Parent_constrained_primitive):
+    pass
 
 
-            class Something:
-                some_property: Some_constrained_primitive
+class Something:
+    some_property: Some_constrained_primitive
 
-                def __init__(self, some_property: Some_constrained_primitive) -> None:
-                    self.some_property = some_property
+    def __init__(self, some_property: Some_constrained_primitive) -> None:
+        self.some_property = some_property
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         # fmt: off
         (
@@ -436,31 +419,29 @@ Constraints(
 
 class Test_unexpected(unittest.TestCase):
     def test_conflicting_min_and_max(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @invariant(
-                lambda self: len(self) > 10,
-                "The string must be more than 10 characters long."
-            )
-            @invariant(
-                lambda self: len(self) < 3,
-                "The string must be less than 3 characters long."
-            )
-            class Some_constrained_primitive(str):
-                pass
+        source = """\
+@invariant(
+    lambda self: len(self) > 10,
+    "The string must be more than 10 characters long."
+)
+@invariant(
+    lambda self: len(self) < 3,
+    "The string must be less than 3 characters long."
+)
+class Some_constrained_primitive(str):
+    pass
 
 
-            class Something:
-                some_property: Some_constrained_primitive
+class Something:
+    some_property: Some_constrained_primitive
 
-                def __init__(self, some_property: Some_constrained_primitive) -> None:
-                    self.some_property = some_property
+    def __init__(self, some_property: Some_constrained_primitive) -> None:
+        self.some_property = some_property
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         (
             symbol_table,
@@ -481,31 +462,29 @@ class Test_unexpected(unittest.TestCase):
         )
 
     def test_conflicting_min_and_exact(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @invariant(
-                lambda self: len(self) > 10,
-                "The string must be more than 10 characters long."
-            )
-            @invariant(
-                lambda self: len(self) == 3,
-                "The string must be exactly 3 characters long."
-            )
-            class Some_constrained_primitive(str):
-                pass
+        source = """\
+@invariant(
+    lambda self: len(self) > 10,
+    "The string must be more than 10 characters long."
+)
+@invariant(
+    lambda self: len(self) == 3,
+    "The string must be exactly 3 characters long."
+)
+class Some_constrained_primitive(str):
+    pass
 
 
-            class Something:
-                some_property: Some_constrained_primitive
+class Something:
+    some_property: Some_constrained_primitive
 
-                def __init__(self, some_property: Some_constrained_primitive) -> None:
-                    self.some_property = some_property
+    def __init__(self, some_property: Some_constrained_primitive) -> None:
+        self.some_property = some_property
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         (
             symbol_table,
@@ -526,31 +505,29 @@ class Test_unexpected(unittest.TestCase):
         )
 
     def test_conflicting_max_and_exact(self) -> None:
-        source = textwrap.dedent(
-            """\
-            @invariant(
-                lambda self: len(self) < 10,
-                "The string must be less than 10 characters long."
-            )
-            @invariant(
-                lambda self: len(self) == 30,
-                "The string must be exactly 30 characters long."
-            )
-            class Some_constrained_primitive(str):
-                pass
+        source = """\
+@invariant(
+    lambda self: len(self) < 10,
+    "The string must be less than 10 characters long."
+)
+@invariant(
+    lambda self: len(self) == 30,
+    "The string must be exactly 30 characters long."
+)
+class Some_constrained_primitive(str):
+    pass
 
 
-            class Something:
-                some_property: Some_constrained_primitive
+class Something:
+    some_property: Some_constrained_primitive
 
-                def __init__(self, some_property: Some_constrained_primitive) -> None:
-                    self.some_property = some_property
+    def __init__(self, some_property: Some_constrained_primitive) -> None:
+        self.some_property = some_property
 
 
-            __version__ = "dummy"
-            __xml_namespace__ = "https://dummy.com"
-            """
-        )
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
 
         (
             symbol_table,

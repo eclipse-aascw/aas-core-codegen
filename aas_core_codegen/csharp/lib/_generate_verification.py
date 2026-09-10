@@ -821,14 +821,11 @@ def _generate_transform_property(
         )
         # Heuristic to break the lines, very rudimentary
         if len(foreach_error_in_verify) > 80:
-            foreach_error_in_verify = textwrap.dedent(
-                f"""\
-                foreach (
-                    {I}var error in {verify_method}(
-                    {II}{source_expr}))"""
-            )
+            foreach_error_in_verify = f"""\
+foreach (
+    {I}var error in {verify_method}(
+    {II}{source_expr}))"""
 
-        # We can't use textwrap.dedent due to foreach_snippet.
         stmts.append(
             Stripped(
                 f"""\
@@ -859,19 +856,15 @@ def _generate_transform_property(
         foreach_item_in_source_expr = f"foreach (var item in {source_expr})"
         # Rudimentary heuristics for line breaking
         if len(foreach_item_in_source_expr) > 80:
-            foreach_item_in_source_expr = textwrap.dedent(
-                f"""\
-                foreach(
-                {I}var item in {source_expr})"""
-            )
+            foreach_item_in_source_expr = f"""\
+foreach(
+{I}var item in {source_expr})"""
 
         foreach_error_in_verify_item = f"foreach (var error in {verify_method}(item))"
         if len(foreach_error_in_verify_item) > 70:
-            foreach_error_in_verify_item = textwrap.dedent(
-                f"""\
-                foreach (
-                {I}var error in {verify_method}(item))"""
-            )
+            foreach_error_in_verify_item = f"""\
+foreach (
+{I}var error in {verify_method}(item))"""
 
         stmts.append(
             Stripped(
@@ -910,14 +903,11 @@ int {index_var} = 0;
             )
             # Heuristic to break the lines, very rudimentary
             if len(foreach_error_in_verify) > 80:
-                foreach_error_in_verify = textwrap.dedent(
-                    f"""\
-                    foreach (
-                        {I}var error in {verify_method}(
-                        {II}{item_expr}))"""
-                )
+                foreach_error_in_verify = f"""\
+foreach (
+    {I}var error in {verify_method}(
+    {II}{item_expr}))"""
 
-            # We can't use textwrap.dedent due to foreach_snippet.
             stmts.append(
                 Stripped(
                     f"""\
@@ -1492,8 +1482,6 @@ namespace {namespace}
         an_instance_variable = csharp_naming.variable_name(Identifier("an_instance"))
 
         verification_writer.write(
-            # We can not use textwrap.dedent since we indent everything including the
-            # first line.
             f"""\
 {I}/// <example>
 {I}/// Here is an example how to verify an instance of {cls_name}:
