@@ -787,15 +787,18 @@ if !(
     return Stripped(writer.getvalue()), None
 
 
-OurTypeExceptEnumeration = Union[
+OurTypeExceptEnumerationAndNamedUnion = Union[
     intermediate.ConstrainedPrimitive,
     intermediate.AbstractClass,
     intermediate.ConcreteClass,
 ]
 assert_union_without_excluded(
     original_union=intermediate.OurType,
-    subset_union=OurTypeExceptEnumeration,
-    excluded=[intermediate.Enumeration],
+    subset_union=OurTypeExceptEnumerationAndNamedUnion,
+    # NOTE (mristin):
+    # Named unions have no verification logic of their own (no properties or
+    # invariants), so they are excluded here just like enumerations.
+    excluded=[intermediate.Enumeration, intermediate.NamedUnion],
 )
 
 
@@ -899,6 +902,33 @@ if abort {{
 {I}return
 }}"""
             )
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # A named union has no verification function of its own -- it is
+            # verified through the same general [Verify] dispatch function
+            # as a class, over its underlying instance. We keep this as its
+            # own branch, separate from the class branch above, so that it
+            # can diverge independently, *e.g.*, if primitive alternatives
+            # are ever allowed into a named union.
+            block = Stripped(
+                f"""\
+abort = Verify(
+{I}that.{getter_name}().Underlying(),
+{I}func(err *VerificationError) bool {{
+{II}err.Path.PrependName(
+{III}&aasreporting.NameSegment{{
+{IIII}Name: {prop_name_literal},
+{III}}},
+{II})
+{II}return onError(err)
+{I}}},
+)
+if abort {{
+{I}return
+}}"""
+            )
+
         else:
             assert_never(our_type)
 
@@ -968,6 +998,39 @@ if abort {{
                     f"""\
 abort = Verify(
 {I}v,
+{I}func(err *VerificationError) bool {{
+{II}err.Path.PrependIndex(
+{III}&aasreporting.IndexSegment{{
+{IIII}Index: i,
+{III}}},
+{II})
+
+{II}err.Path.PrependName(
+{III}&aasreporting.NameSegment{{
+{IIII}Name: {prop_name_literal},
+{III}}},
+{II})
+
+{II}return onError(err)
+{I}}},
+)
+if abort {{
+{I}return
+}}"""
+                )
+
+            elif isinstance(type_anno.items.our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # A named union has no verification function of its own -- it
+                # is verified through the same general [Verify] dispatch
+                # function as a class, over its underlying instance. We keep
+                # this as its own branch, separate from the class branch
+                # above, so that it can diverge independently, *e.g.*, if
+                # primitive alternatives are ever allowed into a named union.
+                loop_body = Stripped(
+                    f"""\
+abort = Verify(
+{I}v.Underlying(),
 {I}func(err *VerificationError) bool {{
 {II}err.Path.PrependIndex(
 {III}&aasreporting.IndexSegment{{
@@ -1091,6 +1154,42 @@ if abort {{
                         )
                     )
 
+                elif isinstance(item_type_anno.our_type, intermediate.NamedUnion):
+                    # NOTE (mristin):
+                    # A named union has no verification function of its own
+                    # -- it is verified through the same general [Verify]
+                    # dispatch function as a class, over its underlying
+                    # instance. We keep this as its own branch, separate from
+                    # the class branch above, so that it can diverge
+                    # independently, *e.g.*, if primitive alternatives are
+                    # ever allowed into a named union.
+                    item_blocks.append(
+                        Stripped(
+                            f"""\
+abort = Verify(
+{I}{item_expr}.Underlying(),
+{I}func(err *VerificationError) bool {{
+{II}err.Path.PrependIndex(
+{III}&aasreporting.IndexSegment{{
+{IIII}Index: {i},
+{III}}},
+{II})
+
+{II}err.Path.PrependName(
+{III}&aasreporting.NameSegment{{
+{IIII}Name: {prop_name_literal},
+{III}}},
+{II})
+
+{II}return onError(err)
+{I}}},
+)
+if abort {{
+{I}return
+}}"""
+                        )
+                    )
+
                 else:
                     # noinspection PyTypeChecker
                     assert_never(item_type_anno.our_type)
@@ -1114,7 +1213,11 @@ if abort {{
             isinstance(type_anno, intermediate.OurTypeAnnotation)
             and isinstance(
                 type_anno.our_type,
-                (intermediate.AbstractClass, intermediate.ConcreteClass),
+                (
+                    intermediate.AbstractClass,
+                    intermediate.ConcreteClass,
+                    intermediate.NamedUnion,
+                ),
             )
         )
         or isinstance(type_anno, intermediate.ListTypeAnnotation)

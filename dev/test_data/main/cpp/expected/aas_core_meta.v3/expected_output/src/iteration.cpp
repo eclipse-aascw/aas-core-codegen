@@ -494,11 +494,10 @@ void IteratorOverExtension::Execute() {
         >& the_supplemental_semantic_ids(
           *(casted_->supplemental_semantic_ids())
         );
+        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_supplemental_semantic_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -539,11 +538,10 @@ void IteratorOverExtension::Execute() {
         >& the_refers_to(
           *(casted_->refers_to())
         );
+        const auto& item_value = the_refers_to[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_refers_to[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -757,11 +755,10 @@ void IteratorOverAdministrativeInformation::Execute() {
         >& the_embedded_data_specifications(
           *(casted_->embedded_data_specifications())
         );
+        const auto& item_value = the_embedded_data_specifications[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_embedded_data_specifications[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -1009,11 +1006,10 @@ void IteratorOverQualifier::Execute() {
         >& the_supplemental_semantic_ids(
           *(casted_->supplemental_semantic_ids())
         );
+        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_supplemental_semantic_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -1241,11 +1237,10 @@ void IteratorOverAssetAdministrationShell::Execute() {
         >& the_extensions(
           *(casted_->extensions())
         );
+        const auto& item_value = the_extensions[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_extensions[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -1286,11 +1281,10 @@ void IteratorOverAssetAdministrationShell::Execute() {
         >& the_display_name(
           *(casted_->display_name())
         );
+        const auto& item_value = the_display_name[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_display_name[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -1331,11 +1325,10 @@ void IteratorOverAssetAdministrationShell::Execute() {
         >& the_description(
           *(casted_->description())
         );
+        const auto& item_value = the_description[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_description[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -1398,11 +1391,10 @@ void IteratorOverAssetAdministrationShell::Execute() {
         >& the_embedded_data_specifications(
           *(casted_->embedded_data_specifications())
         );
+        const auto& item_value = the_embedded_data_specifications[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_embedded_data_specifications[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -1474,11 +1466,10 @@ void IteratorOverAssetAdministrationShell::Execute() {
         >& the_submodels(
           *(casted_->submodels())
         );
+        const auto& item_value = the_submodels[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_submodels[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -1688,11 +1679,10 @@ void IteratorOverAssetInformation::Execute() {
         >& the_specific_asset_ids(
           *(casted_->specific_asset_ids())
         );
+        const auto& item_value = the_specific_asset_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_specific_asset_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -1999,11 +1989,10 @@ void IteratorOverSpecificAssetId::Execute() {
         >& the_supplemental_semantic_ids(
           *(casted_->supplemental_semantic_ids())
         );
+        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_supplemental_semantic_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -2231,11 +2220,10 @@ void IteratorOverSubmodel::Execute() {
         >& the_extensions(
           *(casted_->extensions())
         );
+        const auto& item_value = the_extensions[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_extensions[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -2276,11 +2264,10 @@ void IteratorOverSubmodel::Execute() {
         >& the_display_name(
           *(casted_->display_name())
         );
+        const auto& item_value = the_display_name[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_display_name[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -2321,11 +2308,10 @@ void IteratorOverSubmodel::Execute() {
         >& the_description(
           *(casted_->description())
         );
+        const auto& item_value = the_description[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_description[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -2404,11 +2390,10 @@ void IteratorOverSubmodel::Execute() {
         >& the_supplemental_semantic_ids(
           *(casted_->supplemental_semantic_ids())
         );
+        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_supplemental_semantic_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -2449,11 +2434,10 @@ void IteratorOverSubmodel::Execute() {
         >& the_qualifiers(
           *(casted_->qualifiers())
         );
+        const auto& item_value = the_qualifiers[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_qualifiers[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -2498,11 +2482,10 @@ void IteratorOverSubmodel::Execute() {
         >& the_embedded_data_specifications(
           *(casted_->embedded_data_specifications())
         );
+        const auto& item_value = the_embedded_data_specifications[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_embedded_data_specifications[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -2543,11 +2526,10 @@ void IteratorOverSubmodel::Execute() {
         >& the_submodel_elements(
           *(casted_->submodel_elements())
         );
+        const auto& item_value = the_submodel_elements[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_submodel_elements[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -2757,11 +2739,10 @@ void IteratorOverRelationshipElement::Execute() {
         >& the_extensions(
           *(casted_->extensions())
         );
+        const auto& item_value = the_extensions[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_extensions[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -2802,11 +2783,10 @@ void IteratorOverRelationshipElement::Execute() {
         >& the_display_name(
           *(casted_->display_name())
         );
+        const auto& item_value = the_display_name[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_display_name[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -2847,11 +2827,10 @@ void IteratorOverRelationshipElement::Execute() {
         >& the_description(
           *(casted_->description())
         );
+        const auto& item_value = the_description[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_description[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -2912,11 +2891,10 @@ void IteratorOverRelationshipElement::Execute() {
         >& the_supplemental_semantic_ids(
           *(casted_->supplemental_semantic_ids())
         );
+        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_supplemental_semantic_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -2957,11 +2935,10 @@ void IteratorOverRelationshipElement::Execute() {
         >& the_qualifiers(
           *(casted_->qualifiers())
         );
+        const auto& item_value = the_qualifiers[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_qualifiers[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -3006,11 +2983,10 @@ void IteratorOverRelationshipElement::Execute() {
         >& the_embedded_data_specifications(
           *(casted_->embedded_data_specifications())
         );
+        const auto& item_value = the_embedded_data_specifications[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_embedded_data_specifications[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -3246,11 +3222,10 @@ void IteratorOverSubmodelElementList::Execute() {
         >& the_extensions(
           *(casted_->extensions())
         );
+        const auto& item_value = the_extensions[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_extensions[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -3291,11 +3266,10 @@ void IteratorOverSubmodelElementList::Execute() {
         >& the_display_name(
           *(casted_->display_name())
         );
+        const auto& item_value = the_display_name[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_display_name[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -3336,11 +3310,10 @@ void IteratorOverSubmodelElementList::Execute() {
         >& the_description(
           *(casted_->description())
         );
+        const auto& item_value = the_description[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_description[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -3401,11 +3374,10 @@ void IteratorOverSubmodelElementList::Execute() {
         >& the_supplemental_semantic_ids(
           *(casted_->supplemental_semantic_ids())
         );
+        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_supplemental_semantic_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -3446,11 +3418,10 @@ void IteratorOverSubmodelElementList::Execute() {
         >& the_qualifiers(
           *(casted_->qualifiers())
         );
+        const auto& item_value = the_qualifiers[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_qualifiers[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -3495,11 +3466,10 @@ void IteratorOverSubmodelElementList::Execute() {
         >& the_embedded_data_specifications(
           *(casted_->embedded_data_specifications())
         );
+        const auto& item_value = the_embedded_data_specifications[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_embedded_data_specifications[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -3558,11 +3528,10 @@ void IteratorOverSubmodelElementList::Execute() {
         >& the_value(
           *(casted_->value())
         );
+        const auto& item_value = the_value[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_value[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -3772,11 +3741,10 @@ void IteratorOverSubmodelElementCollection::Execute() {
         >& the_extensions(
           *(casted_->extensions())
         );
+        const auto& item_value = the_extensions[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_extensions[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -3817,11 +3785,10 @@ void IteratorOverSubmodelElementCollection::Execute() {
         >& the_display_name(
           *(casted_->display_name())
         );
+        const auto& item_value = the_display_name[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_display_name[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -3862,11 +3829,10 @@ void IteratorOverSubmodelElementCollection::Execute() {
         >& the_description(
           *(casted_->description())
         );
+        const auto& item_value = the_description[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_description[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -3927,11 +3893,10 @@ void IteratorOverSubmodelElementCollection::Execute() {
         >& the_supplemental_semantic_ids(
           *(casted_->supplemental_semantic_ids())
         );
+        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_supplemental_semantic_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -3972,11 +3937,10 @@ void IteratorOverSubmodelElementCollection::Execute() {
         >& the_qualifiers(
           *(casted_->qualifiers())
         );
+        const auto& item_value = the_qualifiers[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_qualifiers[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -4021,11 +3985,10 @@ void IteratorOverSubmodelElementCollection::Execute() {
         >& the_embedded_data_specifications(
           *(casted_->embedded_data_specifications())
         );
+        const auto& item_value = the_embedded_data_specifications[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_embedded_data_specifications[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -4066,11 +4029,10 @@ void IteratorOverSubmodelElementCollection::Execute() {
         >& the_value(
           *(casted_->value())
         );
+        const auto& item_value = the_value[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_value[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -4280,11 +4242,10 @@ void IteratorOverProperty::Execute() {
         >& the_extensions(
           *(casted_->extensions())
         );
+        const auto& item_value = the_extensions[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_extensions[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -4325,11 +4286,10 @@ void IteratorOverProperty::Execute() {
         >& the_display_name(
           *(casted_->display_name())
         );
+        const auto& item_value = the_display_name[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_display_name[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -4370,11 +4330,10 @@ void IteratorOverProperty::Execute() {
         >& the_description(
           *(casted_->description())
         );
+        const auto& item_value = the_description[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_description[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -4435,11 +4394,10 @@ void IteratorOverProperty::Execute() {
         >& the_supplemental_semantic_ids(
           *(casted_->supplemental_semantic_ids())
         );
+        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_supplemental_semantic_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -4480,11 +4438,10 @@ void IteratorOverProperty::Execute() {
         >& the_qualifiers(
           *(casted_->qualifiers())
         );
+        const auto& item_value = the_qualifiers[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_qualifiers[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -4529,11 +4486,10 @@ void IteratorOverProperty::Execute() {
         >& the_embedded_data_specifications(
           *(casted_->embedded_data_specifications())
         );
+        const auto& item_value = the_embedded_data_specifications[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_embedded_data_specifications[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -4761,11 +4717,10 @@ void IteratorOverMultiLanguageProperty::Execute() {
         >& the_extensions(
           *(casted_->extensions())
         );
+        const auto& item_value = the_extensions[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_extensions[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -4806,11 +4761,10 @@ void IteratorOverMultiLanguageProperty::Execute() {
         >& the_display_name(
           *(casted_->display_name())
         );
+        const auto& item_value = the_display_name[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_display_name[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -4851,11 +4805,10 @@ void IteratorOverMultiLanguageProperty::Execute() {
         >& the_description(
           *(casted_->description())
         );
+        const auto& item_value = the_description[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_description[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -4916,11 +4869,10 @@ void IteratorOverMultiLanguageProperty::Execute() {
         >& the_supplemental_semantic_ids(
           *(casted_->supplemental_semantic_ids())
         );
+        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_supplemental_semantic_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -4961,11 +4913,10 @@ void IteratorOverMultiLanguageProperty::Execute() {
         >& the_qualifiers(
           *(casted_->qualifiers())
         );
+        const auto& item_value = the_qualifiers[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_qualifiers[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -5010,11 +4961,10 @@ void IteratorOverMultiLanguageProperty::Execute() {
         >& the_embedded_data_specifications(
           *(casted_->embedded_data_specifications())
         );
+        const auto& item_value = the_embedded_data_specifications[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_embedded_data_specifications[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -5055,11 +5005,10 @@ void IteratorOverMultiLanguageProperty::Execute() {
         >& the_value(
           *(casted_->value())
         );
+        const auto& item_value = the_value[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_value[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -5287,11 +5236,10 @@ void IteratorOverRange::Execute() {
         >& the_extensions(
           *(casted_->extensions())
         );
+        const auto& item_value = the_extensions[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_extensions[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -5332,11 +5280,10 @@ void IteratorOverRange::Execute() {
         >& the_display_name(
           *(casted_->display_name())
         );
+        const auto& item_value = the_display_name[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_display_name[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -5377,11 +5324,10 @@ void IteratorOverRange::Execute() {
         >& the_description(
           *(casted_->description())
         );
+        const auto& item_value = the_description[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_description[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -5442,11 +5388,10 @@ void IteratorOverRange::Execute() {
         >& the_supplemental_semantic_ids(
           *(casted_->supplemental_semantic_ids())
         );
+        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_supplemental_semantic_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -5487,11 +5432,10 @@ void IteratorOverRange::Execute() {
         >& the_qualifiers(
           *(casted_->qualifiers())
         );
+        const auto& item_value = the_qualifiers[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_qualifiers[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -5536,11 +5480,10 @@ void IteratorOverRange::Execute() {
         >& the_embedded_data_specifications(
           *(casted_->embedded_data_specifications())
         );
+        const auto& item_value = the_embedded_data_specifications[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_embedded_data_specifications[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -5750,11 +5693,10 @@ void IteratorOverReferenceElement::Execute() {
         >& the_extensions(
           *(casted_->extensions())
         );
+        const auto& item_value = the_extensions[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_extensions[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -5795,11 +5737,10 @@ void IteratorOverReferenceElement::Execute() {
         >& the_display_name(
           *(casted_->display_name())
         );
+        const auto& item_value = the_display_name[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_display_name[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -5840,11 +5781,10 @@ void IteratorOverReferenceElement::Execute() {
         >& the_description(
           *(casted_->description())
         );
+        const auto& item_value = the_description[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_description[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -5905,11 +5845,10 @@ void IteratorOverReferenceElement::Execute() {
         >& the_supplemental_semantic_ids(
           *(casted_->supplemental_semantic_ids())
         );
+        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_supplemental_semantic_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -5950,11 +5889,10 @@ void IteratorOverReferenceElement::Execute() {
         >& the_qualifiers(
           *(casted_->qualifiers())
         );
+        const auto& item_value = the_qualifiers[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_qualifiers[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -5999,11 +5937,10 @@ void IteratorOverReferenceElement::Execute() {
         >& the_embedded_data_specifications(
           *(casted_->embedded_data_specifications())
         );
+        const auto& item_value = the_embedded_data_specifications[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_embedded_data_specifications[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -6231,11 +6168,10 @@ void IteratorOverBlob::Execute() {
         >& the_extensions(
           *(casted_->extensions())
         );
+        const auto& item_value = the_extensions[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_extensions[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -6276,11 +6212,10 @@ void IteratorOverBlob::Execute() {
         >& the_display_name(
           *(casted_->display_name())
         );
+        const auto& item_value = the_display_name[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_display_name[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -6321,11 +6256,10 @@ void IteratorOverBlob::Execute() {
         >& the_description(
           *(casted_->description())
         );
+        const auto& item_value = the_description[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_description[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -6386,11 +6320,10 @@ void IteratorOverBlob::Execute() {
         >& the_supplemental_semantic_ids(
           *(casted_->supplemental_semantic_ids())
         );
+        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_supplemental_semantic_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -6431,11 +6364,10 @@ void IteratorOverBlob::Execute() {
         >& the_qualifiers(
           *(casted_->qualifiers())
         );
+        const auto& item_value = the_qualifiers[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_qualifiers[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -6480,11 +6412,10 @@ void IteratorOverBlob::Execute() {
         >& the_embedded_data_specifications(
           *(casted_->embedded_data_specifications())
         );
+        const auto& item_value = the_embedded_data_specifications[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_embedded_data_specifications[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -6694,11 +6625,10 @@ void IteratorOverFile::Execute() {
         >& the_extensions(
           *(casted_->extensions())
         );
+        const auto& item_value = the_extensions[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_extensions[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -6739,11 +6669,10 @@ void IteratorOverFile::Execute() {
         >& the_display_name(
           *(casted_->display_name())
         );
+        const auto& item_value = the_display_name[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_display_name[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -6784,11 +6713,10 @@ void IteratorOverFile::Execute() {
         >& the_description(
           *(casted_->description())
         );
+        const auto& item_value = the_description[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_description[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -6849,11 +6777,10 @@ void IteratorOverFile::Execute() {
         >& the_supplemental_semantic_ids(
           *(casted_->supplemental_semantic_ids())
         );
+        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_supplemental_semantic_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -6894,11 +6821,10 @@ void IteratorOverFile::Execute() {
         >& the_qualifiers(
           *(casted_->qualifiers())
         );
+        const auto& item_value = the_qualifiers[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_qualifiers[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -6943,11 +6869,10 @@ void IteratorOverFile::Execute() {
         >& the_embedded_data_specifications(
           *(casted_->embedded_data_specifications())
         );
+        const auto& item_value = the_embedded_data_specifications[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_embedded_data_specifications[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -7157,11 +7082,10 @@ void IteratorOverAnnotatedRelationshipElement::Execute() {
         >& the_extensions(
           *(casted_->extensions())
         );
+        const auto& item_value = the_extensions[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_extensions[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -7202,11 +7126,10 @@ void IteratorOverAnnotatedRelationshipElement::Execute() {
         >& the_display_name(
           *(casted_->display_name())
         );
+        const auto& item_value = the_display_name[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_display_name[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -7247,11 +7170,10 @@ void IteratorOverAnnotatedRelationshipElement::Execute() {
         >& the_description(
           *(casted_->description())
         );
+        const auto& item_value = the_description[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_description[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -7312,11 +7234,10 @@ void IteratorOverAnnotatedRelationshipElement::Execute() {
         >& the_supplemental_semantic_ids(
           *(casted_->supplemental_semantic_ids())
         );
+        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_supplemental_semantic_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -7357,11 +7278,10 @@ void IteratorOverAnnotatedRelationshipElement::Execute() {
         >& the_qualifiers(
           *(casted_->qualifiers())
         );
+        const auto& item_value = the_qualifiers[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_qualifiers[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -7406,11 +7326,10 @@ void IteratorOverAnnotatedRelationshipElement::Execute() {
         >& the_embedded_data_specifications(
           *(casted_->embedded_data_specifications())
         );
+        const auto& item_value = the_embedded_data_specifications[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_embedded_data_specifications[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -7477,11 +7396,10 @@ void IteratorOverAnnotatedRelationshipElement::Execute() {
         >& the_annotations(
           *(casted_->annotations())
         );
+        const auto& item_value = the_annotations[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_annotations[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -7691,11 +7609,10 @@ void IteratorOverEntity::Execute() {
         >& the_extensions(
           *(casted_->extensions())
         );
+        const auto& item_value = the_extensions[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_extensions[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -7736,11 +7653,10 @@ void IteratorOverEntity::Execute() {
         >& the_display_name(
           *(casted_->display_name())
         );
+        const auto& item_value = the_display_name[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_display_name[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -7781,11 +7697,10 @@ void IteratorOverEntity::Execute() {
         >& the_description(
           *(casted_->description())
         );
+        const auto& item_value = the_description[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_description[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -7846,11 +7761,10 @@ void IteratorOverEntity::Execute() {
         >& the_supplemental_semantic_ids(
           *(casted_->supplemental_semantic_ids())
         );
+        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_supplemental_semantic_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -7891,11 +7805,10 @@ void IteratorOverEntity::Execute() {
         >& the_qualifiers(
           *(casted_->qualifiers())
         );
+        const auto& item_value = the_qualifiers[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_qualifiers[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -7940,11 +7853,10 @@ void IteratorOverEntity::Execute() {
         >& the_embedded_data_specifications(
           *(casted_->embedded_data_specifications())
         );
+        const auto& item_value = the_embedded_data_specifications[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_embedded_data_specifications[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -7985,11 +7897,10 @@ void IteratorOverEntity::Execute() {
         >& the_statements(
           *(casted_->statements())
         );
+        const auto& item_value = the_statements[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_statements[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -8030,11 +7941,10 @@ void IteratorOverEntity::Execute() {
         >& the_specific_asset_ids(
           *(casted_->specific_asset_ids())
         );
+        const auto& item_value = the_specific_asset_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_specific_asset_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -8482,11 +8392,10 @@ void IteratorOverBasicEventElement::Execute() {
         >& the_extensions(
           *(casted_->extensions())
         );
+        const auto& item_value = the_extensions[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_extensions[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -8527,11 +8436,10 @@ void IteratorOverBasicEventElement::Execute() {
         >& the_display_name(
           *(casted_->display_name())
         );
+        const auto& item_value = the_display_name[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_display_name[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -8572,11 +8480,10 @@ void IteratorOverBasicEventElement::Execute() {
         >& the_description(
           *(casted_->description())
         );
+        const auto& item_value = the_description[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_description[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -8637,11 +8544,10 @@ void IteratorOverBasicEventElement::Execute() {
         >& the_supplemental_semantic_ids(
           *(casted_->supplemental_semantic_ids())
         );
+        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_supplemental_semantic_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -8682,11 +8588,10 @@ void IteratorOverBasicEventElement::Execute() {
         >& the_qualifiers(
           *(casted_->qualifiers())
         );
+        const auto& item_value = the_qualifiers[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_qualifiers[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -8731,11 +8636,10 @@ void IteratorOverBasicEventElement::Execute() {
         >& the_embedded_data_specifications(
           *(casted_->embedded_data_specifications())
         );
+        const auto& item_value = the_embedded_data_specifications[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_embedded_data_specifications[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -8976,11 +8880,10 @@ void IteratorOverOperation::Execute() {
         >& the_extensions(
           *(casted_->extensions())
         );
+        const auto& item_value = the_extensions[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_extensions[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -9021,11 +8924,10 @@ void IteratorOverOperation::Execute() {
         >& the_display_name(
           *(casted_->display_name())
         );
+        const auto& item_value = the_display_name[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_display_name[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -9066,11 +8968,10 @@ void IteratorOverOperation::Execute() {
         >& the_description(
           *(casted_->description())
         );
+        const auto& item_value = the_description[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_description[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -9131,11 +9032,10 @@ void IteratorOverOperation::Execute() {
         >& the_supplemental_semantic_ids(
           *(casted_->supplemental_semantic_ids())
         );
+        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_supplemental_semantic_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -9176,11 +9076,10 @@ void IteratorOverOperation::Execute() {
         >& the_qualifiers(
           *(casted_->qualifiers())
         );
+        const auto& item_value = the_qualifiers[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_qualifiers[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -9225,11 +9124,10 @@ void IteratorOverOperation::Execute() {
         >& the_embedded_data_specifications(
           *(casted_->embedded_data_specifications())
         );
+        const auto& item_value = the_embedded_data_specifications[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_embedded_data_specifications[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -9270,11 +9168,10 @@ void IteratorOverOperation::Execute() {
         >& the_input_variables(
           *(casted_->input_variables())
         );
+        const auto& item_value = the_input_variables[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_input_variables[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -9315,11 +9212,10 @@ void IteratorOverOperation::Execute() {
         >& the_output_variables(
           *(casted_->output_variables())
         );
+        const auto& item_value = the_output_variables[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_output_variables[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -9360,11 +9256,10 @@ void IteratorOverOperation::Execute() {
         >& the_inoutput_variables(
           *(casted_->inoutput_variables())
         );
+        const auto& item_value = the_inoutput_variables[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_inoutput_variables[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -9745,11 +9640,10 @@ void IteratorOverCapability::Execute() {
         >& the_extensions(
           *(casted_->extensions())
         );
+        const auto& item_value = the_extensions[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_extensions[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -9790,11 +9684,10 @@ void IteratorOverCapability::Execute() {
         >& the_display_name(
           *(casted_->display_name())
         );
+        const auto& item_value = the_display_name[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_display_name[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -9835,11 +9728,10 @@ void IteratorOverCapability::Execute() {
         >& the_description(
           *(casted_->description())
         );
+        const auto& item_value = the_description[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_description[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -9900,11 +9792,10 @@ void IteratorOverCapability::Execute() {
         >& the_supplemental_semantic_ids(
           *(casted_->supplemental_semantic_ids())
         );
+        const auto& item_value = the_supplemental_semantic_ids[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_supplemental_semantic_ids[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -9945,11 +9836,10 @@ void IteratorOverCapability::Execute() {
         >& the_qualifiers(
           *(casted_->qualifiers())
         );
+        const auto& item_value = the_qualifiers[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_qualifiers[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -9994,11 +9884,10 @@ void IteratorOverCapability::Execute() {
         >& the_embedded_data_specifications(
           *(casted_->embedded_data_specifications())
         );
+        const auto& item_value = the_embedded_data_specifications[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_embedded_data_specifications[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -10208,11 +10097,10 @@ void IteratorOverConceptDescription::Execute() {
         >& the_extensions(
           *(casted_->extensions())
         );
+        const auto& item_value = the_extensions[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_extensions[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -10253,11 +10141,10 @@ void IteratorOverConceptDescription::Execute() {
         >& the_display_name(
           *(casted_->display_name())
         );
+        const auto& item_value = the_display_name[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_display_name[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -10298,11 +10185,10 @@ void IteratorOverConceptDescription::Execute() {
         >& the_description(
           *(casted_->description())
         );
+        const auto& item_value = the_description[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_description[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -10365,11 +10251,10 @@ void IteratorOverConceptDescription::Execute() {
         >& the_embedded_data_specifications(
           *(casted_->embedded_data_specifications())
         );
+        const auto& item_value = the_embedded_data_specifications[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_embedded_data_specifications[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -10410,11 +10295,10 @@ void IteratorOverConceptDescription::Execute() {
         >& the_is_case_of(
           *(casted_->is_case_of())
         );
+        const auto& item_value = the_is_case_of[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_is_case_of[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -10637,11 +10521,10 @@ void IteratorOverReference::Execute() {
         >& the_keys(
           casted_->keys()
         );
+        const auto& item_value = the_keys[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_keys[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -11028,11 +10911,10 @@ void IteratorOverEnvironment::Execute() {
         >& the_asset_administration_shells(
           *(casted_->asset_administration_shells())
         );
+        const auto& item_value = the_asset_administration_shells[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_asset_administration_shells[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -11073,11 +10955,10 @@ void IteratorOverEnvironment::Execute() {
         >& the_submodels(
           *(casted_->submodels())
         );
+        const auto& item_value = the_submodels[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_submodels[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -11118,11 +10999,10 @@ void IteratorOverEnvironment::Execute() {
         >& the_concept_descriptions(
           *(casted_->concept_descriptions())
         );
+        const auto& item_value = the_concept_descriptions[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_concept_descriptions[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -11741,11 +11621,10 @@ void IteratorOverValueList::Execute() {
         >& the_value_reference_pairs(
           casted_->value_reference_pairs()
         );
+        const auto& item_value = the_value_reference_pairs[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_value_reference_pairs[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -12125,11 +12004,10 @@ void IteratorOverDataSpecificationIec61360::Execute() {
         >& the_preferred_name(
           casted_->preferred_name()
         );
+        const auto& item_value = the_preferred_name[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_preferred_name[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -12168,11 +12046,10 @@ void IteratorOverDataSpecificationIec61360::Execute() {
         >& the_short_name(
           *(casted_->short_name())
         );
+        const auto& item_value = the_short_name[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_short_name[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 
@@ -12231,11 +12108,10 @@ void IteratorOverDataSpecificationIec61360::Execute() {
         >& the_definition(
           *(casted_->definition())
         );
+        const auto& item_value = the_definition[*cursor_];
 
         item_ = std::move(
-          std::static_pointer_cast<types::IClass>(
-            the_definition[*cursor_]
-          )
+          std::static_pointer_cast<types::IClass>(item_value)
         );
         ++index_;
 

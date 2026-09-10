@@ -24,6 +24,7 @@ from aas_core_codegen.intermediate._types import (
     Invariant,
     ListTypeAnnotation,
     MetaModel,
+    NamedUnion,
     OptionalTypeAnnotation,
     OurTypeAnnotation,
     PatternVerification,
@@ -535,6 +536,35 @@ def _stringify_enumeration(
     return result
 
 
+def _stringify_named_union(
+    that: NamedUnion,
+) -> stringify_mod.Entity:
+    result = stringify_mod.Entity(
+        name=that.__class__.__name__,
+        properties=[
+            stringify_mod.Property("name", that.name),
+            stringify_mod.Property(
+                "members",
+                [
+                    f"Reference to {member.__class__.__name__} {member.name}"
+                    for member in that.members
+                ],
+            ),
+            stringify_mod.Property(
+                "implementers",
+                [
+                    f"Reference to {implementer.__class__.__name__} {implementer.name}"
+                    for implementer in that.implementers
+                ],
+            ),
+            stringify_mod.Property("description", stringify(that.description)),
+            stringify_mod.PropertyEllipsis("parsed", that.parsed),
+        ],
+    )
+
+    return result
+
+
 def _stringify_constrained_primitive(
     that: ConstrainedPrimitive,
 ) -> stringify_mod.Entity:
@@ -884,6 +914,13 @@ def _stringify_symbol_table(
                     for our_type in that.concrete_classes
                 ],
             ),
+            stringify_mod.Property(
+                "named_unions",
+                [
+                    f"Reference to our type {our_type.name}"
+                    for our_type in that.named_unions
+                ],
+            ),
             stringify_mod.Property("constants", list(map(stringify, that.constants))),
             stringify_mod.PropertyEllipsis("constants_by_name", that.constants_by_name),
             stringify_mod.Property(
@@ -925,6 +962,7 @@ Dumpable = Union[
     Invariant,
     ListTypeAnnotation,
     MetaModel,
+    NamedUnion,
     OptionalTypeAnnotation,
     OurTypeAnnotation,
     PatternVerification,
@@ -965,6 +1003,7 @@ _DISPATCH = {
     DescriptionOfEnumerationLiteral: _stringify_description_of_enumeration_literal,
     DescriptionOfSignature: _stringify_description_of_signature,
     Enumeration: _stringify_enumeration,
+    NamedUnion: _stringify_named_union,
     EnumerationLiteral: _stringify_enumeration_literal,
     ImplementationSpecificMethod: _stringify_implementation_specific_method,
     ImplementationSpecificVerification: _stringify_implementation_specific_verification,

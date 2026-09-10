@@ -44,7 +44,10 @@ from aas_core_codegen.typescript.common import (
 
 def _human_readable_identifier(
     something: Union[
-        intermediate.Enumeration, intermediate.AbstractClass, intermediate.ConcreteClass
+        intermediate.Enumeration,
+        intermediate.AbstractClass,
+        intermediate.ConcreteClass,
+        intermediate.NamedUnion,
     ]
 ) -> str:
     """
@@ -67,6 +70,8 @@ def _human_readable_identifier(
         result = f"meta-model abstract class {something.name!r}"
     elif isinstance(something, intermediate.ConcreteClass):
         result = f"meta-model concrete class {something.name!r}"
+    elif isinstance(something, intermediate.NamedUnion):
+        result = f"meta-model named union {something.name!r}"
     else:
         # noinspection PyTypeChecker
         assert_never(something)
@@ -181,6 +186,12 @@ def _verify_intra_structure_collisions(
                         f"the meta-model method argument {arg.name!r}"
                     )
 
+    elif isinstance(our_type, intermediate.NamedUnion):
+        # NOTE (mristin):
+        # A named union has no properties or methods of its own, so there is
+        # nothing to collide.
+        pass
+
     else:
         # noinspection PyTypeChecker
         assert_never(our_type)
@@ -205,6 +216,7 @@ def _verify_structure_name_collisions(
             intermediate.Enumeration,
             intermediate.AbstractClass,
             intermediate.ConcreteClass,
+            intermediate.NamedUnion,
         ],
     ] = dict()
 
@@ -241,6 +253,31 @@ def _verify_structure_name_collisions(
             )
         else:
             observed_structure_names[name] = our_type
+
+    # NOTE (mristin):
+    # We check the named unions in a loop of their own, separate from the
+    # classes and enumerations above, since a future named union of
+    # primitives might need to diverge from how we look up and report
+    # the name of a class or an enumeration.
+    for named_union in symbol_table.named_unions:
+        name = typescript_naming.name_of(named_union)
+
+        other = observed_structure_names.get(name, None)
+
+        if other is not None:
+            errors.append(
+                Error(
+                    named_union.parsed.node,
+                    f"The TypeScript name {name!r} "
+                    f"of the "
+                    f"{_human_readable_identifier(named_union)} "
+                    f"collides with the TypeScript name "
+                    f"of the "
+                    f"{_human_readable_identifier(other)}",
+                )
+            )
+        else:
+            observed_structure_names[name] = named_union
 
     # endregion
 
@@ -590,7 +627,9 @@ class _DescendBodyUnroller(typescript_unrolling.AbstractUnroller):
             # We can not descend into a primitive type.
             return []
 
-        assert isinstance(our_type, intermediate.Class)  # Exhaustively match
+        assert isinstance(
+            our_type, (intermediate.Class, intermediate.NamedUnion)
+        )  # Exhaustively match
 
         result = [typescript_unrolling.Node(f"yield {unrollee_expr};", children=[])]
 
@@ -618,7 +657,11 @@ class _DescendBodyUnroller(typescript_unrolling.AbstractUnroller):
             and isinstance(type_annotation.items, intermediate.OurTypeAnnotation)
             and isinstance(
                 type_annotation.items.our_type,
-                (intermediate.AbstractClass, intermediate.ConcreteClass),
+                (
+                    intermediate.AbstractClass,
+                    intermediate.ConcreteClass,
+                    intermediate.NamedUnion,
+                ),
             )
         ):
             return [typescript_unrolling.Node(f"yield * {unrollee_expr};", children=[])]
@@ -1196,6 +1239,34 @@ export interface {name}
     writer.write("\n}")
 
     return Stripped(writer.getvalue()), None
+
+
+def _generate_named_union_type_alias(named_union: intermediate.NamedUnion) -> Stripped:
+    """
+    Generate the type alias representing the named union.
+
+    Every implementer of the named union is a concrete class, so we simply
+    alias the union to the union of their class types -- no wrapper is
+    needed, as every implementer already satisfies the common ``Class``
+    thanks to TypeScript's structural typing.
+    """
+    union_name = typescript_naming.union_name(named_union.name)
+
+    member_names = [
+        typescript_naming.class_name(implementer.name)
+        for implementer in named_union.implementers
+    ]
+
+    one_liner = f"export type {union_name} = {' | '.join(member_names)};"
+    if len(one_liner) <= 70:
+        return Stripped(one_liner)
+
+    members_joined = "\n".join(f"{I}| {member_name}" for member_name in member_names)
+    return Stripped(
+        f"""\
+export type {union_name} =
+{members_joined};"""
+    )
 
 
 @require(lambda cls: not cls.is_implementation_specific)
@@ -2389,6 +2460,10 @@ export abstract class Class {{
                     else:
                         assert block is not None
                         blocks.append(block)
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            blocks.append(_generate_named_union_type_alias(named_union=our_type))
+
         else:
             # noinspection PyTypeChecker
             assert_never(our_type)

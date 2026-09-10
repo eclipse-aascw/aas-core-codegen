@@ -33,6 +33,7 @@ SymbolTable(
     'Reference to our type Non_empty_XML_serializable_string'],
   classes=[],
   concrete_classes=[],
+  named_unions=[],
   constants=[],
   constants_by_name=...,
   verification_functions=[],

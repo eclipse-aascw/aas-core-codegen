@@ -1088,6 +1088,80 @@ if (error != null)
     )
 
 
+def _generate_deserialize_named_union_property(
+    prop: intermediate.Property,
+    cls: intermediate.ConcreteClass,
+) -> Stripped:
+    """Generate the snippet to deserialize a property ``prop`` as a named union."""
+    type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+    assert isinstance(type_anno, intermediate.OurTypeAnnotation)
+
+    our_type = type_anno.our_type
+    assert isinstance(our_type, intermediate.NamedUnion)
+
+    prop_name = csharp_naming.property_name(prop.name)
+    cls_name = csharp_naming.class_name(cls.name)
+
+    union_name = csharp_naming.class_name(our_type.name)
+
+    target_var = csharp_naming.variable_name(Identifier(f"the_{prop.name}"))
+    xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
+
+    return Stripped(
+        f"""\
+if (isEmptyProperty)
+{{
+{I}error = new Reporting.Error(
+{II}$"Expected an XML element within the element {{elementName}} representing " +
+{II}"the property {prop_name} of an instance of class {cls_name}, " +
+{II}"but encountered a self-closing element {{elementName}}");
+{I}return null;
+}}
+
+// We need to skip the whitespace here in order to be able to look ahead
+// the discriminator element shortly.
+SkipNoneWhitespaceAndComments(reader);
+
+if (reader.EOF)
+{{
+{I}error = new Reporting.Error(
+{II}$"Expected an XML element within the element {{elementName}} representing " +
+{II}"the property {prop_name} of an instance of class {cls_name}, " +
+{II}"but reached the end-of-file");
+{I}return null;
+}}
+
+// Try to look ahead the discriminator name;
+// we need this name only for the error reporting below.
+// {union_name}FromElement will perform more sophisticated
+// checks.
+string? discriminatorElementName = null;
+if (reader.NodeType == Xml.XmlNodeType.Element)
+{{
+{I}discriminatorElementName = reader.LocalName;
+}}
+
+{target_var} = {union_name}FromElement(
+{I}reader, out error);
+
+if (error != null)
+{{
+{I}if (discriminatorElementName != null)
+{I}{{
+{II}error.PrependSegment(
+{III}new Reporting.NameSegment(
+{IIII}discriminatorElementName));
+{I}}}
+
+{I}error.PrependSegment(
+{II}new Reporting.NameSegment(
+{III}{xml_prop_name_literal}));
+{I}return null;
+}}"""
+    )
+
+
 def _generate_deserialize_cls_property(prop: intermediate.Property) -> Stripped:
     """Generate the snippet to deserialize a property ``prop`` as a concrete class."""
     type_anno = intermediate.beneath_optional(prop.type_annotation)
@@ -1180,6 +1254,22 @@ def _generate_deserialize_list_property(prop: intermediate.Property) -> Stripped
             deserialize_method = Stripped(
                 f"{csharp_naming.class_name(type_anno.items.our_type.name)}FromElement"
             )
+
+    elif isinstance(type_anno.items, intermediate.OurTypeAnnotation) and isinstance(
+        type_anno.items.our_type, intermediate.NamedUnion
+    ):
+        # NOTE (mristin):
+        # A named union is always dispatched by its own discriminator element,
+        # so we treat it the same as a polymorphic class item here -- kept
+        # as its own branch, separate from the class branch above, so that
+        # it can diverge independently, *e.g.* if primitive alternatives are
+        # ever allowed into a named union.
+        is_v_element = False
+        is_value_type = False
+
+        deserialize_method = Stripped(
+            f"{csharp_naming.class_name(type_anno.items.our_type.name)}FromElement"
+        )
     else:
         raise NotImplementedError(
             f"(mristin) We only handle XML de/serialization of lists containing atomic "
@@ -1284,21 +1374,10 @@ def _generate_deserialize_tuple_property(prop: intermediate.Property) -> Strippe
                     f"AsTupleItemDeserializer(ReadVElementAs{enum_name}, {v_name_literal})"
                 )
             )
-        else:
-            # NOTE (mristin):
-            # A tuple item can only be a primitive value, a constrained primitive,
-            # an enumeration literal or a class instance; see
-            # intermediate._translate._verify_only_simple_type_patterns.
-            assert isinstance(item_type_anno, intermediate.OurTypeAnnotation) and (
-                isinstance(
-                    item_type_anno.our_type,
-                    (intermediate.AbstractClass, intermediate.ConcreteClass),
-                )
-            ), (
-                f"Unexpected tuple item type {item_type_anno} at index {i} "
-                f"for the property {prop.name!r}"
-            )
-
+        elif isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
+            item_type_anno.our_type,
+            (intermediate.AbstractClass, intermediate.ConcreteClass),
+        ):
             our_type = item_type_anno.our_type
             if (
                 isinstance(our_type, intermediate.AbstractClass)
@@ -1314,6 +1393,33 @@ def _generate_deserialize_tuple_property(prop: intermediate.Property) -> Strippe
 
             item_deserializer_exprs.append(
                 Stripped(f"AsTupleItemDeserializer({deserialize_method_name})")
+            )
+
+        elif isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
+            item_type_anno.our_type, intermediate.NamedUnion
+        ):
+            # NOTE (mristin):
+            # A named union is always dispatched by its own discriminator
+            # element, so we treat it the same as a polymorphic class item
+            # here -- kept as its own branch, separate from the class branch
+            # above, so that it can diverge independently, *e.g.* if
+            # primitive alternatives are ever allowed into a named union.
+            deserialize_method_name = (
+                f"{csharp_naming.class_name(item_type_anno.our_type.name)}FromElement"
+            )
+
+            item_deserializer_exprs.append(
+                Stripped(f"AsTupleItemDeserializer({deserialize_method_name})")
+            )
+
+        else:
+            # NOTE (mristin):
+            # A tuple item can only be a primitive value, a constrained primitive,
+            # an enumeration literal, a class instance or a named union; see
+            # intermediate._translate._verify_only_simple_type_patterns.
+            raise AssertionError(
+                f"Unexpected tuple item type {item_type_anno} at index {i} "
+                f"for the property {prop.name!r}"
             )
 
     item_deserializer_exprs_joined = ",\n".join(item_deserializer_exprs)
@@ -1383,6 +1489,12 @@ def _generate_deserialize_property(
                 )
             else:
                 blocks.append(_generate_deserialize_cls_property(prop=prop))
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            blocks.append(
+                _generate_deserialize_named_union_property(prop=prop, cls=cls)
+            )
+
         else:
             assert_never(our_type)
 
@@ -2028,6 +2140,125 @@ internal static Aas.{name}? {name}FromElement(
     return Stripped(writer.getvalue())
 
 
+def _generate_deserialize_impl_named_union_from_element(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """Generate the function to de-serialize a ``named_union`` from an XML element."""
+    name = csharp_naming.class_name(named_union.name)
+
+    blocks = [
+        Stripped(
+            f"""\
+error = null;
+
+SkipNoneWhitespaceAndComments(reader);
+
+if (reader.EOF)
+{{
+{I}error = new Reporting.Error(
+{II}"Expected an XML element, but reached end-of-file");
+{I}return null;
+}}
+
+if (reader.NodeType != Xml.XmlNodeType.Element)
+{{
+{I}error = new Reporting.Error(
+{II}"Expected an XML element, " +
+{II}$"but got a node of type {{reader.NodeType}} " +
+{II}$"with value {{reader.Value}}");
+{I}return null;
+}}"""
+        )
+    ]  # type: List[Stripped]
+
+    case_stmts = []  # type: List[Stripped]
+    for implementer in named_union.implementers:
+        implementer_xml_name_literal = csharp_common.string_literal(
+            naming.xml_class_name(implementer.name)
+        )
+
+        implementer_name = csharp_naming.class_name(implementer.name)
+        from_method_name = csharp_naming.method_name(
+            Identifier(f"from_{implementer.name}")
+        )
+
+        case_stmts.append(
+            Stripped(
+                f"""\
+case {implementer_xml_name_literal}:
+{{
+{I}Aas.{implementer_name}? instance = {implementer_name}FromElement(
+{II}reader, out error);
+{I}if (error != null)
+{I}{{
+{II}return null;
+{I}}}
+{I}if (instance == null)
+{I}{{
+{II}throw new System.InvalidOperationException(
+{III}"Unexpected instance null when error null");
+{I}}}
+{I}return Aas.{name}.{from_method_name}(instance);
+}}"""
+            )
+        )
+
+    case_stmts.append(
+        Stripped(
+            f"""\
+default:
+{I}error = new Reporting.Error(
+{II}$"Unexpected element with the name {{elementName}}");
+{I}return null;"""
+        )
+    )
+
+    switch_writer = io.StringIO()
+    switch_writer.write(
+        f"""\
+string elementName = TryElementName(
+{I}reader, out error);
+if (error != null)
+{{
+{I}return null;
+}}
+
+switch (elementName)
+{{
+"""
+    )
+    for i, case_stmt in enumerate(case_stmts):
+        if i > 0:
+            switch_writer.write("\n")
+        switch_writer.write(textwrap.indent(case_stmt, I))
+
+    switch_writer.write("\n}")
+
+    blocks.append(Stripped(switch_writer.getvalue()))
+
+    writer = io.StringIO()
+    writer.write(
+        f"""\
+/// <summary>
+/// Deserialize an instance of {name} from an XML element.
+/// </summary>
+internal static Aas.{name}? {name}FromElement(
+{I}Xml.XmlReader reader,
+{I}out Reporting.Error? error)
+{{
+"""
+    )
+
+    for i, block in enumerate(blocks):
+        if i > 0:
+            writer.write("\n\n")
+        writer.write(textwrap.indent(block, I))
+
+    writer.write(f"\n}}  // internal static Aas.{name}? {name}FromElement")
+
+    return Stripped(writer.getvalue())
+
+
 def _generate_deserialize_impl(
     symbol_table: intermediate.SymbolTable,
     spec_impls: specific_implementations.SpecificImplementations,
@@ -2121,6 +2352,11 @@ def _generate_deserialize_impl(
                 blocks.append(
                     _generate_deserialize_impl_concrete_cls_from_element(cls=cls)
                 )
+
+    for named_union in symbol_table.named_unions:
+        blocks.append(
+            _generate_deserialize_impl_named_union_from_element(named_union=named_union)
+        )
 
     if len(errors) > 0:
         return None, errors
@@ -2241,6 +2477,11 @@ def _generate_deserialize(symbol_table: intermediate.SymbolTable) -> Stripped:
                 _generate_deserialize_from(name=csharp_naming.class_name(cls.name))
             )
 
+    for named_union in symbol_table.named_unions:
+        blocks.append(
+            _generate_deserialize_from(name=csharp_naming.class_name(named_union.name))
+        )
+
     writer = io.StringIO()
     writer.write(
         """\
@@ -2321,7 +2562,8 @@ private delegate void ElementContentSerializer<T>(
 /// </summary>
 /// <remarks>
 /// This is shared by all the property kinds (primitive, enumeration, class,
-/// interface, list) as they all wrap their content in exactly the same way.
+/// interface, named union, list) as they all wrap their content in exactly
+/// the same way.
 /// </remarks>
 /// <typeparam name="T">Type of the property value</typeparam>
 private static void SerializeElement<T>(
@@ -2420,14 +2662,14 @@ def _generate_tuple_item_serializer_helpers() -> Stripped:
 /// A tuple-typed property is written by <c>SerializeTupleN</c> (see
 /// <see cref="SerializeTuple2{{T0, T1}}" /> for the arity-2 case, *etc.*),
 /// which -- like <see cref="SerializeElement{{T}}" /> -- expects an
-/// <see cref="ElementContentSerializer{{T}}" /> per item. A class item's own
-/// <c>Visit</c> method already has that shape (writing its own element
-/// directly, with no wrapping needed), so it can be passed on unchanged.
-/// A primitive or enumeration item, on the other hand, first needs to be
-/// wrapped in its own positional <c>v1</c>, <c>v2</c>, *etc.* element -- this
-/// adapter closes over the element name so that a tuple-typed property does
-/// not need to spell out that wrapping (start element/write value/end
-/// element) at every item, mirroring how
+/// <see cref="ElementContentSerializer{{T}}" /> per item. A class or named
+/// union item's own <c>Visit</c> method (or overload) already has that shape
+/// (writing its own element directly, with no wrapping needed), so it can be
+/// passed on unchanged. A primitive or enumeration item, on the other hand,
+/// first needs to be wrapped in its own positional <c>v1</c>, <c>v2</c>,
+/// *etc.* element -- this adapter closes over the element name so that
+/// a tuple-typed property does not need to spell out that wrapping (start
+/// element/write value/end element) at every item, mirroring how
 /// <see cref="AsTupleItemDeserializer{{T}}(NamedClassItemDeserializer{{T}}, string)" />
 /// avoids the equivalent on the read side.
 /// </remarks>
@@ -2620,21 +2862,30 @@ if (that.{prop_name} != null)
     return result
 
 
-def _generate_serialize_interface_property_as_content(
+def _generate_serialize_polymorphic_property_as_content(
     prop: intermediate.Property,
 ) -> Stripped:
-    """Generate the serialization of an interface as XML content."""
+    """
+    Generate the serialization of a polymorphic property as XML content.
+
+    A property is polymorphic here if the element to write is picked at
+    run-time from the value itself, dispatched through its own discriminator
+    element -- this is the case both for an interface-typed property and for
+    a named union, so we treat them uniformly.
+    """
     type_anno = intermediate.beneath_optional(prop.type_annotation)
 
     # fmt: off
     assert (
             isinstance(type_anno, intermediate.OurTypeAnnotation)
             and (
+                    # pylint: disable=consider-merging-isinstance
                     isinstance(type_anno.our_type, intermediate.AbstractClass)
                     or (
                             isinstance(type_anno.our_type, intermediate.ConcreteClass)
                             and len(type_anno.our_type.concrete_descendants) > 0
                     )
+                    or isinstance(type_anno.our_type, intermediate.NamedUnion)
             )
     ), "See intermediate._translate._verify_only_simple_type_patterns"
     # fmt: on
@@ -2762,8 +3013,16 @@ w.WriteEndElement();"""
             raise AssertionError("This case should have been handled before.")
 
         elif isinstance(
-            our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+            our_type,
+            (
+                intermediate.AbstractClass,
+                intermediate.ConcreteClass,
+                intermediate.NamedUnion,
+            ),
         ):
+            # A named union has its own ``Visit`` overload in the visitor
+            # (see :py:func:`_generate_union_visit_helper`), so it can be
+            # visited exactly like a class instance here.
             item_write_block = Stripped(
                 """\
 this.Visit(item, w);"""
@@ -2863,28 +3122,35 @@ def _generate_serialize_tuple_property_as_content(
                     f"WriteVElementAs{enum_name}, {v_name_literal})"
                 )
             )
+        elif isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
+            item_type_anno.our_type,
+            (
+                intermediate.AbstractClass,
+                intermediate.ConcreteClass,
+                intermediate.NamedUnion,
+            ),
+        ):
+            # NOTE (mristin):
+            # ``this.Visit`` already writes the item's own element directly
+            # (with no positional wrapping needed), so we can pass it on
+            # unchanged as a bare method group: for a class item, its
+            # ``(IClass, Xml.XmlWriter)`` overload is contravariantly
+            # compatible with ``ElementContentSerializer<T>`` for any more
+            # specific interface ``T``; for a named union item, overload
+            # resolution instead picks the union-specific ``Visit`` overload
+            # (see :py:func:`_generate_union_visit_helper`), which matches
+            # ``T`` exactly.
+            item_serializer_exprs.append(Stripped("this.Visit"))
+
         else:
             # NOTE (mristin):
             # A tuple item can only be a primitive value, a constrained primitive,
-            # an enumeration literal or a class instance; see
+            # an enumeration literal, a class instance or a named union; see
             # intermediate._translate._verify_only_simple_type_patterns.
-            assert isinstance(item_type_anno, intermediate.OurTypeAnnotation) and (
-                isinstance(
-                    item_type_anno.our_type,
-                    (intermediate.AbstractClass, intermediate.ConcreteClass),
-                )
-            ), (
+            raise AssertionError(
                 f"Unexpected tuple item type {item_type_anno} at index {i} "
                 f"for the property {prop.name!r}"
             )
-
-            # NOTE (mristin):
-            # ``this.Visit`` already writes the item's own element directly
-            # (with no positional wrapping needed), and its
-            # ``(IClass, Xml.XmlWriter)`` signature is contravariantly
-            # compatible with ``ElementContentSerializer<T>`` for any more
-            # specific interface ``T``, so we can pass it on unchanged.
-            item_serializer_exprs.append(Stripped("this.Visit"))
 
     item_serializer_exprs_joined = ",\n".join(item_serializer_exprs)
 
@@ -2945,11 +3211,14 @@ def _generate_serialize_property_as_content(prop: intermediate.Property) -> Stri
                 isinstance(our_type, intermediate.AbstractClass)
                 or len(our_type.concrete_descendants) > 0
             ):
-                body = _generate_serialize_interface_property_as_content(prop=prop)
+                body = _generate_serialize_polymorphic_property_as_content(prop=prop)
             else:
                 body = _generate_serialize_concrete_class_property_as_sequence(
                     prop=prop
                 )
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            body = _generate_serialize_polymorphic_property_as_content(prop=prop)
 
         else:
             assert_never(our_type)
@@ -3033,6 +3302,38 @@ public override void {visit_name}(
     )
 
 
+def _generate_union_visit_helper() -> Stripped:
+    """
+    Generate a single ``Visit`` overload shared by every named union.
+
+    A named union is not itself an ``Aas.IClass``, so it can not be dispatched
+    by the inherited, ``IClass``-typed ``Visit`` overload. We add this
+    overload, single-purpose and non-virtual, so that call sites can keep
+    passing ``this.Visit`` around as a plain method group or calling it
+    directly, regardless of whether the value at hand is a class instance or
+    a named union.
+
+    Dispatching over the common, non-generic ``Aas.IUnion`` (see ``generate()``
+    in ``_generate_types.py``) instead of the union's own type means we need
+    only this one overload for *all* named unions, not one per union.
+
+    Should a named union ever be allowed to flatten primitive or enumeration
+    alternatives, only the body of this method has to change (to dispatch on
+    the underlying value's kind) -- every call site stays the same.
+    """
+    return Stripped(
+        f"""\
+private void Visit(
+{I}Aas.IUnion that,
+{I}Xml.XmlWriter writer)
+{{
+{I}this.Visit(
+{II}that.Underlying,
+{II}writer);
+}}"""
+    )
+
+
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_visitor(
     symbol_table: intermediate.SymbolTable,
@@ -3084,6 +3385,9 @@ def _generate_visitor(
             blocks.append(_generate_class_to_sequence(cls=cls))
 
             blocks.append(_generate_visit_for_class(cls=cls))
+
+    if len(symbol_table.named_unions) > 0:
+        blocks.append(_generate_union_visit_helper())
 
     if len(errors) > 0:
         return None, errors

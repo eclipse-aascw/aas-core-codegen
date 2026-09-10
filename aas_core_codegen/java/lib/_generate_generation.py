@@ -222,6 +222,7 @@ public {builder_name} {setter_name}({arg_type} {arg_name}) {{
             content=f"""\
 package {package_name};
 
+import {package}.common.*;
 import {package}.types.enums.*;
 import {package}.types.impl.*;
 import {package}.types.model.*;

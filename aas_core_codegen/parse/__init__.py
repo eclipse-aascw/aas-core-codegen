@@ -33,6 +33,7 @@ ClassUnion = _types.ClassUnion
 ConcreteClass = _types.ConcreteClass
 EnumerationLiteral = _types.EnumerationLiteral
 Enumeration = _types.Enumeration
+NamedUnion = _types.NamedUnion
 MetaModel = _types.MetaModel
 SymbolTable = _types.SymbolTable
 

@@ -1,5 +1,6 @@
 UnverifiedSymbolTable(
   our_types=[],
+  named_unions=[],
   constants=[
     ConstantSet(
       name='Something',

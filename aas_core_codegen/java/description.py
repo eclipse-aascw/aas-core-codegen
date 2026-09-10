@@ -156,6 +156,15 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[List[_Token]]
             reference = Stripped(
                 f"{{@link {self.context.root_package}.types.impl.{name}}}"
             )
+        elif isinstance(element.our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # A named union is represented as a plain class, so we refer to
+            # it by its union name, exactly as we do for a constrained
+            # primitive.
+            name = java_naming.union_name(element.our_type.name)
+            reference = Stripped(
+                f"{{@link {self.context.root_package}.types.model.{name}}}"
+            )
         else:
             assert_never(element.our_type)
 

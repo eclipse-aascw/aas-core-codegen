@@ -481,6 +481,29 @@ def _value_to_type_element_or_type_identifier(
                         ),
                         None,
                     )
+
+            elif isinstance(our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # Unlike a class, a named union always has a choice group -- there
+                # is no "single implementer" bypass, since the union's own name
+                # never corresponds to a real generated complex type, and dispatch
+                # must always go through the per-implementer self-tagging choice.
+                xs_complex_type = ET.Element("xs:complexType")
+                xs_sequence = ET.SubElement(xs_complex_type, "xs:sequence")
+
+                ET.SubElement(
+                    xs_sequence,
+                    "xs:group",
+                    {"ref": xsd_naming.choice_group_name(our_type.name)},
+                )
+
+                return (
+                    _TypeElementOrTypeIdentifier(
+                        element=xs_complex_type,
+                    ),
+                    None,
+                )
+
             else:
                 # noinspection PyTypeChecker
                 assert_never(our_type)
@@ -502,23 +525,33 @@ def _value_to_type_element_or_type_identifier(
                 type_annotation.items, intermediate.OurTypeAnnotation
             ) and isinstance(
                 type_annotation.items.our_type,
-                (intermediate.AbstractClass, intermediate.ConcreteClass),
+                (
+                    intermediate.AbstractClass,
+                    intermediate.ConcreteClass,
+                    intermediate.NamedUnion,
+                ),
             ):
                 # NOTE (mristin):
                 # All the other cases introduce ``<v>`` element to capture the items,
-                # but lists of classes use the name of the class, so we have to handle
-                # it here differently.
+                # but lists of classes (and named unions) use the name of the class
+                # (or, for a union, the per-implementer choice group), so we have to
+                # handle it here differently.
 
                 # NOTE (mristin):
-                # We generate choices only if there are at least one concrete descendant.
-                # Otherwise, the choice is not generated. Hence, we need to reference
-                # a choice only if there is actually one.
+                # We generate choices only if there are at least one concrete
+                # descendant, or if this is a named union (which always dispatches
+                # through a choice group, see the property-level handling above for
+                # why there is no "single implementer" bypass for unions). Otherwise,
+                # the choice is not generated. Hence, we need to reference a choice
+                # only if there is actually one.
                 #
                 # This is especially necessary for abstract classes with no descendants
                 # which we still want to include in the schema. We simply generate an empty
                 # element in the schema for such abstract classes without descendants.
 
-                if len(type_annotation.items.our_type.concrete_descendants) > 0:
+                if isinstance(
+                    type_annotation.items.our_type, intermediate.NamedUnion
+                ) or (len(type_annotation.items.our_type.concrete_descendants) > 0):
                     item_element = ET.Element(
                         "xs:group",
                         {
@@ -621,9 +654,10 @@ def _value_to_type_element_or_type_identifier(
                     item_type_annotation, intermediate.AtomicTypeAnnotationAsTuple
                 ), (
                     "(mristin): Only tuples of atomic types (primitives, "
-                    "constrained primitives, classes and enumerations) are "
-                    "supported at the moment; this should have been caught before "
-                    "by intermediate._translate._verify_only_simple_type_patterns. "
+                    "constrained primitives, classes, enumerations and named "
+                    "unions) are supported at the moment; this should have been "
+                    "caught before by "
+                    "intermediate._translate._verify_only_simple_type_patterns. "
                     "If you see this, please contact the developers."
                 )
 
@@ -631,9 +665,15 @@ def _value_to_type_element_or_type_identifier(
                     item_type_annotation, intermediate.OurTypeAnnotation
                 ) and isinstance(
                     item_type_annotation.our_type,
-                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                    (
+                        intermediate.AbstractClass,
+                        intermediate.ConcreteClass,
+                        intermediate.NamedUnion,
+                    ),
                 ):
-                    if len(item_type_annotation.our_type.concrete_descendants) > 0:
+                    if isinstance(
+                        item_type_annotation.our_type, intermediate.NamedUnion
+                    ) or (len(item_type_annotation.our_type.concrete_descendants) > 0):
                         item_element = ET.Element(
                             "xs:group",
                             {
@@ -871,6 +911,30 @@ def _generate_choice_group(cls: intermediate.ClassUnion) -> ET.Element:
         )
 
     xs_group = ET.Element("xs:group", {"name": xsd_naming.choice_group_name(cls.name)})
+    xs_group.append(xs_choice)
+    return xs_group
+
+
+def _generate_choice_group_for_named_union(
+    named_union: intermediate.NamedUnion,
+) -> ET.Element:
+    """Generate a group that defines a choice over a named union's implementers."""
+    xs_choice = ET.Element("xs:choice")
+
+    for implementer in named_union.implementers:
+        xs_choice.append(
+            ET.Element(
+                "xs:element",
+                {
+                    "name": naming.xml_class_name(implementer.name),
+                    "type": xsd_naming.type_name(implementer.name),
+                },
+            )
+        )
+
+    xs_group = ET.Element(
+        "xs:group", {"name": xsd_naming.choice_group_name(named_union.name)}
+    )
     xs_group.append(xs_choice)
     return xs_group
 
@@ -1241,6 +1305,16 @@ def _generate(
                 if len(our_type.concrete_descendants) > 0:
                     choice_group = _generate_choice_group(cls=our_type)
                     elements.append(choice_group)
+
+            elif isinstance(our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # A named union has no complex type or element of its own -- it
+                # is entirely represented by its choice group over its
+                # implementers.
+                elements = [
+                    _generate_choice_group_for_named_union(named_union=our_type)
+                ]
+
             else:
                 # noinspection PyTypeChecker
                 assert_never(our_type)

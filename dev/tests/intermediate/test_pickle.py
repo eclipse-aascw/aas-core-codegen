@@ -951,6 +951,58 @@ class TestPickle(unittest.TestCase):
 
         self.assertEqual(unpickled.name, "some_method")
 
+    def test_named_union(self) -> None:
+        source = """\
+@serialization(with_model_type=True)
+class Some_class:
+    some_property: int
+
+    def __init__(self, some_property: int) -> None:
+        self.some_property = some_property
+
+@serialization(with_model_type=True)
+class Another_class:
+    another_property: int
+
+    def __init__(self, another_property: int) -> None:
+        self.another_property = another_property
+
+Some_union = Union[Some_class, Another_class]
+
+class Something:
+    some_property: Some_union
+
+    def __init__(self, some_property: Some_union) -> None:
+        self.some_property = some_property
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        symbol_table, error = tests.common.translate_source_to_intermediate(
+            source=source
+        )
+        if error is not None:
+            raise AssertionError(tests.common.most_underlying_messages(error))
+        assert symbol_table is not None
+
+        some_union = symbol_table.must_find_named_union(Identifier("Some_union"))
+
+        pickled_data = pickle.dumps(some_union)
+        unpickled = pickle.loads(pickled_data)
+
+        assert isinstance(unpickled, intermediate.NamedUnion)
+
+        self.assertEqual(unpickled.name, "Some_union")
+        self.assertListEqual(
+            ["Some_class", "Another_class"],
+            [member.name for member in unpickled.members],
+        )
+        self.assertListEqual(
+            ["Some_class", "Another_class"],
+            [implementer.name for implementer in unpickled.implementers],
+        )
+
     def test_optional_type_annotation(self) -> None:
         source = textwrap.dedent(
             """\

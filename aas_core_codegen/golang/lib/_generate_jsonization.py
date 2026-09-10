@@ -499,6 +499,207 @@ func {function_name}(
     )
 
 
+def _generate_named_union_from_jsonable(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """Generate the de-serialization function for ``named_union``."""
+    name = golang_naming.union_name(named_union.name)
+
+    function_name = golang_naming.function_name(
+        Identifier(f"{named_union.name}_from_jsonable")
+    )
+
+    with_model_type = []  # type: List[intermediate.ConcreteClass]
+    without_model_type = []  # type: List[intermediate.ConcreteClass]
+
+    for implementer in named_union.implementers:
+        if implementer.serialization.with_model_type:
+            with_model_type.append(implementer)
+        else:
+            without_model_type.append(implementer)
+
+    blocks = [
+        Stripped(
+            f"""\
+if jsonable == nil {{
+{I}err = newDeserializationError(
+{II}"Expected a JSON object, but got null",
+{I})
+{I}return
+}}"""
+        ),
+        Stripped(
+            f"""\
+m, ok := jsonable.(map[string]interface{{}})
+if !ok {{
+{I}err = newDeserializationError(
+{II}fmt.Sprintf(
+{III}"Expected a JSON object, but got %T",
+{III}jsonable,
+{II}),
+{I})
+{I}return
+}}"""
+        ),
+    ]  # type: List[Stripped]
+
+    if len(with_model_type) > 0:
+        case_blocks = []  # type: List[Stripped]
+        for implementer in with_model_type:
+            model_type_literal = golang_common.string_literal(
+                naming.json_model_type(implementer.name)
+            )
+
+            implementer_interface_name = golang_naming.interface_name(implementer.name)
+            implementer_from_jsonable = golang_naming.function_name(
+                Identifier(f"{implementer.name}_from_jsonable")
+            )
+            from_method_name = golang_naming.function_name(
+                Identifier(f"new_{named_union.name}_from_{implementer.name}")
+            )
+
+            case_blocks.append(
+                Stripped(
+                    f"""\
+case {model_type_literal}:
+{I}var instance aastypes.{implementer_interface_name}
+{I}instance, err = {implementer_from_jsonable}(
+{II}m,
+{I})
+{I}if err != nil {{
+{II}return
+{I}}}
+{I}result = aastypes.{from_method_name}(
+{II}instance,
+{I})
+{I}return"""
+                )
+            )
+
+        case_blocks.append(
+            Stripped(
+                f"""\
+default:
+{I}err = newDeserializationError(
+{II}fmt.Sprintf(
+{III}"Unexpected model type for the union {name}: %s",
+{III}modelType,
+{II}),
+{I})
+{I}return"""
+            )
+        )
+
+        case_blocks_joined = "\n".join(case_blocks)
+
+        blocks.append(
+            Stripped(
+                f"""\
+modelTypeAny, foundModelType := m["modelType"]
+if foundModelType {{
+{I}var modelType string
+{I}modelType, ok = modelTypeAny.(string)
+{I}if !ok {{
+{II}err = newDeserializationError(
+{III}fmt.Sprintf(
+{IIII}"Expected the property modelType to be a string, "+
+{IIIII}"but got %T",
+{IIII}modelTypeAny,
+{III}),
+{II})
+{II}return
+{I}}}
+
+{I}switch modelType {{
+{I}{indent_but_first_line(case_blocks_joined, I)}
+{I}}}
+}}"""
+            )
+        )
+
+    for implementer in without_model_type:
+        implementer_interface_name = golang_naming.interface_name(implementer.name)
+        implementer_from_jsonable = golang_naming.function_name(
+            Identifier(f"{implementer.name}_from_jsonable")
+        )
+        from_method_name = golang_naming.function_name(
+            Identifier(f"new_{named_union.name}_from_{implementer.name}")
+        )
+
+        required_props = [
+            prop
+            for prop in implementer.properties
+            if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
+        ]
+        assert len(required_props) > 0, (
+            f"Expected at least one required property for the structurally "
+            f"dispatched implementer {implementer.name!r} of "
+            f"the union {named_union.name!r}; this should have already been "
+            f"verified in the intermediate stage."
+        )
+
+        found_names = [
+            golang_naming.variable_name(Identifier(f"found_{i}"))
+            for i in range(len(required_props))
+        ]
+
+        found_checks = "\n".join(
+            f"_, {found_name} := m[{golang_common.string_literal(prop.json_name)}]"
+            for found_name, prop in zip(found_names, required_props)
+        )
+
+        found_condition = " && ".join(found_names)
+
+        blocks.append(
+            Stripped(
+                f"""\
+{{
+{I}{indent_but_first_line(found_checks, I)}
+{I}if {found_condition} {{
+{II}var instance aastypes.{implementer_interface_name}
+{II}instance, err = {implementer_from_jsonable}(
+{III}m,
+{II})
+{II}if err != nil {{
+{III}return
+{II}}}
+{II}result = aastypes.{from_method_name}(
+{III}instance,
+{II})
+{II}return
+{I}}}
+}}"""
+            )
+        )
+
+    blocks.append(
+        Stripped(
+            f"""\
+err = newDeserializationError(
+{I}"Could not determine the concrete type of the union {name}: " +
+{II}"none of its implementers matched",
+)
+return"""
+        )
+    )
+
+    body = Stripped("\n\n".join(blocks))
+
+    return Stripped(
+        f"""\
+// Parse `jsonable` as an instance of [aastypes.{name}],
+// or return an error.
+func {function_name}(
+{I}jsonable interface{{}},
+) (
+{I}result *aastypes.{name},
+{I}err error,
+) {{
+{I}{indent_but_first_line(body, I)}
+}}"""
+    )
+
+
 def _generate_class_from_jsonable(cls: intermediate.ClassUnion) -> Stripped:
     """Generate the de-serialization function for a class that involves a dispatch."""
     function_name = golang_naming.function_name(Identifier(f"{cls.name}_from_jsonable"))
@@ -604,6 +805,11 @@ def _determine_parse_function_for_atomic_value(
                 intermediate.ConcreteClass,
             ),
         ):
+            function_name = golang_naming.function_name(
+                Identifier(f"{our_type.name}_from_jsonable")
+            )
+
+        elif isinstance(our_type, intermediate.NamedUnion):
             function_name = golang_naming.function_name(
                 Identifier(f"{our_type.name}_from_jsonable")
             )
@@ -1343,6 +1549,32 @@ func {function_name}(that aastypes.{enum_name}) (interface{{}}, error) {{
     )
 
 
+def _generate_union_as_jsonable_interface() -> Stripped:
+    """
+    Generate the wrapper so a named-union tuple item is a bare function reference.
+
+    ``ToJsonable`` takes an ``aastypes.IClass``, which a named union is
+    deliberately not, but every named union exposes its underlying instance
+    through ``Underlying`` -- constraining this wrapper's type parameter to
+    that single method (instead of a fixed union type) lets the very same
+    one be passed on bare, uninstantiated, for every union-typed tuple item,
+    mirroring :py:func:`_generate_class_as_jsonable_interface`.
+    """
+    return Stripped(
+        f"""\
+// Constrain a generic type to a named union, giving access to its
+// underlying instance for serialization.
+type namedUnion interface {{
+{I}Underlying() aastypes.IClass
+}}
+
+// Serialize `that` union to a JSON-able value, or return an error.
+func unionAsJsonableInterface[T namedUnion](that T) (interface{{}}, error) {{
+{I}return ToJsonable(that.Underlying())
+}}"""
+    )
+
+
 def _tuple_item_serializer_function(
     type_annotation: intermediate.AtomicTypeAnnotation,
 ) -> Stripped:
@@ -1396,6 +1628,11 @@ def _tuple_item_serializer_function(
             type_annotation=type_annotation, types_package=Identifier("aastypes")
         )
         return Stripped(f"classAsJsonableInterface[{item_type}]")
+    elif isinstance(our_type, intermediate.NamedUnion):
+        item_type = golang_common.generate_type(
+            type_annotation=type_annotation, types_package=Identifier("aastypes")
+        )
+        return Stripped(f"unionAsJsonableInterface[{item_type}]")
     elif isinstance(our_type, intermediate.ConstrainedPrimitive):
         raise AssertionError(
             f"Unexpected {our_type=}: a constrained primitive should have "
@@ -1639,6 +1876,17 @@ bytesToJsonable(
                     f"""\
 ToJsonable(
 {I}{access_expression},
+)"""
+                ),
+                True,
+            )
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            return (
+                Stripped(
+                    f"""\
+ToJsonable(
+{I}{access_expression}.Underlying(),
 )"""
                 ),
                 True,
@@ -2070,6 +2318,8 @@ func (de *DeserializationError) PathString() string {{
                 blocks.append(
                     _generate_concrete_class_from_map_without_dispatch(cls=our_type)
                 )
+        elif isinstance(our_type, intermediate.NamedUnion):
+            blocks.append(_generate_named_union_from_jsonable(named_union=our_type))
         else:
             # noinspection PyTypeChecker
             assert_never(our_type)
@@ -2142,6 +2392,8 @@ func (se *SerializationError) PathString() string {{
         blocks.append(_generate_class_as_jsonable_interface())
         for enumeration in symbol_table.enumerations:
             blocks.append(_generate_enum_as_jsonable_interface(enumeration))
+        if len(symbol_table.named_unions) > 0:
+            blocks.append(_generate_union_as_jsonable_interface())
         for arity in tuple_arities:
             blocks.append(_generate_serialize_tuple_helper(arity))
 

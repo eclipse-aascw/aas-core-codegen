@@ -249,6 +249,28 @@ def generate_type(
 
             return Stripped(f"{types_package}.{interface_name}")
 
+        elif isinstance(our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # A named union is represented as a plain Golang struct, not an
+            # interface -- unlike a class, the union struct itself is never
+            # enhanced or wrapped, since it is merely a closed, tagged
+            # container. Enhancement of the *instance held inside* the union
+            # is unaffected by this: that instance is still typed as an
+            # interface field within the union struct (see
+            # ``_generate_named_union_struct`` in ``lib/_generate_types.py``),
+            # so it is enhanced/wrapped like any other instance -- the
+            # generated ``Wrap`` recurses into it via ``Underlying``/
+            # ``FromUnderlying`` (see ``lib/_generate_enhancing.py``).
+            union_name = golang_naming.union_name(our_type.name)
+
+            if types_package is None:
+                return Stripped(f"*{union_name}")
+
+            return Stripped(f"*{types_package}.{union_name}")
+
+        else:
+            assert_never(our_type)
+
     elif isinstance(type_annotation, intermediate.ListTypeAnnotation):
         item_type = generate_type(
             type_annotation=type_annotation.items, types_package=types_package

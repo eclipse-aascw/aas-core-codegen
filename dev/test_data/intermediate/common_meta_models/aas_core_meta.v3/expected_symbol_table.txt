@@ -28379,6 +28379,7 @@ SymbolTable(
     'Reference to our type Lang_string_short_name_type_IEC_61360',
     'Reference to our type Lang_string_definition_type_IEC_61360',
     'Reference to our type Data_specification_IEC_61360'],
+  named_unions=[],
   constants=[
     ConstantSetOfPrimitives(
       name='Valid_categories_for_data_element',

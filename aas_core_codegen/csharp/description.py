@@ -192,6 +192,12 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[_NodeUnion]):
             else:
                 assert_never(element.our_type)
 
+        elif isinstance(element.our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # A named union is represented as a plain C# class, so we refer to it
+            # by its class name, exactly as we do for a concrete class.
+            name = csharp_naming.class_name(element.our_type.name)
+
         else:
             # NOTE (mristin, 2022-03-30):
             # This is a very special case where we had problems with an interface.

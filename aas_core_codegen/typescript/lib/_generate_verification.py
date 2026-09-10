@@ -691,15 +691,18 @@ def _transpile_invariant(
     return Stripped(writer.getvalue()), None
 
 
-OurTypeExceptEnumeration = Union[
+OurTypeExceptEnumerationAndNamedUnion = Union[
     intermediate.ConstrainedPrimitive,
     intermediate.AbstractClass,
     intermediate.ConcreteClass,
 ]
 assert_union_without_excluded(
     original_union=intermediate.OurType,
-    subset_union=OurTypeExceptEnumeration,
-    excluded=[intermediate.Enumeration],
+    subset_union=OurTypeExceptEnumerationAndNamedUnion,
+    # NOTE (mristin):
+    # Named unions have no verification logic of their own (no properties or
+    # invariants), so they are excluded here just like enumerations.
+    excluded=[intermediate.Enumeration, intermediate.NamedUnion],
 )
 
 
@@ -829,7 +832,12 @@ for (const error of {function_name}(
             )
 
         elif isinstance(
-            type_anno.our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+            type_anno.our_type,
+            (
+                intermediate.AbstractClass,
+                intermediate.ConcreteClass,
+                intermediate.NamedUnion,
+            ),
         ):
             for_error_of_this_transform = f"""\
 for (const error of this.transformWithContext(that.{prop_name}, context))"""
@@ -883,7 +891,11 @@ for (const error of this.transformWithContext(
 
             elif isinstance(
                 type_anno.items.our_type,
-                (intermediate.AbstractClass, intermediate.ConcreteClass),
+                (
+                    intermediate.AbstractClass,
+                    intermediate.ConcreteClass,
+                    intermediate.NamedUnion,
+                ),
             ):
                 item_error_generation_expr = Stripped(
                     "this.transformWithContext(item, context)"
@@ -975,7 +987,11 @@ for (const error of {verify_function}(
 
                 elif isinstance(
                     item_type_anno.our_type,
-                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                    (
+                        intermediate.AbstractClass,
+                        intermediate.ConcreteClass,
+                        intermediate.NamedUnion,
+                    ),
                 ):
                     for_error_of_item = Stripped(
                         f"""\
@@ -1681,12 +1697,18 @@ export function *verify(
                 blocks.append(constrained_primitive_block)
 
         elif isinstance(
-            our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+            our_type,
+            (
+                intermediate.AbstractClass,
+                intermediate.ConcreteClass,
+                intermediate.NamedUnion,
+            ),
         ):
             # NOTE (mristin, 2022-11-12):
             # We provide a general dispatch function for the most abstract
             # class ``Class``.
             pass
+
         else:
             # noinspection PyTypeChecker
             assert_never(our_type)

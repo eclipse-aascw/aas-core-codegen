@@ -314,6 +314,11 @@ class Test_cpp(_TestCase):
             target=aas_core_codegen.main.Target.CPP, case_name="tuples"
         )
 
+    def test_expected_unions(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.CPP, case_name="unions"
+        )
+
     def test_unexpected_conflict_between_constructor_arguments(self) -> None:
         self._run_unexpected_test(
             target=aas_core_codegen.main.Target.CPP,
@@ -390,6 +395,11 @@ class Test_csharp(_TestCase):
             target=aas_core_codegen.main.Target.CSHARP, case_name="tuples"
         )
 
+    def test_expected_unions(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.CSHARP, case_name="unions"
+        )
+
     def test_unexpected_conflict_between_transformed_keyword_and_property(self) -> None:
         self._run_unexpected_test(
             target=aas_core_codegen.main.Target.CSHARP,
@@ -464,6 +474,11 @@ class Test_golang(_TestCase):
     def test_expected_tuples(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.GOLANG, case_name="tuples"
+        )
+
+    def test_expected_unions(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.GOLANG, case_name="unions"
         )
 
     def test_unexpected_conflict_between_transformed_keyword_and_property(self) -> None:
@@ -545,6 +560,11 @@ class Test_java(_TestCase):
     def test_expected_tuples(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.JAVA, case_name="tuples"
+        )
+
+    def test_expected_unions(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.JAVA, case_name="unions"
         )
 
     def test_unexpected_conflict_between_constructor_arguments(self) -> None:
@@ -666,6 +686,11 @@ class Test_jsonschema(_TestCase):
             target=aas_core_codegen.main.Target.JSONSCHEMA, case_name="tuples"
         )
 
+    def test_expected_unions(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.JSONSCHEMA, case_name="unions"
+        )
+
 
 class Test_python(_TestCase):
     def test_expected_aas_core_meta_v3(self) -> None:
@@ -734,6 +759,11 @@ class Test_python(_TestCase):
     def test_expected_tuples(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.PYTHON, case_name="tuples"
+        )
+
+    def test_expected_unions(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.PYTHON, case_name="unions"
         )
 
     def test_unexpected_conflict_between_constructor_arguments(self) -> None:
@@ -822,6 +852,11 @@ class Test_typescript(_TestCase):
     def test_expected_tuples(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.TYPESCRIPT, case_name="tuples"
+        )
+
+    def test_expected_unions(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.TYPESCRIPT, case_name="unions"
         )
 
     def test_unexpected_conflict_between_constructor_arguments(self) -> None:
@@ -936,6 +971,11 @@ class Test_xsd(_TestCase):
     def test_expected_tuples(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.XSD, case_name="tuples"
+        )
+
+    def test_expected_unions(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.XSD, case_name="unions"
         )
 
 

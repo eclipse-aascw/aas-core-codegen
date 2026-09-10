@@ -149,6 +149,16 @@ def generate_type(
                 our_type_prefix + csharp_naming.interface_name(our_type.name)
             )
 
+        elif isinstance(our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # A named union is represented as a plain C# class, not an interface --
+            # it is a closed set of alternatives, so there is no need to allow
+            # custom enhancements or wrappings the way we do for the classes.
+            return Stripped(our_type_prefix + csharp_naming.class_name(our_type.name))
+
+        else:
+            assert_never(our_type)
+
     elif isinstance(type_annotation, intermediate.ListTypeAnnotation):
         item_type = generate_type(
             type_annotation=type_annotation.items, our_type_qualifier=our_type_qualifier

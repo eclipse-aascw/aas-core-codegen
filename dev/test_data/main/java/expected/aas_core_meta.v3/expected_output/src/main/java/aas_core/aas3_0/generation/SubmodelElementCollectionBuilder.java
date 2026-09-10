@@ -1,5 +1,6 @@
 package aas_core.aas3_0.generation;
 
+import aas_core.aas3_0.common.*;
 import aas_core.aas3_0.types.enums.*;
 import aas_core.aas3_0.types.impl.*;
 import aas_core.aas3_0.types.model.*;

@@ -105,6 +105,7 @@ SymbolTable(
     'Reference to our type Something'],
   concrete_classes=[
     'Reference to our type Something'],
+  named_unions=[],
   constants=[],
   constants_by_name=...,
   verification_functions=[],

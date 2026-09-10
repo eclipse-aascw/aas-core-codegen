@@ -2742,6 +2742,147 @@ class MetaModel:
 ClassUnion = Union[AbstractClass, ConcreteClass]
 
 
+class NamedUnion:
+    """
+    Represent a named union of classes (and/or other named unions) in the meta-model.
+
+    For example:
+
+    .. code-block::
+
+        Xxx = Union[Yyy, Zzz]
+
+    A member may itself be another named union, in which case it contributes its
+    own (already flattened) :attr:`implementers` to this union's, transitively —
+    a named union may not be its own member, directly or transitively (no cycles).
+
+    Unlike :class:`Interface`, a named union is *not* synthesized from a single
+    base class's descendants — it is directly declared in the meta-model, and
+    its members need not share any common ancestor or structure.
+    """
+
+    #: Name of the named union
+    name: Final[Identifier]
+
+    # region Members
+
+    # NOTE (mristin):
+    # We have to decorate members with ``@property`` so that the translation code
+    # is forced to use ``_set_members``.
+
+    _members: Sequence[Union["ClassUnion", "NamedUnion"]]
+
+    # endregion
+
+    #: Description of the named union, if any
+    description: Final[Optional[DescriptionOfOurType]]
+
+    #: Relation to the named union from the parse stage
+    parsed: Final[parse.NamedUnion]
+
+    # region Implementers
+
+    # NOTE (mristin):
+    # We have to decorate implementers with ``@property`` so that the translation
+    # code is forced to use ``_set_implementers``.
+
+    _implementers: Sequence["ConcreteClass"]
+
+    def __init__(
+        self,
+        name: Identifier,
+        description: Optional[DescriptionOfOurType],
+        parsed: parse.NamedUnion,
+    ) -> None:
+        self.name = name
+        self.description = description
+        self.parsed = parsed
+
+        # NOTE (mristin):
+        # We use a placeholder for the members as we can not resolve them at this
+        # point in the translation (the meta-model may contain forward references).
+        self._members = []
+
+        # NOTE (mristin):
+        # Likewise, the implementers can only be computed once the members are
+        # resolved and every member class's descendants have been resolved.
+        self._implementers = []
+
+    @property
+    def members(self) -> Sequence[Union["ClassUnion", "NamedUnion"]]:
+        """
+        Get the directly declared members of the union.
+
+        A member is either a class or another named union.
+        """
+        return self._members
+
+    # fmt: off
+    @require(
+        lambda members: len(members) >= 1,
+        "At least one member in the named union"
+    )
+    @require(
+        lambda members:
+        len(members) == len(set(id(member) for member in members)),
+        "Unique members in the named union"
+    )
+    # fmt: on
+    def _set_members(
+        self, members: Sequence[Union["ClassUnion", "NamedUnion"]]
+    ) -> None:
+        """
+        Set the members of the named union.
+
+        This method is expected to be called only during the translation phase,
+        after any named-union members have themselves had *their* members
+        resolved (*i.e.*, in the topological order over the named-union
+        dependency graph).
+        """
+        self._members = members
+
+    # endregion
+
+    @property
+    def implementers(self) -> Sequence["ConcreteClass"]:
+        """
+        Get the concrete classes which can appear as a value of this union.
+
+        This *flattens* :attr:`members`, recursively:
+
+        * a member which is itself a concrete class with no descendants
+          contributes itself;
+        * an abstract member, or a concrete member with descendants, contributes
+          its :attr:`Class.concrete_descendants` instead (never the member
+          itself, since an abstract class can not be instantiated);
+        * a member which is itself a named union contributes its own (already
+          flattened) :attr:`implementers`.
+
+        This is the set of classes that de/serialization dispatch for this union
+        needs to distinguish between.
+        """
+        return self._implementers
+
+    def _set_implementers(self, implementers: Sequence["ConcreteClass"]) -> None:
+        """
+        Set the flattened, concrete implementers of the named union.
+
+        This method is expected to be called only during the translation phase,
+        after :attr:`members` has been resolved, every member class's
+        :attr:`Class.concrete_descendants` has been resolved, and — for any
+        member which is itself a named union — that member's own
+        :attr:`implementers` has already been resolved (*i.e.*, in the
+        topological order over the named-union dependency graph).
+        """
+        self._implementers = implementers
+
+    def __repr__(self) -> str:
+        """Represent the instance as a string for easier debugging."""
+        return (
+            f"<{_MODULE_NAME}.{self.__class__.__name__} {self.name} at 0x{id(self):x}>"
+        )
+
+
 class SymbolTable:
     """Represent all the symbols of the intermediate representation."""
 
@@ -2780,6 +2921,9 @@ class SymbolTable:
     #: List all the concrete classes in the symbol table
     concrete_classes: Final[Sequence["ConcreteClass"]]
 
+    #: List all the named unions in the symbol table
+    named_unions: Final[Sequence["NamedUnion"]]
+
     # fmt: off
     @require(
         lambda our_types: (
@@ -2811,6 +2955,13 @@ class SymbolTable:
         all(
             self.must_find_enumeration(enumeration.name)
             for enumeration in self.enumerations
+        )
+    )
+    @ensure(
+        lambda self:
+        all(
+            self.must_find_named_union(named_union.name)
+            for named_union in self.named_unions
         )
     )
     @ensure(
@@ -2905,6 +3056,10 @@ class SymbolTable:
             if isinstance(our_type, ConstrainedPrimitive)
         ]
 
+        self.named_unions = [
+            our_type for our_type in our_types if isinstance(our_type, NamedUnion)
+        ]
+
         self._name_to_our_type = {our_type.name: our_type for our_type in our_types}
 
     def find_our_type(self, name: Identifier) -> Optional["OurType"]:
@@ -2920,6 +3075,28 @@ class SymbolTable:
         result = self.find_our_type(name)
         if result is None:
             raise KeyError(name)
+
+        return result
+
+    def must_find_named_union(self, name: Identifier) -> "NamedUnion":
+        """
+        Find the named union with the given ``name``.
+
+        :raise: :py:class:`KeyError` if the ``name`` is not in our types.
+        :raise:
+            :py:class:`TypeError` if the ``name`` is our type,
+            but is not a named union.
+        """
+        result = self.find_our_type(name)
+        if result is None:
+            raise KeyError(name)
+
+        if not isinstance(result, NamedUnion):
+            raise TypeError(
+                f"Found {name} in our types; "
+                f"expected an instance of {NamedUnion.__name__}, "
+                f"but got {type(result)}: {result}"
+            )
 
         return result
 
@@ -3028,6 +3205,31 @@ class SymbolTable:
             raise TypeError(
                 f"Found {name} in our types; "
                 f"expected an instance of {ConcreteClass.__name__}, "
+                f"but got {type(result)}: {result}"
+            )
+
+        return result
+
+    def must_find_class_or_named_union(
+        self, name: Identifier
+    ) -> Union["ClassUnion", "NamedUnion"]:
+        """
+        Find the class or the named union with the given ``name``.
+
+        :raise: :py:class:`KeyError` if the ``name`` is not in our types.
+        :raise:
+            :py:class:`TypeError` if the ``name`` is our type, but is neither a class
+            nor a named union
+        """
+        result = self.find_our_type(name)
+        if result is None:
+            raise KeyError(name)
+
+        if not isinstance(result, (AbstractClass, ConcreteClass, NamedUnion)):
+            raise TypeError(
+                f"Found {name} in our types; "
+                f"expected an instance of either {AbstractClass.__name__}, "
+                f"{ConcreteClass.__name__} or {NamedUnion.__name__}, "
                 f"but got {type(result)}: {result}"
             )
 
@@ -3232,6 +3434,11 @@ def map_descendability(
                 result = False
             elif isinstance(a_type_annotation.our_type, Class):
                 result = True
+            elif isinstance(a_type_annotation.our_type, NamedUnion):
+                # NOTE (mristin):
+                # A named union references classes (its members), so it is
+                # descendable, just like a plain class reference.
+                result = True
             else:
                 assert_never(a_type_annotation.our_type)
 
@@ -3377,9 +3584,20 @@ assert ClassUnionAsTuple == get_args(ClassUnion)
 MethodUnion = Union[UnderstoodMethod, ImplementationSpecificMethod]
 assert_union_of_descendants_exhaustive(union=MethodUnion, base_class=Method)
 
-OurType = Union[Enumeration, ConstrainedPrimitive, ClassUnion]
+OurType = Union[Enumeration, ConstrainedPrimitive, ClassUnion, NamedUnion]
 
-OurTypeExceptEnumeration = Union[ConstrainedPrimitive, ClassUnion]
+# NOTE (mristin):
+# A named union does not participate in the *inheritance* hierarchy (it has no
+# properties, methods, invariants or serialization settings of its own), but it
+# is still included in ``OurTypeExceptEnumeration``/``our_types_topologically_sorted``
+# — unlike ``Enumeration`` — because downstream code generation needs the named
+# unions ordered *after* all of their member classes (some targets, such as C++,
+# require types to be declared before they are used). ``translate()`` appends
+# the named unions after all the classes in ``our_types_topologically_sorted``,
+# which is a valid topological order since a named union may not be a member of
+# another named union (no unions-of-unions), so every named union only depends
+# on classes, all of which already precede it in the list.
+OurTypeExceptEnumeration = Union[ConstrainedPrimitive, ClassUnion, NamedUnion]
 assert_union_without_excluded(
     original_union=OurType,
     subset_union=OurTypeExceptEnumeration,

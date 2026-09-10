@@ -30,6 +30,7 @@ SymbolTable(
   constrained_primitives=[],
   classes=[],
   concrete_classes=[],
+  named_unions=[],
   constants=[
     ConstantSetOfEnumerationLiterals(
       name='Something',

@@ -1,0 +1,1 @@
+Expected the members of the named union 'Some_union' to be classes, but the member 'int' is a primitive type

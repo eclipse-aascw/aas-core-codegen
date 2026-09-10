@@ -85,6 +85,7 @@ UnverifiedSymbolTable(
       node=...,
       properties_by_name=...,
       methods_by_name=...)],
+  named_unions=[],
   constants=[],
   verification_functions=[],
   meta_model=MetaModel(

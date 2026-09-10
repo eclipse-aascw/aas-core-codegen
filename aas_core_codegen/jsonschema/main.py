@@ -238,6 +238,14 @@ def _define_type(
                         None,
                     )
 
+            elif isinstance(type_annotation.our_type, intermediate.NamedUnion):
+                return (
+                    collections.OrderedDict(
+                        [("$ref", f"#/definitions/{model_type}_choice")]
+                    ),
+                    None,
+                )
+
             else:
                 assert_never(type_annotation.our_type)
 
@@ -648,6 +656,27 @@ def _generate_choice_definition(
     return {f"{naming.json_model_type(cls.name)}_choice": {"oneOf": one_of}}
 
 
+def _generate_choice_definition_for_named_union(
+    named_union: intermediate.NamedUnion,
+) -> MutableMapping[str, Any]:
+    """
+    Generate the definition of dispatching through ``oneOf`` for a named union.
+
+    Unlike :func:`_generate_choice_definition`, this always dispatches over
+    ``named_union.implementers``, which is already the fully flattened set of
+    concrete classes (including, transitively, through any named-union member)
+    -- there is no abstract/concrete distinction to make here.
+
+    The definitions are to be *extended* with the resulting mapping.
+    """
+    one_of = [
+        {"$ref": f"#/definitions/{naming.json_model_type(implementer.name)}"}
+        for implementer in named_union.implementers
+    ]
+
+    return {f"{naming.json_model_type(named_union.name)}_choice": {"oneOf": one_of}}
+
+
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_concrete_definition(
     cls: intermediate.ClassUnion,
@@ -998,6 +1027,17 @@ def generate(
 
                     # We do not generate any concrete definition for an abstract class.
                     pass
+
+            elif isinstance(our_type, intermediate.NamedUnion):
+                update_error = definitions.update_for(
+                    our_type=our_type,
+                    extension=_generate_choice_definition_for_named_union(
+                        named_union=our_type
+                    ),
+                )
+                if update_error is not None:
+                    errors.append(update_error)
+
             else:
                 assert_never(our_type)
 

@@ -155,8 +155,17 @@ def _parse_function_for_atomic_type(
     elif isinstance(type_annotation, intermediate.OurTypeAnnotation):
         our_type = type_annotation.our_type
 
+        # NOTE (mristin):
+        # A class or a named union is never de-serialized as an atomic text
+        # value -- it always dispatches on the local name of the XML element,
+        # see :py:func:`_parse_atomic_property`.
         assert not isinstance(
-            our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+            our_type,
+            (
+                intermediate.AbstractClass,
+                intermediate.ConcreteClass,
+                intermediate.NamedUnion,
+            ),
         )
 
         if isinstance(our_type, intermediate.Enumeration):
@@ -231,6 +240,15 @@ def _dispatch_parse_element_function_name(
     )
 
 
+def _dispatch_parse_element_function_name_for_named_union(
+    named_union: intermediate.NamedUnion,
+) -> Identifier:
+    """Generate the name of the function to dispatch-parse the ``named_union``."""
+    return typescript_naming.function_name(
+        Identifier(f"dispatch_parse_{named_union.name}_element")
+    )
+
+
 def _parse_atomic_property(
     type_anno: intermediate.AtomicTypeAnnotation,
 ) -> Tuple[Stripped, Stripped]:
@@ -247,6 +265,29 @@ def _parse_atomic_property(
         a primitive, an enumeration, or a single class/interface
     :return: generated TS statements, and the expression of the parsed value
     """
+    if isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+        type_anno.our_type, intermediate.NamedUnion
+    ):
+        # NOTE (mristin):
+        # A named union has no element tag of its own, so we always dispatch
+        # on the local name of the next XML element, exactly as we do for an
+        # abstract class or a concrete class with descendants.
+        dispatch_function_name = _dispatch_parse_element_function_name_for_named_union(
+            named_union=type_anno.our_type
+        )
+
+        return (
+            Stripped(
+                f"""\
+const instanceOrError = {dispatch_function_name}(cursor);
+if (instanceOrError.error !== null) {{
+{I}propertyError = instanceOrError.error;
+{I}break;
+}}"""
+            ),
+            Stripped("instanceOrError.mustValue()"),
+        )
+
     if not (
         isinstance(type_anno, intermediate.OurTypeAnnotation)
         and isinstance(
@@ -341,7 +382,22 @@ def _parse_list_property(
         f"developers if you need this feature."
     )
 
-    if not (
+    if isinstance(type_anno.items, intermediate.OurTypeAnnotation) and isinstance(
+        type_anno.items.our_type, intermediate.NamedUnion
+    ):
+        # NOTE (mristin):
+        # A named union has no element tag of its own, so we always dispatch
+        # on the local name of the next XML element, exactly as we do for an
+        # abstract class or a concrete class with descendants.
+        items_named_union = type_anno.items.our_type
+        expected_name = typescript_naming.union_name(items_named_union.name)
+        parse_item_expr = Stripped(
+            _dispatch_parse_element_function_name_for_named_union(
+                named_union=items_named_union
+            )
+        )
+        item_type = Stripped(f"AasTypes.{expected_name}")
+    elif not (
         isinstance(type_anno.items, intermediate.OurTypeAnnotation)
         and isinstance(
             type_anno.items.our_type,
@@ -496,6 +552,27 @@ def _parse_tuple_property(
             "intermediate._translate._verify_only_simple_type_patterns, so no "
             "nested optionals, lists or tuples are expected here."
         )
+
+        if isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
+            item_type_anno.our_type, intermediate.NamedUnion
+        ):
+            # NOTE (mristin):
+            # A named union has no element tag of its own, so we always
+            # dispatch on the local name of the next XML element, exactly as
+            # we do for an abstract class or a concrete class with
+            # descendants.
+            item_named_union = item_type_anno.our_type
+            item_types.append(
+                Stripped(
+                    f"AasTypes.{typescript_naming.union_name(item_named_union.name)}"
+                )
+            )
+            item_parsers.append(
+                _dispatch_parse_element_function_name_for_named_union(
+                    named_union=item_named_union
+                )
+            )
+            continue
 
         if not (
             isinstance(item_type_anno, intermediate.OurTypeAnnotation)
@@ -833,8 +910,19 @@ def _serialize_function_for_atomic_type(
     elif isinstance(type_annotation, intermediate.OurTypeAnnotation):
         our_type = type_annotation.our_type
 
+        # NOTE (mristin):
+        # A class or a named union is never serialized as an atomic text
+        # value -- it always writes its own element, tagged either with the
+        # property's name (statically known concrete type) or with its own
+        # runtime class name (polymorphic dispatch), see
+        # :py:func:`_generate_serialize_block_for_property`.
         assert not isinstance(
-            our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+            our_type,
+            (
+                intermediate.AbstractClass,
+                intermediate.ConcreteClass,
+                intermediate.NamedUnion,
+            ),
         )
 
         if isinstance(our_type, intermediate.Enumeration):
@@ -980,6 +1068,22 @@ def _generate_serialize_block_for_property(
         (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
     ):
         if isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+            type_anno.our_type, intermediate.NamedUnion
+        ):
+            # NOTE (mristin):
+            # A named union always writes its own element, self-tagged with
+            # the runtime class's own name, exactly as we do for a
+            # polymorphic class property.
+            body = Stripped(
+                f"""\
+parts.push(openTag({xml_name_literal}));
+{indent_but_first_line(
+    _generate_serialize_class_element(access_expr=access_expr),
+    I,
+)}
+parts.push(closeTag({xml_name_literal}));"""
+            )
+        elif isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
             type_anno.our_type,
             (intermediate.AbstractClass, intermediate.ConcreteClass),
         ):
@@ -1017,7 +1121,28 @@ parts.push(closeTag({xml_name_literal}));"""
             )
 
     elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        if isinstance(
+        if isinstance(type_anno.items, intermediate.OurTypeAnnotation) and isinstance(
+            type_anno.items.our_type, intermediate.NamedUnion
+        ):
+            # NOTE (mristin):
+            # A named union always writes its own element, self-tagged with
+            # the runtime class's own name, exactly as we do for a list of
+            # a polymorphic class.
+            item_var = typescript_naming.variable_name(Identifier(f"item_{prop.name}"))
+
+            body = Stripped(
+                f"""\
+parts.push(openTag({xml_name_literal}));
+for (const {item_var} of {access_expr}) {{
+{I}{indent_but_first_line(
+    _generate_serialize_class_element(access_expr=Stripped(item_var)),
+    I,
+)}
+}}
+parts.push(closeTag({xml_name_literal}));"""
+            )
+
+        elif isinstance(
             type_anno.items,
             (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
         ) and not (
@@ -1095,6 +1220,19 @@ parts.push(closeTag({xml_name_literal}));"""
             item_access = Stripped(f"{access_expr}[{i}]")
 
             if isinstance(
+                item_type_anno, intermediate.OurTypeAnnotation
+            ) and isinstance(item_type_anno.our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # A named union always writes its own element, self-tagged
+                # with the runtime class's own name, exactly as we do for a
+                # tuple item of a polymorphic class. We keep this as a
+                # branch of its own, separate from the class case below,
+                # since a future named union of primitives would need to
+                # diverge here.
+                item_write_stmts.append(
+                    _generate_serialize_class_element(access_expr=item_access)
+                )
+            elif isinstance(
                 item_type_anno, intermediate.OurTypeAnnotation
             ) and isinstance(
                 item_type_anno.our_type,
@@ -1232,6 +1370,92 @@ def _generate_dispatch_parse_interface_element(
 
     case_writer = io.StringIO()
     for implementer in interface.implementers:
+        implementer_local_name_literal = typescript_common.string_literal(
+            naming.xml_class_name(implementer.name)
+        )
+        parse_function_name = _parse_sequence_function_name_for_concrete_class(
+            cls=implementer
+        )
+
+        case_writer.write(
+            f"""\
+{II}case {implementer_local_name_literal}:
+{III}instanceOrError = {parse_function_name}(cursor);
+{III}break;
+"""
+        )
+
+    return Stripped(
+        f"""\
+/**
+ * Dispatch-parse an instance
+ * of {{@link {typescript_common.TYPES_MODULE}!{expected_name}}} from the next
+ * XML element in `cursor`, based on the element's local name.
+ *
+ * @param cursor - to read from
+ * @returns the parsed instance, or an error
+ */
+function {function_name}(
+{I}cursor: XmlCursor
+): AasCommon.Either<AasTypes.{expected_name}, DeserializationError> {{
+{I}const startTagOrError = readNextOpenTag(cursor);
+{I}if (startTagOrError.error !== null) {{
+{II}return new AasCommon.Either<AasTypes.{expected_name}, DeserializationError>(
+{III}null,
+{III}startTagOrError.error
+{II});
+{I}}}
+{I}const startTag = startTagOrError.mustValue();
+
+{I}const localName = localNameOfTag(startTag.tag);
+{I}cursor.advance();
+
+{I}let instanceOrError: AasCommon.Either<AasTypes.{expected_name}, DeserializationError>;
+{I}switch (localName) {{
+{case_writer.getvalue().rstrip()}
+{II}default:
+{III}return newDeserializationError<AasTypes.{expected_name}>(
+{IIII}`Expected an instance of {expected_name}, but got: ${{localName}}`
+{III});
+{I}}}
+
+{I}if (instanceOrError.error !== null) {{
+{II}return instanceOrError;
+{I}}}
+
+{I}const closeError = consumeCloseTag(cursor, localName);
+{I}if (closeError !== null) {{
+{II}return new AasCommon.Either<AasTypes.{expected_name}, DeserializationError>(
+{III}null,
+{III}closeError
+{II});
+{I}}}
+
+{I}return instanceOrError;
+}}"""
+    )
+
+
+def _generate_dispatch_parse_named_union_element(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """
+    Generate a function to dispatch-parse the ``named_union`` from an XML element.
+
+    This dispatches over the (already flattened) implementers of
+    ``named_union``, exactly as :py:func:`_generate_dispatch_parse_interface_element`
+    dispatches over the implementers of an interface. XML dispatch is always
+    by the element's local name, regardless of whether the union is
+    dispatched by ``modelType`` or structurally on the JSON side, so a single
+    dispatch shape serves every named union.
+    """
+    expected_name = typescript_naming.union_name(named_union.name)
+    function_name = _dispatch_parse_element_function_name_for_named_union(
+        named_union=named_union
+    )
+
+    case_writer = io.StringIO()
+    for implementer in named_union.implementers:
         implementer_local_name_literal = typescript_common.string_literal(
             naming.xml_class_name(implementer.name)
         )
@@ -2071,6 +2295,15 @@ function parseTextContent(cursor: XmlCursor): string {{
                 )
         else:
             assert_never(cls)
+
+    # NOTE (mristin):
+    # We keep the named unions' own dispatch functions in a loop of their
+    # own, separate from the loop above, since a named union is never
+    # a member of ``symbol_table.classes``.
+    for named_union in symbol_table.named_unions:
+        blocks.append(
+            _generate_dispatch_parse_named_union_element(named_union=named_union)
+        )
 
     blocks.extend(
         [

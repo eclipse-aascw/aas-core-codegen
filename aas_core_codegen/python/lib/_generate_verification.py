@@ -678,15 +678,18 @@ def _transpile_invariant(
     return Stripped(writer.getvalue()), None
 
 
-OurTypeExceptEnumeration = Union[
+OurTypeExceptEnumerationAndNamedUnion = Union[
     intermediate.ConstrainedPrimitive,
     intermediate.AbstractClass,
     intermediate.ConcreteClass,
 ]
 assert_union_without_excluded(
     original_union=intermediate.OurType,
-    subset_union=OurTypeExceptEnumeration,
-    excluded=[intermediate.Enumeration],
+    subset_union=OurTypeExceptEnumerationAndNamedUnion,
+    # NOTE (mristin):
+    # Named unions have no verification logic of their own (no properties or
+    # invariants), so they are excluded here just like enumerations.
+    excluded=[intermediate.Enumeration, intermediate.NamedUnion],
 )
 
 
@@ -799,8 +802,39 @@ for error in {function_name}(
             )
 
         elif isinstance(
-            type_anno.our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+            type_anno.our_type,
+            (intermediate.AbstractClass, intermediate.ConcreteClass),
         ):
+            for_error_in_self_transform = (
+                f"for error in self.transform(that.{prop_name})"
+            )
+            # Heuristic to break the lines, very rudimentary
+            if len(for_error_in_self_transform) > 70:
+                for_error_in_self_transform = f"""\
+for error in self.transform(
+{II}that.{prop_name}
+)"""
+
+            stmts.append(
+                Stripped(
+                    f"""\
+{for_error_in_self_transform}:
+{I}error.path._prepend(
+{II}PropertySegment(
+{III}that,
+{III}{prop_name_literal}
+{II})
+{I})
+{I}yield error"""
+                )
+            )
+
+        elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # We keep this as its own branch, separate from the class case
+            # above, even though the code is identical at the moment. We
+            # might want to support unions of primitives in the future, at
+            # which point this branch would need to diverge.
             for_error_in_self_transform = (
                 f"for error in self.transform(that.{prop_name})"
             )
@@ -877,6 +911,25 @@ for error in {function_name}(
                 type_anno.items.our_type,
                 (intermediate.AbstractClass, intermediate.ConcreteClass),
             ):
+                for_error = Stripped(
+                    f"""for error in self.transform({loop_variable})"""
+                )
+
+                if len(for_error) > 70:
+                    for_error = Stripped(
+                        f"""\
+for error in self.transform(
+{II}{loop_variable}
+)"""
+                    )
+
+            elif isinstance(type_anno.items.our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # We keep this as its own branch, separate from the class
+                # case above, even though the code is identical at the
+                # moment. We might want to support unions of primitives in
+                # the future, at which point this branch would need to
+                # diverge.
                 for_error = Stripped(
                     f"""for error in self.transform({loop_variable})"""
                 )
@@ -982,6 +1035,25 @@ for error in {function_name}(
                     item_type_anno.our_type,
                     (intermediate.AbstractClass, intermediate.ConcreteClass),
                 ):
+                    for_error_in_verification = Stripped(
+                        f"for error in self.transform({item_access})"
+                    )
+
+                    if len(for_error_in_verification) > 70:
+                        for_error_in_verification = Stripped(
+                            f"""\
+for error in self.transform(
+{II}{item_access}
+)"""
+                        )
+
+                elif isinstance(item_type_anno.our_type, intermediate.NamedUnion):
+                    # NOTE (mristin):
+                    # We keep this as its own branch, separate from the class
+                    # case above, even though the code is identical at the
+                    # moment. We might want to support unions of primitives
+                    # in the future, at which point this branch would need
+                    # to diverge.
                     for_error_in_verification = Stripped(
                         f"for error in self.transform({item_access})"
                     )
@@ -1601,6 +1673,13 @@ def verify(
             # We provide a general dispatch function for the most abstract
             # class ``Class``.
             pass
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # A named union has no invariants of its own, so there is
+            # nothing to generate here.
+            pass
+
         else:
             assert_never(our_type)
 

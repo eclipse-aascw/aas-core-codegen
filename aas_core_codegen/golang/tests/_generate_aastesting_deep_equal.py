@@ -113,6 +113,17 @@ if !DeepEqual(
 }}"""
                 )
 
+            elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+                cmp_subblock = Stripped(
+                    f"""\
+if !DeepEqual(
+{I}{that_var}.Underlying(),
+{I}{other_var}.Underlying(),
+) {{
+{I}return false
+}}"""
+                )
+
             else:
                 # noinspection PyTypeChecker
                 assert_never(type_anno.our_type)
@@ -174,17 +185,12 @@ for i := range {that_var} {{
 }}"""
                     )
 
-            else:
-                # fmt: off
-                assert (
-                    isinstance(type_anno.items, intermediate.OurTypeAnnotation)
-                    and isinstance(
-                        type_anno.items.our_type,
-                        (intermediate.AbstractClass, intermediate.ConcreteClass)
-                    )
-                )
-                # fmt: on
-
+            elif isinstance(
+                type_anno.items, intermediate.OurTypeAnnotation
+            ) and isinstance(
+                type_anno.items.our_type,
+                (intermediate.AbstractClass, intermediate.ConcreteClass),
+            ):
                 cmp_subblock = Stripped(
                     f"""\
 if 
@@ -196,6 +202,28 @@ for i := range {that_var} {{
 {I}if !DeepEqual(
 {II}{that_var}[i],
 {II}{other_var}[i],
+{I}) {{
+{II}return false
+{I}}}
+}}"""
+                )
+
+            else:
+                assert isinstance(
+                    type_anno.items, intermediate.OurTypeAnnotation
+                ) and isinstance(type_anno.items.our_type, intermediate.NamedUnion)
+
+                cmp_subblock = Stripped(
+                    f"""\
+if 
+{I}len({that_var}) !=
+{I}len({other_var}) {{
+{I}return false
+}}
+for i := range {that_var} {{
+{I}if !DeepEqual(
+{II}{that_var}[i].Underlying(),
+{II}{other_var}[i].Underlying(),
 {I}) {{
 {II}return false
 {I}}}
@@ -221,6 +249,20 @@ for i := range {that_var} {{
 if !DeepEqual(
 {I}{item_that},
 {I}{item_other},
+) {{
+{I}return false
+}}"""
+                        )
+                    )
+                elif isinstance(
+                    item_type_anno, intermediate.OurTypeAnnotation
+                ) and isinstance(item_type_anno.our_type, intermediate.NamedUnion):
+                    item_cmp_blocks.append(
+                        Stripped(
+                            f"""\
+if !DeepEqual(
+{I}{item_that}.Underlying(),
+{I}{item_other}.Underlying(),
 ) {{
 {I}return false
 }}"""

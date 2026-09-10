@@ -21,6 +21,7 @@ UnverifiedSymbolTable(
       description=None,
       node=...,
       literals_by_name=...)],
+  named_unions=[],
   constants=[
     ConstantSet(
       name='Something',

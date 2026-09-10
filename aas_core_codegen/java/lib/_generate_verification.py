@@ -782,12 +782,50 @@ def _generate_verify_method(our_type: intermediate.OurType) -> Stripped:
         name = java_naming.class_name(our_type.name)
         return Stripped(f"verify{name}")
 
-    elif isinstance(our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)):
+    elif isinstance(
+        our_type,
+        (
+            intermediate.AbstractClass,
+            intermediate.ConcreteClass,
+            intermediate.NamedUnion,
+        ),
+    ):
+        # NOTE (mristin):
+        # A named union has no invariants of its own; ``verifyToErrorStream``
+        # has an overload for it (see
+        # :py:func:`_generate_union_verify_helper`) that recurses into
+        # the underlying instance, so it is dispatched exactly like a class.
         return Stripped("verifyToErrorStream")
     else:
         assert_never(our_type)
 
     raise AssertionError("Unexpected execution path")
+
+
+def _generate_union_verify_helper() -> Stripped:
+    """
+    Generate a single ``verifyToErrorStream`` overload shared by every named union.
+
+    A named union is not itself an ``IClass``, so it can not be passed to
+    the general ``verifyToErrorStream(IClass that)`` dispatch function
+    directly. We add this overload, next to it, so that call sites can keep
+    calling ``verifyToErrorStream`` directly on a named union, exactly as
+    they would on a class instance.
+
+    Dispatching over the common ``IUnion<?>`` (see ``_generate_iunion`` in
+    ``_generate_types.py``) instead of the union's own type means we need
+    only this one overload for *all* named unions, not one per union.
+
+    Should a named union ever be allowed to flatten primitive or enumeration
+    alternatives, only the body of this method has to change (to dispatch on
+    the underlying value's kind) -- every call site stays the same.
+    """
+    return Stripped(
+        f"""\
+public static Stream<Reporting.Error> verifyToErrorStream(IUnion<?> that) {{
+{I}return verifyToErrorStream(that.getUnderlying());
+}}"""
+    )
 
 
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -861,6 +899,11 @@ def _generate_transform_property(
     elif isinstance(type_anno, intermediate.OurTypeAnnotation):
         verify_method = _generate_verify_method(our_type=type_anno.our_type)
 
+        # NOTE (mristin):
+        # A named union is matched by its own ``verifyToErrorStream``
+        # overload (see :py:func:`_generate_union_verify_helper`), so
+        # it can be verified exactly like a class instance here.
+
         stmts.append(
             Stripped(
                 f"""\
@@ -888,6 +931,11 @@ errorStream = Stream.<Reporting.Error>concat(errorStream,
 
         verify_method = _generate_verify_method(type_anno.items.our_type)
         item_type = java_common.generate_type(type_anno.items)
+
+        # NOTE (mristin):
+        # A named union item is matched by its own ``verifyToErrorStream``
+        # overload (see :py:func:`_generate_union_verify_helper`), so
+        # it can be verified exactly like a class item here.
 
         stmts.append(
             Stripped(
@@ -921,6 +969,12 @@ errorStream = Stream.<Reporting.Error>concat(errorStream,
 
             verify_method = _generate_verify_method(our_type=item_type_anno.our_type)
             item_expr = Stripped(f"{source_expr}.item{i + 1}()")
+
+            # NOTE (mristin):
+            # A named union item is matched by its own
+            # ``verifyToErrorStream`` overload (see
+            # :py:func:`_generate_union_verify_helper`), so it can be
+            # verified exactly like a class item here.
 
             stmts.append(
                 Stripped(
@@ -1098,6 +1152,13 @@ def _generate_transformer(
                 else:
                     assert block is not None
                     blocks.append(block)
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            # A named union is never double-dispatched here directly -- it
+            # is unwrapped by its own ``verifyToErrorStream`` overload
+            # instead (see :py:func:`_generate_union_verify_helper`).
+            pass
+
         else:
             assert_never(our_type)
 
@@ -1414,8 +1475,18 @@ public static Iterable<Reporting.Error> verify(IClass that) {{
         ):
             # We provide a general dispatch function.
             pass
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            # A named union has no invariants of its own; it is unwrapped by
+            # the single shared ``verifyToErrorStream(IUnion<?>)`` overload
+            # instead (see :py:func:`_generate_union_verify_helper`).
+            pass
+
         else:
             assert_never(our_type)
+
+    if len(symbol_table.named_unions) > 0:
+        verification_blocks.append(_generate_union_verify_helper())
 
     if len(errors) > 0:
         return None, errors

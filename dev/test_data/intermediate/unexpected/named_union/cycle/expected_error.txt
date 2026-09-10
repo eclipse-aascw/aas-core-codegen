@@ -1,0 +1,1 @@
+The named union 'Some_union' is involved in a cycle of named unions, which is not allowed (a named union may not be its own member, directly or transitively): 'Some_union' -> 'Another_union' -> 'Some_union'

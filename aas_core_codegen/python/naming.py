@@ -60,9 +60,36 @@ def class_name(identifier: Identifier) -> Identifier:
     )
 
 
+def union_name(identifier: Identifier) -> Identifier:
+    """
+    Generate a name for a named union based on its meta-model ``identifier``.
+
+    A named union is represented as a ``Union[...]`` type alias, so it follows
+    the same convention as :py:func:`class_name`, but is kept as a separate
+    function since a named union is conceptually distinct from a class.
+
+    >>> union_name(Identifier("Something"))
+    'Something'
+
+    >>> union_name(Identifier("URL_to_something"))
+    'URLToSomething'
+
+    >>> union_name(Identifier("Something_to_URL"))
+    'SomethingToURL'
+    """
+    parts = identifier.split("_")
+
+    return Identifier(
+        "".join(part if part == part.upper() else part.capitalize() for part in parts)
+    )
+
+
 def name_of(
     something: Union[
-        intermediate.Enumeration, intermediate.AbstractClass, intermediate.ConcreteClass
+        intermediate.Enumeration,
+        intermediate.AbstractClass,
+        intermediate.ConcreteClass,
+        intermediate.NamedUnion,
     ]
 ) -> Identifier:
     """Dispatch the name based on the run-time type of ``something``."""
@@ -73,6 +100,9 @@ def name_of(
         something, (intermediate.AbstractClass, intermediate.ConcreteClass)
     ):
         return class_name(something.name)
+
+    elif isinstance(something, intermediate.NamedUnion):
+        return union_name(something.name)
 
     else:
         assert_never(something)

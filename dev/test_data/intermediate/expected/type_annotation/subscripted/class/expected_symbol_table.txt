@@ -122,6 +122,7 @@ SymbolTable(
   concrete_classes=[
     'Reference to our type SomeConcreteClass',
     'Reference to our type SomeContainerClass'],
+  named_unions=[],
   constants=[],
   constants_by_name=...,
   verification_functions=[],

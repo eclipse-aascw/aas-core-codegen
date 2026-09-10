@@ -717,7 +717,18 @@ def _generate_verify_method(our_type: intermediate.OurType) -> Stripped:
         name = csharp_naming.class_name(our_type.name)
         return Stripped(f"Verification.Verify{name}")
 
-    elif isinstance(our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)):
+    elif isinstance(
+        our_type,
+        (
+            intermediate.AbstractClass,
+            intermediate.ConcreteClass,
+            intermediate.NamedUnion,
+        ),
+    ):
+        # A named union has no invariants of its own; ``Verification.Verify``
+        # has an overload for it (see
+        # :py:func:`_generate_union_verify_helper`) that recurses into
+        # the underlying instance, so it is dispatched exactly like a class.
         return Stripped("Verification.Verify")
     else:
         assert_never(our_type)
@@ -1112,6 +1123,13 @@ def _generate_transformer(
                 else:
                     assert block is not None
                     blocks.append(block)
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            # A named union is never double-dispatched here directly -- it is
+            # unwrapped by its own ``Verification.Verify`` overload instead
+            # (see :py:func:`_generate_union_verify_helper`).
+            pass
+
         else:
             assert_never(our_type)
 
@@ -1239,6 +1257,35 @@ public static IEnumerable<Reporting.Error> Verify{name} (
 
     assert len(errors) == 0
     return Stripped(writer.getvalue()), None
+
+
+def _generate_union_verify_helper() -> Stripped:
+    """
+    Generate a single ``Verify`` overload shared by every named union.
+
+    A named union is not itself an ``Aas.IClass``, so it can not be passed to
+    the general ``Verify(Aas.IClass that)`` dispatch function directly. We add
+    this overload, next to it, so that call sites can keep calling ``Verify``
+    directly on a named union, exactly as they would on a class instance.
+
+    Dispatching over the common, non-generic ``Aas.IUnion`` (see ``generate()``
+    in ``_generate_types.py``) instead of the union's own type means we need
+    only this one overload for *all* named unions, not one per union.
+
+    Should a named union ever be allowed to flatten primitive or enumeration
+    alternatives, only the body of this method has to change (to dispatch on
+    the underlying value's kind) -- every call site stays the same.
+    """
+    return Stripped(
+        f"""\
+public static IEnumerable<Reporting.Error> Verify(Aas.IUnion that)
+{{
+{I}foreach (var error in Verify(that.Underlying))
+{I}{{
+{II}yield return error;
+{I}}}
+}}"""
+    )
 
 
 # fmt: off
@@ -1399,8 +1446,18 @@ public static IEnumerable<Reporting.Error> Verify(Aas.IClass that)
         ):
             # We provide a general dispatch function.
             pass
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            # A named union has no invariants of its own; it is unwrapped by
+            # the single shared ``Verify(Aas.IUnion)`` overload instead (see
+            # :py:func:`_generate_union_verify_helper`).
+            pass
+
         else:
             assert_never(our_type)
+
+    if len(symbol_table.named_unions) > 0:
+        verification_blocks.append(_generate_union_verify_helper())
 
     if len(errors) > 0:
         return None, errors

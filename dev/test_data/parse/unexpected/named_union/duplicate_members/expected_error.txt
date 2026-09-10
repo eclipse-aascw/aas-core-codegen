@@ -1,0 +1,1 @@
+Expected unique members in the named union 'Some_union', but the following member(s) are repeated: 'Some_class'

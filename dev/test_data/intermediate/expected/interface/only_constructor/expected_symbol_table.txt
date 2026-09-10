@@ -92,6 +92,7 @@ SymbolTable(
   classes=[
     'Reference to our type SomethingAbstract'],
   concrete_classes=[],
+  named_unions=[],
   constants=[],
   constants_by_name=...,
   verification_functions=[],

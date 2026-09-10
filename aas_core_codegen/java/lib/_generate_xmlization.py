@@ -924,6 +924,81 @@ if ({try_target_var}.isError()) {{
     )
 
 
+def _generate_deserialize_named_union_property(
+    prop: intermediate.Property,
+    cls: intermediate.ConcreteClass,
+) -> Stripped:
+    """Generate the snippet to deserialize a property ``prop`` as a named union."""
+    type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+    assert isinstance(type_anno, intermediate.OurTypeAnnotation)
+
+    our_type = type_anno.our_type
+    assert isinstance(our_type, intermediate.NamedUnion)
+
+    prop_name = java_naming.property_name(prop.name)
+    cls_name = java_naming.class_name(cls.name)
+
+    union_name = java_naming.union_name(our_type.name)
+
+    target_var = java_naming.variable_name(Identifier(f"the_{prop.name}"))
+    try_target_var = java_naming.variable_name(Identifier(f"try_{prop.name}"))
+    xml_prop_name_literal = java_common.string_literal(prop.xml_name)
+
+    return Stripped(
+        f"""\
+if (isEmptyProperty) {{
+{I}final Reporting.Error error = new Reporting.Error(
+{II}"Expected an XML element within the element " + tryElementName.getResult() + " representing " +
+{II}"the property {prop_name} of an instance of class {cls_name}, " +
+{II}"but encountered a self-closing element.");
+{I}return Reporting.Result.failure(error);
+}}
+
+// We need to skip the whitespace here in order to be able to look ahead
+// the discriminator element shortly.
+skipWhitespaceAndComments(reader);
+
+if (currentEvent(reader).isEndDocument()) {{
+{I}final Reporting.Error error = new Reporting.Error(
+{II}"Expected an XML element within the element " + tryElementName.getResult() + " representing " +
+{II}"the property {prop_name} of an instance of class {cls_name}, " +
+{II}"but reached the end-of-file");
+{I}return Reporting.Result.failure(error);
+}}
+
+// Try to look ahead the discriminator name;
+// we need this name only for the error reporting below.
+// {union_name}FromElement will perform more sophisticated
+// checks.
+String discriminatorElementName = null;
+if (currentEvent(reader).isStartElement()) {{
+{I}Reporting.Result<String> tryDiscriminatorElementName = tryElementName(reader);
+{I}assert(!tryDiscriminatorElementName.isError());
+{I}discriminatorElementName = tryDiscriminatorElementName.getResult();
+}}
+
+Reporting.Result<? extends {union_name}> {try_target_var} = try{union_name}FromElement(reader);
+
+if ({try_target_var}.isError()) {{
+{I}if (discriminatorElementName != null) {{
+{II}{try_target_var}.getError().
+{III}prependSegment(
+{IIII}new Reporting.NameSegment(
+{IIIII}discriminatorElementName));
+{I}}}
+
+{I}{try_target_var}.getError()
+{II}.prependSegment(
+{III}new Reporting.NameSegment(
+{IIII}{xml_prop_name_literal}));
+{I}return {try_target_var}.castTo({cls_name}.class);
+}}
+
+{target_var} = {try_target_var}.getResult();"""
+    )
+
+
 def _generate_deserialize_cls_property(
     prop: intermediate.Property, cls: intermediate.ConcreteClass
 ) -> Stripped:
@@ -1032,6 +1107,11 @@ def _xml_deserialize_atomic_item_method_name(
         else:
             class_name = java_naming.class_name(item_our_type.name)
             return Stripped(f"try{class_name}FromElement")
+    elif isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
+        item_type_anno.our_type, intermediate.NamedUnion
+    ):
+        union_name = java_naming.union_name(item_type_anno.our_type.name)
+        return Stripped(f"try{union_name}FromElement")
     else:
         raise NotImplementedError(
             f"We only handle XML de/serialization of atomic items "
@@ -1343,6 +1423,10 @@ def _generate_deserialize_property(
                 )
             else:
                 blocks.append(_generate_deserialize_cls_property(prop=prop, cls=cls))
+        elif isinstance(our_type, intermediate.NamedUnion):
+            blocks.append(
+                _generate_deserialize_named_union_property(prop=prop, cls=cls)
+            )
         else:
             assert_never(our_type)
 
@@ -1720,6 +1804,73 @@ private static Reporting.Result<? extends {name}> try{name}FromElement(
     )
 
 
+def _generate_deserialize_impl_named_union_from_element(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """
+    Generate the function to de-serialize the named union ``named_union`` from
+    an XML element.
+
+    Dispatch uniformly on the element's own tag over every flattened
+    implementer -- XML elements are always self-tagging with the concrete
+    class's own name, regardless of whether that implementer is dispatched
+    by ``modelType`` on the JSON side.
+    """
+    name = java_naming.union_name(named_union.name)
+
+    case_stmts = []  # type: List[Stripped]
+    for implementer in named_union.implementers:
+        implementer_xml_name_literal = java_common.string_literal(
+            naming.xml_class_name(implementer.name)
+        )
+
+        implementer_name = java_naming.class_name(implementer.name)
+
+        case_stmts.append(
+            Stripped(
+                f"""\
+case {implementer_xml_name_literal}: {{
+{I}final Reporting.Result<{implementer_name}> result =
+{II}try{implementer_name}FromSequence(reader, isEmptyElement);
+{I}if (result.isError()) {{
+{II}return result.castTo({name}.class);
+{I}}}
+{I}return Reporting.Result.success({name}.from{implementer_name}(result.getResult()));
+}}"""
+            )
+        )
+
+    case_stmts.append(
+        Stripped(
+            f"""\
+default:
+{I}final Reporting.Error error = new Reporting.Error(
+{II}"Unexpected element with the name " + elementName);
+{I}return Reporting.Result.failure(error);"""
+        )
+    )
+
+    case_stmts_joined = "\n".join(case_stmts)
+
+    return Stripped(
+        f"""\
+/**
+ * Deserialize an instance of {name} from an XML element.
+ */
+private static Reporting.Result<? extends {name}> try{name}FromElement(
+{I}XMLEventReader reader) {{
+{I}return parseInstanceFromElement(
+{II}reader,
+{II}{name}.class,
+{II}(elementName, isEmptyElement) -> {{
+{III}switch (elementName) {{
+{IIII}{indent_but_first_line(case_stmts_joined, IIII)}
+{III}}}
+{II}}});
+}}"""
+    )
+
+
 def _generate_deserialize_impl(
     symbol_table: intermediate.SymbolTable,
     spec_impls: specific_implementations.SpecificImplementations,
@@ -1818,6 +1969,11 @@ def _generate_deserialize_impl(
                     _generate_deserialize_impl_concrete_cls_from_element(cls=cls)
                 )
 
+    for named_union in symbol_table.named_unions:
+        blocks.append(
+            _generate_deserialize_impl_named_union_from_element(named_union=named_union)
+        )
+
     if len(errors) > 0:
         return None, errors
 
@@ -1915,6 +2071,11 @@ def _generate_deserialize(symbol_table: intermediate.SymbolTable) -> Stripped:
             blocks.append(
                 _generate_deserialize_from(name=java_naming.class_name(cls.name))
             )
+
+    for named_union in symbol_table.named_unions:
+        blocks.append(
+            _generate_deserialize_from(name=java_naming.union_name(named_union.name))
+        )
 
     writer = io.StringIO()
     writer.write(
@@ -2221,17 +2382,28 @@ serializeElement(
     )
 
 
-def _generate_serialize_interface_property_as_content(
+def _generate_serialize_polymorphic_property_as_content(
     prop: intermediate.Property,
 ) -> Stripped:
-    """Generate the serialization of an interface as XML content."""
+    """
+    Generate the serialization of a polymorphic property as XML content.
+
+    A property is polymorphic here if the element to write is picked at
+    run-time from the value itself, dispatched through its own discriminator
+    element -- this is the case both for an interface-typed property (either
+    an abstract class or a concrete class with concrete descendants) and for
+    a named union, so we treat them uniformly.
+    """
     type_anno = intermediate.beneath_optional(prop.type_annotation)
 
     # fmt: off
     assert (
         isinstance(type_anno, intermediate.OurTypeAnnotation)
         and (
-            isinstance(type_anno.our_type, intermediate.AbstractClass)
+            isinstance(
+                type_anno.our_type,
+                (intermediate.AbstractClass, intermediate.NamedUnion),
+            )
             or (
                 isinstance(type_anno.our_type, intermediate.ConcreteClass)
                 and len(type_anno.our_type.concrete_descendants) > 0
@@ -2240,17 +2412,22 @@ def _generate_serialize_interface_property_as_content(
     ), (
         f"This function is expected to be called only for a property whose "
         f"(optional-stripped) type requires polymorphic dispatch through "
-        f"a Java interface, *i.e.*, either an abstract class or a concrete "
-        f"class with concrete descendants, since the caller "
-        f"(_generate_serialize_property_as_content) already dispatches on "
-        f"that before invoking us, but the property {prop.name!r} has "
-        f"the type {prop.type_annotation}."
+        f"a Java interface, *i.e.*, either an abstract class, a concrete "
+        f"class with concrete descendants, or a named union, since the "
+        f"caller (_generate_serialize_property_as_content) already "
+        f"dispatches on that before invoking us, but the property "
+        f"{prop.name!r} has the type {prop.type_annotation}."
     )
     # fmt: on
 
     getter_name = java_naming.getter_name(prop.name)
     xml_prop_name_literal = java_common.string_literal(prop.xml_name)
 
+    # NOTE (mristin):
+    # A named union has its own ``visit`` overload in the visitor (see
+    # :py:func:`_generate_union_visit_helper`), so ``this::visit`` binds
+    # to it exactly as it binds to the inherited ``IClass``-typed overload
+    # for a class-typed property.
     content_serializer = Stripped("this::visit")
 
     if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
@@ -2402,14 +2579,21 @@ def _generate_serialize_tuple_property_as_content(
             )
         elif isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
             item_type_anno.our_type,
-            (intermediate.AbstractClass, intermediate.ConcreteClass),
+            (
+                intermediate.AbstractClass,
+                intermediate.ConcreteClass,
+                intermediate.NamedUnion,
+            ),
         ):
             # NOTE (mristin):
             # A class item is dispatched through ``this.visit``, which already
             # matches the shape ``ElementContentSerializer<T>`` expects and
             # writes its own natural element tag, exactly as for a class item
             # of a list -- unlike a scalar item, it must *not* be additionally
-            # wrapped in its own ``v{i+1}`` element.
+            # wrapped in its own ``v{i+1}`` element. A named union item is
+            # matched by its own ``visit`` overload (see
+            # :py:func:`_generate_union_visit_helper`), so it can be
+            # passed on unchanged just like a class item.
             item_content_serializer = Stripped("this::visit")
         else:
             raise NotImplementedError(
@@ -2510,13 +2694,19 @@ serializeItems(asNamedElementSerializer("v", this::{write_content_method}))"""
         )
     elif isinstance(type_anno.items, intermediate.OurTypeAnnotation) and isinstance(
         type_anno.items.our_type,
-        (intermediate.AbstractClass, intermediate.ConcreteClass),
+        (
+            intermediate.AbstractClass,
+            intermediate.ConcreteClass,
+            intermediate.NamedUnion,
+        ),
     ):
         # NOTE (mristin):
         # A class item is dispatched through ``this.visit``, which already
         # matches the shape ``ElementContentSerializer<T>`` expects, so we
         # pass it directly as a method reference instead of wrapping it in
-        # a lambda.
+        # a lambda. A named union item is matched by its own ``visit``
+        # overload (see :py:func:`_generate_union_visit_helper`), so it
+        # can be passed on unchanged just like a class item.
         content_serializer = Stripped("serializeItems(this::visit)")
     else:
         raise NotImplementedError(
@@ -2576,11 +2766,14 @@ def _generate_serialize_property_as_content(prop: intermediate.Property) -> Stri
                 isinstance(our_type, intermediate.AbstractClass)
                 or len(our_type.concrete_descendants) > 0
             ):
-                body = _generate_serialize_interface_property_as_content(prop=prop)
+                body = _generate_serialize_polymorphic_property_as_content(prop=prop)
             else:
                 body = _generate_serialize_concrete_class_property_as_sequence(
                     prop=prop
                 )
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            body = _generate_serialize_polymorphic_property_as_content(prop=prop)
 
         else:
             assert_never(our_type)
@@ -2670,6 +2863,37 @@ public void {visit_name}(
     return Stripped(writer.getvalue())
 
 
+def _generate_union_visit_helper() -> Stripped:
+    """
+    Generate a single ``visit`` overload shared by every named union.
+
+    A named union is not itself an ``IClass``, so it can not be dispatched by
+    the inherited, ``IClass``-typed ``visit(IClass, XMLStreamWriter)``
+    overload of ``AbstractVisitorWithContext``. We add this overload,
+    single-purpose, so that call sites can keep passing ``this::visit``
+    around as a plain method reference or calling it directly, regardless of
+    whether the value at hand is a class instance or a named union.
+
+    Dispatching over the common ``IUnion<?>`` (see ``_generate_iunion`` in
+    ``_generate_types.py``) instead of the union's own type means we need
+    only this one overload for *all* named unions, not one per union.
+
+    Should a named union ever be allowed to flatten primitive or enumeration
+    alternatives, only the body of this method has to change (to dispatch on
+    the underlying value's kind) -- every call site stays the same.
+    """
+    return Stripped(
+        f"""\
+private void visit(
+{I}IUnion<?> that,
+{I}XMLStreamWriter writer) {{
+{I}this.visit(
+{II}that.getUnderlying(),
+{II}writer);
+}}"""
+    )
+
+
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_visitor(
     symbol_table: intermediate.SymbolTable,
@@ -2724,6 +2948,9 @@ def _generate_visitor(
             blocks.append(_generate_class_to_sequence(cls=cls))
 
             blocks.append(_generate_visit_for_class(cls=cls))
+
+    if len(symbol_table.named_unions) > 0:
+        blocks.append(_generate_union_visit_helper())
 
     if len(errors) > 0:
         return None, errors

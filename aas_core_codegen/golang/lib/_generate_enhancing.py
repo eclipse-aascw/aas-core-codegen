@@ -234,6 +234,22 @@ that.{prop_setter_name}(
 )"""
                 )
 
+            elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # A named union has its own ``wrapUnion`` generic helper
+                # (see :py:func:`_generate_self_union_and_wrap_union`), which
+                # already returns the union's own concrete type, so no type
+                # assertion is needed here, unlike the class branch above.
+                recurse_block = Stripped(
+                    f"""\
+that.{prop_setter_name}(
+{I}wrapUnion[E](
+{II}{prop_var},
+{II}factory,
+{I}),
+)"""
+                )
+
             else:
                 # noinspection PyTypeChecker
                 assert_never(type_anno.our_type)
@@ -273,6 +289,21 @@ for i, v := range {prop_var} {{
 }}"""
                     )
 
+                elif isinstance(type_anno.items.our_type, intermediate.NamedUnion):
+                    # NOTE (mristin):
+                    # A named union has its own ``wrapUnion`` generic helper
+                    # (see :py:func:`_generate_self_union_and_wrap_union`),
+                    # which already returns the union's own concrete type,
+                    # so no type assertion is needed here, unlike the class
+                    # branch above.
+                    recurse_block = Stripped(
+                        f"""\
+for i, v := range {prop_var} {{
+{I}// Update in-situ
+{I}{prop_var}[i] = wrapUnion[E](v, factory)
+}}"""
+                    )
+
                 else:
                     assert_never(type_anno.items.our_type)
 
@@ -306,28 +337,43 @@ for i, v := range {prop_var} {{
         elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
             item_assignments = []  # type: List[Stripped]
             for i, item_type_anno in enumerate(type_anno.items):
-                if not (
-                    isinstance(item_type_anno, intermediate.OurTypeAnnotation)
-                    and isinstance(
-                        item_type_anno.our_type,
-                        (intermediate.AbstractClass, intermediate.ConcreteClass),
-                    )
-                ):
+                if not isinstance(item_type_anno, intermediate.OurTypeAnnotation):
                     continue
 
-                item_interface_name = golang_naming.interface_name(
-                    item_type_anno.our_type.name
-                )
+                if isinstance(
+                    item_type_anno.our_type,
+                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                ):
+                    item_interface_name = golang_naming.interface_name(
+                        item_type_anno.our_type.name
+                    )
 
-                item_assignments.append(
-                    Stripped(
-                        f"""\
+                    item_assignments.append(
+                        Stripped(
+                            f"""\
 {prop_var}.Item{i + 1} = Wrap[E](
 {I}{prop_var}.Item{i + 1},
 {I}factory,
 ).(aastypes.{item_interface_name})"""
+                        )
                     )
-                )
+
+                elif isinstance(item_type_anno.our_type, intermediate.NamedUnion):
+                    # NOTE (mristin):
+                    # A named union has its own ``wrapUnion`` generic helper
+                    # (see :py:func:`_generate_self_union_and_wrap_union`),
+                    # which already returns the union's own concrete type,
+                    # so no type assertion is needed here, unlike the class
+                    # branch above.
+                    item_assignments.append(
+                        Stripped(
+                            f"""\
+{prop_var}.Item{i + 1} = wrapUnion[E]({prop_var}.Item{i + 1}, factory)"""
+                        )
+                    )
+
+                else:
+                    continue
 
             if len(item_assignments) == 0:
                 continue
@@ -396,6 +442,56 @@ func {function_name}[E any](
 {I}factory func(aastypes.IClass) (E, bool),
 ) (result aastypes.{interface_name}) {{
 {I}{indent_but_first_line(body, I)}
+}}"""
+    )
+
+
+def _generate_self_union_and_wrap_union() -> Stripped:
+    """
+    Generate the ``selfUnion`` constraint and the ``wrapUnion`` helper.
+
+    A named union is not itself an ``aastypes.IClass``, so it can not be
+    passed to ``Wrap[E]`` directly, and its underlying instance has to be
+    unwrapped, enhanced and re-wrapped. Go has no method overloading (unlike
+    C#/Java), so this can not be a same-named overload of ``Wrap`` -- but,
+    unlike C#/Java, Go also has no inheritance-based visitor dispatch to
+    special-case here in the first place, so a single small generic helper
+    covers every named union directly, with ``T`` self-bounded via
+    ``selfUnion[T]`` so the result comes back as the caller's own concrete
+    union type (e.g. ``*aastypes.StructuralUnion``), with no type assertion
+    needed at any property/list-item/tuple-item call site -- unlike the
+    class-typed sibling call sites, which do need a ``.(aastypes.IXxx)``
+    type assertion, since ``Wrap[E]`` itself is generic only over ``E`` and
+    always returns the common ``aastypes.IClass``.
+
+    Should a named union ever be allowed to flatten primitive or enumeration
+    alternatives, only the body of ``wrapUnion`` has to change (to dispatch
+    on the underlying value's kind) -- every call site stays the same.
+    """
+    return Stripped(
+        f"""\
+// Constrain a generic type parameter to a named union whose underlying
+// instance can be re-wrapped into the same concrete union type, needed for
+// a generic helper that both unwraps and re-wraps without knowing the
+// concrete union type.
+type selfUnion[T any] interface {{
+{I}Underlying() aastypes.IClass
+{I}WithUnderlying(aastypes.IClass) T
+}}
+
+// Wrap the underlying instance of `that` union recursively with the
+// enhancement produced by `factory`, and re-wrap the result back into the
+// same concrete union type as `that`.
+func wrapUnion[E any, T selfUnion[T]](
+{I}that T,
+{I}factory func(aastypes.IClass) (E, bool),
+) T {{
+{I}return that.WithUnderlying(
+{II}Wrap[E](
+{III}that.Underlying(),
+{III}factory,
+{II}),
+{I})
 }}"""
     )
 
@@ -532,6 +628,9 @@ type enhanced[E any] interface {{
 }}"""
         ),
     ]  # type: List[Stripped]
+
+    if len(symbol_table.named_unions) > 0:
+        blocks.append(_generate_self_union_and_wrap_union())
 
     for cls in symbol_table.concrete_classes:
         if cls.is_implementation_specific:

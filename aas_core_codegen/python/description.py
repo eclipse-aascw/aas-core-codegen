@@ -93,6 +93,17 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
             else:
                 result = f":py:class:`.types.{name}`"
 
+        elif isinstance(element.our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # We keep this as its own branch, separate from the case above,
+            # even though the code is identical at the moment. We might want
+            # to support unions of primitives in the future, at which point
+            # this branch would need to diverge.
+            if self.context.module == "types":
+                result = f":py:class:`{name}`"
+            else:
+                result = f":py:class:`.types.{name}`"
+
         elif isinstance(element.our_type, intermediate.ConstrainedPrimitive):
             # NOTE (mristin, 2022-09-08):
             # We do not generate a class for constrained primitives, but we

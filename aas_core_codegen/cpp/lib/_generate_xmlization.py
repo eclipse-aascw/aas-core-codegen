@@ -75,6 +75,31 @@ common::expected<
             )
         )
 
+    for named_union in symbol_table.named_unions:
+        union_name = cpp_naming.union_name(named_union.name)
+        function_name = cpp_naming.function_name(Identifier(f"{named_union.name}_from"))
+        result.append(
+            Stripped(
+                f"""\
+/**
+ * Deserialize an instance of types::{union_name} from an XML
+ * read from the stream \\p is.
+ *
+ * \\param is stream to read XML from
+ * \\param options reading options to be tweaked for special cases. The defaults should
+ * work in most cases.
+ * \\return the parsed types::{union_name}, or an error if any
+ */
+common::expected<
+{I}types::{union_name},
+{I}DeserializationError
+> {function_name}(
+{I}std::istream& is,
+{I}const ReadingOptions& options = {{}}
+);"""
+            )
+        )
+
     return result
 
 
@@ -1645,6 +1670,25 @@ std::pair<
                 )
             )
 
+    for named_union in symbol_table.named_unions:
+        union_name = cpp_naming.union_name(named_union.name)
+
+        from_element_name = cpp_naming.function_name(
+            Identifier(f"{named_union.name}_from_element")
+        )
+
+        result.append(
+            Stripped(
+                f"""\
+std::pair<
+{I}common::optional<types::{union_name}>,
+{I}common::optional<DeserializationError>
+> {from_element_name}(
+{I}ReaderMergingText& reader
+);"""
+            )
+        )
+
     result.append(
         Stripped("// endregion Forward declarations of de-serialization functions")
     )
@@ -2391,6 +2435,337 @@ std::pair<
 {III}const std::string& a_name
 {II}) -> std::pair<
 {III}common::optional<std::shared_ptr<types::{interface_name}> >,
+{III}common::optional<DeserializationError>
+{II}> {{
+{III}switch (a_model_type) {{
+{IIII}{indent_but_first_line(case_blocks_joined, IIII)}
+{III}}}
+{II}}}
+{I});
+}}"""
+    )
+
+
+def _generate_deserialize_union_from_element_generic() -> Stripped:
+    """
+    Generate a generic function to de-serialize a named union from an element.
+
+    This mirrors :py:func:`_generate_deserialize_class_from_element_generic`,
+    but returns ``optional<VariantT>`` directly instead of
+    ``optional<shared_ptr<T>>`` -- a named union is a ``std::variant``, not
+    a polymorphic pointer, so there is no pointer to wrap. The dispatch
+    lambda supplied by the caller is responsible for constructing the right
+    variant alternative.
+    """
+    model_type_from_element_name = cpp_naming.function_name(
+        Identifier("model_type_from_element_name")
+    )
+
+    return Stripped(
+        f"""\
+template <typename VariantT, typename DispatchT>
+std::pair<
+{I}common::optional<VariantT>,
+{I}common::optional<DeserializationError>
+> DeserializeUnionFromElement(
+{I}ReaderMergingText& reader,
+{I}const std::wstring& union_name,
+{I}const DispatchT& dispatch
+) {{
+{I}#ifdef DEBUG
+{I}if (reader.node().kind() == NodeKind::Error) {{
+{II}throw std::logic_error(
+{III}"Unexpected unhandled XML error in DeserializeUnionFromElement. "
+{III}"DeserializeUnionFromElement expects no reader error at entry."
+{II});
+{I}}}
+{I}#endif
+
+{I}common::optional<DeserializationError> error;
+
+{I}error = SkipBof(reader);
+{I}if (error.has_value()) {{
+{II}return NoInstanceAndDeserializationError<VariantT>(std::move(*error));
+{I}}}
+
+{I}error = SkipWhitespace(reader);
+{I}if (error.has_value()) {{
+{II}return NoInstanceAndDeserializationError<VariantT>(std::move(*error));
+{I}}}
+
+{I}if (reader.node().kind() != NodeKind::Start) {{
+{II}return NoInstanceAndDeserializationErrorWithCause<VariantT>(
+{III}common::Concat(
+{IIII}L"Expected a start element opening an instance of ",
+{IIII}union_name,
+{IIII}L", but got ",
+{IIII}NodeToHumanReadableWstring(reader.node())
+{III})
+{II});
+{I}}}
+
+{I}const std::string name(
+{II}static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+{III}const StartNode&
+{II}>(reader.node()).name
+{I});
+
+{I}common::optional<types::ModelType> model_type(
+{II}{model_type_from_element_name}(name)
+{I});
+{I}if (!model_type.has_value()) {{
+{II}return NoInstanceAndDeserializationErrorWithCause<VariantT>(
+{III}common::Concat(
+{IIII}L"Unexpected start element as its name does not correspond "
+{IIII}L"to any model type: ",
+{IIII}common::Utf8ToWstring(name)
+{III})
+{II});
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// We consume the start element.
+{I}reader.Read();
+
+{I}if (reader.node().kind() == NodeKind::Error) {{
+{II}auto noInstanceAndError = NoInstanceAndDeserializationErrorFromReader<
+{III}VariantT
+{II}>(
+{III}reader
+{II});
+
+{II}PrependElementSegmentToDeserializationError(
+{III}name,
+{III}*(noInstanceAndError.second)
+{II});
+
+{II}return noInstanceAndError;
+{I}}}
+
+{I}common::optional<VariantT> instance;
+{I}std::tie(
+{II}instance,
+{II}error
+{I}) = dispatch(reader, *model_type, name);
+
+{I}if (error.has_value()) {{
+{II}PrependElementSegmentToDeserializationError(
+{III}name,
+{III}*error
+{II});
+
+{II}return NoInstanceAndDeserializationError<VariantT>(std::move(*error));
+{I}}}
+
+{I}error = SkipWhitespace(reader);
+{I}if (error.has_value()) {{
+{II}PrependElementSegmentToDeserializationError(
+{III}name,
+{III}*error
+{II});
+
+{II}return NoInstanceAndDeserializationError<VariantT>(std::move(*error));
+{I}}}
+
+{I}if (!IsStopNodeWithName(reader.node(), name)) {{
+{II}error = DeserializationError(
+{III}common::Concat(
+{IIII}L"Expected a stop element </",
+{IIII}common::Utf8ToWstring(name),
+{IIII}L"> closing an instance of ",
+{IIII}union_name,
+{IIII}L", but got ",
+{IIII}NodeToHumanReadableWstring(reader.node())
+{III})
+{II});
+
+{II}PrependElementSegmentToDeserializationError(
+{III}name,
+{III}*error
+{II});
+
+{II}return NoInstanceAndDeserializationError<VariantT>(std::move(*error));
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// We consume the stop element.
+{I}reader.Read();
+{I}if (reader.node().kind() == NodeKind::Error) {{
+{II}error = DeserializationErrorFromReader(reader);
+
+{II}PrependElementSegmentToDeserializationError(
+{III}name,
+{III}*error
+{II});
+
+{II}return NoInstanceAndDeserializationError<VariantT>(std::move(*error));
+{I}}}
+
+{I}return InstanceAndNoDeserializationError(
+{II}std::move(*instance)
+{I});
+}}"""
+    )
+
+
+def _generate_wrap_deserialized_as_variant_function() -> Stripped:
+    """
+    Generate the generic helper to wrap a de-serialized pointer as a variant.
+
+    Every implementer of a named union is de-serialized through its own
+    ``*FromSequence`` function, and the resulting
+    ``pair<optional<shared_ptr<T>>, ...>`` then needs to be wrapped into
+    the union's ``std::variant`` alternative matching its own interface.
+    This shape is identical for every implementer of every union (only the
+    types differ), so we factor it out into a single generic function
+    instead of unrolling it at each dispatch case, mirroring how
+    ``DeserializeTupleN``/``SerializeTupleN`` factor out the per-item
+    boilerplate for tuples.
+    """
+    return Stripped(
+        f"""\
+/**
+ * \\brief Wrap a de-serialized pointer as a named union's variant alternative.
+ *
+ * Every implementer of a named union is de-serialized through its own
+ * *FromSequence function, and the resulting
+ * pair<optional<shared_ptr<T>>, ...> then needs to be wrapped into the
+ * union's std::variant alternative matching its own interface.
+ *
+ * \\param result the result of a de-serialization call for one implementer
+ * \\return the result wrapped as a variant, or the propagated error
+ */
+template <typename VariantT, typename T>
+std::pair<
+{I}common::optional<VariantT>,
+{I}common::optional<DeserializationError>
+> WrapDeserializedAsVariant(
+{I}std::pair<
+{II}common::optional<std::shared_ptr<T> >,
+{II}common::optional<DeserializationError>
+{I}> result
+) {{
+{I}if (result.first.has_value()) {{
+{II}return std::make_pair<
+{III}common::optional<VariantT>,
+{III}common::optional<DeserializationError>
+{II}>(
+{III}VariantT(std::move(*result.first)),
+{III}common::nullopt
+{II});
+{I}}}
+
+{I}return std::make_pair<
+{II}common::optional<VariantT>,
+{II}common::optional<DeserializationError>
+{I}>(
+{II}common::nullopt,
+{II}std::move(result.second)
+{I});
+}}"""
+    )
+
+
+def _generate_deserialize_and_wrap_snippet_for_named_union_implementer(
+    implementer: intermediate.ConcreteClass, union_name: Identifier
+) -> Stripped:
+    """
+    Generate the snippet to de-serialize a single implementer and wrap it.
+
+    The implementer's own properties are read directly through its
+    ``*FromSequence`` function (no separate start/stop element -- the outer
+    ``DeserializeUnionFromElement`` already consumed those), and the
+    resulting pair is wrapped into the union's ``std::variant`` in one call
+    via :py:func:`_generate_wrap_deserialized_as_variant_function`.
+    """
+    from_sequence_name = cpp_naming.function_name(
+        Identifier(f"{implementer.name}_from_sequence")
+    )
+
+    implementer_interface_name = cpp_naming.interface_name(implementer.name)
+
+    return Stripped(
+        f"""\
+return WrapDeserializedAsVariant<types::{union_name}>(
+{I}{from_sequence_name}<
+{II}types::{implementer_interface_name}
+{I}>(a_reader)
+);"""
+    )
+
+
+@require(lambda named_union: len(named_union.implementers) > 0)
+def _generate_named_union_from_element(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """
+    Generate the de-serialization function for a named union from an element.
+
+    Every flattened implementer is self-tagging (its own XML element name),
+    so dispatch is uniformly by tag regardless of whether the implementer
+    also happens to carry a JSON ``modelType`` -- unlike the JSON side, there
+    is no structural/modelType distinction here at all.
+    """
+    union_name = cpp_naming.union_name(named_union.name)
+
+    function_name = cpp_naming.function_name(
+        Identifier(f"{named_union.name}_from_element")
+    )
+
+    case_blocks = []  # type: List[Stripped]
+    for implementer in named_union.implementers:
+        model_type_enum = cpp_naming.enum_name(Identifier("Model_type"))
+        model_type_literal = cpp_naming.enum_literal_name(implementer.name)
+
+        snippet = _generate_deserialize_and_wrap_snippet_for_named_union_implementer(
+            implementer=implementer, union_name=union_name
+        )
+
+        case_blocks.append(
+            Stripped(
+                f"""\
+case types::{model_type_enum}::{model_type_literal}: {{
+{I}{indent_but_first_line(snippet, I)}
+}}"""
+            )
+        )
+
+    case_blocks.append(
+        Stripped(
+            f"""\
+default:
+{I}return NoInstanceAndDeserializationErrorWithCause<
+{II}types::{union_name}
+{I}>(
+{II}common::Concat(
+{III}L"Impossible to de-serialize an instance "
+{III}L"of {union_name} from <",
+{III}common::Utf8ToWstring(a_name),
+{III}L">"
+{II})
+{I});"""
+        )
+    )
+
+    case_blocks_joined = "\n".join(case_blocks)
+
+    return Stripped(
+        f"""\
+std::pair<
+{I}common::optional<types::{union_name}>,
+{I}common::optional<DeserializationError>
+> {function_name}(
+{I}ReaderMergingText& reader
+) {{
+{I}return DeserializeUnionFromElement<types::{union_name}>(
+{II}reader,
+{II}L"{union_name}",
+{II}[](
+{III}ReaderMergingText& a_reader,
+{III}types::ModelType a_model_type,
+{III}const std::string& a_name
+{II}) -> std::pair<
+{III}common::optional<types::{union_name}>,
 {III}common::optional<DeserializationError>
 {II}> {{
 {III}switch (a_model_type) {{
@@ -3360,6 +3735,11 @@ def _xml_deserialize_item_expr(
                 Identifier(f"{item_type_anno.our_type.name}_from_element")
             )
 
+        elif isinstance(item_type_anno.our_type, intermediate.NamedUnion):
+            return cpp_naming.function_name(
+                Identifier(f"{item_type_anno.our_type.name}_from_element")
+            )
+
         else:
             # noinspection PyTypeChecker
             assert_never(item_type_anno.our_type)
@@ -3559,6 +3939,23 @@ std::tie(
 {I}error
 ) = {from_element_name}(reader);"""
                     )
+
+            elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # A named union always takes the dispatching ``*FromElement`` path,
+                # regardless of how many implementers it flattens to -- it must
+                # always be de/serialized with an explicit discriminator tag.
+                from_element_name = cpp_naming.function_name(
+                    Identifier(f"{type_anno.our_type.name}_from_element")
+                )
+
+                return Stripped(
+                    f"""\
+std::tie(
+{I}{var_name},
+{I}error
+) = {from_element_name}(reader);"""
+                )
 
             else:
                 # noinspection PyTypeChecker
@@ -3981,19 +4378,21 @@ std::pair<
 
 
 def _generate_deserialize_from(
-    function_name: Identifier, from_element_name: Identifier, interface_name: Identifier
+    function_name: Identifier, from_element_name: Identifier, value_type: Stripped
 ) -> Stripped:
     """
-    Generate the impl. of a public de-serialization for an interface.
+    Generate the impl. of a public de-serialization for a value type.
 
-    We deliberately do not pass in a class object, and pass names instead, in order to
-    be able to generate the function both for the most abstract ``IClass`` and
-    the classes defined in the symbol table.
+    We deliberately do not pass in a class or named union object, and pass
+    names/the value type instead, in order to be able to generate the
+    function both for the most abstract ``IClass``, the classes defined in
+    the symbol table, and the named unions (whose value type is a
+    ``std::variant``, not a ``shared_ptr``-wrapped interface).
     """
     return Stripped(
         f"""\
 common::expected<
-{I}std::shared_ptr<types::{interface_name}>,
+{I}{indent_but_first_line(value_type, I)},
 {I}DeserializationError
 > {function_name}(
 {I}std::istream& is,
@@ -4009,7 +4408,7 @@ common::expected<
 {I}}}
 
 {I}common::optional<
-{II}std::shared_ptr<types::{interface_name}>
+{II}{indent_but_first_line(value_type, II)}
 {I}> instance;
 
 {I}common::optional<DeserializationError> error;
@@ -5196,6 +5595,18 @@ def _xml_serialize_list_value_expr(
                 )
                 list_helper = "SerializeListOfInstances"
 
+            elif isinstance(item_type_annotation.our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # A named union has no ``*PtrAsElement`` counterpart -- its own
+                # value is already a ``std::variant``, not a pointer -- so we
+                # reference its ``*AsElement`` function directly.
+                serialize_item = cpp_naming.function_name(
+                    Identifier(
+                        f"serialize_{item_type_annotation.our_type.name}_as_element"
+                    )
+                )
+                list_helper = "SerializeListOfInstances"
+
             else:
                 # noinspection PyTypeChecker
                 assert_never(item_type_annotation.our_type)
@@ -5252,14 +5663,21 @@ def _xml_serialize_tuple_value_expr(
 
         items_primitive_type = intermediate.try_primitive_type(item_type_anno)
 
+        # NOTE (mristin):
+        # Both classes and named unions are self-tagging (dispatched through
+        # their own element tag), unlike primitives/enumerations, which are
+        # wrapped in a synthetic ``<v1>``, ``<v2>``, *etc.* element.
         is_class_item = isinstance(
             item_type_anno, intermediate.OurTypeAnnotation
         ) and isinstance(
             item_type_anno.our_type,
             (intermediate.AbstractClass, intermediate.ConcreteClass),
         )
+        is_named_union_item = isinstance(
+            item_type_anno, intermediate.OurTypeAnnotation
+        ) and isinstance(item_type_anno.our_type, intermediate.NamedUnion)
 
-        if not is_class_item:
+        if not (is_class_item or is_named_union_item):
             if items_primitive_type is not None:
                 serialize_function = _PRIMITIVE_TYPE_TO_SERIALIZE[items_primitive_type]
             elif isinstance(item_type_anno, intermediate.PrimitiveTypeAnnotation):
@@ -5327,9 +5745,20 @@ def _xml_serialize_tuple_value_expr(
             )
         else:
             assert isinstance(item_type_anno, intermediate.OurTypeAnnotation)
-            serialize_function = cpp_naming.function_name(
-                Identifier(f"serialize_{item_type_anno.our_type.name}_ptr_as_element")
-            )
+
+            if isinstance(item_type_anno.our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # A named union has no ``*PtrAsElement`` counterpart -- its
+                # own value is already a ``std::variant``, not a pointer.
+                serialize_function = cpp_naming.function_name(
+                    Identifier(f"serialize_{item_type_anno.our_type.name}_as_element")
+                )
+            else:
+                serialize_function = cpp_naming.function_name(
+                    Identifier(
+                        f"serialize_{item_type_anno.our_type.name}_ptr_as_element"
+                    )
+                )
 
             item_exprs.append(Stripped(serialize_function))
 
@@ -5421,6 +5850,20 @@ def _generate_serialize_property(prop: intermediate.Property) -> Stripped:
                             )
                         )
                     )
+
+            elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # A named union's own value is already a ``std::variant``,
+                # not a pointer, so -- unlike a class -- there is nothing
+                # to dereference here.
+                value_expr = getter_expr
+
+                serialize_value_expr = Stripped(
+                    cpp_naming.function_name(
+                        Identifier(f"serialize_{type_anno.our_type.name}_as_element")
+                    )
+                )
+
             else:
                 # noinspection PyTypeChecker
                 assert_never(type_anno.our_type)
@@ -5635,6 +6078,40 @@ common::optional<SerializationError> {function_name_ptr}(
     ]
 
 
+def _generate_serialize_named_union_as_element_definition(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """
+    Generate the def. to serialize a named union to an XML element.
+
+    Unlike a class, a named union has no ``*PtrAsElement`` counterpart --
+    the union's own value is already a ``std::variant``, not a pointer, so
+    a single by-const-ref function suffices for every use site (property,
+    list item, tuple item).
+    """
+    union_name = cpp_naming.union_name(named_union.name)
+
+    function_name = cpp_naming.function_name(
+        Identifier(f"serialize_{named_union.name}_as_element")
+    )
+
+    return Stripped(
+        f"""\
+/**
+ * \\brief Serialize \\p that instance by dispatching to the appropriate concrete
+ * serialization function.
+ *
+ * \\param that instance to be serialized
+ * \\param writer to be write to
+ * \\return error, if any
+ */
+common::optional<SerializationError> {function_name}(
+{I}const types::{union_name}& that,
+{I}SelfClosingWriter& writer
+);"""
+    )
+
+
 def _generate_concrete_serialize_cls_as_element(
     cls: intermediate.ConcreteClass,
 ) -> Stripped:
@@ -5819,6 +6296,71 @@ common::optional<SerializationError> {function_name}(
 {I}// we would have used static casts.
 
 {I}switch (that.model_type()) {{
+{II}{indent_but_first_line(case_blocks_joined, II)}
+{I}}};
+}}"""
+    )
+
+
+def _generate_dispatching_serialize_named_union_as_element(
+    named_union: intermediate.NamedUnion,
+) -> Stripped:
+    """
+    Generate the impl. for a dispatching serialization for a named union.
+
+    Unlike :py:func:`_generate_dispatching_serialize_cls_as_element`, the
+    value here is a ``std::variant``, not a polymorphic pointer, so there is
+    no ``model_type()``/``dynamic_cast`` dance -- the variant already knows
+    which alternative it holds through its own ``index()``, so we switch on
+    that directly and delegate to the corresponding implementer's own
+    ``*PtrAsElement`` function (one case per alternative, in the exact same
+    order the variant's alternatives were declared).
+    """
+    union_name = cpp_naming.union_name(named_union.name)
+
+    case_blocks = []  # type: List[Stripped]
+    for i, implementer in enumerate(named_union.implementers):
+        serialize_ptr_as_element = cpp_naming.function_name(
+            Identifier(f"serialize_{implementer.name}_ptr_as_element")
+        )
+
+        case_blocks.append(
+            Stripped(
+                f"""\
+case {i}:
+{I}return {serialize_ptr_as_element}(
+{II}std::get<{i}>(that),
+{II}writer
+{I});"""
+            )
+        )
+
+    case_blocks.append(
+        Stripped(
+            f"""\
+default:
+{I}throw std::logic_error(
+{II}common::Concat(
+{III}"Invalid variant index for {union_name}: ",
+{III}std::to_string(that.index())
+{II})
+{I});"""
+        )
+    )
+
+    case_blocks_joined = "\n".join(case_blocks)
+
+    function_name = cpp_naming.function_name(
+        Identifier(f"serialize_{named_union.name}_as_element")
+    )
+
+    return Stripped(
+        f"""\
+common::optional<SerializationError> {function_name}(
+{I}const types::{union_name}& that,
+{I}SelfClosingWriter& writer
+) {{
+{I}switch (that.index()) {{
 {II}{indent_but_first_line(case_blocks_joined, II)}
 {I}}};
 }}"""
@@ -6080,6 +6622,9 @@ def _type_annotation_contains_list_of_atomic_non_class_values(
             ):
                 return False
 
+            elif isinstance(type_annotation.items.our_type, intermediate.NamedUnion):
+                return False
+
             else:
                 # noinspection PyTypeChecker
                 assert_never(type_annotation.items.our_type)
@@ -6152,6 +6697,9 @@ def _type_annotation_contains_list_of_instances(
                 type_annotation.items.our_type,
                 (intermediate.AbstractClass, intermediate.ConcreteClass),
             ):
+                return True
+
+            elif isinstance(type_annotation.items.our_type, intermediate.NamedUnion):
                 return True
 
             else:
@@ -6289,6 +6837,10 @@ const std::string kNamespace(  // NOLINT(cert-err58-cpp)
         ),
     ]
 
+    if len(symbol_table.named_unions) > 0:
+        blocks.append(_generate_deserialize_union_from_element_generic())
+        blocks.append(_generate_wrap_deserialized_as_variant_function())
+
     for cls in symbol_table.classes:
         concrete_classes = []
         if isinstance(cls, intermediate.ConcreteClass):
@@ -6305,6 +6857,15 @@ const std::string kNamespace(  // NOLINT(cert-err58-cpp)
                 concrete_classes=concrete_classes,
             )
         )
+
+    for named_union in symbol_table.named_unions:
+        # NOTE (mristin):
+        # XML dispatch is always by the element's own tag name -- unlike JSON,
+        # there is no distinction between a ``modelType``-dispatched and
+        # a structurally-dispatched implementer here. However, a named union
+        # is a ``std::variant``, not a polymorphic pointer, so we still need
+        # our own dispatch function to construct the right alternative.
+        blocks.append(_generate_named_union_from_element(named_union=named_union))
 
     blocks.extend(_generate_functions_to_deserialize_primitives())
 
@@ -6349,7 +6910,7 @@ const std::string kNamespace(  // NOLINT(cert-err58-cpp)
             from_element_name=cpp_naming.function_name(
                 Identifier("class_from_element")
             ),
-            interface_name=Identifier("IClass"),
+            value_type=Stripped("std::shared_ptr<types::IClass>"),
         )
     )
 
@@ -6360,7 +6921,24 @@ const std::string kNamespace(  // NOLINT(cert-err58-cpp)
                 from_element_name=cpp_naming.function_name(
                     Identifier(f"{cls.name}_from_element")
                 ),
-                interface_name=cpp_naming.interface_name(cls.name),
+                value_type=Stripped(
+                    f"std::shared_ptr<types::{cpp_naming.interface_name(cls.name)}>"
+                ),
+            )
+        )
+
+    for named_union in symbol_table.named_unions:
+        blocks.append(
+            _generate_deserialize_from(
+                function_name=cpp_naming.function_name(
+                    Identifier(f"{named_union.name}_from")
+                ),
+                from_element_name=cpp_naming.function_name(
+                    Identifier(f"{named_union.name}_from_element")
+                ),
+                value_type=Stripped(
+                    f"types::{cpp_naming.union_name(named_union.name)}"
+                ),
             )
         )
 
@@ -6458,6 +7036,13 @@ common::optional<SerializationError> CheckOstreamState(
 
         blocks.extend(_generate_serialize_cls_as_element_definition(cls=cls))
 
+    for named_union in symbol_table.named_unions:
+        blocks.append(
+            _generate_serialize_named_union_as_element_definition(
+                named_union=named_union
+            )
+        )
+
     for cls in symbol_table.classes:
         if isinstance(cls, intermediate.ConcreteClass):
             block, error = _generate_serialize_cls_as_sequence_implementation(
@@ -6475,6 +7060,13 @@ common::optional<SerializationError> CheckOstreamState(
             blocks.append(_generate_dispatching_serialize_cls_as_element(cls=cls))
 
         blocks.append(_generate_serialize_cls_ptr_as_element(cls=cls))
+
+    for named_union in symbol_table.named_unions:
+        blocks.append(
+            _generate_dispatching_serialize_named_union_as_element(
+                named_union=named_union
+            )
+        )
 
     if len(errors) > 0:
         return None, errors

@@ -289,6 +289,54 @@ void AbstractVisitor::Visit(
     return blocks
 
 
+def _generate_visit_named_union_switch(
+    union_value_expr: Stripped, named_union: intermediate.NamedUnion
+) -> Stripped:
+    """
+    Generate a ``switch`` calling ``Visit`` on whichever alternative is held.
+
+    A named union's value is a ``std::variant``, not a polymorphic pointer,
+    so it can not be passed to ``Visit`` (which expects
+    ``shared_ptr<types::IClass>``) directly -- we switch on the variant's
+    own ``index()`` and call ``Visit`` on the corresponding
+    ``std::get<i>(...)`` alternative, which upcasts to ``IClass`` like any
+    other class pointer.
+    """
+    case_blocks = []  # type: List[Stripped]
+    for i in range(len(named_union.implementers)):
+        case_blocks.append(
+            Stripped(
+                f"""\
+case {i}:
+{I}Visit(
+{II}std::get<{i}>(
+{III}{indent_but_first_line(union_value_expr, III)}
+{II})
+{I});
+{I}break;"""
+            )
+        )
+
+    case_blocks.append(
+        Stripped(
+            f"""\
+default:
+{I}throw std::logic_error("Invalid variant index");"""
+        )
+    )
+
+    case_blocks_joined = "\n".join(case_blocks)
+
+    return Stripped(
+        f"""\
+switch (
+{I}({indent_but_first_line(union_value_expr, I)}).index()
+) {{
+{I}{indent_but_first_line(case_blocks_joined, I)}
+}}"""
+    )
+
+
 def _generate_recursive_visit_for_property(
     prop: intermediate.Property, mutating: bool
 ) -> Stripped:
@@ -337,6 +385,10 @@ Visit(
 {I}{get_expr}
 );"""
             )
+        elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+            code = _generate_visit_named_union_switch(
+                union_value_expr=get_expr, named_union=type_anno.our_type
+            )
         else:
             # noinspection PyTypeChecker
             assert_never(type_anno.our_type)
@@ -372,6 +424,26 @@ for (
 {I}{indent_but_first_line(get_expr, I)}
 ) {{
 {I}Visit(item);
+}}"""
+                )
+            elif isinstance(type_anno.items.our_type, intermediate.NamedUnion):
+                item_type = cpp_common.generate_type_with_const_ref_if_applicable(
+                    type_annotation=type_anno.items,
+                    types_namespace=cpp_common.TYPES_NAMESPACE,
+                )
+
+                visit_switch = _generate_visit_named_union_switch(
+                    union_value_expr=Stripped("item"),
+                    named_union=type_anno.items.our_type,
+                )
+
+                code = Stripped(
+                    f"""\
+for (
+{I}{indent_but_first_line(item_type, I)} item :
+{I}{indent_but_first_line(get_expr, I)}
+) {{
+{I}{indent_but_first_line(visit_switch, I)}
 }}"""
                 )
             else:
@@ -410,6 +482,22 @@ Visit(
 {II}{indent_but_first_line(get_expr, II)}
 {I})
 );"""
+                    )
+                )
+            elif isinstance(
+                item_type_anno, intermediate.OurTypeAnnotation
+            ) and isinstance(item_type_anno.our_type, intermediate.NamedUnion):
+                tuple_item_expr = Stripped(
+                    f"""\
+std::get<{i}>(
+{I}{indent_but_first_line(get_expr, I)}
+)"""
+                )
+
+                visit_stmts.append(
+                    _generate_visit_named_union_switch(
+                        union_value_expr=tuple_item_expr,
+                        named_union=item_type_anno.our_type,
                     )
                 )
 

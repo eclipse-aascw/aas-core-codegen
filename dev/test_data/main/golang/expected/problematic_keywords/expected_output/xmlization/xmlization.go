@@ -675,7 +675,12 @@ func readListOfScalars[T Scalar](
 // stop the reading as soon as we encounter a non-start element.
 //
 // That last non-start element is returned as `next` element.
-func readListOfInstances[T aastypes.IClass](
+//
+// `T` is left unconstrained (instead of `aastypes.IClass`) since this
+// function never invokes any `aastypes.IClass` method on `T` -- this lets it
+// be reused for a list of a named union as well, which is deliberately not
+// an `aastypes.IClass` itself.
+func readListOfInstances[T any](
 	decoder *xml.Decoder,
 	current xml.Token,
 	readTWithLookahead func(

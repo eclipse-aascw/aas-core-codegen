@@ -46,7 +46,10 @@ from aas_core_codegen.python.common import (
 
 def _human_readable_identifier(
     something: Union[
-        intermediate.Enumeration, intermediate.AbstractClass, intermediate.ConcreteClass
+        intermediate.Enumeration,
+        intermediate.AbstractClass,
+        intermediate.ConcreteClass,
+        intermediate.NamedUnion,
     ]
 ) -> str:
     """
@@ -62,6 +65,8 @@ def _human_readable_identifier(
         result = f"meta-model abstract class {something.name!r}"
     elif isinstance(something, intermediate.ConcreteClass):
         result = f"meta-model concrete class {something.name!r}"
+    elif isinstance(something, intermediate.NamedUnion):
+        result = f"meta-model named union {something.name!r}"
     else:
         assert_never(something)
 
@@ -96,6 +101,10 @@ def _verify_intra_structure_collisions(
                 enum_literal_map[literal_name] = literal
 
     elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+        pass
+
+    elif isinstance(our_type, intermediate.NamedUnion):
+        # A named union has no members of its own to collide.
         pass
 
     elif isinstance(our_type, intermediate.Class):
@@ -198,6 +207,7 @@ def _verify_structure_name_collisions(
             intermediate.Enumeration,
             intermediate.AbstractClass,
             intermediate.ConcreteClass,
+            intermediate.NamedUnion,
         ],
     ] = dict()
 
@@ -205,23 +215,25 @@ def _verify_structure_name_collisions(
 
     # region Inter-structure collisions
 
-    for enum_or_cls in itertools.chain(symbol_table.enumerations, symbol_table.classes):
-        name = python_naming.name_of(enum_or_cls)
+    for enum_or_cls_or_union in itertools.chain(
+        symbol_table.enumerations, symbol_table.classes, symbol_table.named_unions
+    ):
+        name = python_naming.name_of(enum_or_cls_or_union)
 
         other = observed_structure_names.get(name, None)
 
         if other is not None:
             errors.append(
                 Error(
-                    enum_or_cls.parsed.node,
+                    enum_or_cls_or_union.parsed.node,
                     f"The Python name {name!r} "
-                    f"of the {_human_readable_identifier(enum_or_cls)} "
+                    f"of the {_human_readable_identifier(enum_or_cls_or_union)} "
                     f"collides with the Python name "
                     f"of the {_human_readable_identifier(other)}",
                 )
             )
         else:
-            observed_structure_names[name] = enum_or_cls
+            observed_structure_names[name] = enum_or_cls_or_union
 
     # endregion
 
@@ -474,6 +486,25 @@ class _DescendBodyUnroller(python_unrolling.AbstractUnroller):
             # We can not descend into a primitive type.
             return []
 
+        elif isinstance(our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # We keep this as its own branch, separate from the class case
+            # below, even though the code is identical at the moment. We
+            # might want to support unions of primitives in the future, at
+            # which point this branch would need to diverge.
+            result = [python_unrolling.Node(f"yield {unrollee_expr}", children=[])]
+
+            if self._recurse:
+                if self._descendability[type_annotation]:
+                    result.append(
+                        python_unrolling.Node(
+                            text=f"yield from {unrollee_expr}.descend()",
+                            children=[],
+                        )
+                    )
+
+            return result
+
         assert isinstance(our_type, intermediate.Class)  # Exhaustively match
 
         result = [python_unrolling.Node(f"yield {unrollee_expr}", children=[])]
@@ -497,15 +528,26 @@ class _DescendBodyUnroller(python_unrolling.AbstractUnroller):
         list_loop_level: int,
     ) -> List[python_unrolling.Node]:
         """Generate code for the given specific ``type_annotation``."""
-        if (
-            not self._recurse
-            and isinstance(type_annotation.items, intermediate.OurTypeAnnotation)
-            and isinstance(
+        if not self._recurse and isinstance(
+            type_annotation.items, intermediate.OurTypeAnnotation
+        ):
+            if isinstance(
                 type_annotation.items.our_type,
                 (intermediate.AbstractClass, intermediate.ConcreteClass),
-            )
-        ):
-            return [python_unrolling.Node(f"yield from {unrollee_expr}", children=[])]
+            ):
+                return [
+                    python_unrolling.Node(f"yield from {unrollee_expr}", children=[])
+                ]
+
+            elif isinstance(type_annotation.items.our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # We keep this as its own branch, separate from the class case
+                # above, even though the code is identical at the moment. We
+                # might want to support unions of primitives in the future, at
+                # which point this branch would need to diverge.
+                return [
+                    python_unrolling.Node(f"yield from {unrollee_expr}", children=[])
+                ]
 
         loop_var = next(self._generator_for_loop_variables)
         children = self.unroll(
@@ -1629,6 +1671,32 @@ class TransformerWithDefaultAndContext(
     return Stripped(writer.getvalue())
 
 
+def _generate_named_union_alias(named_union: intermediate.NamedUnion) -> Stripped:
+    """Generate the type alias for the named union ``named_union``."""
+    name = python_naming.union_name(named_union.name)
+
+    implementer_literals = [
+        repr(python_naming.class_name(implementer.name))
+        for implementer in named_union.implementers
+    ]
+
+    one_liner = f"{name} = Union[{', '.join(implementer_literals)}]"
+    if len(one_liner) <= 70:
+        assignment = one_liner
+    else:
+        joined_implementer_literals = ",\n".join(implementer_literals)
+        assignment = f"""\
+{name} = Union[
+{I}{indent_but_first_line(joined_implementer_literals, I)},
+]"""
+
+    return Stripped(
+        f"""\
+#: Represent a union of classes.
+{assignment}"""
+    )
+
+
 def _generate_docstring_for_meta_model(
     description: intermediate.DescriptionOfMetaModel,
     qualified_module_name: python_common.QualifiedModuleName,
@@ -1689,6 +1757,20 @@ def generate(
             assert docstring is not None
             blocks.append(docstring)
 
+    typing_imports = [
+        Identifier("Generic"),
+        Identifier("Iterator"),
+        Identifier("Optional"),
+        Identifier("TypeVar"),
+        Identifier("List"),
+        Identifier("Tuple"),
+    ]  # type: List[Identifier]
+
+    if len(symbol_table.named_unions) > 0:
+        typing_imports.append(Identifier("Union"))
+
+    typing_imports_joined = ",\n".join(f"{I}{name}" for name in typing_imports)
+
     blocks.extend(
         [
             python_common.WARNING,
@@ -1697,12 +1779,7 @@ def generate(
 import abc
 import enum
 from typing import (
-{I}Generic,
-{I}Iterator,
-{I}Optional,
-{I}TypeVar,
-{I}List,
-{I}Tuple
+{typing_imports_joined}
 )"""
             ),
             Stripped(
@@ -1832,6 +1909,11 @@ class Class(abc.ABC):
                     assert block is not None
                     blocks.append(block)
                     continue
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            blocks.append(_generate_named_union_alias(named_union=our_type))
+            continue
+
         else:
             assert_never(our_type)
 

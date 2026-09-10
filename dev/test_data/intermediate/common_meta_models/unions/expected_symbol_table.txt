@@ -1,0 +1,1348 @@
+SymbolTable(
+  our_types=[
+    ConcreteClass(
+      name='Structural_first',
+      inheritances=[],
+      inheritance_id_set=...,
+      ancestors=[],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=None,
+      descendant_id_set=...,
+      descendants=[],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[],
+      properties=[
+        Property(
+          name='unique_to_first',
+          type_annotation=PrimitiveTypeAnnotation(
+            a_type='STR',
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Structural_first',
+          json_name='uniqueToFirst',
+          xml_name='uniqueToFirst',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='unique_to_first',
+            type_annotation=PrimitiveTypeAnnotation(
+              a_type='STR',
+              parsed=...),
+            default=None,
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='unique_to_first',
+              argument='unique_to_first',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='unique_to_first',
+              argument='unique_to_first',
+              default=None)""")]),
+      invariants=[
+        Invariant(
+          description='The value must not be empty.',
+          body=textwrap.dedent("""\
+            Comparison(
+              left=FunctionCall(
+                name='len',
+                args=[
+                  Member(
+                    instance=Name(
+                      identifier='self',
+                      original_node=...),
+                    name='unique_to_first',
+                    original_node=...)],
+                original_node=...),
+              op='GT',
+              right=Constant(
+                value=0,
+                original_node=...),
+              original_node=...)"""),
+          specified_for='Reference to ConcreteClass Structural_first',
+          parsed=...)],
+      serialization=Serialization(
+        with_model_type=False),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...),
+    ConcreteClass(
+      name='Structural_second',
+      inheritances=[],
+      inheritance_id_set=...,
+      ancestors=[],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=None,
+      descendant_id_set=...,
+      descendants=[],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[],
+      properties=[
+        Property(
+          name='unique_to_second',
+          type_annotation=PrimitiveTypeAnnotation(
+            a_type='STR',
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Structural_second',
+          json_name='uniqueToSecond',
+          xml_name='uniqueToSecond',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='unique_to_second',
+            type_annotation=PrimitiveTypeAnnotation(
+              a_type='STR',
+              parsed=...),
+            default=None,
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='unique_to_second',
+              argument='unique_to_second',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='unique_to_second',
+              argument='unique_to_second',
+              default=None)""")]),
+      invariants=[
+        Invariant(
+          description='The value must not be empty.',
+          body=textwrap.dedent("""\
+            Comparison(
+              left=FunctionCall(
+                name='len',
+                args=[
+                  Member(
+                    instance=Name(
+                      identifier='self',
+                      original_node=...),
+                    name='unique_to_second',
+                    original_node=...)],
+                original_node=...),
+              op='GT',
+              right=Constant(
+                value=0,
+                original_node=...),
+              original_node=...)"""),
+          specified_for='Reference to ConcreteClass Structural_second',
+          parsed=...)],
+      serialization=Serialization(
+        with_model_type=False),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...),
+    NamedUnion(
+      name='Structural_union',
+      members=[
+        'Reference to ConcreteClass Structural_first',
+        'Reference to ConcreteClass Structural_second'],
+      implementers=[
+        'Reference to ConcreteClass Structural_first',
+        'Reference to ConcreteClass Structural_second'],
+      description=None,
+      parsed=...),
+    AbstractClass(
+      name='Mixed_abstract_member',
+      inheritances=[],
+      inheritance_id_set=...,
+      ancestors=[],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=Interface(
+        base='Reference to AbstractClass Mixed_abstract_member',
+        name='Mixed_abstract_member',
+        inheritances=[],
+        implementers=[
+          'Reference to ConcreteClass Mixed_abstract_descendant_one',
+          'Reference to ConcreteClass Mixed_abstract_descendant_two'],
+        properties=[],
+        signatures=[],
+        description=None,
+        parsed=...,
+        properties_by_name=...,
+        property_id_set=...),
+      descendant_id_set=...,
+      descendants=[
+        'Reference to ConcreteClass Mixed_abstract_descendant_one',
+        'Reference to ConcreteClass Mixed_abstract_descendant_two'],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[
+        'Reference to ConcreteClass Mixed_abstract_descendant_one',
+        'Reference to ConcreteClass Mixed_abstract_descendant_two'],
+      properties=[],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=None,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[],
+        inlined_statements=[]),
+      invariants=[],
+      serialization=Serialization(
+        with_model_type=False),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...),
+    ConcreteClass(
+      name='Mixed_abstract_descendant_one',
+      inheritances=[
+        'Reference to AbstractClass Mixed_abstract_member'],
+      inheritance_id_set=...,
+      ancestors=[
+        'Reference to AbstractClass Mixed_abstract_member'],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=None,
+      descendant_id_set=...,
+      descendants=[],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[],
+      properties=[
+        Property(
+          name='unique_to_abstract_descendant_one',
+          type_annotation=PrimitiveTypeAnnotation(
+            a_type='STR',
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Mixed_abstract_descendant_one',
+          json_name='uniqueToAbstractDescendantOne',
+          xml_name='uniqueToAbstractDescendantOne',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='unique_to_abstract_descendant_one',
+            type_annotation=PrimitiveTypeAnnotation(
+              a_type='STR',
+              parsed=...),
+            default=None,
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='unique_to_abstract_descendant_one',
+              argument='unique_to_abstract_descendant_one',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='unique_to_abstract_descendant_one',
+              argument='unique_to_abstract_descendant_one',
+              default=None)""")]),
+      invariants=[
+        Invariant(
+          description='The value must not be empty.',
+          body=textwrap.dedent("""\
+            Comparison(
+              left=FunctionCall(
+                name='len',
+                args=[
+                  Member(
+                    instance=Name(
+                      identifier='self',
+                      original_node=...),
+                    name='unique_to_abstract_descendant_one',
+                    original_node=...)],
+                original_node=...),
+              op='GT',
+              right=Constant(
+                value=0,
+                original_node=...),
+              original_node=...)"""),
+          specified_for='Reference to ConcreteClass Mixed_abstract_descendant_one',
+          parsed=...)],
+      serialization=Serialization(
+        with_model_type=False),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...),
+    ConcreteClass(
+      name='Mixed_abstract_descendant_two',
+      inheritances=[
+        'Reference to AbstractClass Mixed_abstract_member'],
+      inheritance_id_set=...,
+      ancestors=[
+        'Reference to AbstractClass Mixed_abstract_member'],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=None,
+      descendant_id_set=...,
+      descendants=[],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[],
+      properties=[
+        Property(
+          name='unique_to_abstract_descendant_two',
+          type_annotation=PrimitiveTypeAnnotation(
+            a_type='STR',
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Mixed_abstract_descendant_two',
+          json_name='uniqueToAbstractDescendantTwo',
+          xml_name='uniqueToAbstractDescendantTwo',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='unique_to_abstract_descendant_two',
+            type_annotation=PrimitiveTypeAnnotation(
+              a_type='STR',
+              parsed=...),
+            default=None,
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='unique_to_abstract_descendant_two',
+              argument='unique_to_abstract_descendant_two',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='unique_to_abstract_descendant_two',
+              argument='unique_to_abstract_descendant_two',
+              default=None)""")]),
+      invariants=[
+        Invariant(
+          description='The value must not be empty.',
+          body=textwrap.dedent("""\
+            Comparison(
+              left=FunctionCall(
+                name='len',
+                args=[
+                  Member(
+                    instance=Name(
+                      identifier='self',
+                      original_node=...),
+                    name='unique_to_abstract_descendant_two',
+                    original_node=...)],
+                original_node=...),
+              op='GT',
+              right=Constant(
+                value=0,
+                original_node=...),
+              original_node=...)"""),
+          specified_for='Reference to ConcreteClass Mixed_abstract_descendant_two',
+          parsed=...)],
+      serialization=Serialization(
+        with_model_type=False),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...),
+    ConcreteClass(
+      name='Mixed_concrete_with_descendants',
+      inheritances=[],
+      inheritance_id_set=...,
+      ancestors=[],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=Interface(
+        base='Reference to ConcreteClass Mixed_concrete_with_descendants',
+        name='Mixed_concrete_with_descendants',
+        inheritances=[],
+        implementers=[
+          'Reference to ConcreteClass Mixed_concrete_with_descendants_child',
+          'Reference to ConcreteClass Mixed_concrete_with_descendants'],
+        properties=[
+          Property(
+            name='some_base_property',
+            type_annotation=PrimitiveTypeAnnotation(
+              a_type='STR',
+              parsed=...),
+            description=None,
+            specified_for='Reference to ConcreteClass Mixed_concrete_with_descendants',
+            json_name='someBaseProperty',
+            xml_name='someBaseProperty',
+            parsed=...)],
+        signatures=[],
+        description=None,
+        parsed=...,
+        properties_by_name=...,
+        property_id_set=...),
+      descendant_id_set=...,
+      descendants=[
+        'Reference to ConcreteClass Mixed_concrete_with_descendants_child'],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[
+        'Reference to ConcreteClass Mixed_concrete_with_descendants_child'],
+      properties=[
+        Property(
+          name='some_base_property',
+          type_annotation=PrimitiveTypeAnnotation(
+            a_type='STR',
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Mixed_concrete_with_descendants',
+          json_name='someBaseProperty',
+          xml_name='someBaseProperty',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='some_base_property',
+            type_annotation=PrimitiveTypeAnnotation(
+              a_type='STR',
+              parsed=...),
+            default=None,
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='some_base_property',
+              argument='some_base_property',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='some_base_property',
+              argument='some_base_property',
+              default=None)""")]),
+      invariants=[
+        Invariant(
+          description='The value must not be empty.',
+          body=textwrap.dedent("""\
+            Comparison(
+              left=FunctionCall(
+                name='len',
+                args=[
+                  Member(
+                    instance=Name(
+                      identifier='self',
+                      original_node=...),
+                    name='some_base_property',
+                    original_node=...)],
+                original_node=...),
+              op='GT',
+              right=Constant(
+                value=0,
+                original_node=...),
+              original_node=...)"""),
+          specified_for='Reference to ConcreteClass Mixed_concrete_with_descendants',
+          parsed=...)],
+      serialization=Serialization(
+        with_model_type=True),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...),
+    ConcreteClass(
+      name='Mixed_concrete_with_descendants_child',
+      inheritances=[
+        'Reference to ConcreteClass Mixed_concrete_with_descendants'],
+      inheritance_id_set=...,
+      ancestors=[
+        'Reference to ConcreteClass Mixed_concrete_with_descendants'],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=None,
+      descendant_id_set=...,
+      descendants=[],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[],
+      properties=[
+        Property(
+          name='some_base_property',
+          type_annotation=PrimitiveTypeAnnotation(
+            a_type='STR',
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Mixed_concrete_with_descendants',
+          json_name='someBaseProperty',
+          xml_name='someBaseProperty',
+          parsed=...),
+        Property(
+          name='some_child_property',
+          type_annotation=PrimitiveTypeAnnotation(
+            a_type='STR',
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Mixed_concrete_with_descendants_child',
+          json_name='someChildProperty',
+          xml_name='someChildProperty',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='some_base_property',
+            type_annotation=PrimitiveTypeAnnotation(
+              a_type='STR',
+              parsed=...),
+            default=None,
+            parsed=...),
+          Argument(
+            name='some_child_property',
+            type_annotation=PrimitiveTypeAnnotation(
+              a_type='STR',
+              parsed=...),
+            default=None,
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[
+          textwrap.dedent("""\
+            CallSuperConstructor(
+              super_name='Mixed_concrete_with_descendants')"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='some_child_property',
+              argument='some_child_property',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='some_base_property',
+              argument='some_base_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='some_child_property',
+              argument='some_child_property',
+              default=None)""")]),
+      invariants=[
+        Invariant(
+          description='The value must not be empty.',
+          body=textwrap.dedent("""\
+            Comparison(
+              left=FunctionCall(
+                name='len',
+                args=[
+                  Member(
+                    instance=Name(
+                      identifier='self',
+                      original_node=...),
+                    name='some_base_property',
+                    original_node=...)],
+                original_node=...),
+              op='GT',
+              right=Constant(
+                value=0,
+                original_node=...),
+              original_node=...)"""),
+          specified_for='Reference to ConcreteClass Mixed_concrete_with_descendants',
+          parsed=...),
+        Invariant(
+          description='The child value must not be empty.',
+          body=textwrap.dedent("""\
+            Comparison(
+              left=FunctionCall(
+                name='len',
+                args=[
+                  Member(
+                    instance=Name(
+                      identifier='self',
+                      original_node=...),
+                    name='some_child_property',
+                    original_node=...)],
+                original_node=...),
+              op='GT',
+              right=Constant(
+                value=0,
+                original_node=...),
+              original_node=...)"""),
+          specified_for='Reference to ConcreteClass Mixed_concrete_with_descendants_child',
+          parsed=...)],
+      serialization=Serialization(
+        with_model_type=True),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...),
+    ConcreteClass(
+      name='Mixed_concrete_leaf',
+      inheritances=[],
+      inheritance_id_set=...,
+      ancestors=[],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=None,
+      descendant_id_set=...,
+      descendants=[],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[],
+      properties=[
+        Property(
+          name='unique_to_concrete_leaf',
+          type_annotation=PrimitiveTypeAnnotation(
+            a_type='STR',
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Mixed_concrete_leaf',
+          json_name='uniqueToConcreteLeaf',
+          xml_name='uniqueToConcreteLeaf',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='unique_to_concrete_leaf',
+            type_annotation=PrimitiveTypeAnnotation(
+              a_type='STR',
+              parsed=...),
+            default=None,
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='unique_to_concrete_leaf',
+              argument='unique_to_concrete_leaf',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='unique_to_concrete_leaf',
+              argument='unique_to_concrete_leaf',
+              default=None)""")]),
+      invariants=[
+        Invariant(
+          description='The value must not be empty.',
+          body=textwrap.dedent("""\
+            Comparison(
+              left=FunctionCall(
+                name='len',
+                args=[
+                  Member(
+                    instance=Name(
+                      identifier='self',
+                      original_node=...),
+                    name='unique_to_concrete_leaf',
+                    original_node=...)],
+                original_node=...),
+              op='GT',
+              right=Constant(
+                value=0,
+                original_node=...),
+              original_node=...)"""),
+          specified_for='Reference to ConcreteClass Mixed_concrete_leaf',
+          parsed=...)],
+      serialization=Serialization(
+        with_model_type=False),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...),
+    NamedUnion(
+      name='Mixed_union',
+      members=[
+        'Reference to AbstractClass Mixed_abstract_member',
+        'Reference to ConcreteClass Mixed_concrete_with_descendants',
+        'Reference to ConcreteClass Mixed_concrete_leaf'],
+      implementers=[
+        'Reference to ConcreteClass Mixed_abstract_descendant_one',
+        'Reference to ConcreteClass Mixed_abstract_descendant_two',
+        'Reference to ConcreteClass Mixed_concrete_with_descendants_child',
+        'Reference to ConcreteClass Mixed_concrete_with_descendants',
+        'Reference to ConcreteClass Mixed_concrete_leaf'],
+      description=None,
+      parsed=...),
+    ConcreteClass(
+      name='Model_typed_first',
+      inheritances=[],
+      inheritance_id_set=...,
+      ancestors=[],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=None,
+      descendant_id_set=...,
+      descendants=[],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[],
+      properties=[
+        Property(
+          name='some_property',
+          type_annotation=PrimitiveTypeAnnotation(
+            a_type='STR',
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Model_typed_first',
+          json_name='someProperty',
+          xml_name='someProperty',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='some_property',
+            type_annotation=PrimitiveTypeAnnotation(
+              a_type='STR',
+              parsed=...),
+            default=None,
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='some_property',
+              argument='some_property',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='some_property',
+              argument='some_property',
+              default=None)""")]),
+      invariants=[
+        Invariant(
+          description='The value must not be empty.',
+          body=textwrap.dedent("""\
+            Comparison(
+              left=FunctionCall(
+                name='len',
+                args=[
+                  Member(
+                    instance=Name(
+                      identifier='self',
+                      original_node=...),
+                    name='some_property',
+                    original_node=...)],
+                original_node=...),
+              op='GT',
+              right=Constant(
+                value=0,
+                original_node=...),
+              original_node=...)"""),
+          specified_for='Reference to ConcreteClass Model_typed_first',
+          parsed=...)],
+      serialization=Serialization(
+        with_model_type=True),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...),
+    ConcreteClass(
+      name='Model_typed_second',
+      inheritances=[],
+      inheritance_id_set=...,
+      ancestors=[],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=None,
+      descendant_id_set=...,
+      descendants=[],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[],
+      properties=[
+        Property(
+          name='some_property',
+          type_annotation=PrimitiveTypeAnnotation(
+            a_type='STR',
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Model_typed_second',
+          json_name='someProperty',
+          xml_name='someProperty',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='some_property',
+            type_annotation=PrimitiveTypeAnnotation(
+              a_type='STR',
+              parsed=...),
+            default=None,
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='some_property',
+              argument='some_property',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='some_property',
+              argument='some_property',
+              default=None)""")]),
+      invariants=[
+        Invariant(
+          description='The value must not be empty.',
+          body=textwrap.dedent("""\
+            Comparison(
+              left=FunctionCall(
+                name='len',
+                args=[
+                  Member(
+                    instance=Name(
+                      identifier='self',
+                      original_node=...),
+                    name='some_property',
+                    original_node=...)],
+                original_node=...),
+              op='GT',
+              right=Constant(
+                value=0,
+                original_node=...),
+              original_node=...)"""),
+          specified_for='Reference to ConcreteClass Model_typed_second',
+          parsed=...)],
+      serialization=Serialization(
+        with_model_type=True),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...),
+    NamedUnion(
+      name='Model_typed_union',
+      members=[
+        'Reference to ConcreteClass Model_typed_first',
+        'Reference to ConcreteClass Model_typed_second'],
+      implementers=[
+        'Reference to ConcreteClass Model_typed_first',
+        'Reference to ConcreteClass Model_typed_second'],
+      description=None,
+      parsed=...),
+    ConcreteClass(
+      name='Something',
+      inheritances=[],
+      inheritance_id_set=...,
+      ancestors=[],
+      ancestor_id_set=...,
+      is_implementation_specific=False,
+      interface=None,
+      descendant_id_set=...,
+      descendants=[],
+      concrete_descendant_id_set=...,
+      concrete_descendants=[],
+      properties=[
+        Property(
+          name='structural_property',
+          type_annotation=OurTypeAnnotation(
+            our_type='Reference to our type Structural_union',
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='structuralProperty',
+          xml_name='structuralProperty',
+          parsed=...),
+        Property(
+          name='mixed_property',
+          type_annotation=OurTypeAnnotation(
+            our_type='Reference to our type Mixed_union',
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='mixedProperty',
+          xml_name='mixedProperty',
+          parsed=...),
+        Property(
+          name='model_typed_property',
+          type_annotation=OurTypeAnnotation(
+            our_type='Reference to our type Model_typed_union',
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='modelTypedProperty',
+          xml_name='modelTypedProperty',
+          parsed=...),
+        Property(
+          name='list_structural_property',
+          type_annotation=ListTypeAnnotation(
+            items=OurTypeAnnotation(
+              our_type='Reference to our type Structural_union',
+              parsed=...),
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='listStructuralProperty',
+          xml_name='listStructuralProperty',
+          parsed=...),
+        Property(
+          name='list_mixed_property',
+          type_annotation=ListTypeAnnotation(
+            items=OurTypeAnnotation(
+              our_type='Reference to our type Mixed_union',
+              parsed=...),
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='listMixedProperty',
+          xml_name='listMixedProperty',
+          parsed=...),
+        Property(
+          name='list_model_typed_property',
+          type_annotation=ListTypeAnnotation(
+            items=OurTypeAnnotation(
+              our_type='Reference to our type Model_typed_union',
+              parsed=...),
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='listModelTypedProperty',
+          xml_name='listModelTypedProperty',
+          parsed=...),
+        Property(
+          name='tuple_property',
+          type_annotation=TupleTypeAnnotation(
+            items=[
+              OurTypeAnnotation(
+                our_type='Reference to our type Structural_union',
+                parsed=...),
+              OurTypeAnnotation(
+                our_type='Reference to our type Mixed_union',
+                parsed=...),
+              OurTypeAnnotation(
+                our_type='Reference to our type Model_typed_union',
+                parsed=...)],
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='tupleProperty',
+          xml_name='tupleProperty',
+          parsed=...),
+        Property(
+          name='optional_structural_property',
+          type_annotation=OptionalTypeAnnotation(
+            value=OurTypeAnnotation(
+              our_type='Reference to our type Structural_union',
+              parsed=...),
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='optionalStructuralProperty',
+          xml_name='optionalStructuralProperty',
+          parsed=...),
+        Property(
+          name='optional_mixed_property',
+          type_annotation=OptionalTypeAnnotation(
+            value=OurTypeAnnotation(
+              our_type='Reference to our type Mixed_union',
+              parsed=...),
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='optionalMixedProperty',
+          xml_name='optionalMixedProperty',
+          parsed=...),
+        Property(
+          name='optional_model_typed_property',
+          type_annotation=OptionalTypeAnnotation(
+            value=OurTypeAnnotation(
+              our_type='Reference to our type Model_typed_union',
+              parsed=...),
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='optionalModelTypedProperty',
+          xml_name='optionalModelTypedProperty',
+          parsed=...)],
+      methods=[],
+      constructor=Constructor(
+        name='__init__',
+        arguments=[
+          Argument(
+            name='structural_property',
+            type_annotation=OurTypeAnnotation(
+              our_type='Reference to our type Structural_union',
+              parsed=...),
+            default=None,
+            parsed=...),
+          Argument(
+            name='mixed_property',
+            type_annotation=OurTypeAnnotation(
+              our_type='Reference to our type Mixed_union',
+              parsed=...),
+            default=None,
+            parsed=...),
+          Argument(
+            name='model_typed_property',
+            type_annotation=OurTypeAnnotation(
+              our_type='Reference to our type Model_typed_union',
+              parsed=...),
+            default=None,
+            parsed=...),
+          Argument(
+            name='list_structural_property',
+            type_annotation=ListTypeAnnotation(
+              items=OurTypeAnnotation(
+                our_type='Reference to our type Structural_union',
+                parsed=...),
+              parsed=...),
+            default=None,
+            parsed=...),
+          Argument(
+            name='list_mixed_property',
+            type_annotation=ListTypeAnnotation(
+              items=OurTypeAnnotation(
+                our_type='Reference to our type Mixed_union',
+                parsed=...),
+              parsed=...),
+            default=None,
+            parsed=...),
+          Argument(
+            name='list_model_typed_property',
+            type_annotation=ListTypeAnnotation(
+              items=OurTypeAnnotation(
+                our_type='Reference to our type Model_typed_union',
+                parsed=...),
+              parsed=...),
+            default=None,
+            parsed=...),
+          Argument(
+            name='tuple_property',
+            type_annotation=TupleTypeAnnotation(
+              items=[
+                OurTypeAnnotation(
+                  our_type='Reference to our type Structural_union',
+                  parsed=...),
+                OurTypeAnnotation(
+                  our_type='Reference to our type Mixed_union',
+                  parsed=...),
+                OurTypeAnnotation(
+                  our_type='Reference to our type Model_typed_union',
+                  parsed=...)],
+              parsed=...),
+            default=None,
+            parsed=...),
+          Argument(
+            name='optional_structural_property',
+            type_annotation=OptionalTypeAnnotation(
+              value=OurTypeAnnotation(
+                our_type='Reference to our type Structural_union',
+                parsed=...),
+              parsed=...),
+            default=DefaultPrimitive(
+              value=None,
+              parsed=...),
+            parsed=...),
+          Argument(
+            name='optional_mixed_property',
+            type_annotation=OptionalTypeAnnotation(
+              value=OurTypeAnnotation(
+                our_type='Reference to our type Mixed_union',
+                parsed=...),
+              parsed=...),
+            default=DefaultPrimitive(
+              value=None,
+              parsed=...),
+            parsed=...),
+          Argument(
+            name='optional_model_typed_property',
+            type_annotation=OptionalTypeAnnotation(
+              value=OurTypeAnnotation(
+                our_type='Reference to our type Model_typed_union',
+                parsed=...),
+              parsed=...),
+            default=DefaultPrimitive(
+              value=None,
+              parsed=...),
+            parsed=...)],
+        returns=None,
+        description=None,
+        contracts=Contracts(
+          preconditions=[],
+          snapshots=[],
+          postconditions=[]),
+        parsed=...,
+        arguments_by_name=...,
+        is_implementation_specific=False,
+        statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='structural_property',
+              argument='structural_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='mixed_property',
+              argument='mixed_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='model_typed_property',
+              argument='model_typed_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='list_structural_property',
+              argument='list_structural_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='list_mixed_property',
+              argument='list_mixed_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='list_model_typed_property',
+              argument='list_model_typed_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='tuple_property',
+              argument='tuple_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_structural_property',
+              argument='optional_structural_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_mixed_property',
+              argument='optional_mixed_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_model_typed_property',
+              argument='optional_model_typed_property',
+              default=None)""")],
+        inlined_statements=[
+          textwrap.dedent("""\
+            AssignArgument(
+              name='structural_property',
+              argument='structural_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='mixed_property',
+              argument='mixed_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='model_typed_property',
+              argument='model_typed_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='list_structural_property',
+              argument='list_structural_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='list_mixed_property',
+              argument='list_mixed_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='list_model_typed_property',
+              argument='list_model_typed_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='tuple_property',
+              argument='tuple_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_structural_property',
+              argument='optional_structural_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_mixed_property',
+              argument='optional_mixed_property',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_model_typed_property',
+              argument='optional_model_typed_property',
+              default=None)""")]),
+      invariants=[],
+      serialization=Serialization(
+        with_model_type=False),
+      description=None,
+      parsed=...,
+      properties_by_name=...,
+      property_id_set=...,
+      methods_by_name=...,
+      method_id_set=...,
+      invariant_id_set=...)],
+  our_types_topologically_sorted=[
+    'Reference to our type Mixed_abstract_member',
+    'Reference to our type Mixed_abstract_descendant_one',
+    'Reference to our type Mixed_abstract_descendant_two',
+    'Reference to our type Mixed_concrete_leaf',
+    'Reference to our type Mixed_concrete_with_descendants',
+    'Reference to our type Mixed_concrete_with_descendants_child',
+    'Reference to our type Model_typed_first',
+    'Reference to our type Model_typed_second',
+    'Reference to our type Something',
+    'Reference to our type Structural_first',
+    'Reference to our type Structural_second',
+    'Reference to our type Structural_union',
+    'Reference to our type Mixed_union',
+    'Reference to our type Model_typed_union'],
+  enumerations=[],
+  constrained_primitives=[],
+  classes=[
+    'Reference to our type Structural_first',
+    'Reference to our type Structural_second',
+    'Reference to our type Mixed_abstract_member',
+    'Reference to our type Mixed_abstract_descendant_one',
+    'Reference to our type Mixed_abstract_descendant_two',
+    'Reference to our type Mixed_concrete_with_descendants',
+    'Reference to our type Mixed_concrete_with_descendants_child',
+    'Reference to our type Mixed_concrete_leaf',
+    'Reference to our type Model_typed_first',
+    'Reference to our type Model_typed_second',
+    'Reference to our type Something'],
+  concrete_classes=[
+    'Reference to our type Structural_first',
+    'Reference to our type Structural_second',
+    'Reference to our type Mixed_abstract_descendant_one',
+    'Reference to our type Mixed_abstract_descendant_two',
+    'Reference to our type Mixed_concrete_with_descendants',
+    'Reference to our type Mixed_concrete_with_descendants_child',
+    'Reference to our type Mixed_concrete_leaf',
+    'Reference to our type Model_typed_first',
+    'Reference to our type Model_typed_second',
+    'Reference to our type Something'],
+  named_unions=[
+    'Reference to our type Structural_union',
+    'Reference to our type Mixed_union',
+    'Reference to our type Model_typed_union'],
+  constants=[],
+  constants_by_name=...,
+  verification_functions=[],
+  verification_functions_by_name=...,
+  meta_model=MetaModel(
+    description=None,
+    version='dummy',
+    xml_namespace='https://dummy.com'))
