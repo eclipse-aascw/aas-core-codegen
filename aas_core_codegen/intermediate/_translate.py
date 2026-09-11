@@ -4805,6 +4805,43 @@ def _verify_description_rendering_with_smoke(symbol_table: SymbolTable) -> List[
     return errors
 
 
+def _type_annotation_is_bound_by_json_value(type_anno: TypeAnnotationUnion) -> bool:
+    """
+    Check that ``type_anno`` is a valid instantiation of the bound
+    ``V: TypeVar("V", bound=JSONValue)`` from ``aas_core_meta.marker.JSONObject``.
+
+    This mirrors ``aas_core_meta.marker.JSONValue`` itself
+    (``Union[bool, float, str, JSONArray, JSONObject[str, JSONValue]]``):
+    a primitive other than ``bytearray`` (``int`` is accepted since it is
+    duck-type compatible with ``float``), a constrained primitive thereof,
+    ``JSONValue``, ``JSONArray`` or another ``JSONObject`` whose key and value
+    satisfy the very same bounds, recursively.
+    """
+    if isinstance(type_anno, JsonValueTypeAnnotation):
+        return True
+
+    elif isinstance(type_anno, JsonArrayTypeAnnotation):
+        return True
+
+    elif isinstance(type_anno, JsonObjectTypeAnnotation):
+        return try_primitive_type(
+            type_anno.key
+        ) == PrimitiveType.STR and _type_annotation_is_bound_by_json_value(
+            type_anno.value
+        )
+
+    elif isinstance(type_anno, PrimitiveTypeAnnotation):
+        return type_anno.a_type != PrimitiveType.BYTEARRAY
+
+    elif isinstance(type_anno, OurTypeAnnotation) and isinstance(
+        type_anno.our_type, ConstrainedPrimitive
+    ):
+        return type_anno.our_type.constrainee != PrimitiveType.BYTEARRAY
+
+    else:
+        return False
+
+
 def _verify_only_simple_type_patterns(symbol_table: SymbolTable) -> List[Error]:
     """
     Check that there are only simple type patterns in the meta-model.
@@ -4830,7 +4867,11 @@ def _verify_only_simple_type_patterns(symbol_table: SymbolTable) -> List[Error]:
       classes and enumerations; and
     * The key of a ``JSONObject`` must be ``str`` or a class (transitively)
       constraining ``str`` -- its open-keyed shape only makes sense over
-      string-like keys.
+      string-like keys; and
+    * The value of a ``JSONObject`` must be bound by ``JSONValue``, mirroring
+      ``aas_core_meta.marker.JSONObject``'s own type parameter -- classes,
+      named unions, enumerations, lists, tuples, optionals and ``bytearray``
+      (or a class constraining it) are not JSON-able and hence unexpected.
     """
     errors = []  # type: List[Error]
     for cls in symbol_table.classes:
@@ -4895,6 +4936,25 @@ def _verify_only_simple_type_patterns(symbol_table: SymbolTable) -> List[Error]:
                             f"type annotation patterns. At the moment, we only "
                             f"support ``str`` or a class constraining ``str`` as "
                             f"the key of a ``JSONObject``, "
+                            f"but the property {prop.name!r} "
+                            f"of the class {cls.name!r} "
+                            f"has type: {prop.type_annotation}. "
+                            f"Please contact the developers if you need "
+                            f"this functionality",
+                        )
+                    )
+
+                if not _type_annotation_is_bound_by_json_value(type_anno.value):
+                    errors.append(
+                        Error(
+                            prop.parsed.node,
+                            f"We currently support only a limited set of "
+                            f"type annotation patterns. At the moment, the value "
+                            f"of a ``JSONObject`` must be bound by ``JSONValue`` "
+                            f"(a primitive other than ``bytearray``, a "
+                            f"constrained primitive thereof, ``JSONValue``, "
+                            f"``JSONArray`` or another ``JSONObject`` satisfying "
+                            f"the same bound), "
                             f"but the property {prop.name!r} "
                             f"of the class {cls.name!r} "
                             f"has type: {prop.type_annotation}. "
