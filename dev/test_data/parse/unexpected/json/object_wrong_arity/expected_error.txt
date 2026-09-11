@@ -1,0 +1,1 @@
+Expected 2 arguments of a subscripted type annotation 'JSONObject', but got 1: JSONObject[str]

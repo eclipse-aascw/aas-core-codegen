@@ -23,7 +23,20 @@ _MODULE_NAME = pathlib.Path(os.path.realpath(__file__)).parent.name
 PRIMITIVE_TYPES = {"bool", "int", "float", "str", "bytearray"}
 
 #: Built-in generic types
-GENERIC_TYPES = {Identifier("List"), Identifier("Optional"), Identifier("Tuple")}
+GENERIC_TYPES = {
+    Identifier("List"),
+    Identifier("Optional"),
+    Identifier("Tuple"),
+    Identifier("JSONObject"),
+}
+
+#: Name of the special atomic type annotation denoting an arbitrary JSON-able
+#: value (see ``aas_core_meta.marker.JSONValue``)
+JSON_VALUE_TYPE_NAME = Identifier("JSONValue")
+
+#: Name of the special atomic type annotation denoting a JSON-able array of
+#: arbitrary values (see ``aas_core_meta.marker.JSONArray``)
+JSON_ARRAY_TYPE_NAME = Identifier("JSONArray")
 
 
 class AtomicTypeAnnotation:

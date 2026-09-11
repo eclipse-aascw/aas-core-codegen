@@ -39,6 +39,8 @@ SymbolTable = _types.SymbolTable
 
 PRIMITIVE_TYPES = _types.PRIMITIVE_TYPES
 GENERIC_TYPES = _types.GENERIC_TYPES
+JSON_VALUE_TYPE_NAME = _types.JSON_VALUE_TYPE_NAME
+JSON_ARRAY_TYPE_NAME = _types.JSON_ARRAY_TYPE_NAME
 
 source_to_atok = _translate.source_to_atok
 check_expected_imports = _translate.check_expected_imports

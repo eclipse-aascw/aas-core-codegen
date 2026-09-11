@@ -65,6 +65,8 @@ from aas_core_codegen.parse._types import (
     UnverifiedSymbolTable,
     PRIMITIVE_TYPES,
     GENERIC_TYPES,
+    JSON_VALUE_TYPE_NAME,
+    JSON_ARRAY_TYPE_NAME,
     Description,
     MetaModel,
     ImplementationSpecificMethod,
@@ -122,6 +124,9 @@ class _ExpectedImportsVisitor(ast.NodeVisitor):
             ("verification", "aas_core_meta.marker"),
             ("non_mutating", "aas_core_meta.marker"),
             ("xml_name", "aas_core_meta.marker"),
+            ("JSONArray", "aas_core_meta.marker"),
+            ("JSONObject", "aas_core_meta.marker"),
+            ("JSONValue", "aas_core_meta.marker"),
         ]
     )
 
@@ -2423,7 +2428,7 @@ def _verify_arity_of_type_annotation_subscript(
 
         return None
 
-    expected_arity_map = {"List": 1, "Optional": 1}
+    expected_arity_map = {"List": 1, "Optional": 1, "JSONObject": 2}
     expected_arity = expected_arity_map.get(type_annotation.identifier, None)
     if expected_arity is None:
         raise AssertionError(
@@ -2911,6 +2916,12 @@ def _verify_symbol_table(
         """
         if isinstance(type_annotation, AtomicTypeAnnotation):
             if type_annotation.identifier in PRIMITIVE_TYPES:
+                return None
+
+            if type_annotation.identifier in (
+                JSON_VALUE_TYPE_NAME,
+                JSON_ARRAY_TYPE_NAME,
+            ):
                 return None
 
             if type_annotation.identifier in expected_subscripted_types:
