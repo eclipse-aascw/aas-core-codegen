@@ -2,10 +2,10 @@ from typing import Optional
 
 
 class Something:
-    value: Optional[JSONObject[str, JSONValue]]
+    value: Optional[JSONObject[str]]
 
     def __init__(
-        self, value: Optional[JSONObject[str, JSONValue]] = None
+        self, value: Optional[JSONObject[str]] = None
     ) -> None:
         self.value = value
 

@@ -3,7 +3,7 @@ class Short_id:
 
 
 class Something:
-    value: JSONObject[Short_id, JSONValue]
+    value: JSONObject[Short_id]
 
 
 __version__ = "dummy"

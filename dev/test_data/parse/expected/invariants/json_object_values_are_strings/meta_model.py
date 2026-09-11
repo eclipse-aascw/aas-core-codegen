@@ -3,9 +3,9 @@
     "All the values must be strings.",
 )
 class Something:
-    value: JSONObject[str, JSONValue]
+    value: JSONObject[str]
 
-    def __init__(self, value: JSONObject[str, JSONValue]) -> None:
+    def __init__(self, value: JSONObject[str]) -> None:
         self.value = value
 
 

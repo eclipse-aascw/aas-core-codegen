@@ -15,12 +15,20 @@ SymbolTable(
       properties=[
         Property(
           name='value',
-          type_annotation=JsonObjectTypeAnnotation(
-            key=PrimitiveTypeAnnotation(
-              a_type='STR',
-              parsed=...),
-            value=JsonArrayTypeAnnotation(
-              parsed=...),
+          type_annotation=TupleTypeAnnotation(
+            items=[
+              PrimitiveTypeAnnotation(
+                a_type='STR',
+                parsed=...),
+              JsonValueTypeAnnotation(
+                parsed=...),
+              JsonArrayTypeAnnotation(
+                parsed=...),
+              JsonObjectTypeAnnotation(
+                key=PrimitiveTypeAnnotation(
+                  a_type='STR',
+                  parsed=...),
+                parsed=...)],
             parsed=...),
           description=None,
           specified_for='Reference to ConcreteClass Something',
@@ -33,12 +41,20 @@ SymbolTable(
         arguments=[
           Argument(
             name='value',
-            type_annotation=JsonObjectTypeAnnotation(
-              key=PrimitiveTypeAnnotation(
-                a_type='STR',
-                parsed=...),
-              value=JsonArrayTypeAnnotation(
-                parsed=...),
+            type_annotation=TupleTypeAnnotation(
+              items=[
+                PrimitiveTypeAnnotation(
+                  a_type='STR',
+                  parsed=...),
+                JsonValueTypeAnnotation(
+                  parsed=...),
+                JsonArrayTypeAnnotation(
+                  parsed=...),
+                JsonObjectTypeAnnotation(
+                  key=PrimitiveTypeAnnotation(
+                    a_type='STR',
+                    parsed=...),
+                  parsed=...)],
               parsed=...),
             default=None,
             parsed=...)],

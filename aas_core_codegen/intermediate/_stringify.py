@@ -157,7 +157,6 @@ def _stringify_json_object_type_annotation(
         name=that.__class__.__name__,
         properties=[
             stringify_mod.Property("key", stringify(that.key)),
-            stringify_mod.Property("value", stringify(that.value)),
             stringify_mod.PropertyEllipsis("parsed", that.parsed),
         ],
     )

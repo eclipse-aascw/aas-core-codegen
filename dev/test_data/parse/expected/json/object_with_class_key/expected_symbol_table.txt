@@ -24,9 +24,6 @@ UnverifiedSymbolTable(
             subscripts=[
               AtomicTypeAnnotation(
                 identifier='Short_id',
-                node=...),
-              AtomicTypeAnnotation(
-                identifier='JSONValue',
                 node=...)],
             node=...),
           description=None,

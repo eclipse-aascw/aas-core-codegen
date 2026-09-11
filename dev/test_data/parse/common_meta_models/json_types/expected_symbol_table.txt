@@ -31,32 +31,6 @@ UnverifiedSymbolTable(
       properties_by_name=...,
       methods_by_name=...),
     ConcreteClass(
-      name='Positive_int',
-      is_implementation_specific=False,
-      inheritances=[
-        'int'],
-      properties=[],
-      methods=[],
-      invariants=[
-        Invariant(
-          description='Larger than zero',
-          body=textwrap.dedent("""\
-            Comparison(
-              left=Name(
-                identifier='self',
-                original_node=...),
-              op='GT',
-              right=Constant(
-                value=0,
-                original_node=...),
-              original_node=...)"""),
-          node=...)],
-      serialization=None,
-      description=None,
-      node=...,
-      properties_by_name=...,
-      methods_by_name=...),
-    ConcreteClass(
       name='Something',
       is_implementation_specific=False,
       inheritances=[],
@@ -86,9 +60,6 @@ UnverifiedSymbolTable(
             subscripts=[
               AtomicTypeAnnotation(
                 identifier='str',
-                node=...),
-              AtomicTypeAnnotation(
-                identifier='JSONValue',
                 node=...)],
             node=...),
           description=None,
@@ -102,64 +73,6 @@ UnverifiedSymbolTable(
             subscripts=[
               AtomicTypeAnnotation(
                 identifier='Non_empty_string',
-                node=...),
-              AtomicTypeAnnotation(
-                identifier='JSONValue',
-                node=...)],
-            node=...),
-          description=None,
-          json_name=None,
-          xml_name=None,
-          node=...),
-        Property(
-          name='mapping_with_constrained_value',
-          type_annotation=SubscriptedTypeAnnotation(
-            identifier='JSONObject',
-            subscripts=[
-              AtomicTypeAnnotation(
-                identifier='str',
-                node=...),
-              AtomicTypeAnnotation(
-                identifier='Positive_int',
-                node=...)],
-            node=...),
-          description=None,
-          json_name=None,
-          xml_name=None,
-          node=...),
-        Property(
-          name='mapping_with_constrained_key_and_value',
-          type_annotation=SubscriptedTypeAnnotation(
-            identifier='JSONObject',
-            subscripts=[
-              AtomicTypeAnnotation(
-                identifier='Non_empty_string',
-                node=...),
-              AtomicTypeAnnotation(
-                identifier='Positive_int',
-                node=...)],
-            node=...),
-          description=None,
-          json_name=None,
-          xml_name=None,
-          node=...),
-        Property(
-          name='nested_mapping',
-          type_annotation=SubscriptedTypeAnnotation(
-            identifier='JSONObject',
-            subscripts=[
-              AtomicTypeAnnotation(
-                identifier='str',
-                node=...),
-              SubscriptedTypeAnnotation(
-                identifier='JSONObject',
-                subscripts=[
-                  AtomicTypeAnnotation(
-                    identifier='str',
-                    node=...),
-                  AtomicTypeAnnotation(
-                    identifier='JSONValue',
-                    node=...)],
                 node=...)],
             node=...),
           description=None,
@@ -202,9 +115,6 @@ UnverifiedSymbolTable(
                 subscripts=[
                   AtomicTypeAnnotation(
                     identifier='str',
-                    node=...),
-                  AtomicTypeAnnotation(
-                    identifier='JSONValue',
                     node=...)],
                 node=...)],
             node=...),
@@ -243,9 +153,6 @@ UnverifiedSymbolTable(
                 subscripts=[
                   AtomicTypeAnnotation(
                     identifier='str',
-                    node=...),
-                  AtomicTypeAnnotation(
-                    identifier='JSONValue',
                     node=...)],
                 node=...),
               default=None,
@@ -257,58 +164,6 @@ UnverifiedSymbolTable(
                 subscripts=[
                   AtomicTypeAnnotation(
                     identifier='Non_empty_string',
-                    node=...),
-                  AtomicTypeAnnotation(
-                    identifier='JSONValue',
-                    node=...)],
-                node=...),
-              default=None,
-              node=...),
-            Argument(
-              name='mapping_with_constrained_value',
-              type_annotation=SubscriptedTypeAnnotation(
-                identifier='JSONObject',
-                subscripts=[
-                  AtomicTypeAnnotation(
-                    identifier='str',
-                    node=...),
-                  AtomicTypeAnnotation(
-                    identifier='Positive_int',
-                    node=...)],
-                node=...),
-              default=None,
-              node=...),
-            Argument(
-              name='mapping_with_constrained_key_and_value',
-              type_annotation=SubscriptedTypeAnnotation(
-                identifier='JSONObject',
-                subscripts=[
-                  AtomicTypeAnnotation(
-                    identifier='Non_empty_string',
-                    node=...),
-                  AtomicTypeAnnotation(
-                    identifier='Positive_int',
-                    node=...)],
-                node=...),
-              default=None,
-              node=...),
-            Argument(
-              name='nested_mapping',
-              type_annotation=SubscriptedTypeAnnotation(
-                identifier='JSONObject',
-                subscripts=[
-                  AtomicTypeAnnotation(
-                    identifier='str',
-                    node=...),
-                  SubscriptedTypeAnnotation(
-                    identifier='JSONObject',
-                    subscripts=[
-                      AtomicTypeAnnotation(
-                        identifier='str',
-                        node=...),
-                      AtomicTypeAnnotation(
-                        identifier='JSONValue',
-                        node=...)],
                     node=...)],
                 node=...),
               default=None,
@@ -347,9 +202,6 @@ UnverifiedSymbolTable(
                     subscripts=[
                       AtomicTypeAnnotation(
                         identifier='str',
-                        node=...),
-                      AtomicTypeAnnotation(
-                        identifier='JSONValue',
                         node=...)],
                     node=...)],
                 node=...),

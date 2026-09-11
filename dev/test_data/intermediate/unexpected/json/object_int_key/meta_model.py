@@ -1,7 +1,7 @@
 class Something:
-    value: JSONObject[int, JSONValue]
+    value: JSONObject[int]
 
-    def __init__(self, value: JSONObject[int, JSONValue]) -> None:
+    def __init__(self, value: JSONObject[int]) -> None:
         self.value = value
 
 

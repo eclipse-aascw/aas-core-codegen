@@ -3,9 +3,9 @@ class Some_class:
 
 
 class Something:
-    value: JSONObject[Some_class, JSONValue]
+    value: JSONObject[Some_class]
 
-    def __init__(self, value: JSONObject[Some_class, JSONValue]) -> None:
+    def __init__(self, value: JSONObject[Some_class]) -> None:
         self.value = value
 
 

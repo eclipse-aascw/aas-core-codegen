@@ -7,9 +7,9 @@ class Non_empty_string(str):
 
 
 class Something:
-    value: JSONObject[Non_empty_string, JSONValue]
+    value: JSONObject[Non_empty_string]
 
-    def __init__(self, value: JSONObject[Non_empty_string, JSONValue]) -> None:
+    def __init__(self, value: JSONObject[Non_empty_string]) -> None:
         self.value = value
 
 

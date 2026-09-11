@@ -1,1 +1,1 @@
-Expected 2 arguments of a subscripted type annotation 'JSONObject', but got 1: JSONObject[str]
+Expected exactly 1 argument (the key type) of a subscripted type annotation 'JSONObject', but got 2: JSONObject[str, JSONValue]. The value of a JSONObject is always an arbitrary JSON-able value (JSONValue) and can not be customized at the moment. Please contact the developers if you need to customize it.

@@ -201,10 +201,13 @@ class OptionalTypeAnnotation(TypeAnnotation):
 
 class JsonValueTypeAnnotation(TypeAnnotation):
     """
-    Represent a type annotation involving ``aas_core_meta.marker.JSONValue``.
+    Represent a type annotation for an arbitrary, open JSON-able value.
 
-    This denotes an arbitrary, open JSON-able value -- a primitive, an array or
-    an open, JSON-object-shaped value.
+    A JSON-able value is, recursively, exactly as JSON itself is defined:
+    a boolean, a number or a string, an open JSON-able array of such values
+    (see :class:`JsonArrayTypeAnnotation`), or an open, JSON-object-shaped
+    value with string-like keys and JSON-able values (see
+    :class:`JsonObjectTypeAnnotation`).
     """
 
     def __str__(self) -> str:
@@ -213,9 +216,11 @@ class JsonValueTypeAnnotation(TypeAnnotation):
 
 class JsonArrayTypeAnnotation(TypeAnnotation):
     """
-    Represent a type annotation involving ``aas_core_meta.marker.JSONArray``.
+    Represent a type annotation for an open, JSON-able array.
 
-    This denotes an open JSON-able array of arbitrary values.
+    This denotes a homogeneous array whose items are themselves arbitrary
+    JSON-able values (see :class:`JsonValueTypeAnnotation`), without pinning
+    the array down to a fixed length or to a single, more specific item type.
     """
 
     def __str__(self) -> str:
@@ -224,25 +229,29 @@ class JsonArrayTypeAnnotation(TypeAnnotation):
 
 class JsonObjectTypeAnnotation(TypeAnnotation):
     """
-    Represent a type annotation involving ``aas_core_meta.marker.JSONObject[K, V]``.
+    Represent a type annotation for an open, JSON-object-shaped value.
 
-    This denotes an open, JSON-object-shaped value, string-keyed by ``key`` and
-    valued by ``value``.
+    This denotes a string-keyed mapping whose keys are given by ``key``
+    (``str`` or a class (transitively) constraining ``str``) and whose
+    values are always arbitrary JSON-able values (see
+    :class:`JsonValueTypeAnnotation`) -- the value can not be customized to
+    a more specific type. A custom value type would make the shape much
+    harder to verify and to generate correct code for in every
+    implementation language, and no concrete need for it has been
+    identified in the AAS meta-model itself.
     """
 
     def __init__(
         self,
         key: "TypeAnnotationUnion",
-        value: "TypeAnnotationUnion",
         parsed: parse.TypeAnnotation,
     ) -> None:
         TypeAnnotation.__init__(self, parsed=parsed)
 
         self.key = key
-        self.value = value
 
     def __str__(self) -> str:
-        return f"JSONObject[{self.key}, {self.value}]"
+        return f"JSONObject[{self.key}]"
 
 
 TypeAnnotationUnion = Union[
@@ -300,9 +309,41 @@ TypeAnnotationExceptOptionalAsTuple = (
 )
 assert TypeAnnotationExceptOptionalAsTuple == get_args(TypeAnnotationExceptOptional)
 
-AtomicTypeAnnotation = Union[PrimitiveTypeAnnotation, OurTypeAnnotation]
+# NOTE (mristin):
+# "Atomic" here does not mean "unsubscripted at the parse stage" -- it means
+# that a single item of this type can be handled by generated code with one
+# self-contained, non-recursive statement or function call (*e.g.*, "convert
+# this one value" or "de-/serialize this one object"), without the *caller*
+# (typically the code iterating over a ``List``'s items or unpacking a
+# ``Tuple``'s items) needing to unroll any further recursive structure of its
+# own. A primitive is atomic in this sense, and so is a reference to one of
+# our own types (``Enumeration``, ``ConstrainedPrimitive``, a ``Class`` or
+# a ``NamedUnion``) -- whatever internal complexity the referenced class
+# itself might have (even further lists, tuples or JSON objects) is entirely
+# the concern of that class's own, single, dedicated function, not of the
+# caller trying to handle one item of a collection. The very same reasoning
+# makes ``JsonValueTypeAnnotation``, ``JsonArrayTypeAnnotation`` and
+# ``JsonObjectTypeAnnotation`` atomic too: each is always handled by exactly
+# one call into a generic "parse/render an arbitrary JSON value" routine,
+# regardless of how deeply the JSON value happens to be nested at runtime.
+# ``List``, ``Tuple`` and ``Optional`` are excluded for the opposite reason:
+# handling one of them at the call site *does* require the caller itself to
+# generate a loop, per-index unpacking, or a null-check branch.
+AtomicTypeAnnotation = Union[
+    PrimitiveTypeAnnotation,
+    OurTypeAnnotation,
+    JsonValueTypeAnnotation,
+    JsonArrayTypeAnnotation,
+    JsonObjectTypeAnnotation,
+]
 
-AtomicTypeAnnotationAsTuple = (PrimitiveTypeAnnotation, OurTypeAnnotation)
+AtomicTypeAnnotationAsTuple = (
+    PrimitiveTypeAnnotation,
+    OurTypeAnnotation,
+    JsonValueTypeAnnotation,
+    JsonArrayTypeAnnotation,
+    JsonObjectTypeAnnotation,
+)
 assert AtomicTypeAnnotationAsTuple == get_args(AtomicTypeAnnotation)
 
 assert_union_without_excluded(
@@ -312,9 +353,6 @@ assert_union_without_excluded(
         ListTypeAnnotation,
         TupleTypeAnnotation,
         OptionalTypeAnnotation,
-        JsonValueTypeAnnotation,
-        JsonArrayTypeAnnotation,
-        JsonObjectTypeAnnotation,
     ],
 )
 
@@ -363,9 +401,7 @@ def type_annotations_equal(
 
     elif isinstance(that, JsonObjectTypeAnnotation):
         assert isinstance(other, JsonObjectTypeAnnotation)
-        return type_annotations_equal(that.key, other.key) and type_annotations_equal(
-            that.value, other.value
-        )
+        return type_annotations_equal(that.key, other.key)
 
     else:
         assert_never(that)
@@ -3556,12 +3592,12 @@ def map_descendability(
 
         elif isinstance(a_type_annotation, JsonObjectTypeAnnotation):
             # NOTE (mristin):
-            # The key is restricted to ``str`` or a class constraining ``str``
-            # (see ``_verify_only_simple_type_patterns`` in ``_translate.py``),
-            # which is never descendable, so only the value matters here.
-            result = recurse(a_type_annotation=a_type_annotation.value)
-            mapping[a_type_annotation] = result
-            return result
+            # The key is ``str`` or a class constraining ``str`` (enforced by
+            # ``_verify_only_simple_type_patterns`` in ``_translate.py``) and
+            # the value is always ``JSONValue`` -- neither ever descends into
+            # a class, so a ``JsonObjectTypeAnnotation`` is never descendable.
+            mapping[a_type_annotation] = False
+            return False
 
         else:
             assert_never(a_type_annotation)
@@ -3604,9 +3640,6 @@ def over_type_annotation_and_nested_type_annotations(
 
     elif isinstance(type_annotation, JsonObjectTypeAnnotation):
         yield from over_type_annotation_and_nested_type_annotations(type_annotation.key)
-        yield from over_type_annotation_and_nested_type_annotations(
-            type_annotation.value
-        )
 
     else:
         pass
@@ -3667,7 +3700,6 @@ def collect_ids_of_our_types_in_properties(symbol_table: SymbolTable) -> Set[int
                     pass
                 elif isinstance(type_anno, JsonObjectTypeAnnotation):
                     stack.append(type_anno.key)
-                    stack.append(type_anno.value)
                 else:
                     assert_never(type_anno)
 

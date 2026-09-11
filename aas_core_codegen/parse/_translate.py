@@ -2428,7 +2428,26 @@ def _verify_arity_of_type_annotation_subscript(
 
         return None
 
-    expected_arity_map = {"List": 1, "Optional": 1, "JSONObject": 2}
+    if type_annotation.identifier == "JSONObject":
+        # NOTE (mristin):
+        # ``JSONObject`` only takes the key type as its generic parameter --
+        # the value is always an arbitrary JSON-able value (``JSONValue``)
+        # and can not be customized, so it is not spelled out as a second
+        # subscript.
+        if len(type_annotation.subscripts) != 1:
+            return Error(
+                type_annotation.node,
+                f"Expected exactly 1 argument (the key type) of "
+                f"a subscripted type annotation {type_annotation.identifier!r}, "
+                f"but got {len(type_annotation.subscripts)}: {type_annotation}. "
+                f"The value of a JSONObject is always an arbitrary JSON-able "
+                f"value (JSONValue) and can not be customized at the moment. "
+                f"Please contact the developers if you need to customize it.",
+            )
+
+        return None
+
+    expected_arity_map = {"List": 1, "Optional": 1}
     expected_arity = expected_arity_map.get(type_annotation.identifier, None)
     if expected_arity is None:
         raise AssertionError(

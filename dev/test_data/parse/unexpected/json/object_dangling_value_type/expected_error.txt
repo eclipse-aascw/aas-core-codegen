@@ -1,1 +1,0 @@
-Our type could not be found in the symbol table: Nonexistent

@@ -51,8 +51,6 @@ SymbolTable(
             key=OurTypeAnnotation(
               our_type='Reference to our type Non_empty_string',
               parsed=...),
-            value=JsonValueTypeAnnotation(
-              parsed=...),
             parsed=...),
           description=None,
           specified_for='Reference to ConcreteClass Something',
@@ -68,8 +66,6 @@ SymbolTable(
             type_annotation=JsonObjectTypeAnnotation(
               key=OurTypeAnnotation(
                 our_type='Reference to our type Non_empty_string',
-                parsed=...),
-              value=JsonValueTypeAnnotation(
                 parsed=...),
               parsed=...),
             default=None,

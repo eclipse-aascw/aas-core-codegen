@@ -7,9 +7,9 @@ class Positive_int(int):
 
 
 class Something:
-    value: JSONObject[Positive_int, JSONValue]
+    value: JSONObject[Positive_int]
 
-    def __init__(self, value: JSONObject[Positive_int, JSONValue]) -> None:
+    def __init__(self, value: JSONObject[Positive_int]) -> None:
         self.value = value
 
 

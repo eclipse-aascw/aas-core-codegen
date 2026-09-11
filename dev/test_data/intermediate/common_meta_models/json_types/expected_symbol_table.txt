@@ -32,34 +32,6 @@ SymbolTable(
       invariant_id_set=...,
       description=None,
       parsed=...),
-    ConstrainedPrimitive(
-      name='Positive_int',
-      inheritances=[],
-      inheritance_id_set=...,
-      ancestors=[],
-      ancestor_id_set=...,
-      descendants=[],
-      descendant_id_set=...,
-      constrainee='INT',
-      is_implementation_specific=False,
-      invariants=[
-        Invariant(
-          description='Larger than zero',
-          body=textwrap.dedent("""\
-            Comparison(
-              left=Name(
-                identifier='self',
-                original_node=...),
-              op='GT',
-              right=Constant(
-                value=0,
-                original_node=...),
-              original_node=...)"""),
-          specified_for='Reference to ConstrainedPrimitive Positive_int',
-          parsed=...)],
-      invariant_id_set=...,
-      description=None,
-      parsed=...),
     ConcreteClass(
       name='Something',
       inheritances=[],
@@ -97,8 +69,6 @@ SymbolTable(
             key=PrimitiveTypeAnnotation(
               a_type='STR',
               parsed=...),
-            value=JsonValueTypeAnnotation(
-              parsed=...),
             parsed=...),
           description=None,
           specified_for='Reference to ConcreteClass Something',
@@ -111,62 +81,11 @@ SymbolTable(
             key=OurTypeAnnotation(
               our_type='Reference to our type Non_empty_string',
               parsed=...),
-            value=JsonValueTypeAnnotation(
-              parsed=...),
             parsed=...),
           description=None,
           specified_for='Reference to ConcreteClass Something',
           json_name='mappingWithConstrainedKey',
           xml_name='mappingWithConstrainedKey',
-          parsed=...),
-        Property(
-          name='mapping_with_constrained_value',
-          type_annotation=JsonObjectTypeAnnotation(
-            key=PrimitiveTypeAnnotation(
-              a_type='STR',
-              parsed=...),
-            value=OurTypeAnnotation(
-              our_type='Reference to our type Positive_int',
-              parsed=...),
-            parsed=...),
-          description=None,
-          specified_for='Reference to ConcreteClass Something',
-          json_name='mappingWithConstrainedValue',
-          xml_name='mappingWithConstrainedValue',
-          parsed=...),
-        Property(
-          name='mapping_with_constrained_key_and_value',
-          type_annotation=JsonObjectTypeAnnotation(
-            key=OurTypeAnnotation(
-              our_type='Reference to our type Non_empty_string',
-              parsed=...),
-            value=OurTypeAnnotation(
-              our_type='Reference to our type Positive_int',
-              parsed=...),
-            parsed=...),
-          description=None,
-          specified_for='Reference to ConcreteClass Something',
-          json_name='mappingWithConstrainedKeyAndValue',
-          xml_name='mappingWithConstrainedKeyAndValue',
-          parsed=...),
-        Property(
-          name='nested_mapping',
-          type_annotation=JsonObjectTypeAnnotation(
-            key=PrimitiveTypeAnnotation(
-              a_type='STR',
-              parsed=...),
-            value=JsonObjectTypeAnnotation(
-              key=PrimitiveTypeAnnotation(
-                a_type='STR',
-                parsed=...),
-              value=JsonValueTypeAnnotation(
-                parsed=...),
-              parsed=...),
-            parsed=...),
-          description=None,
-          specified_for='Reference to ConcreteClass Something',
-          json_name='nestedMapping',
-          xml_name='nestedMapping',
           parsed=...),
         Property(
           name='optional_value',
@@ -197,8 +116,6 @@ SymbolTable(
               key=PrimitiveTypeAnnotation(
                 a_type='STR',
                 parsed=...),
-              value=JsonValueTypeAnnotation(
-                parsed=...),
               parsed=...),
             parsed=...),
           description=None,
@@ -228,8 +145,6 @@ SymbolTable(
               key=PrimitiveTypeAnnotation(
                 a_type='STR',
                 parsed=...),
-              value=JsonValueTypeAnnotation(
-                parsed=...),
               parsed=...),
             default=None,
             parsed=...),
@@ -238,48 +153,6 @@ SymbolTable(
             type_annotation=JsonObjectTypeAnnotation(
               key=OurTypeAnnotation(
                 our_type='Reference to our type Non_empty_string',
-                parsed=...),
-              value=JsonValueTypeAnnotation(
-                parsed=...),
-              parsed=...),
-            default=None,
-            parsed=...),
-          Argument(
-            name='mapping_with_constrained_value',
-            type_annotation=JsonObjectTypeAnnotation(
-              key=PrimitiveTypeAnnotation(
-                a_type='STR',
-                parsed=...),
-              value=OurTypeAnnotation(
-                our_type='Reference to our type Positive_int',
-                parsed=...),
-              parsed=...),
-            default=None,
-            parsed=...),
-          Argument(
-            name='mapping_with_constrained_key_and_value',
-            type_annotation=JsonObjectTypeAnnotation(
-              key=OurTypeAnnotation(
-                our_type='Reference to our type Non_empty_string',
-                parsed=...),
-              value=OurTypeAnnotation(
-                our_type='Reference to our type Positive_int',
-                parsed=...),
-              parsed=...),
-            default=None,
-            parsed=...),
-          Argument(
-            name='nested_mapping',
-            type_annotation=JsonObjectTypeAnnotation(
-              key=PrimitiveTypeAnnotation(
-                a_type='STR',
-                parsed=...),
-              value=JsonObjectTypeAnnotation(
-                key=PrimitiveTypeAnnotation(
-                  a_type='STR',
-                  parsed=...),
-                value=JsonValueTypeAnnotation(
-                  parsed=...),
                 parsed=...),
               parsed=...),
             default=None,
@@ -310,8 +183,6 @@ SymbolTable(
               value=JsonObjectTypeAnnotation(
                 key=PrimitiveTypeAnnotation(
                   a_type='STR',
-                  parsed=...),
-                value=JsonValueTypeAnnotation(
                   parsed=...),
                 parsed=...),
               parsed=...),
@@ -351,21 +222,6 @@ SymbolTable(
               default=None)"""),
           textwrap.dedent("""\
             AssignArgument(
-              name='mapping_with_constrained_value',
-              argument='mapping_with_constrained_value',
-              default=None)"""),
-          textwrap.dedent("""\
-            AssignArgument(
-              name='mapping_with_constrained_key_and_value',
-              argument='mapping_with_constrained_key_and_value',
-              default=None)"""),
-          textwrap.dedent("""\
-            AssignArgument(
-              name='nested_mapping',
-              argument='nested_mapping',
-              default=None)"""),
-          textwrap.dedent("""\
-            AssignArgument(
               name='optional_value',
               argument='optional_value',
               default=None)"""),
@@ -402,21 +258,6 @@ SymbolTable(
               default=None)"""),
           textwrap.dedent("""\
             AssignArgument(
-              name='mapping_with_constrained_value',
-              argument='mapping_with_constrained_value',
-              default=None)"""),
-          textwrap.dedent("""\
-            AssignArgument(
-              name='mapping_with_constrained_key_and_value',
-              argument='mapping_with_constrained_key_and_value',
-              default=None)"""),
-          textwrap.dedent("""\
-            AssignArgument(
-              name='nested_mapping',
-              argument='nested_mapping',
-              default=None)"""),
-          textwrap.dedent("""\
-            AssignArgument(
               name='optional_value',
               argument='optional_value',
               default=None)"""),
@@ -442,12 +283,10 @@ SymbolTable(
       invariant_id_set=...)],
   our_types_topologically_sorted=[
     'Reference to our type Non_empty_string',
-    'Reference to our type Positive_int',
     'Reference to our type Something'],
   enumerations=[],
   constrained_primitives=[
-    'Reference to our type Non_empty_string',
-    'Reference to our type Positive_int'],
+    'Reference to our type Non_empty_string'],
   classes=[
     'Reference to our type Something'],
   concrete_classes=[

@@ -1,5 +1,5 @@
 class Something:
-    value: JSONObject[str]
+    value: JSONObject[str, JSONValue]
 
 
 __version__ = "dummy"

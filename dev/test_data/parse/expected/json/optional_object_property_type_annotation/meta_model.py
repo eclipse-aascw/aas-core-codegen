@@ -1,5 +1,5 @@
 class Something:
-    value: Optional[JSONObject[str, JSONValue]]
+    value: Optional[JSONObject[str]]
 
 
 __version__ = "dummy"

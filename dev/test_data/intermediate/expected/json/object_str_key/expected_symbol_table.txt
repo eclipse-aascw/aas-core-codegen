@@ -19,8 +19,6 @@ SymbolTable(
             key=PrimitiveTypeAnnotation(
               a_type='STR',
               parsed=...),
-            value=JsonValueTypeAnnotation(
-              parsed=...),
             parsed=...),
           description=None,
           specified_for='Reference to ConcreteClass Something',
@@ -36,8 +34,6 @@ SymbolTable(
             type_annotation=JsonObjectTypeAnnotation(
               key=PrimitiveTypeAnnotation(
                 a_type='STR',
-                parsed=...),
-              value=JsonValueTypeAnnotation(
                 parsed=...),
               parsed=...),
             default=None,
