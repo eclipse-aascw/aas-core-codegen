@@ -65,6 +65,9 @@ from aas_core_codegen.intermediate._types import (
     AtomicTypeAnnotationAsTuple,
     OptionalTypeAnnotation,
     OurTypeAnnotation,
+    JsonValueTypeAnnotation,
+    JsonArrayTypeAnnotation,
+    JsonObjectTypeAnnotation,
     STR_TO_PRIMITIVE_TYPE,
     PrimitiveTypeAnnotation,
     DefaultEnumerationLiteral,
@@ -95,6 +98,7 @@ from aas_core_codegen.intermediate._types import (
     MethodUnion,
     beneath_optional,
     over_type_annotation_and_nested_type_annotations,
+    try_primitive_type,
     DescriptionOfConstant,
     ConstantUnion,
     ConstantPrimitive,
@@ -1007,6 +1011,12 @@ def _to_type_annotation(
         if primitive_type is not None:
             return PrimitiveTypeAnnotation(a_type=primitive_type, parsed=parsed)
 
+        if parsed.identifier == parse.JSON_VALUE_TYPE_NAME:
+            return JsonValueTypeAnnotation(parsed=parsed)
+
+        if parsed.identifier == parse.JSON_ARRAY_TYPE_NAME:
+            return JsonArrayTypeAnnotation(parsed=parsed)
+
         # noinspection PyTypeChecker
         return OurTypeAnnotation(
             our_type=_PlaceholderOurType(name=parsed.identifier),  # type: ignore
@@ -1046,6 +1056,19 @@ def _to_type_annotation(
                 items=[
                     _to_type_annotation(subscript) for subscript in parsed.subscripts
                 ],
+                parsed=parsed,
+            )
+
+        elif parsed.identifier == "JSONObject":
+            assert len(parsed.subscripts) == 2, (
+                f"Expected exactly two subscripts for the JSONObject type "
+                f"annotation, but got: {parsed}; this should have been caught "
+                f"before!"
+            )
+
+            return JsonObjectTypeAnnotation(
+                key=_to_type_annotation(parsed.subscripts[0]),
+                value=_to_type_annotation(parsed.subscripts[1]),
                 parsed=parsed,
             )
 
@@ -2307,6 +2330,16 @@ def _over_our_type_annotations(
             yield from _over_our_type_annotations(item)
 
     elif isinstance(something, OptionalTypeAnnotation):
+        yield from _over_our_type_annotations(something.value)
+
+    elif isinstance(something, JsonValueTypeAnnotation):
+        pass
+
+    elif isinstance(something, JsonArrayTypeAnnotation):
+        pass
+
+    elif isinstance(something, JsonObjectTypeAnnotation):
+        yield from _over_our_type_annotations(something.key)
         yield from _over_our_type_annotations(something.value)
 
     elif isinstance(something, Enumeration):
@@ -4794,7 +4827,10 @@ def _verify_only_simple_type_patterns(symbol_table: SymbolTable) -> List[Error]:
     * Tuples of optionals are unexpected; and
     * Tuples of non-atomic types (*i.e.* of lists, tuples or optionals) are
       unexpected -- we only support tuples of primitives, constrained primitives,
-      classes and enumerations.
+      classes and enumerations; and
+    * The key of a ``JSONObject`` must be ``str`` or a class (transitively)
+      constraining ``str`` -- its open-keyed shape only makes sense over
+      string-like keys.
     """
     errors = []  # type: List[Error]
     for cls in symbol_table.classes:
@@ -4842,6 +4878,23 @@ def _verify_only_simple_type_patterns(symbol_table: SymbolTable) -> List[Error]:
                             f"only tuples of primitives, constrained primitives, "
                             f"classes and enumerations (*i.e.* no tuples of "
                             f"optionals, lists or nested tuples), "
+                            f"but the property {prop.name!r} "
+                            f"of the class {cls.name!r} "
+                            f"has type: {prop.type_annotation}. "
+                            f"Please contact the developers if you need "
+                            f"this functionality",
+                        )
+                    )
+
+            elif isinstance(type_anno, JsonObjectTypeAnnotation):
+                if try_primitive_type(type_anno.key) != PrimitiveType.STR:
+                    errors.append(
+                        Error(
+                            prop.parsed.node,
+                            f"We currently support only a limited set of "
+                            f"type annotation patterns. At the moment, we only "
+                            f"support ``str`` or a class constraining ``str`` as "
+                            f"the key of a ``JSONObject``, "
                             f"but the property {prop.name!r} "
                             f"of the class {cls.name!r} "
                             f"has type: {prop.type_annotation}. "

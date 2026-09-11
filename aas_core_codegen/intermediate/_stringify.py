@@ -22,6 +22,9 @@ from aas_core_codegen.intermediate._types import (
     ImplementationSpecificVerification,
     Interface,
     Invariant,
+    JsonArrayTypeAnnotation,
+    JsonObjectTypeAnnotation,
+    JsonValueTypeAnnotation,
     ListTypeAnnotation,
     MetaModel,
     NamedUnion,
@@ -123,6 +126,41 @@ def _stringify_optional_type_annotation(
     )
 
     return result
+
+
+def _stringify_json_value_type_annotation(
+    that: JsonValueTypeAnnotation,
+) -> stringify_mod.Entity:
+    return stringify_mod.Entity(
+        name=that.__class__.__name__,
+        properties=[
+            stringify_mod.PropertyEllipsis("parsed", that.parsed),
+        ],
+    )
+
+
+def _stringify_json_array_type_annotation(
+    that: JsonArrayTypeAnnotation,
+) -> stringify_mod.Entity:
+    return stringify_mod.Entity(
+        name=that.__class__.__name__,
+        properties=[
+            stringify_mod.PropertyEllipsis("parsed", that.parsed),
+        ],
+    )
+
+
+def _stringify_json_object_type_annotation(
+    that: JsonObjectTypeAnnotation,
+) -> stringify_mod.Entity:
+    return stringify_mod.Entity(
+        name=that.__class__.__name__,
+        properties=[
+            stringify_mod.Property("key", stringify(that.key)),
+            stringify_mod.Property("value", stringify(that.value)),
+            stringify_mod.PropertyEllipsis("parsed", that.parsed),
+        ],
+    )
 
 
 def _stringify_description_of_meta_model(
@@ -960,6 +998,9 @@ Dumpable = Union[
     ImplementationSpecificVerification,
     Interface,
     Invariant,
+    JsonArrayTypeAnnotation,
+    JsonObjectTypeAnnotation,
+    JsonValueTypeAnnotation,
     ListTypeAnnotation,
     MetaModel,
     NamedUnion,
@@ -1009,6 +1050,9 @@ _DISPATCH = {
     ImplementationSpecificVerification: _stringify_implementation_specific_verification,
     Interface: _stringify_interface,
     Invariant: _stringify_invariant,
+    JsonArrayTypeAnnotation: _stringify_json_array_type_annotation,
+    JsonObjectTypeAnnotation: _stringify_json_object_type_annotation,
+    JsonValueTypeAnnotation: _stringify_json_value_type_annotation,
     ListTypeAnnotation: _stringify_list_type_annotation,
     MetaModel: _stringify_meta_model,
     OptionalTypeAnnotation: _stringify_optional_type_annotation,
