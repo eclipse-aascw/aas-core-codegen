@@ -171,6 +171,70 @@ Constraints(
             text,
         )
 
+    def test_json_object_with_pattern_constrained_str_key_property(self) -> None:
+        source = """\
+@verification
+def matches_something(text: str) -> bool:
+    prefix = "something"
+    return match(f"^{prefix}-[a-zA-Z]+$", text) is not None
+
+
+@invariant(
+    lambda self: matches_something(self),
+    "Must match something."
+)
+class Something_id(str):
+    pass
+
+
+class Something:
+    some_property: JSONObject[Something_id]
+
+    def __init__(self, some_property: JSONObject[Something_id]) -> None:
+        self.some_property = some_property
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        # fmt: off
+        (
+            _,
+            something_cls,
+            constraints_by_class,
+        ) = (
+            tests.infer_for_schema.common
+            .parse_to_symbol_table_and_something_cls_and_constraints_by_class(
+                source=source
+            )
+        )
+        # fmt: on
+
+        some_property = something_cls.properties_by_name[Identifier("some_property")]
+
+        type_anno = intermediate.beneath_optional(some_property.type_annotation)
+        assert isinstance(type_anno, intermediate.JsonObjectTypeAnnotation)
+
+        constraints_by_value = constraints_by_class[something_cls]
+
+        key_constraints = constraints_by_value.get(type_anno.key, None)
+        assert key_constraints is not None
+
+        text = infer_for_schema.dump(key_constraints)
+
+        self.assertEqual(
+            """\
+Constraints(
+  len_constraint=None,
+  patterns=[
+    PatternConstraint(
+      pattern='^something-[a-zA-Z]+$')],
+  set_of_primitives=None,
+  set_of_enumeration_literals=None)""",
+            text,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

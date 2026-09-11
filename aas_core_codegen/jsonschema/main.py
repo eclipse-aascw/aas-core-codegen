@@ -132,13 +132,24 @@ def _translate_constraints(
 
                     additional_subschemas.append(additional_subschema)
 
-    if isinstance(type_annotation, intermediate.ListTypeAnnotation):
+    if isinstance(
+        type_annotation,
+        (intermediate.ListTypeAnnotation, intermediate.JsonArrayTypeAnnotation),
+    ):
         if constraints.len_constraint is not None:
             if constraints.len_constraint.min_value is not None:
                 base_subschema["minItems"] = constraints.len_constraint.min_value
 
             if constraints.len_constraint.max_value is not None:
                 base_subschema["maxItems"] = constraints.len_constraint.max_value
+
+    if isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
+        if constraints.len_constraint is not None:
+            if constraints.len_constraint.min_value is not None:
+                base_subschema["minProperties"] = constraints.len_constraint.min_value
+
+            if constraints.len_constraint.max_value is not None:
+                base_subschema["maxProperties"] = constraints.len_constraint.max_value
 
     assert (
         not (len(base_subschema) == 0) or len(additional_subschemas) == 0
@@ -302,6 +313,64 @@ def _define_type(
             definition["maxItems"] = len(items_type_definitions)
             definition["additionalItems"] = False
 
+        elif isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
+            # NOTE (mristin):
+            # ``JSONValue`` is the only one of the three JSON-able type
+            # annotations that is genuinely self-referential (an array of
+            # ``JSONValue``s, an object of ``JSONValue``s), so it is the only
+            # one that needs a shared, named definition to break the cycle. It
+            # has no further constraints to inline on top of that definition,
+            # so we simply point to it and skip the constraint-merging logic
+            # below.
+            return (
+                collections.OrderedDict([("$ref", "#/definitions/JSONValue")]),
+                None,
+            )
+
+        elif isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
+            # NOTE (mristin):
+            # Unlike ``JSONValue``, an array of JSON-able values is *not*
+            # self-referential, so we inline it directly instead of pointing to
+            # a shared definition -- the same way ``ListTypeAnnotation`` is
+            # inlined just below. This also means ``minItems``/``maxItems`` can
+            # be merged in as plain sibling keys through the generic
+            # constraint-merging logic at the end of this function, with no
+            # ``$ref`` present at this level to worry about.
+            definition["type"] = "array"
+            definition["items"] = collections.OrderedDict(
+                [("$ref", "#/definitions/JSONValue")]
+            )
+
+        elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
+            # NOTE (mristin):
+            # See the note above on ``JsonArrayTypeAnnotation`` -- an open JSON
+            # object is not self-referential either, so we inline it directly.
+            definition["type"] = "object"
+            definition["additionalProperties"] = collections.OrderedDict(
+                [("$ref", "#/definitions/JSONValue")]
+            )
+
+            assert not isinstance(
+                type_annotation.key, intermediate.OptionalTypeAnnotation
+            ), (
+                "NOTE (mristin): The key of a JSONObject is verified to never be "
+                "optional in "
+                "intermediate._translate._verify_only_simple_type_patterns."
+            )
+
+            key_constraints = constraints_by_value.get(type_annotation.key, None)
+            if key_constraints is not None:
+                key_all_of = _translate_constraints(
+                    type_annotation=type_annotation.key,
+                    constraints=key_constraints,
+                    fix_pattern=fix_pattern,
+                )
+
+                if key_all_of is not None:
+                    definition["propertyNames"] = _all_of_as_jsonable_mapping(
+                        key_all_of
+                    )
+
         else:
             assert_never(type_annotation)
 
@@ -383,9 +452,17 @@ def _over_non_optional_type_annotations(
 
     elif isinstance(
         type_annotation,
-        (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
+        (
+            intermediate.PrimitiveTypeAnnotation,
+            intermediate.OurTypeAnnotation,
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+        ),
     ):
         pass
+
+    elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
+        yield from _over_non_optional_type_annotations(type_annotation.key)
 
     else:
         # noinspection PyTypeChecker
@@ -769,6 +846,88 @@ def _generate_concrete_definition(
     return result, None
 
 
+def _model_uses_json_types(symbol_table: intermediate.SymbolTable) -> bool:
+    """Check whether any property in the model refers to a JSON-able type."""
+    for cls in symbol_table.classes:
+        for prop in cls.properties:
+            for (
+                type_anno
+            ) in intermediate.over_type_annotation_and_nested_type_annotations(
+                prop.type_annotation
+            ):
+                if isinstance(
+                    type_anno,
+                    (
+                        intermediate.JsonValueTypeAnnotation,
+                        intermediate.JsonArrayTypeAnnotation,
+                        intermediate.JsonObjectTypeAnnotation,
+                    ),
+                ):
+                    return True
+
+    return False
+
+
+def _define_json_type_definitions() -> MutableMapping[str, Any]:
+    """
+    Generate the shared definition for JSONValue.
+
+    ``JSONValue`` is the only one of the three JSON-able type annotations that
+    is genuinely self-referential (an array of ``JSONValue``s, an object of
+    ``JSONValue``s), so it is the only one that needs a name to break the
+    cycle -- ``JSONArray``/``JSONObject`` are inlined directly wherever they
+    occur instead (see :func:`_define_type`), the same way ``List``/``Tuple``
+    already are, since they are not self-referential on their own.
+
+    NOTE (mristin):
+    ``JSONValue`` is deliberately spelled out as an ``anyOf`` *whitelist* of
+    the five legal JSON shapes (boolean, number, string, array, object), each
+    with ``type`` as a single string, rather than as a permissive ``{}`` or as
+    a ``{"not": {"type": "null"}}``/``{"type": [...]}`` blacklist. This
+    excludes JSON ``null`` for free -- it is simply not one of the five
+    branches -- without needing any dedicated "not null" building block, and
+    it keeps every branch inside the restricted Schema Object subset that
+    OpenAPI 3.0 itself supports (OpenAPI 3.0 forbids ``type`` arrays and has
+    no ``"null"`` type value at all; both were only added in 3.1). The one
+    piece here that can *not* port to OpenAPI 3.0 is ``propertyNames`` (used
+    in :func:`_define_type` for constrained-string ``JSONObject`` keys) --
+    that is expected, not a gap: it is the same restriction the official AAS
+    API spec itself runs into by being boxed into OpenAPI 3.0, which is
+    exactly why we can express something here that it can not.
+
+    The definitions are to be *extended* with the resulting mapping.
+    """
+    return collections.OrderedDict(
+        [
+            (
+                "JSONValue",
+                collections.OrderedDict(
+                    [
+                        (
+                            "anyOf",
+                            [
+                                {"type": "boolean"},
+                                {"type": "number"},
+                                {"type": "string"},
+                                {
+                                    "type": "array",
+                                    "items": {"$ref": "#/definitions/JSONValue"},
+                                },
+                                {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                        "$ref": "#/definitions/JSONValue"
+                                    },
+                                },
+                            ],
+                        )
+                    ]
+                ),
+            ),
+        ]
+    )
+
+
 class Definitions:
     """Store definitions of the schema as we go."""
 
@@ -1040,6 +1199,14 @@ def generate(
 
             else:
                 assert_never(our_type)
+
+    if len(errors) > 0:
+        return None, errors
+
+    if _model_uses_json_types(symbol_table):
+        update_error = definitions.update(_define_json_type_definitions())
+        if update_error is not None:
+            errors.append(update_error)
 
     if len(errors) > 0:
         return None, errors

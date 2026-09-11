@@ -1747,7 +1747,21 @@ assert_union_without_excluded(
     # ``ListTypeAnnotation`` and ``TupleTypeAnnotation`` are handled directly in
     # the calling code (see ``_generate_cls_to_map``), which unrolls them into
     # calls of this function on the atomic items.
-    excluded=[intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation],
+    #
+    # NOTE (mristin, 2026-09-11):
+    # ``JsonValueTypeAnnotation``, ``JsonArrayTypeAnnotation`` and
+    # ``JsonObjectTypeAnnotation`` are not supported in the Go backend yet (see
+    # ``aas_core_codegen.golang.common.generate_type``, which does not handle them
+    # and will fail loudly with ``assert_never`` if a meta-model actually uses
+    # them). Excluded here only to keep this module importable in the meantime;
+    # the Go backend itself still needs real JSON* support as separate work.
+    excluded=[
+        intermediate.ListTypeAnnotation,
+        intermediate.TupleTypeAnnotation,
+        intermediate.JsonValueTypeAnnotation,
+        intermediate.JsonArrayTypeAnnotation,
+        intermediate.JsonObjectTypeAnnotation,
+    ],
 )
 
 

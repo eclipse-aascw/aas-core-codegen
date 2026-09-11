@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2019-09/schema",
+  "title": "DummyForTest",
+  "type": "object",
+  "allOf": [
+    {
+      "$ref": "#/definitions/Something"
+    }
+  ],
+  "$id": "https://dummy.com",
+  "definitions": {
+    "JSONValue": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JSONValue"
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JSONValue"
+          }
+        }
+      ]
+    },
+    "ModelType": {
+      "type": "string",
+      "enum": []
+    },
+    "Something": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "$ref": "#/definitions/JSONValue"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JSONValue"
+          }
+        },
+        "mapping": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JSONValue"
+          }
+        },
+        "mappingWithConstrainedKey": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JSONValue"
+          },
+          "propertyNames": {
+            "minLength": 1
+          }
+        },
+        "optionalValue": {
+          "$ref": "#/definitions/JSONValue"
+        },
+        "optionalValues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/JSONValue"
+          }
+        },
+        "optionalMapping": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/JSONValue"
+          }
+        }
+      },
+      "required": [
+        "value",
+        "values",
+        "mapping",
+        "mappingWithConstrainedKey"
+      ]
+    }
+  }
+}

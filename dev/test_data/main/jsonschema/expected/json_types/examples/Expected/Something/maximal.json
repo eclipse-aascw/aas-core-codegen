@@ -1,0 +1,33 @@
+{
+  "value": {
+    "aBoolean": true,
+    "aNumber": 42.5,
+    "aString": "hello",
+    "anArray": [1, "two", false, [3, 4], {"nested": "object"}],
+    "anObject": {
+      "deeper": {
+        "evenDeeper": [1, 2, 3]
+      }
+    }
+  },
+  "values": [
+    true,
+    3.14,
+    "text",
+    [1, 2, 3],
+    {"key": "value"}
+  ],
+  "mapping": {
+    "anyKeyGoes": "value",
+    "anotherKey": [1, 2, {"three": 3}]
+  },
+  "mappingWithConstrainedKey": {
+    "nonEmptyKey": {"nested": [1, 2, 3]},
+    "anotherNonEmptyKey": "just a string"
+  },
+  "optionalValue": false,
+  "optionalValues": [1, 2, 3],
+  "optionalMapping": {
+    "someKey": "someValue"
+  }
+}

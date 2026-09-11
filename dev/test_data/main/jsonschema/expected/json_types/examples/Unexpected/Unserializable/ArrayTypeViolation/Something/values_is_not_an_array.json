@@ -1,0 +1,8 @@
+{
+  "value": true,
+  "values": "this is a string, not a JSON array",
+  "mapping": {},
+  "mappingWithConstrainedKey": {
+    "a": 1
+  }
+}
