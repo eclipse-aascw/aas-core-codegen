@@ -1,9 +1,9 @@
-class Short_id:
+class Short_ID:
     pass
 
 
 class Something:
-    value: JSONObject[Short_id]
+    value: JSONObject[Short_ID]
 
 
 __version__ = "dummy"

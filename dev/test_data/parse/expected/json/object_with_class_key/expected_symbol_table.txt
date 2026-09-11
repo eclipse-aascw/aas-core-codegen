@@ -1,7 +1,7 @@
 UnverifiedSymbolTable(
   our_types=[
     ConcreteClass(
-      name='Short_id',
+      name='Short_ID',
       is_implementation_specific=False,
       inheritances=[],
       properties=[],
@@ -23,7 +23,7 @@ UnverifiedSymbolTable(
             identifier='JSONObject',
             subscripts=[
               AtomicTypeAnnotation(
-                identifier='Short_id',
+                identifier='Short_ID',
                 node=...)],
             node=...),
           description=None,
