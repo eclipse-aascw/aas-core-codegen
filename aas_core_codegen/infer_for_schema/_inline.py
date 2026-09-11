@@ -424,9 +424,17 @@ def _over_non_optional_type_annotations(
 
     elif isinstance(
         type_annotation,
-        (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
+        (
+            intermediate.PrimitiveTypeAnnotation,
+            intermediate.OurTypeAnnotation,
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+        ),
     ):
         pass
+
+    elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
+        yield from _over_non_optional_type_annotations(type_annotation.key)
 
     else:
         # noinspection PyTypeChecker
