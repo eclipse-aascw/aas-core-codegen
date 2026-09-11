@@ -302,6 +302,125 @@ __xml_namespace__ = "https://dummy.com"
 
         Test_with_smoke.execute(source=source)
 
+    def test_len_and_index_on_json_array(self) -> None:
+        source = """\
+@invariant(
+    lambda self:
+    len(self.values) >= 1 and len(self.values[0]) >= 0,
+    "There must be at least one value."
+)
+class Something:
+    values: JSONArray
+
+    def __init__(self, values: JSONArray) -> None:
+        self.values = values
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        Test_with_smoke.execute(source=source)
+
+    def test_len_index_and_in_on_json_object(self) -> None:
+        source = """\
+@invariant(
+    lambda self:
+    len(self.value) >= 1
+    and ("modelType" in self.value)
+    and len(self.value["modelType"]) >= 0,
+    "The value must contain at least one key."
+)
+class Something:
+    value: JSONObject[str]
+
+    def __init__(self, value: JSONObject[str]) -> None:
+        self.value = value
+
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        Test_with_smoke.execute(source=source)
+
+    def test_index_on_json_value_fails(self) -> None:
+        source = """\
+@invariant(
+    lambda self:
+    len(self.value[0]) >= 0,
+    "Dummy invariant description"
+)
+class Something:
+    value: JSONValue
+
+    def __init__(self, value: JSONValue) -> None:
+        self.value = value
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_type_inference_to_fail(
+            source=source,
+            expected_joined_message=(
+                "JSONValue represents an arbitrary, open JSON-able value "
+                "whose shape can not be determined statically, so we treat "
+                "it analogous to Unknown -- indexing into it is not "
+                "supported"
+            ),
+        )
+
+    def test_index_on_json_array_with_non_integer_fails(self) -> None:
+        source = """\
+@invariant(
+    lambda self:
+    len(self.values["x"]) >= 0,
+    "Dummy invariant description"
+)
+class Something:
+    values: JSONArray
+
+    def __init__(self, values: JSONArray) -> None:
+        self.values = values
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_type_inference_to_fail(
+            source=source,
+            expected_joined_message=(
+                "Expected the index into a JSONArray to be an integer, "
+                "but got: str"
+            ),
+        )
+
+    def test_index_on_json_object_with_non_string_fails(self) -> None:
+        source = """\
+@invariant(
+    lambda self:
+    len(self.value[1]) >= 0,
+    "Dummy invariant description"
+)
+class Something:
+    value: JSONObject[str]
+
+    def __init__(self, value: JSONObject[str]) -> None:
+        self.value = value
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        self.expect_type_inference_to_fail(
+            source=source,
+            expected_joined_message=(
+                "Expected the index into a JSONObject to be a string "
+                "(or a class constraining ``str``), but got: int"
+            ),
+        )
+
     def test_is_none_fails_on_non_optional(self) -> None:
         source = """\
 @invariant(

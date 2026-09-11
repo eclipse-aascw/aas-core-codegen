@@ -253,6 +253,42 @@ class OptionalTypeAnnotation(SubscriptedTypeAnnotation):
         return f"Optional[{self.value}]"
 
 
+class JsonValueTypeAnnotation(AtomicTypeAnnotation):
+    """
+    Represent the type of an arbitrary, open JSON-able value.
+
+    Since neither its shape nor any further operation on it can be determined
+    statically, we treat it analogous to ``Unknown`` -- no member access,
+    indexing or other operation is allowed on a value of this type.
+    """
+
+    def __str__(self) -> str:
+        return "JSONValue"
+
+
+class JsonArrayTypeAnnotation(AtomicTypeAnnotation):
+    """Represent the type of an open, JSON-able array."""
+
+    def __str__(self) -> str:
+        return "JSONArray"
+
+
+class JsonObjectTypeAnnotation(AtomicTypeAnnotation):
+    """
+    Represent the type of an open, JSON-object-shaped value.
+
+    The value is always a :class:`JsonValueTypeAnnotation` and can not be
+    customized, so we only track the ``key`` here.
+    """
+
+    def __init__(self, key: "TypeAnnotationUnion") -> None:
+        """Initialize with the given values."""
+        self.key = key
+
+    def __str__(self) -> str:
+        return f"JSONObject[{self.key}]"
+
+
 class EnumerationAsTypeTypeAnnotation(TypeAnnotation):
     """
     Represent an enum class as a type.
@@ -349,6 +385,18 @@ def _type_annotations_equal(
             return False
         else:
             return that.enumeration is other.enumeration
+
+    elif isinstance(that, JsonValueTypeAnnotation):
+        return isinstance(other, JsonValueTypeAnnotation)
+
+    elif isinstance(that, JsonArrayTypeAnnotation):
+        return isinstance(other, JsonArrayTypeAnnotation)
+
+    elif isinstance(that, JsonObjectTypeAnnotation):
+        if not isinstance(other, JsonObjectTypeAnnotation):
+            return False
+        else:
+            return _type_annotations_equal(that.key, other.key)
 
     else:
         assert_never(that)
@@ -502,6 +550,45 @@ def _assignable(
                 target_type=target_type.value, value_type=value_type.value
             )
 
+    elif isinstance(target_type, JsonValueTypeAnnotation):
+        # NOTE (mristin):
+        # ``JSONValue`` denotes an arbitrary, open JSON-able value, so any
+        # JSON-able value -- a JSON-able primitive or a JSON-able collection --
+        # can be assigned to it.
+        #
+        # We deliberately exclude ``PrimitiveType.INT`` here. JSON itself has
+        # no separate integer type, only a single "number" type, which we
+        # model as ``PrimitiveType.FLOAT``. Accepting an ``int`` here would be
+        # ambiguous -- it is unclear whether it should be rendered as, say,
+        # ``1`` or ``1.0`` -- so we require the value to already be a
+        # ``float`` (or another JSON-able type) before it can flow into
+        # a ``JSONValue``.
+        return isinstance(
+            value_type,
+            (
+                JsonValueTypeAnnotation,
+                JsonArrayTypeAnnotation,
+                JsonObjectTypeAnnotation,
+            ),
+        ) or (
+            isinstance(value_type, PrimitiveTypeAnnotation)
+            and value_type.a_type
+            in (
+                PrimitiveType.BOOL,
+                PrimitiveType.FLOAT,
+                PrimitiveType.STR,
+            )
+        )
+
+    elif isinstance(target_type, JsonArrayTypeAnnotation):
+        return isinstance(value_type, JsonArrayTypeAnnotation)
+
+    elif isinstance(target_type, JsonObjectTypeAnnotation):
+        if not isinstance(value_type, JsonObjectTypeAnnotation):
+            return False
+        else:
+            return _type_annotations_equal(target_type.key, value_type.key)
+
     elif isinstance(target_type, EnumerationAsTypeTypeAnnotation):
         raise NotImplementedError(
             "(mristin, 2022-02-04): Assigning enumeration-as-type to another "
@@ -551,6 +638,17 @@ def convert_type_annotation(
     elif isinstance(type_annotation, _types.OptionalTypeAnnotation):
         return OptionalTypeAnnotation(
             value=convert_type_annotation(type_annotation.value)
+        )
+
+    elif isinstance(type_annotation, _types.JsonValueTypeAnnotation):
+        return JsonValueTypeAnnotation()
+
+    elif isinstance(type_annotation, _types.JsonArrayTypeAnnotation):
+        return JsonArrayTypeAnnotation()
+
+    elif isinstance(type_annotation, _types.JsonObjectTypeAnnotation):
+        return JsonObjectTypeAnnotation(
+            key=convert_type_annotation(type_annotation.key)
         )
 
     else:
@@ -1031,6 +1129,9 @@ TypeAnnotationUnion = Union[
     TupleTypeAnnotation,
     OptionalTypeAnnotation,
     EnumerationAsTypeTypeAnnotation,
+    JsonValueTypeAnnotation,
+    JsonArrayTypeAnnotation,
+    JsonObjectTypeAnnotation,
 ]
 
 
@@ -1272,6 +1373,51 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
             result = items[index_value]
             self.type_map[node] = result
             return result
+
+        if isinstance(collection_type, JsonArrayTypeAnnotation):
+            if not (
+                isinstance(index_type, PrimitiveTypeAnnotation)
+                and index_type.a_type in (PrimitiveType.INT, PrimitiveType.LENGTH)
+            ):
+                self.errors.append(
+                    Error(
+                        node.index.original_node,
+                        f"Expected the index into a JSONArray to be an integer, "
+                        f"but got: {index_type}",
+                    )
+                )
+                return None
+
+            result = JsonValueTypeAnnotation()
+            self.type_map[node] = result
+            return result
+
+        if isinstance(collection_type, JsonObjectTypeAnnotation):
+            if try_primitive_type(index_type) != PrimitiveType.STR:
+                self.errors.append(
+                    Error(
+                        node.index.original_node,
+                        f"Expected the index into a JSONObject to be a string "
+                        f"(or a class constraining ``str``), but got: {index_type}",
+                    )
+                )
+                return None
+
+            result = JsonValueTypeAnnotation()
+            self.type_map[node] = result
+            return result
+
+        if isinstance(collection_type, JsonValueTypeAnnotation):
+            self.errors.append(
+                Error(
+                    node.collection.original_node,
+                    "JSONValue represents an arbitrary, open JSON-able value "
+                    "whose shape can not be determined statically, so we treat "
+                    "it analogous to Unknown -- indexing into it is not "
+                    "supported",
+                )
+            )
+            return None
 
         if not isinstance(collection_type, ListTypeAnnotation):
             self.errors.append(
@@ -1562,6 +1708,9 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
                     TupleTypeAnnotation,
                     OptionalTypeAnnotation,
                     EnumerationAsTypeTypeAnnotation,
+                    JsonValueTypeAnnotation,
+                    JsonArrayTypeAnnotation,
+                    JsonObjectTypeAnnotation,
                 ),
             ):
                 self.errors.append(
@@ -2398,6 +2547,9 @@ TypeAnnotationExceptOptional = Union[
     SetTypeAnnotation,
     TupleTypeAnnotation,
     EnumerationAsTypeTypeAnnotation,
+    JsonValueTypeAnnotation,
+    JsonArrayTypeAnnotation,
+    JsonObjectTypeAnnotation,
 ]
 assert_union_without_excluded(
     original_union=TypeAnnotationUnion,

@@ -842,6 +842,99 @@ __xml_namespace__ = "https://dummy.com"
 
         self.assertIsInstance(unpickled, intermediate_types.TupleTypeAnnotation)
 
+    def test_json_value_type_annotation(self) -> None:
+        source = """\
+class Some_class:
+    some_property: JSONValue
+
+    def __init__(
+            self,
+            some_property: JSONValue
+    ) -> None:
+        self.some_property = some_property
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        symbol_table, error = tests.common.translate_source_to_intermediate(
+            source=source
+        )
+        if error is not None:
+            raise AssertionError(tests.common.most_underlying_messages(error))
+        assert symbol_table is not None
+
+        some_class = symbol_table.must_find_concrete_class(Identifier("Some_class"))
+        some_property = some_class.properties[0]
+        type_annotation = some_property.type_annotation
+
+        pickled_data = pickle.dumps(type_annotation)
+        unpickled = pickle.loads(pickled_data)
+
+        self.assertIsInstance(unpickled, intermediate_types.JsonValueTypeAnnotation)
+
+    def test_json_array_type_annotation(self) -> None:
+        source = """\
+class Some_class:
+    some_property: JSONArray
+
+    def __init__(
+            self,
+            some_property: JSONArray
+    ) -> None:
+        self.some_property = some_property
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        symbol_table, error = tests.common.translate_source_to_intermediate(
+            source=source
+        )
+        if error is not None:
+            raise AssertionError(tests.common.most_underlying_messages(error))
+        assert symbol_table is not None
+
+        some_class = symbol_table.must_find_concrete_class(Identifier("Some_class"))
+        some_property = some_class.properties[0]
+        type_annotation = some_property.type_annotation
+
+        pickled_data = pickle.dumps(type_annotation)
+        unpickled = pickle.loads(pickled_data)
+
+        self.assertIsInstance(unpickled, intermediate_types.JsonArrayTypeAnnotation)
+
+    def test_json_object_type_annotation(self) -> None:
+        source = """\
+class Some_class:
+    some_property: JSONObject[str]
+
+    def __init__(
+            self,
+            some_property: JSONObject[str]
+    ) -> None:
+        self.some_property = some_property
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        symbol_table, error = tests.common.translate_source_to_intermediate(
+            source=source
+        )
+        if error is not None:
+            raise AssertionError(tests.common.most_underlying_messages(error))
+        assert symbol_table is not None
+
+        some_class = symbol_table.must_find_concrete_class(Identifier("Some_class"))
+        some_property = some_class.properties[0]
+        type_annotation = some_property.type_annotation
+
+        pickled_data = pickle.dumps(type_annotation)
+        unpickled = pickle.loads(pickled_data)
+
+        self.assertIsInstance(unpickled, intermediate_types.JsonObjectTypeAnnotation)
+
     def test_meta_model(self) -> None:
         source = """\
 class Some_class:
