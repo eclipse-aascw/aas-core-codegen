@@ -1953,70 +1953,13 @@ def _generate_deserialize_list_property(
 
     assert isinstance(type_anno, intermediate.ListTypeAnnotation)
 
-    deserialize_item_expr: Stripped
+    assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
+        "List items are restricted to atomic types (primitives, "
+        "constrained primitives, classes, enumerations and JSON-able values), "
+        "so no nested optionals, lists or tuples are expected here."
+    )
 
-    items_primitive_type = intermediate.try_primitive_type(type_anno.items)
-
-    if items_primitive_type is not None:
-        deserialize_item_expr = _PRIMITIVE_TYPE_TO_DESERIALIZE[items_primitive_type]
-
-    else:
-        if isinstance(type_anno.items, intermediate.PrimitiveTypeAnnotation):
-            raise AssertionError("This case should have been handled before.")
-
-        elif isinstance(type_anno.items, intermediate.OurTypeAnnotation):
-            if isinstance(type_anno.items.our_type, intermediate.Enumeration):
-                deserialize_item_expr = cpp_naming.function_name(
-                    Identifier(f"deserialize_{type_anno.items.our_type.name}")
-                )
-
-            elif isinstance(
-                type_anno.items.our_type, intermediate.ConstrainedPrimitive
-            ):
-                raise AssertionError("This case should have been handled before.")
-
-            elif isinstance(
-                type_anno.items.our_type,
-                (intermediate.AbstractClass, intermediate.ConcreteClass),
-            ):
-                deserialize_cls = _determine_deserialize_function_for_class(
-                    cls=type_anno.items.our_type
-                )
-
-                deserialize_item_expr = Stripped(
-                    f"""\
-[&additional_properties](const nlohmann::json& a_json) {{
-{I}return {deserialize_cls}(a_json, additional_properties);
-}}"""
-                )
-
-            elif isinstance(type_anno.items.our_type, intermediate.NamedUnion):
-                # NOTE (mristin):
-                # A named union is not part of the class hierarchy, so there is no
-                # ancestor to upcast to -- the dispatching function is always
-                # called bare, without any template parameter.
-                deserialize_cls = cpp_naming.function_name(
-                    Identifier(f"Deserialize_{type_anno.items.our_type.name}")
-                )
-
-                deserialize_item_expr = Stripped(
-                    f"""\
-[&additional_properties](const nlohmann::json& a_json) {{
-{I}return {deserialize_cls}(a_json, additional_properties);
-}}"""
-                )
-
-            else:
-                # noinspection PyTypeChecker
-                assert_never(type_anno.items.our_type)
-
-        else:
-            raise NotImplementedError(
-                f"NOTE (mristin): We currently generate only JSON de-serialization "
-                f"code for lists of atomic values, "
-                f"but you specified {type_anno}. "
-                f"Please contact the developers if you need this feature."
-            )
+    deserialize_item_expr = _deserialize_expr_for_atomic_item(type_anno.items)
 
     var_name = cpp_naming.variable_name(Identifier(f"the_{prop.name}"))
     json_prop_name = prop.json_name
@@ -3781,6 +3724,12 @@ def _generate_serialize_list_property(
 
     serialize_item_expr: Stripped
 
+    assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
+        "List items are restricted to atomic types (primitives, "
+        "constrained primitives, classes, enumerations and JSON-able values), "
+        "so no nested optionals, lists or tuples are expected here."
+    )
+
     items_primitive_type = intermediate.try_primitive_type(type_anno.items)
 
     if items_primitive_type is not None:
@@ -3858,12 +3807,21 @@ def _generate_serialize_list_property(
                 # noinspection PyTypeChecker
                 assert_never(type_anno.items.our_type)
 
+        elif isinstance(
+            type_anno.items,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            serialize_list = "SerializeListWithFallible"
+
+            serialize_item_expr = _json_serialize_function_for(type_anno.items)
+
         else:
-            raise NotImplementedError(
-                f"(mristin) We currently generate JSON serialization code only for "
-                f"lists of atomic values, but we got: {type_anno}. "
-                f"Please contact the developers if you need this feature."
-            )
+            # noinspection PyTypeChecker
+            assert_never(type_anno.items)
 
     json_prop_name_literal = cpp_common.string_literal(json_name)
 

@@ -826,6 +826,20 @@ class IteratorQualities:
                     else:
                         assert_never(type_anno.items.our_type)
 
+                elif isinstance(
+                    type_anno.items,
+                    (
+                        intermediate.JsonValueTypeAnnotation,
+                        intermediate.JsonArrayTypeAnnotation,
+                        intermediate.JsonObjectTypeAnnotation,
+                    ),
+                ):
+                    # NOTE (mristin):
+                    # A JSON-able value is plain data (``nlohmann::json``), never
+                    # a reference to one of our own classes, so it is never
+                    # relevant for iteration/descent.
+                    pass
+
                 else:
                     raise NotImplementedError(
                         f"NOTE (mristin): We expect only lists of atomic values "

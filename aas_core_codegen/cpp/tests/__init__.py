@@ -7,6 +7,7 @@ from aas_core_codegen.cpp.tests import (
     _generate_common_xmlization,
     _generate_test_descent_and_descent_once,
     _generate_test_jsonization_dispatch,
+    _generate_test_json_value_verification,
     _generate_test_jsonization_of_concrete_classes,
     _generate_test_revm,
     _generate_test_stringification_base64,
@@ -42,6 +43,9 @@ generate_test_descent_and_descent_once_implementation = (
 )
 generate_test_jsonization_dispatch_implementation = (
     _generate_test_jsonization_dispatch.generate_implementation
+)
+generate_test_json_value_verification_implementation = (
+    _generate_test_json_value_verification.generate_implementation
 )
 generate_test_jsonization_of_concrete_classes_implementation = (
     _generate_test_jsonization_of_concrete_classes.generate_implementation

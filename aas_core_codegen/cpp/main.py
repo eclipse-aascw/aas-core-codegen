@@ -549,6 +549,15 @@ def execute(context: run.Context, stdout: TextIO, stderr: TextIO) -> int:
                     None,
                 ),
             ),
+            (
+                test_dir / "test_json_value_verification.cpp",
+                lambda: (
+                    cpp_tests.generate_test_json_value_verification_implementation(
+                        library_namespace=library_namespace
+                    ),
+                    None,
+                ),
+            ),
         ]
 
     for rel_path, generator_func in rel_paths_generators:

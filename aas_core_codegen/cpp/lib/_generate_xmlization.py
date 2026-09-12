@@ -4028,6 +4028,12 @@ def _xml_serialize_list_value_expr(
     Build the ``(list, writer) -> optional<xml_common::SerializationError>`` callable for
     a list-typed property, to be plugged into ``SerializePropertyAsElement``.
     """
+    assert isinstance(item_type_annotation, intermediate.AtomicTypeAnnotationAsTuple), (
+        "List items are restricted to atomic types (primitives, "
+        "constrained primitives, classes, enumerations and JSON-able values), "
+        "so no nested optionals, lists or tuples are expected here."
+    )
+
     item_type = cpp_common.generate_type(
         type_annotation=item_type_annotation, types_namespace=cpp_common.TYPES_NAMESPACE
     )
@@ -4084,13 +4090,20 @@ def _xml_serialize_list_value_expr(
                 # noinspection PyTypeChecker
                 assert_never(item_type_annotation.our_type)
 
+        elif isinstance(
+            item_type_annotation,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            serialize_item = _xml_json_serialize_function_for(item_type_annotation)
+            list_helper = "SerializeListOfVElements"
+
         else:
-            raise NotImplementedError(
-                "NOTE (mristin): We currently implement only XML serialization of "
-                "lists of atomic values (primitive types, enumerations, instances), "
-                f"but we got list of item type: {item_type_annotation}. "
-                f"Please contact the developers if you need this feature."
-            )
+            # noinspection PyTypeChecker
+            assert_never(item_type_annotation)
 
     return Stripped(
         f"""\

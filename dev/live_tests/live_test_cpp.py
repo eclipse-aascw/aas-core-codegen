@@ -73,6 +73,14 @@ def _generate_cmake_lists(namespace: Stripped, uses_xml_rpc: bool) -> Stripped:
             NAME test_xml_rpc
             COMMAND $<TARGET_FILE:test_xml_rpc>
     )
+
+    add_executable(test_json_value_verification test/test_json_value_verification.cpp)
+    target_include_directories(test_json_value_verification PRIVATE ${{CMAKE_CURRENT_SOURCE_DIR}}/src)
+    target_link_libraries(test_json_value_verification {target_prefix}_static)
+    add_test(
+            NAME test_json_value_verification
+            COMMAND $<TARGET_FILE:test_json_value_verification>
+    )
 """
         if uses_xml_rpc
         else ""
