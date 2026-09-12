@@ -1026,6 +1026,12 @@ def generate_header(
         "#include <variant>\n" if len(symbol_table.named_unions) > 0 else ""
     )
 
+    nlohmann_json_include = (
+        "#include <nlohmann/json.hpp>\n\n"
+        if intermediate.model_uses_json_types(symbol_table)
+        else ""
+    )
+
     blocks = [
         Stripped(
             f"""\
@@ -1038,6 +1044,7 @@ def generate_header(
 #include "{include_prefix_path}/common.hpp"
 
 #pragma warning(push, 0)
+{nlohmann_json_include}\
 #include <cstddef>
 #include <cstdint>
 #include <memory>

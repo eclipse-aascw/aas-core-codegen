@@ -278,6 +278,11 @@ class Test_cpp(_TestCase):
             target=aas_core_codegen.main.Target.CPP, case_name="enum"
         )
 
+    def test_expected_json_types(self) -> None:
+        self._run_expected_test(
+            target=aas_core_codegen.main.Target.CPP, case_name="json_types"
+        )
+
     def test_expected_list_of_classes(self) -> None:
         self._run_expected_test(
             target=aas_core_codegen.main.Target.CPP, case_name="list_of_classes"

@@ -843,6 +843,22 @@ def _find_constrained_primitive(
 
         return None
 
+    elif isinstance(
+        type_annotation,
+        (intermediate.JsonValueTypeAnnotation, intermediate.JsonArrayTypeAnnotation),
+    ):
+        # NOTE (mristin):
+        # Neither has a key to constrain, and the value is always the fully
+        # open ``JSONValue``, so there is nothing to find here.
+        return None
+
+    elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
+        # NOTE (mristin):
+        # ``JsonObjectTypeAnnotation.key`` is either a plain ``str`` or
+        # a class (transitively) constraining ``str`` -- delegate to find out
+        # which, exactly as we would for any other property.
+        return _find_constrained_primitive(type_annotation.key)
+
     else:
         assert_never(type_annotation)
 
@@ -860,24 +876,32 @@ class VerificatorQualities:
     #: primitive
     constrained_primitive_properties: Final[Sequence[intermediate.Property]]
 
+    #: List properties which are annotated with a (possibly optional) JSON-able
+    #: type (``JSONValue``, ``JSONArray`` or ``JSONObject[K]``), and therefore need
+    #: to be exhaustively verified with :class:`JsonValueVerificator`, regardless of
+    #: whether ``K`` is further constrained
+    json_properties: Final[Sequence[intermediate.Property]]
+
     # fmt: off
     @ensure(
         lambda self:
         not (
             len(self.cls.invariants) == 0
             and len(self.constrained_primitive_properties) == 0
+            and len(self.json_properties) == 0
         ) or self.is_noop,
-        "The verificator is a no-op if there are no invariants and no constrained "
-        "primitive properties in the class"
+        "The verificator is a no-op if there are no invariants, no constrained "
+        "primitive properties and no JSON-able properties in the class"
     )
     @ensure(
         lambda self:
         not (
             len(self.cls.invariants) > 0
             or len(self.constrained_primitive_properties) > 0
+            or len(self.json_properties) > 0
         ) or not self.is_noop,
-        "The verificator is *not* a no-op if there is at least one invariant or "
-        "a property annotated with a constrained primitive"
+        "The verificator is *not* a no-op if there is at least one invariant, "
+        "a property annotated with a constrained primitive or a JSON-able property"
     )
     # fmt: on
     def __init__(self, cls: intermediate.ConcreteClass) -> None:
@@ -889,8 +913,23 @@ class VerificatorQualities:
             if _find_constrained_primitive(prop.type_annotation) is not None
         ]
 
+        self.json_properties = [
+            prop
+            for prop in cls.properties
+            if isinstance(
+                intermediate.beneath_optional(prop.type_annotation),
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            )
+        ]
+
         self.is_noop = (
-            len(cls.invariants) == 0 and len(self.constrained_primitive_properties) == 0
+            len(cls.invariants) == 0
+            and len(self.constrained_primitive_properties) == 0
+            and len(self.json_properties) == 0
         )
 
 
@@ -1436,6 +1475,122 @@ error_->path.segments.emplace_back(
                     )
                 )
 
+        elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+            # NOTE (mristin):
+            # The constrained primitive is not the property's value itself, but
+            # the key of every member of the JSON object -- ``K`` is guaranteed
+            # to reduce to a string-like primitive (see
+            # ``intermediate._translate._verify_only_simple_type_patterns``), so
+            # every key, once converted to a ``std::wstring``, can be verified
+            # exactly like any other constrained string.
+            assert isinstance(type_anno.key, intermediate.OurTypeAnnotation) and (
+                isinstance(type_anno.key.our_type, intermediate.ConstrainedPrimitive)
+            ), (
+                "A plain ``str`` key never ends up in "
+                "``constrained_primitive_properties`` in the first place -- "
+                "see ``_find_constrained_primitive``."
+            )
+
+            of_constrained_primitive = cpp_naming.class_name(
+                Identifier(f"Of_{type_anno.key.our_type.name}")
+            )
+
+            # noinspection PyListCreation
+            flow_for_prop = []
+
+            # NOTE (mristin):
+            # We call ``append`` to avoid the double indention with ``extend([...])``.
+
+            flow_for_prop.append(
+                yielding_flow.command_from_text(
+                    f"""\
+json_object_it_ = ({getter_expr}).cbegin();"""
+                )
+            )
+
+            flow_for_prop.append(
+                yielding_flow.For(
+                    f"json_object_it_ != ({getter_expr}).cend()",
+                    "++json_object_it_;",
+                    [
+                        yielding_flow.command_from_text(
+                            f"""\
+current_json_object_key_ = common::make_optional<std::wstring>(
+{I}common::Utf8ToWstring(json_object_it_.key())
+);
+
+constrained_primitive_verificator_ = (
+{I}common::make_unique<
+{II}constrained_primitive_verificator::{of_constrained_primitive}
+{I}>(
+{II}*current_json_object_key_
+{I})
+);
+constrained_primitive_verificator_->Start();"""
+                        ),
+                        yielding_flow.For(
+                            "!constrained_primitive_verificator_->Done()",
+                            "constrained_primitive_verificator_->Next();",
+                            [
+                                yielding_flow.command_from_text(
+                                    f"""\
+// We intentionally take over the ownership of the errors' data members,
+// as we know the implementation in all the detail, and want to avoid a costly
+// copy.
+error_ = common::make_unique<Error>(
+{I}std::move(
+{II}constrained_primitive_verificator_->GetMutable()
+{I})
+);
+
+// NOTE (mristin):
+// ``iteration::PropertySegment`` requires an enumeration literal for one of
+// the meta-model's own properties, so it can not represent an arbitrary
+// JSON object key -- we fold the key into the message instead of a
+// structured path segment, mirroring how the JSON de/serialization code
+// already has to do the same (see, *e.g.*, ``jsonization.cpp``'s own
+// ``SerializeJsonValue``).
+error_->cause = common::Concat(
+{I}L"At the JSON object key \\"",
+{I}*current_json_object_key_,
+{I}L"\\": ",
+{I}error_->cause
+);
+
+error_->path.segments.emplace_back(
+{I}common::make_unique<iteration::PropertySegment>(
+{II}iteration::{property_enum}::{property_literal}
+{I})
+);
+
+++index_;"""
+                                ),
+                                yielding_flow.Yield(),
+                            ],
+                        ),
+                        yielding_flow.command_from_text(
+                            """\
+constrained_primitive_verificator_ = nullptr;
+current_json_object_key_ = common::nullopt;"""
+                        ),
+                    ],
+                )
+            )
+
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+            ),
+        ):
+            raise AssertionError(
+                f"Unexpected {type_anno} in constrained_primitive_properties -- "
+                f"neither has a key to be constrained, so "
+                f"_find_constrained_primitive should never have included this "
+                f"property in the first place."
+            )
+
         else:
             assert_never(type_anno)
 
@@ -1448,6 +1603,81 @@ error_->path.segments.emplace_back(
             ]
 
         flow.extend(flow_for_prop)
+
+    for prop in verificator_qualities.json_properties:
+        type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+        property_enum = cpp_naming.enum_name(Identifier("Property"))
+        property_literal = cpp_naming.enum_literal_name(prop.name)
+
+        getter_name = cpp_naming.getter_name(prop.name)
+
+        getter_expr = (
+            Stripped(f"*(instance_->{getter_name}())")
+            if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
+            else Stripped(f"instance_->{getter_name}()")
+        )
+
+        if isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+            shape_literal = "kAny"
+        elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+            shape_literal = "kArray"
+        elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+            shape_literal = "kObject"
+        else:
+            raise AssertionError(
+                f"Expected a JSON-able type annotation, but got: {type_anno}"
+            )
+
+        flow_for_json_prop = [
+            yielding_flow.command_from_text(
+                f"""\
+json_value_verificator_ = (
+{I}common::make_unique<JsonValueVerificator>(
+{II}{indent_but_first_line(getter_expr, II)},
+{II}JsonValueShape::{shape_literal}
+{I})
+);
+json_value_verificator_->Start();"""
+            ),
+            yielding_flow.For(
+                "!json_value_verificator_->Done()",
+                "json_value_verificator_->Next();",
+                [
+                    yielding_flow.command_from_text(
+                        f"""\
+// We intentionally take over the ownership of the errors' data members,
+// as we know the implementation in all the detail, and want to avoid a costly
+// copy.
+error_ = common::make_unique<Error>(
+{I}std::move(
+{II}json_value_verificator_->GetMutable()
+{I})
+);
+
+error_->path.segments.emplace_back(
+{I}common::make_unique<iteration::PropertySegment>(
+{II}iteration::{property_enum}::{property_literal}
+{I})
+);
+
+++index_;"""
+                    ),
+                    yielding_flow.Yield(),
+                ],
+            ),
+            yielding_flow.command_from_text("json_value_verificator_ = nullptr;"),
+        ]  # type: List[yielding_flow.Node]
+
+        if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
+            flow_for_json_prop = [
+                yielding_flow.IfTrue(
+                    condition=f"instance_->{getter_name}().has_value()",
+                    body=flow_for_json_prop,
+                )
+            ]
+
+        flow.extend(flow_for_json_prop)
 
     flow.append(
         yielding_flow.command_from_text(
@@ -1524,6 +1754,23 @@ constrained_primitive_verificator_ = (
 {move_data_members_snippet}
 constrained_primitive_verificator_ = std::move(
 {I}other.constrained_primitive_verificator_
+);"""
+        )
+
+    if len(verificator_qualities.json_properties) > 0:
+        copy_data_members_snippet = Stripped(
+            f"""\
+{copy_data_members_snippet}
+json_value_verificator_ = (
+{I}other.json_value_verificator_->Clone()
+);"""
+        )
+
+        move_data_members_snippet = Stripped(
+            f"""\
+{move_data_members_snippet}
+json_value_verificator_ = std::move(
+{I}other.json_value_verificator_
 );"""
         )
 
@@ -1738,16 +1985,36 @@ std::uint32_t state_;"""
         )
 
         for prop in verificator_qualities.constrained_primitive_properties:
-            if isinstance(
-                intermediate.beneath_optional(prop.type_annotation),
-                intermediate.ListTypeAnnotation,
-            ):
+            prop_type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+            if isinstance(prop_type_anno, intermediate.ListTypeAnnotation):
                 # NOTE (mristin):
                 # Since there is a list of constrained primitives, we will have to
                 # iterate over it.
                 private_data_members.append(
                     Stripped("std::size_t index_in_constrained_primitives_;")
                 )
+
+            elif isinstance(prop_type_anno, intermediate.JsonObjectTypeAnnotation):
+                # NOTE (mristin):
+                # The constrained primitive is not the property's value itself,
+                # but the key of every member of the JSON object, so we have to
+                # iterate over all its members. Unlike a list item, a JSON
+                # object's key is not already stored anywhere as a ``std::wstring``
+                # we could merely reference, so we have to also keep it alive here
+                # for as long as ``constrained_primitive_verificator_`` refers to
+                # it.
+                private_data_members.append(
+                    Stripped(
+                        "nlohmann::json::const_iterator json_object_it_;\n"
+                        "common::optional<std::wstring> current_json_object_key_;"
+                    )
+                )
+
+    if len(verificator_qualities.json_properties) > 0:
+        private_data_members.append(
+            Stripped("std::unique_ptr<impl::IVerificator> json_value_verificator_;")
+        )
 
     private_data_members_joined = "\n".join(private_data_members)
 
@@ -3045,10 +3312,17 @@ def generate_implementation(
         symbol_table=symbol_table
     )
 
+    json_value_verification_include = (
+        '#include "json_value_verification.hpp"\n\n'
+        if intermediate.model_uses_json_types(symbol_table)
+        else ""
+    )
+
     blocks = [
         cpp_common.WARNING,
         Stripped(
             f"""\
+{json_value_verification_include}\
 #include "{include_prefix_path}/common.hpp"
 #include "{include_prefix_path}/constants.hpp"
 #include "{include_prefix_path}/pattern.hpp"

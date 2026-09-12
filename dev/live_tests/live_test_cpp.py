@@ -49,12 +49,34 @@ def _cmake_target_prefix(namespace: Stripped) -> Stripped:
     return Stripped("_".join([part.lower() for part in namespace_parts]))
 
 
-def _generate_cmake_lists(namespace: Stripped) -> Stripped:
+def _generate_cmake_lists(namespace: Stripped, uses_xml_rpc: bool) -> Stripped:
     project_name = _cmake_project_name(namespace)
     variable_prefix = _cmake_variable_prefix(namespace)
     target_prefix = _cmake_target_prefix(namespace)
 
     relative_path = "/".join(namespace.split("::"))
+
+    xml_rpc_src_line = (
+        "        ${SRC_PATH}/xml_rpc.cpp\n"
+        "        ${SRC_PATH}/json_value_verification.cpp\n"
+        if uses_xml_rpc
+        else ""
+    )
+
+    test_xml_rpc_block = (
+        f"""\
+
+    add_executable(test_xml_rpc test/test_xml_rpc.cpp)
+    target_include_directories(test_xml_rpc PRIVATE ${{CMAKE_CURRENT_SOURCE_DIR}}/src)
+    target_link_libraries(test_xml_rpc {target_prefix}_static)
+    add_test(
+            NAME test_xml_rpc
+            COMMAND $<TARGET_FILE:test_xml_rpc>
+    )
+"""
+        if uses_xml_rpc
+        else ""
+    )
 
     # pylint: disable=line-too-long
     return Stripped(
@@ -158,7 +180,8 @@ SET(SRC
         ${{SRC_PATH}}/verification.cpp
         ${{SRC_PATH}}/visitation.cpp
         ${{SRC_PATH}}/wstringification.cpp
-        ${{SRC_PATH}}/xmlization.cpp
+        ${{SRC_PATH}}/xml_common.cpp
+{xml_rpc_src_line}        ${{SRC_PATH}}/xmlization.cpp
         )
 
 # NOTE (mristin)
@@ -409,7 +432,7 @@ if (${{BUILD_TESTS}})
             COMMAND $<TARGET_FILE:test_x_or_default>
     )
     # endregion
-endif ()"""
+{test_xml_rpc_block}endif ()"""
     )
 
 
@@ -572,7 +595,18 @@ def main() -> int:
 
             print(f"Generating CMakeLists.txt in {project_dir} ...")
 
-            cmake_lists_text = _generate_cmake_lists(namespace=namespace)
+            # NOTE (mristin):
+            # ``xml_rpc`` (and its isolated unit test) is only generated for
+            # a meta-model which actually uses a JSON-able type -- we check
+            # what the generator actually wrote instead of re-deriving that
+            # fact here, so this can never drift out of sync with it.
+            uses_xml_rpc = (
+                case_dir / "expected_output" / "src" / "xml_rpc.hpp"
+            ).exists()
+
+            cmake_lists_text = _generate_cmake_lists(
+                namespace=namespace, uses_xml_rpc=uses_xml_rpc
+            )
             (project_dir / "CMakeLists.txt").write_text(
                 cmake_lists_text, encoding="utf-8"
             )

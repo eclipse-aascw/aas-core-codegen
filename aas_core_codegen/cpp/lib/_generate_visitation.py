@@ -507,6 +507,19 @@ std::get<{i}>(
 
         code = Stripped("\n".join(visit_stmts))
 
+    elif isinstance(
+        type_anno,
+        (
+            intermediate.JsonValueTypeAnnotation,
+            intermediate.JsonArrayTypeAnnotation,
+            intermediate.JsonObjectTypeAnnotation,
+        ),
+    ):
+        # NOTE (mristin):
+        # A JSON-able value is plain data (``nlohmann::json``), never
+        # a reference to one of our own classes, so there is nothing to visit.
+        return Stripped("")
+
     else:
         # noinspection PyTypeChecker
         assert_never(type_anno)
