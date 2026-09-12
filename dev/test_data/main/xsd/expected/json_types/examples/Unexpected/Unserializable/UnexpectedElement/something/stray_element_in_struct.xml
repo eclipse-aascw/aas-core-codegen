@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<something xmlns="https://dummy.com">
+    <value>
+        <struct>
+            <member>
+                <name>a</name>
+                <value><double>1</double></value>
+            </member>
+            <note>this element is not part of the XML-RPC-subset grammar and must be rejected</note>
+        </struct>
+    </value>
+    <values><data/></values>
+    <mapping/>
+    <mappingWithConstrainedKey>
+        <member>
+            <name>a</name>
+            <value><double>1</double></value>
+        </member>
+    </mappingWithConstrainedKey>
+</something>

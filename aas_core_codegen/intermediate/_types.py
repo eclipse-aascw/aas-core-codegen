@@ -3671,6 +3671,33 @@ def tuple_arities(symbol_table: SymbolTable) -> List[int]:
     return sorted(arities)
 
 
+def model_uses_json_types(symbol_table: SymbolTable) -> bool:
+    """
+    Check whether any property in the model refers to a JSON-able type.
+
+    This works recursively: a JSON-able type is picked up regardless of how
+    deeply it is nested within a property's type annotation (*e.g.*, inside
+    a ``List[...]`` or an ``Optional[...]``), not just when the property
+    itself is directly annotated as one.
+    """
+    for cls in symbol_table.classes:
+        for prop in cls.properties:
+            for type_anno in over_type_annotation_and_nested_type_annotations(
+                prop.type_annotation
+            ):
+                if isinstance(
+                    type_anno,
+                    (
+                        JsonValueTypeAnnotation,
+                        JsonArrayTypeAnnotation,
+                        JsonObjectTypeAnnotation,
+                    ),
+                ):
+                    return True
+
+    return False
+
+
 def collect_ids_of_our_types_in_properties(symbol_table: SymbolTable) -> Set[int]:
     """
     Collect the IDs of our types occurring in type annotations of the properties.

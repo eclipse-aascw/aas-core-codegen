@@ -318,6 +318,115 @@ def _translate_to_simple_type(
     )
 
 
+# NOTE (mristin):
+# We represent ``JSONValue``/``JSONArray``/``JSONObject`` with a restricted subset
+# of XML-RPC's own element vocabulary: ``<boolean>``, ``<double>``, ``<string>``,
+# ``<array>``, ``<data>``, ``<struct>``, ``<member>``, ``<name>`` and ``<value>``.
+# We deliberately keep XML-RPC's wrapper elements (``<value>``, ``<data>``,
+# ``<member>``, ``<name>``) instead of a flatter, wrapper-free alternative, for
+# real interoperability with existing XML-RPC tooling. We leave out the parts of
+# XML-RPC that a ``JSONValue`` has no equivalent for -- ``<int>``/``<i4>``,
+# ``<base64>``, ``<dateTime.iso8601>`` and ``<nil/>`` (there is no ``null``
+# variant of a JSON-able value).
+_JSON_VALUE_TYPE_NAME: Final[Identifier] = xsd_naming.type_name(
+    Identifier("Json_value")
+)
+_JSON_ARRAY_TYPE_NAME: Final[Identifier] = xsd_naming.type_name(
+    Identifier("Json_array")
+)
+_JSON_STRUCT_TYPE_NAME: Final[Identifier] = xsd_naming.type_name(
+    Identifier("Json_struct")
+)
+_JSON_VALUE_ELEMENT_NAME: Final[str] = "value"
+
+
+def _generate_json_type_definitions() -> List[ET.Element]:
+    """
+    Generate the shared definitions for the JSON-able types.
+
+    Only ``jsonValue_t`` is genuinely self-referential -- a struct member's
+    value, or an array item, is itself an arbitrary ``JSONValue`` -- so only it
+    needs the indirection through a global ``<value>`` element to close the
+    recursion. ``jsonArray_t``/``jsonStruct_t`` are ordinary named complex
+    types, shared the same way every other named type in this backend is
+    shared (through a ``type="..."`` attribute), not because they are
+    self-referential.
+
+    The root element is to be *extended* with the resulting list.
+    """
+    xs_value_choice = ET.Element("xs:choice")
+    xs_value_choice.append(
+        ET.Element("xs:element", {"name": "boolean", "type": "xs:boolean"})
+    )
+    xs_value_choice.append(
+        ET.Element("xs:element", {"name": "double", "type": "xs:double"})
+    )
+    xs_value_choice.append(
+        ET.Element("xs:element", {"name": "string", "type": "xs:string"})
+    )
+    xs_value_choice.append(
+        ET.Element("xs:element", {"name": "array", "type": _JSON_ARRAY_TYPE_NAME})
+    )
+    xs_value_choice.append(
+        ET.Element("xs:element", {"name": "struct", "type": _JSON_STRUCT_TYPE_NAME})
+    )
+
+    json_value_complex_type = ET.Element(
+        "xs:complexType", {"name": _JSON_VALUE_TYPE_NAME}
+    )
+    json_value_complex_type.append(xs_value_choice)
+
+    xs_data = ET.Element("xs:element", {"name": "data"})
+    xs_data_complex_type = ET.SubElement(xs_data, "xs:complexType")
+    xs_data_sequence = ET.SubElement(xs_data_complex_type, "xs:sequence")
+    xs_data_sequence.append(
+        ET.Element(
+            "xs:element",
+            {
+                "ref": _JSON_VALUE_ELEMENT_NAME,
+                "minOccurs": "0",
+                "maxOccurs": "unbounded",
+            },
+        )
+    )
+
+    json_array_complex_type = ET.Element(
+        "xs:complexType", {"name": _JSON_ARRAY_TYPE_NAME}
+    )
+    json_array_sequence = ET.SubElement(json_array_complex_type, "xs:sequence")
+    json_array_sequence.append(xs_data)
+
+    xs_member = ET.Element(
+        "xs:element", {"name": "member", "minOccurs": "0", "maxOccurs": "unbounded"}
+    )
+    xs_member_complex_type = ET.SubElement(xs_member, "xs:complexType")
+    xs_member_sequence = ET.SubElement(xs_member_complex_type, "xs:sequence")
+    xs_member_sequence.append(
+        ET.Element("xs:element", {"name": "name", "type": "xs:string"})
+    )
+    xs_member_sequence.append(
+        ET.Element("xs:element", {"ref": _JSON_VALUE_ELEMENT_NAME})
+    )
+
+    json_struct_complex_type = ET.Element(
+        "xs:complexType", {"name": _JSON_STRUCT_TYPE_NAME}
+    )
+    json_struct_sequence = ET.SubElement(json_struct_complex_type, "xs:sequence")
+    json_struct_sequence.append(xs_member)
+
+    json_value_element = ET.Element(
+        "xs:element",
+        {"name": _JSON_VALUE_ELEMENT_NAME, "type": _JSON_VALUE_TYPE_NAME},
+    )
+
+    return [
+        json_value_complex_type,
+        json_array_complex_type,
+        json_struct_complex_type,
+        json_value_element,
+    ]
+
+
 class _TypeElementOrTypeIdentifier:
     """
     Represent a rendering of a type annotation.
@@ -724,6 +833,145 @@ def _value_to_type_element_or_type_identifier(
                         item_element.append(item_type_element_or_identifier.element)
 
                 xs_sequence.append(item_element)
+
+            return _TypeElementOrTypeIdentifier(element=xs_complex_type), None
+
+        elif isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
+            return _TypeElementOrTypeIdentifier(tajp=_JSON_VALUE_TYPE_NAME), None
+
+        elif isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
+            # NOTE (mristin):
+            # We only need to inline a bespoke ``<data>`` sequence if there is
+            # a length constraint on this particular occurrence of the array --
+            # otherwise the shared ``jsonArray_t`` (with unconstrained
+            # ``minOccurs="0"``/``maxOccurs="unbounded"``) already says exactly
+            # the same thing, so we simply point to it, mirroring how classes
+            # and named unions are shared through a ``type="..."`` attribute
+            # everywhere else in this backend.
+            constraints = constraints_by_value.get(type_annotation, None)
+            if constraints is None or constraints.len_constraint is None:
+                return _TypeElementOrTypeIdentifier(tajp=_JSON_ARRAY_TYPE_NAME), None
+
+            min_occurs = "0"
+            max_occurs = "unbounded"
+            if constraints.len_constraint.min_value is not None:
+                min_occurs = str(constraints.len_constraint.min_value)
+            if constraints.len_constraint.max_value is not None:
+                max_occurs = str(constraints.len_constraint.max_value)
+
+            xs_data = ET.Element("xs:element", {"name": "data"})
+            xs_data_complex_type = ET.SubElement(xs_data, "xs:complexType")
+            xs_data_sequence = ET.SubElement(xs_data_complex_type, "xs:sequence")
+            xs_data_sequence.append(
+                ET.Element(
+                    "xs:element",
+                    {
+                        "ref": _JSON_VALUE_ELEMENT_NAME,
+                        "minOccurs": min_occurs,
+                        "maxOccurs": max_occurs,
+                    },
+                )
+            )
+
+            xs_complex_type = ET.Element("xs:complexType")
+            xs_sequence = ET.SubElement(xs_complex_type, "xs:sequence")
+            xs_sequence.append(xs_data)
+
+            return _TypeElementOrTypeIdentifier(element=xs_complex_type), None
+
+        elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
+            assert not isinstance(
+                type_annotation.key, intermediate.OptionalTypeAnnotation
+            ), (
+                "(mristin): The key of a JSONObject is verified to never be "
+                "optional in "
+                "intermediate._translate._verify_only_simple_type_patterns."
+            )
+
+            key_primitive_type = intermediate.try_primitive_type(type_annotation.key)
+            assert key_primitive_type is intermediate.PrimitiveType.STR, (
+                "(mristin): The key of a JSONObject is verified to always reduce "
+                "to a string (or a class constraining a string) in "
+                "intermediate._translate._verify_only_simple_type_patterns."
+            )
+
+            key_simple_type, key_simple_type_error = _translate_to_simple_type(
+                primitive_type=key_primitive_type,
+                constraints=constraints_by_value.get(type_annotation.key, None),
+            )
+            if key_simple_type_error is not None:
+                return None, (
+                    f"Failed to translate the key of the type annotation "
+                    f"{type_annotation} to xs:simpleType: {key_simple_type_error}"
+                )
+
+            assert key_simple_type is not None
+
+            constraints = constraints_by_value.get(type_annotation, None)
+            len_constraint = None if constraints is None else constraints.len_constraint
+
+            # NOTE (mristin):
+            # If the key is unconstrained and there is no length constraint on
+            # the object itself, the shared ``jsonStruct_t`` already says
+            # exactly the same thing, so we simply point to it -- mirroring
+            # ``JsonArrayTypeAnnotation`` above.
+            if key_simple_type.restriction is None and len_constraint is None:
+                return _TypeElementOrTypeIdentifier(tajp=_JSON_STRUCT_TYPE_NAME), None
+
+            xs_name = ET.Element("xs:element", {"name": "name"})
+            if key_simple_type.restriction is None:
+                xs_name.attrib["type"] = key_simple_type.tajp
+            else:
+                xs_name_simple_type = ET.SubElement(xs_name, "xs:simpleType")
+                xs_name_restriction = ET.SubElement(
+                    xs_name_simple_type,
+                    "xs:restriction",
+                    {"base": key_simple_type.tajp},
+                )
+
+                if key_simple_type.restriction.pattern is not None:
+                    ET.SubElement(
+                        xs_name_restriction,
+                        "xs:pattern",
+                        {"value": key_simple_type.restriction.pattern},
+                    )
+
+                if key_simple_type.restriction.min_length is not None:
+                    ET.SubElement(
+                        xs_name_restriction,
+                        "xs:minLength",
+                        {"value": str(key_simple_type.restriction.min_length)},
+                    )
+
+                if key_simple_type.restriction.max_length is not None:
+                    ET.SubElement(
+                        xs_name_restriction,
+                        "xs:maxLength",
+                        {"value": str(key_simple_type.restriction.max_length)},
+                    )
+
+            min_occurs = "0"
+            max_occurs = "unbounded"
+            if len_constraint is not None:
+                if len_constraint.min_value is not None:
+                    min_occurs = str(len_constraint.min_value)
+                if len_constraint.max_value is not None:
+                    max_occurs = str(len_constraint.max_value)
+
+            xs_member = ET.Element(
+                "xs:element",
+                {"name": "member", "minOccurs": min_occurs, "maxOccurs": max_occurs},
+            )
+            xs_member_complex_type = ET.SubElement(xs_member, "xs:complexType")
+            xs_member_sequence = ET.SubElement(xs_member_complex_type, "xs:sequence")
+            xs_member_sequence.append(xs_name)
+            xs_member_sequence.append(
+                ET.Element("xs:element", {"ref": _JSON_VALUE_ELEMENT_NAME})
+            )
+
+            xs_complex_type = ET.Element("xs:complexType")
+            xs_sequence = ET.SubElement(xs_complex_type, "xs:sequence")
+            xs_sequence.append(xs_member)
 
             return _TypeElementOrTypeIdentifier(element=xs_complex_type), None
 
@@ -1324,6 +1572,9 @@ def _generate(
 
     if len(errors) > 0:
         return None, errors
+
+    if intermediate.model_uses_json_types(symbol_table):
+        root.extend(_generate_json_type_definitions())
 
     # Tag name 🠒 (name 🠒 element)
     observed_definitions = dict(

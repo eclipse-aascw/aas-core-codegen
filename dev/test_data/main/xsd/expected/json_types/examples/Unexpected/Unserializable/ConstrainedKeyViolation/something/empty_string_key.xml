@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<something xmlns="https://dummy.com">
+    <value><boolean>1</boolean></value>
+    <values><data/></values>
+    <mapping/>
+    <mappingWithConstrainedKey>
+        <member>
+            <name></name>
+            <value>
+                <string>the key above is the empty string, but Non_empty_string requires at least one character</string>
+            </value>
+        </member>
+    </mappingWithConstrainedKey>
+</something>

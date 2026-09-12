@@ -77,6 +77,7 @@ over_type_annotation_and_nested_type_annotations = (
     _types.over_type_annotation_and_nested_type_annotations
 )
 tuple_arities = _types.tuple_arities
+model_uses_json_types = _types.model_uses_json_types
 
 translate = _translate.translate
 errors_if_contracts_for_functions_or_methods_defined = (

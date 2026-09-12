@@ -1,0 +1,72 @@
+<?xml version="1.0" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="https://dummy.com" elementFormDefault="qualified" targetNamespace="https://dummy.com">
+  <xs:group name="something">
+    <xs:sequence>
+      <xs:element name="value" type="jsonValue_t"/>
+      <xs:element name="values" type="jsonArray_t"/>
+      <xs:element name="mapping" type="jsonStruct_t"/>
+      <xs:element name="mappingWithConstrainedKey">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="member" minOccurs="0" maxOccurs="unbounded">
+              <xs:complexType>
+                <xs:sequence>
+                  <xs:element name="name">
+                    <xs:simpleType>
+                      <xs:restriction base="xs:string">
+                        <xs:minLength value="1"/>
+                      </xs:restriction>
+                    </xs:simpleType>
+                  </xs:element>
+                  <xs:element ref="value"/>
+                </xs:sequence>
+              </xs:complexType>
+            </xs:element>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+      <xs:element name="optionalValue" type="jsonValue_t" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="optionalValues" type="jsonArray_t" minOccurs="0" maxOccurs="1"/>
+      <xs:element name="optionalMapping" type="jsonStruct_t" minOccurs="0" maxOccurs="1"/>
+    </xs:sequence>
+  </xs:group>
+  <xs:complexType name="jsonArray_t">
+    <xs:sequence>
+      <xs:element name="data">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element ref="value" minOccurs="0" maxOccurs="unbounded"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="jsonStruct_t">
+    <xs:sequence>
+      <xs:element name="member" minOccurs="0" maxOccurs="unbounded">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element name="name" type="xs:string"/>
+            <xs:element ref="value"/>
+          </xs:sequence>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="jsonValue_t">
+    <xs:choice>
+      <xs:element name="boolean" type="xs:boolean"/>
+      <xs:element name="double" type="xs:double"/>
+      <xs:element name="string" type="xs:string"/>
+      <xs:element name="array" type="jsonArray_t"/>
+      <xs:element name="struct" type="jsonStruct_t"/>
+    </xs:choice>
+  </xs:complexType>
+  <xs:complexType name="something_t">
+    <xs:sequence>
+      <xs:group ref="something"/>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:element name="value" type="jsonValue_t"/>
+  <xs:element name="something" type="something_t"/>
+</xs:schema>

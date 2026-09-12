@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<something xmlns="https://dummy.com">
+    <value><boolean>1</boolean></value>
+    <values><data/></values>
+    <mappingWithConstrainedKey>
+        <member>
+            <name>a</name>
+            <value><double>1</double></value>
+        </member>
+    </mappingWithConstrainedKey>
+</something>

@@ -846,28 +846,6 @@ def _generate_concrete_definition(
     return result, None
 
 
-def _model_uses_json_types(symbol_table: intermediate.SymbolTable) -> bool:
-    """Check whether any property in the model refers to a JSON-able type."""
-    for cls in symbol_table.classes:
-        for prop in cls.properties:
-            for (
-                type_anno
-            ) in intermediate.over_type_annotation_and_nested_type_annotations(
-                prop.type_annotation
-            ):
-                if isinstance(
-                    type_anno,
-                    (
-                        intermediate.JsonValueTypeAnnotation,
-                        intermediate.JsonArrayTypeAnnotation,
-                        intermediate.JsonObjectTypeAnnotation,
-                    ),
-                ):
-                    return True
-
-    return False
-
-
 def _define_json_type_definitions() -> MutableMapping[str, Any]:
     """
     Generate the shared definition for JSONValue.
@@ -1203,7 +1181,7 @@ def generate(
     if len(errors) > 0:
         return None, errors
 
-    if _model_uses_json_types(symbol_table):
+    if intermediate.model_uses_json_types(symbol_table):
         update_error = definitions.update(_define_json_type_definitions())
         if update_error is not None:
             errors.append(update_error)

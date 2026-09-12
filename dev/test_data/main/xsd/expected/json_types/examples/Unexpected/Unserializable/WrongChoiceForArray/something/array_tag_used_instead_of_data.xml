@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    ``values`` is statically typed as a JSONArray, so its content is directly
+    the ``<data>`` sequence (jsonArray_t), with no further ``<array>``
+    discriminator tag; that tag only appears where a value's shape is not
+    already pinned down by the property's own type (i.e., inside a generic
+    ``<value>``). Using ``<array>`` here is therefore the wrong shape.
+-->
+<something xmlns="https://dummy.com">
+    <value><boolean>1</boolean></value>
+    <values>
+        <array>
+            <data>
+                <value><double>1</double></value>
+            </data>
+        </array>
+    </values>
+    <mapping/>
+    <mappingWithConstrainedKey>
+        <member>
+            <name>a</name>
+            <value><double>1</double></value>
+        </member>
+    </mappingWithConstrainedKey>
+</something>

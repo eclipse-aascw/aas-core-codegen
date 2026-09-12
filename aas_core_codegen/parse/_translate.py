@@ -2528,6 +2528,19 @@ def _verify_symbol_table(
         # ``Union`` would be ambiguous with the ``typing.Union[...]`` marker syntax
         # used to declare a named union of classes (``Xxx = Union[Yyy, Zzz]``).
         "union",
+        # NOTE (mristin):
+        # ``JSONValue``, ``JSONArray`` and ``JSONObject`` are reserved since they
+        # name the special JSON-able types recognized by the parser (see
+        # ``parse._types.JSON_VALUE_TYPE_NAME``, ``JSON_ARRAY_TYPE_NAME`` and
+        # ``GENERIC_TYPES``). We also reserve the snake_case spelling
+        # (``json_value``, ``json_array``, ``json_object``) since it is easily
+        # confused with those special types despite being a different identifier.
+        "jsonvalue",
+        "jsonarray",
+        "jsonobject",
+        "json_value",
+        "json_array",
+        "json_object",
     }
 
     # NOTE (mristin, 2023-06-30):
@@ -2550,6 +2563,16 @@ def _verify_symbol_table(
         "set_enhancement",
         "get_enhancement",
         "enhancement",
+        # NOTE (mristin):
+        # See the note on ``reserved_type_names`` above regarding ``JSONValue``,
+        # ``JSONArray`` and ``JSONObject`` -- we reserve the same spellings here
+        # for methods, properties, constants and verification functions.
+        "jsonvalue",
+        "jsonarray",
+        "jsonobject",
+        "json_value",
+        "json_array",
+        "json_object",
     }
 
     for our_type in symbol_table.our_types:
