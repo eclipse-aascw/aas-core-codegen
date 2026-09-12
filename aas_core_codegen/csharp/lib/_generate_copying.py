@@ -445,6 +445,34 @@ if (that.{prop_name} != null)
                 constructor_arg_exprs.append(
                     csharp_common.generate_tuple_literal(item_exprs)
                 )
+
+            elif isinstance(
+                type_anno,
+                (
+                    intermediate.JsonValueTypeAnnotation,
+                    intermediate.JsonArrayTypeAnnotation,
+                    intermediate.JsonObjectTypeAnnotation,
+                ),
+            ):
+                # NOTE (mristin):
+                # ``System.Text.Json.Nodes.JsonNode`` instances can only ever
+                # be attached to a single parent, so we have to deep-clone
+                # the value here -- the copy will be a *different* node from
+                # ``that``'s own property value, unlike every other property
+                # kind above, which share the same immutable/by-value data.
+                item_type = csharp_common.generate_type(type_anno)
+                if optional:
+                    constructor_arg_exprs.append(
+                        f"""\
+(that.{prop_name} != null)
+{I}? ({item_type})that.{prop_name}.DeepClone()
+{I}: null"""
+                    )
+                else:
+                    constructor_arg_exprs.append(
+                        f"({item_type})that.{prop_name}.DeepClone()"
+                    )
+
             else:
                 # noinspection PyTypeChecker
                 assert_never(type_anno)
@@ -568,6 +596,9 @@ def generate(
 using System.Collections.Generic;  // can't alias"""
         )
     )
+
+    if intermediate.model_uses_json_types(symbol_table):
+        using_directives.append(Stripped("using Nodes = System.Text.Json.Nodes;"))
 
     # NOTE (mristin, 2022-11-03):
     # We wrap the shallow and deep copying in generic methods to allow for easier

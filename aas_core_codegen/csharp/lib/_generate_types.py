@@ -1656,6 +1656,9 @@ using System.Collections.Generic;  // can't alias"""
         )
     )
 
+    if intermediate.model_uses_json_types(symbol_table):
+        using_directives.append(Stripped("using Nodes = System.Text.Json.Nodes;"))
+
     code_blocks_joined = "\n\n".join(code_blocks)
 
     blocks = [

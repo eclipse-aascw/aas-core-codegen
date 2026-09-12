@@ -226,6 +226,23 @@ class AbstractUnroller(DBC):
                 item_level=item_level,
                 key_value_level=key_value_level,
             )
+
+        elif isinstance(
+            type_annotation,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            # NOTE (mristin):
+            # A JSON-able value is plain data (never an ``IClass`` instance),
+            # so there is nothing to unroll into, regardless of which
+            # concrete unroller is asking -- mirrors
+            # ``_unroll_primitive_type_annotation``'s "can not descend into
+            # a primitive type" for every subclass uniformly.
+            return []
+
         else:
             assert_never(type_annotation)
 

@@ -492,6 +492,18 @@ var {casted_name} = (
 {joined_pre_stmts}
 that.{prop_name} = {tuple_literal};"""
                 )
+
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            # We can not enhance a JSON-able value; nothing to do here.
+            continue
+
         else:
             assert_never(type_anno)
 

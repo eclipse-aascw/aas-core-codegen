@@ -321,6 +321,23 @@ Transform(
 
             expr = Stripped(item_exprs_writer.getvalue())
 
+        elif isinstance(
+            type_anno,
+            (
+                intermediate.JsonValueTypeAnnotation,
+                intermediate.JsonArrayTypeAnnotation,
+                intermediate.JsonObjectTypeAnnotation,
+            ),
+        ):
+            # NOTE (mristin):
+            # We compare the canonical JSON text instead of the
+            # ``Nodes.JsonNode`` instances themselves, which would only ever
+            # be reference-equal (never overridden to compare by value).
+            expr = Stripped(
+                f"""\
+that.{prop_name}.ToJsonString() == casted.{prop_name}.ToJsonString()"""
+            )
+
         else:
             # noinspection PyTypeChecker
             assert_never(type_anno)

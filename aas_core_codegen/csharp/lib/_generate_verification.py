@@ -924,6 +924,84 @@ foreach (
                 )
             )
 
+    elif isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        stmts.append(
+            Stripped(
+                f"""\
+foreach (
+{I}var error in JsonValueVerification.Verify(
+{II}{source_expr}, JsonValueVerification.ExpectedShape.Any))
+{{
+{I}error.PrependSegment(
+{II}new Reporting.NameSegment(
+{III}{prop_literal}));
+{I}yield return error;
+}}"""
+            )
+        )
+
+    elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        stmts.append(
+            Stripped(
+                f"""\
+foreach (
+{I}var error in JsonValueVerification.Verify(
+{II}{source_expr}, JsonValueVerification.ExpectedShape.Array))
+{{
+{I}error.PrependSegment(
+{II}new Reporting.NameSegment(
+{III}{prop_literal}));
+{I}yield return error;
+}}"""
+            )
+        )
+
+    elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        stmts.append(
+            Stripped(
+                f"""\
+foreach (
+{I}var error in JsonValueVerification.Verify(
+{II}{source_expr}, JsonValueVerification.ExpectedShape.Object))
+{{
+{I}error.PrependSegment(
+{II}new Reporting.NameSegment(
+{III}{prop_literal}));
+{I}yield return error;
+}}"""
+            )
+        )
+
+        if isinstance(type_anno.key, intermediate.OurTypeAnnotation):
+            # NOTE (mristin):
+            # The key is a constrained primitive (the only other option,
+            # a bare ``str``, has nothing to verify) -- we reuse the
+            # already-generated per-constrained-primitive verify method
+            # instead of generating any new verification code, exactly as
+            # we already do for a list's items above.
+            key_verify_method = _generate_verify_method(
+                our_type=type_anno.key.our_type
+            )
+
+            stmts.append(
+                Stripped(
+                    f"""\
+foreach (var member in {source_expr})
+{{
+{I}foreach (var error in {key_verify_method}(member.Key))
+{I}{{
+{II}error.PrependSegment(
+{III}new Reporting.NameSegment(
+{IIII}member.Key));
+{II}error.PrependSegment(
+{III}new Reporting.NameSegment(
+{IIII}{prop_literal}));
+{II}yield return error;
+{I}}}
+}}"""
+                )
+            )
+
     else:
         assert_never(type_anno)
 

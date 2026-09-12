@@ -1191,6 +1191,119 @@ if (error != null)
     )
 
 
+def _generate_parse_json_property_helpers() -> List[Stripped]:
+    """
+    Generate the helpers to read a JSON-able property's content.
+
+    These play the same role for the JSON-able properties that
+    :py:func:`_generate_parse_list_of_class_helpers` plays for the list-typed
+    ones: the self-closing-element handling and the delegation into
+    ``XmlRpc`` are the *same* for every property of a given JSON-able shape,
+    so we generate them exactly once here instead of inlining them at every
+    property.
+    """
+    return [
+        Stripped(
+            f"""\
+/// <summary>
+/// Read the content of a property typed as an open JSON-able value.
+/// </summary>
+private static Nodes.JsonNode? ParseJsonValueProperty(
+{I}Xml.XmlReader reader,
+{I}bool isEmptyProperty,
+{I}out Reporting.Error? error)
+{{
+{I}if (isEmptyProperty)
+{I}{{
+{II}error = new Reporting.Error(
+{III}"Expected one of the elements <boolean>, <double>, <string>, " +
+{III}"<array> or <struct> as the content of the property, " +
+{III}"but the property element was self-closing");
+{II}return null;
+{I}}}
+
+{I}return XmlRpc.DeserializeValueFrom(
+{II}reader, NS, out error);
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Read the content of a property typed as an open JSON-able array.
+/// </summary>
+private static Nodes.JsonArray? ParseJsonArrayProperty(
+{I}Xml.XmlReader reader,
+{I}bool isEmptyProperty,
+{I}out Reporting.Error? error)
+{{
+{I}if (isEmptyProperty)
+{I}{{
+{II}error = new Reporting.Error(
+{III}"Expected a <data> element as the content of the property, " +
+{III}"but the property element was self-closing");
+{II}return null;
+{I}}}
+
+{I}return XmlRpc.DeserializeArrayBodyFrom(
+{II}reader, NS, out error);
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Read the content of a property typed as an open JSON-able object.
+/// </summary>
+/// <remarks>
+/// A self-closing property element represents a JSON-able object with no
+/// members at all, unlike a JSON-able array, which always needs an
+/// explicit, if empty, <c>&lt;data&gt;</c> element (see
+/// <see cref="ParseJsonArrayProperty" />).
+/// </remarks>
+private static Nodes.JsonObject? ParseJsonObjectProperty(
+{I}Xml.XmlReader reader,
+{I}bool isEmptyProperty,
+{I}out Reporting.Error? error)
+{{
+{I}if (isEmptyProperty)
+{I}{{
+{II}error = null;
+{II}return new Nodes.JsonObject();
+{I}}}
+
+{I}return XmlRpc.DeserializeStructBodyFrom(
+{II}reader, NS, out error);
+}}"""
+        ),
+    ]
+
+
+def _generate_deserialize_json_property(
+    prop: intermediate.Property, parse_function: str
+) -> Stripped:
+    """
+    Generate the snippet to deserialize a JSON-able-typed property ``prop``.
+
+    ``parse_function`` names the shared helper to delegate to (see
+    :py:func:`_generate_parse_json_property_helpers`), picked from
+    the property's own static type.
+    """
+    target_var = csharp_naming.variable_name(Identifier(f"the_{prop.name}"))
+    xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
+
+    return Stripped(
+        f"""\
+{target_var} = {parse_function}(
+{I}reader, isEmptyProperty, out error);
+if (error != null)
+{{
+{I}error.PrependSegment(
+{II}new Reporting.NameSegment(
+{III}{xml_prop_name_literal}));
+{I}return null;
+}}"""
+    )
+
+
 def _generate_deserialize_list_property(prop: intermediate.Property) -> Stripped:
     """Generate the code to de-serialize a property ``prop`` as a list."""
     type_anno = intermediate.beneath_optional(prop.type_annotation)
@@ -1503,6 +1616,27 @@ def _generate_deserialize_property(
 
     elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
         blocks.append(_generate_deserialize_tuple_property(prop=prop))
+
+    elif isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        blocks.append(
+            _generate_deserialize_json_property(
+                prop=prop, parse_function="ParseJsonValueProperty"
+            )
+        )
+
+    elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        blocks.append(
+            _generate_deserialize_json_property(
+                prop=prop, parse_function="ParseJsonArrayProperty"
+            )
+        )
+
+    elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        blocks.append(
+            _generate_deserialize_json_property(
+                prop=prop, parse_function="ParseJsonObjectProperty"
+            )
+        )
 
     else:
         assert_never(type_anno)
@@ -2283,6 +2417,12 @@ def _generate_deserialize_impl(
         for arity in tuple_arities:
             blocks.append(_generate_parse_tuple_helper(arity))
 
+    # NOTE (mristin):
+    # These delegate into ``XmlRpc``, which is only generated when the model
+    # actually uses a JSON-able type.
+    if intermediate.model_uses_json_types(symbol_table):
+        blocks.extend(_generate_parse_json_property_helpers())
+
     for enumeration in symbol_table.enumerations:
         blocks.append(_generate_read_v_element_as_enumeration(enumeration))
 
@@ -2862,6 +3002,77 @@ if (that.{prop_name} != null)
     return result
 
 
+def _generate_write_json_content_functions() -> List[Stripped]:
+    """
+    Generate the functions to write a JSON-able value as an element's content.
+
+    ``XmlRpc``'s own serialization functions take the XML namespace as
+    a third argument, so they can not be passed to
+    :py:func:`_generate_serialize_element_helper`'s
+    ``ElementContentSerializer`` as a bare method group. These thin wrappers
+    bind ``NS`` so that every JSON-able-typed property can, mirroring how
+    :py:func:`_generate_tuple_atomic_serializer_helpers` adds wrappers of our
+    own for exactly the same reason on the JSON side.
+    """
+    result = []  # type: List[Stripped]
+
+    for function_name, csharp_type, xml_rpc_function in (
+        ("WriteJsonValueContent", "Nodes.JsonNode", "SerializeValueTo"),
+        ("WriteJsonArrayContent", "Nodes.JsonArray", "SerializeArrayBodyTo"),
+        ("WriteJsonObjectContent", "Nodes.JsonObject", "SerializeStructBodyTo"),
+    ):
+        result.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Write <paramref name="that" /> as the content of an element.
+/// </summary>
+private static void {function_name}(
+{I}{csharp_type} that,
+{I}Xml.XmlWriter writer)
+{{
+{I}XmlRpc.{xml_rpc_function}(that, writer, NS);
+}}"""
+            )
+        )
+
+    return result
+
+
+def _generate_serialize_json_property_as_content(
+    prop: intermediate.Property, write_content_function: str
+) -> Stripped:
+    """
+    Generate the serialization of a JSON-able-typed ``prop`` as XML content.
+
+    ``write_content_function`` names the shared content writer to delegate to
+    (see :py:func:`_generate_write_json_content_functions`), picked from
+    the property's own static type.
+    """
+    prop_name = csharp_naming.property_name(prop.name)
+    xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
+
+    result = Stripped(
+        f"""\
+SerializeElement(
+{I}{xml_prop_name_literal},
+{I}that.{prop_name},
+{I}writer,
+{I}{write_content_function});"""
+    )
+
+    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
+        result = Stripped(
+            f"""\
+if (that.{prop_name} != null)
+{{
+{I}{indent_but_first_line(result, I)}
+}}"""
+        )
+
+    return result
+
+
 def _generate_serialize_polymorphic_property_as_content(
     prop: intermediate.Property,
 ) -> Stripped:
@@ -3229,6 +3440,21 @@ def _generate_serialize_property_as_content(prop: intermediate.Property) -> Stri
     elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
         body = _generate_serialize_tuple_property_as_content(prop=prop)
 
+    elif isinstance(type_anno, intermediate.JsonValueTypeAnnotation):
+        body = _generate_serialize_json_property_as_content(
+            prop=prop, write_content_function="WriteJsonValueContent"
+        )
+
+    elif isinstance(type_anno, intermediate.JsonArrayTypeAnnotation):
+        body = _generate_serialize_json_property_as_content(
+            prop=prop, write_content_function="WriteJsonArrayContent"
+        )
+
+    elif isinstance(type_anno, intermediate.JsonObjectTypeAnnotation):
+        body = _generate_serialize_json_property_as_content(
+            prop=prop, write_content_function="WriteJsonObjectContent"
+        )
+
     else:
         assert_never(type_anno)
 
@@ -3352,6 +3578,12 @@ def _generate_visitor(
         blocks.append(_generate_tuple_item_serializer_helpers())
         for arity in tuple_arities:
             blocks.append(_generate_serialize_tuple_helper(arity))
+
+    # NOTE (mristin):
+    # These delegate into ``XmlRpc``, which is only generated when the model
+    # actually uses a JSON-able type.
+    if intermediate.model_uses_json_types(symbol_table):
+        blocks.extend(_generate_write_json_content_functions())
 
     # The abstract classes are directly dispatched by the transformer,
     # so we do not need to handle them separately.
@@ -3611,6 +3843,9 @@ using Xml = System.Xml;
 using System.Collections.Generic;  // can't alias"""
         )
     )
+
+    if intermediate.model_uses_json_types(symbol_table):
+        using_directives.append(Stripped("using Nodes = System.Text.Json.Nodes;"))
 
     # pylint: disable=line-too-long
     blocks = [

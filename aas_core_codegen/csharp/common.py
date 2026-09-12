@@ -188,6 +188,15 @@ def generate_type(
         )
         return Stripped(f"{value}?")
 
+    elif isinstance(type_annotation, intermediate.JsonValueTypeAnnotation):
+        return Stripped("Nodes.JsonNode")
+
+    elif isinstance(type_annotation, intermediate.JsonArrayTypeAnnotation):
+        return Stripped("Nodes.JsonArray")
+
+    elif isinstance(type_annotation, intermediate.JsonObjectTypeAnnotation):
+        return Stripped("Nodes.JsonObject")
+
     else:
         assert_never(type_annotation)
 
