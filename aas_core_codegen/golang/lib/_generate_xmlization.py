@@ -1,7 +1,7 @@
 """Generate code for XML de/serialization."""
 
 import io
-from typing import Tuple, Optional, List, Set, Union
+from typing import Tuple, Optional, List, Sequence, Set, Union
 
 from icontract import ensure, require
 
@@ -26,6 +26,298 @@ from aas_core_codegen.golang.common import (
     INDENT5 as IIIII,
     INDENT6 as IIIIII,
 )
+
+# region Shared between the de-serialization and the serialization
+
+
+#: Maximum number of columns of a line of the generated code, with a tab counted as
+#: :py:data:`_TAB_WIDTH` columns
+_MAX_LINE_LENGTH = 88
+
+#: Number of columns a tab of indention takes up in the generated code
+_TAB_WIDTH = 4
+
+
+def _join_arguments(arguments: Sequence[str], indention: int) -> str:
+    """
+    Join the ``arguments`` of a call, on a single line if they fit on one.
+
+    The arguments are expected to be written on their own line(s), indented by
+    ``indention`` tabs, and followed by the closing parenthesis on yet another line.
+    A trailing comma is appended, as Golang requires it there.
+    """
+    joined = ", ".join(arguments) + ","
+
+    if indention * _TAB_WIDTH + len(joined) <= _MAX_LINE_LENGTH:
+        return joined
+
+    return ",\n".join(arguments) + ","
+
+
+_SCALAR_NAME_BY_PRIMITIVE_TYPE = {
+    intermediate.PrimitiveType.BOOL: "boolean",
+    intermediate.PrimitiveType.INT: "long",
+    intermediate.PrimitiveType.FLOAT: "double",
+    intermediate.PrimitiveType.STR: "string",
+    intermediate.PrimitiveType.BYTEARRAY: "base64_encoded_bytes",
+}
+assert all(
+    literal in _SCALAR_NAME_BY_PRIMITIVE_TYPE for literal in intermediate.PrimitiveType
+)
+
+
+class _ScalarItem:
+    """
+    Specify a scalar value wrapped in an element of a fixed name.
+
+    A scalar element is not self-describing: its name denotes its *position*, ``v``
+    in a list and ``v1``, ``v2``, *etc.* in a tuple, and never its type. Both sides
+    therefore need a function per scalar type *and* element name: the reader checks
+    the name (see :py:func:`_generate_read_scalar_item`), the writer writes it (see
+    :py:func:`_generate_write_scalar_item`), so that neither a container nor its
+    items need to know anything about the other.
+    """
+
+    def __init__(
+        self,
+        type_anno: intermediate.AtomicTypeAnnotation,
+        element_name: str,
+    ) -> None:
+        """Initialize with the given values."""
+        self.type_anno = type_anno
+        self.element_name = element_name
+
+
+def _scalar_name(type_anno: intermediate.AtomicTypeAnnotation) -> str:
+    """Name the scalar ``type_anno`` for the use in an identifier."""
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        return _SCALAR_NAME_BY_PRIMITIVE_TYPE[primitive_type]
+
+    assert isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+        type_anno.our_type, intermediate.Enumeration
+    ), (
+        f"Expected a scalar type annotation, but got {type_anno}; "
+        f"the instances are de/serialized as their own element instead"
+    )
+
+    return type_anno.our_type.name
+
+
+def _scalar_item_reader_name(
+    type_anno: intermediate.AtomicTypeAnnotation, element_name: str
+) -> Identifier:
+    """Name the function reading a scalar ``type_anno`` in ``element_name``."""
+    return golang_naming.private_function_name(
+        Identifier(f"read_{_scalar_name(type_anno)}_at_{element_name}")
+    )
+
+
+def _scalar_item_writer_name(
+    type_anno: intermediate.AtomicTypeAnnotation, element_name: str
+) -> Identifier:
+    """Name the function writing a scalar ``type_anno`` in ``element_name``."""
+    return golang_naming.private_function_name(
+        Identifier(f"write_{_scalar_name(type_anno)}_at_{element_name}")
+    )
+
+
+# NOTE (mristin):
+# A Golang primitive is not usable as a part of an identifier as it is spelled
+# (``[]byte``, and the lower-case names read badly), so the primitives are the only
+# types which have to be renamed. They are keyed by the meta-model primitive rather
+# than by the Golang spelling, so that the mapping is total by construction.
+_MONIKER_BY_PRIMITIVE_TYPE = {
+    intermediate.PrimitiveType.BOOL: "Bool",
+    intermediate.PrimitiveType.INT: "Long",
+    intermediate.PrimitiveType.FLOAT: "Double",
+    intermediate.PrimitiveType.STR: "String",
+    intermediate.PrimitiveType.BYTEARRAY: "Bytes",
+}
+assert all(
+    literal in _MONIKER_BY_PRIMITIVE_TYPE for literal in intermediate.PrimitiveType
+)
+
+
+def _type_moniker(type_anno: intermediate.AtomicTypeAnnotation) -> str:
+    """
+    Name the type of ``type_anno`` as a part of an identifier.
+
+    Everything which is not a primitive is named as the Golang type is, so that
+    the name of a function can not drift apart from the type it operates on.
+    """
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        return _MONIKER_BY_PRIMITIVE_TYPE[primitive_type]
+
+    assert isinstance(
+        type_anno, intermediate.OurTypeAnnotation
+    ), f"Unexpected type annotation for a moniker: {type_anno}"
+
+    our_type = type_anno.our_type
+
+    if isinstance(our_type, intermediate.Enumeration):
+        return golang_naming.enum_name(our_type.name)
+
+    if isinstance(our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)):
+        return golang_naming.interface_name(our_type.name)
+
+    assert isinstance(
+        our_type, intermediate.NamedUnion
+    ), f"Unexpected our type for a moniker: {our_type}"
+
+    return golang_naming.union_name(our_type.name)
+
+
+def _list_content_writer_name(
+    items_type_anno: intermediate.AtomicTypeAnnotation,
+) -> Stripped:
+    """Name the function which writes the content of a list of ``items_type_anno``."""
+    return Stripped(f"writeListOf{_type_moniker(items_type_anno)}")
+
+
+def _tuple_content_writer_name(type_anno: intermediate.TupleTypeAnnotation) -> Stripped:
+    """Name the function which writes the content of a tuple of ``type_anno``."""
+    monikers = []  # type: List[str]
+    for item_type_anno in type_anno.items:
+        assert isinstance(item_type_anno, intermediate.AtomicTypeAnnotationAsTuple)
+        monikers.append(_type_moniker(item_type_anno))
+
+    joined = "".join(monikers)
+
+    return Stripped(f"writeTupleOf{joined}")
+
+
+def _requires_dispatch(type_anno: intermediate.TypeAnnotation) -> bool:
+    """
+    Check whether a *single* property of ``type_anno`` is de/serialized by dispatch.
+
+    A single property of a concrete class without concrete descendants is wrapped in
+    an element named after the *property*, not after the class, so there is no
+    discriminator to dispatch on. Everything else polymorphic -- an abstract class,
+    a concrete class with concrete descendants, and a named union -- is wrapped twice,
+    the inner element naming the concrete alternative.
+    """
+    if not isinstance(type_anno, intermediate.OurTypeAnnotation):
+        return False
+
+    our_type = type_anno.our_type
+
+    if isinstance(our_type, intermediate.ConcreteClass):
+        return len(our_type.concrete_descendants) > 0
+
+    return isinstance(our_type, (intermediate.AbstractClass, intermediate.NamedUnion))
+
+
+class _Requirements:
+    """Specify which of the optional de/serialization functions are needed."""
+
+    def __init__(
+        self,
+        dispatched_type_ids: Set[int],
+        scalar_items: List[_ScalarItem],
+        list_items_type_annos: List[intermediate.AtomicTypeAnnotation],
+        tuple_type_annos: List[intermediate.TupleTypeAnnotation],
+    ) -> None:
+        """Initialize with the given values."""
+        #: IDs of our types for which a ``read*Dispatched`` function must be generated
+        self.dispatched_type_ids = dispatched_type_ids
+
+        #: Scalar items to be de/serialized, in the order of the first occurrence
+        self.scalar_items = scalar_items
+
+        #: Items of the lists to be serialized, in the order of the first occurrence
+        self.list_items_type_annos = list_items_type_annos
+
+        #: Tuples to be serialized, in the order of the first occurrence
+        self.tuple_type_annos = tuple_type_annos
+
+
+def _collect_requirements(
+    symbol_table: intermediate.SymbolTable,
+) -> _Requirements:
+    """
+    Collect the de/serialization functions which are actually reachable.
+
+    ``Unmarshal`` dispatches to ``read*AsSequence`` and ``Marshal`` to
+    ``write*AsSequence`` of *every* concrete class, so every concrete class is
+    reachable, and it suffices to look at the properties of the concrete classes:
+    a ``read*Dispatched``, a scalar item function and a tuple writer are called only
+    from a property.
+    """
+    dispatched_type_ids = set()  # type: Set[int]
+
+    scalar_items = []  # type: List[_ScalarItem]
+    observed_scalar_items = set()  # type: Set[Tuple[str, str]]
+
+    list_items_type_annos = []  # type: List[intermediate.AtomicTypeAnnotation]
+    observed_list_writers = set()  # type: Set[str]
+
+    tuple_type_annos = []  # type: List[intermediate.TupleTypeAnnotation]
+    observed_tuple_writers = set()  # type: Set[str]
+
+    def require_item(
+        item_type_anno: intermediate.AtomicTypeAnnotation, element_name: str
+    ) -> None:
+        """Require the de/serialization of an item in ``element_name``."""
+        if isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
+            item_type_anno.our_type,
+            (
+                intermediate.AbstractClass,
+                intermediate.ConcreteClass,
+                intermediate.NamedUnion,
+            ),
+        ):
+            dispatched_type_ids.add(id(item_type_anno.our_type))
+            return
+
+        key = (_scalar_name(item_type_anno), element_name)
+        if key not in observed_scalar_items:
+            observed_scalar_items.add(key)
+            scalar_items.append(
+                _ScalarItem(type_anno=item_type_anno, element_name=element_name)
+            )
+
+    for cls in symbol_table.concrete_classes:
+        for prop in cls.properties:
+            type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+            if isinstance(type_anno, intermediate.ListTypeAnnotation):
+                assert isinstance(
+                    type_anno.items, intermediate.AtomicTypeAnnotationAsTuple
+                )
+                require_item(type_anno.items, "v")
+
+                writer_name = _list_content_writer_name(type_anno.items)
+                if writer_name not in observed_list_writers:
+                    observed_list_writers.add(writer_name)
+                    list_items_type_annos.append(type_anno.items)
+
+            elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+                for i, item_type_anno in enumerate(type_anno.items):
+                    assert isinstance(
+                        item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+                    )
+                    require_item(item_type_anno, f"v{i + 1}")
+
+                writer_name = _tuple_content_writer_name(type_anno)
+                if writer_name not in observed_tuple_writers:
+                    observed_tuple_writers.add(writer_name)
+                    tuple_type_annos.append(type_anno)
+
+            elif _requires_dispatch(type_anno):
+                assert isinstance(type_anno, intermediate.OurTypeAnnotation)
+                dispatched_type_ids.add(id(type_anno.our_type))
+
+    return _Requirements(
+        dispatched_type_ids=dispatched_type_ids,
+        scalar_items=scalar_items,
+        list_items_type_annos=list_items_type_annos,
+        tuple_type_annos=tuple_type_annos,
+    )
+
+
+# endregion
 
 
 # region De-serialization
@@ -641,20 +933,6 @@ func checkEndElement(current xml.Token, local string) (err error) {{
     )
 
 
-def _generate_scalar_definition() -> Stripped:
-    return Stripped(
-        f"""\
-type Scalar interface {{
-{I}~bool |
-{I}~int |
-{I}~int64 |
-{I}~float64 |
-{I}~string |
-{I}~[]byte
-}}"""
-    )
-
-
 def _generate_error_constructors() -> List[Stripped]:
     """Generate the constructors of the recurring de-serialization errors."""
     return [
@@ -1110,18 +1388,6 @@ assert all(
 )
 
 
-_SCALAR_NAME_BY_PRIMITIVE_TYPE = {
-    intermediate.PrimitiveType.BOOL: "boolean",
-    intermediate.PrimitiveType.INT: "long",
-    intermediate.PrimitiveType.FLOAT: "double",
-    intermediate.PrimitiveType.STR: "string",
-    intermediate.PrimitiveType.BYTEARRAY: "base64_encoded_bytes",
-}
-assert all(
-    literal in _SCALAR_NAME_BY_PRIMITIVE_TYPE for literal in intermediate.PrimitiveType
-)
-
-
 def _read_text_function(type_anno: intermediate.AtomicTypeAnnotation) -> Stripped:
     """Determine the function which reads the text of a scalar ``type_anno``."""
     primitive_type = intermediate.try_primitive_type(type_anno)
@@ -1139,60 +1405,6 @@ def _read_text_function(type_anno: intermediate.AtomicTypeAnnotation) -> Strippe
         golang_naming.private_function_name(
             Identifier(f"read_text_as_{type_anno.our_type.name}")
         )
-    )
-
-
-class _ScalarItemReader:
-    """
-    Specify a function which reads a scalar item wrapped in a fixed element name.
-
-    A scalar element is not self-describing: its name denotes its *position*, ``v``
-    in a list and ``v1``, ``v2``, *etc.* in a tuple, and never its type. The expected
-    name is therefore checked by the item reader itself, so that a container such as
-    :py:func:`_generate_read_list_of` needs to know nothing about its items. See
-    :py:func:`_generate_read_scalar_item` for the generated code.
-    """
-
-    def __init__(
-        self,
-        function_name: Identifier,
-        value_type: Stripped,
-        element_name: str,
-        read_text_function: Stripped,
-    ) -> None:
-        """Initialize with the given values."""
-        self.function_name = function_name
-        self.value_type = value_type
-        self.element_name = element_name
-        self.read_text_function = read_text_function
-
-
-def _to_scalar_item_reader(
-    type_anno: intermediate.AtomicTypeAnnotation, element_name: str
-) -> _ScalarItemReader:
-    """Determine the reader of a scalar ``type_anno`` wrapped in ``element_name``."""
-    primitive_type = intermediate.try_primitive_type(type_anno)
-    if primitive_type is not None:
-        scalar_name = _SCALAR_NAME_BY_PRIMITIVE_TYPE[primitive_type]
-    else:
-        assert isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
-            type_anno.our_type, intermediate.Enumeration
-        ), (
-            f"Expected a scalar type annotation, but got {type_anno}; "
-            f"the instances are read by dispatch on their own element name instead"
-        )
-
-        scalar_name = type_anno.our_type.name
-
-    return _ScalarItemReader(
-        function_name=golang_naming.private_function_name(
-            Identifier(f"read_{scalar_name}_at_{element_name}")
-        ),
-        value_type=golang_common.generate_type(
-            type_annotation=type_anno, types_package=Identifier("aastypes")
-        ),
-        element_name=element_name,
-        read_text_function=_read_text_function(type_anno),
     )
 
 
@@ -1219,124 +1431,32 @@ def _item_reader_name(
             )
         )
 
-    return Stripped(_to_scalar_item_reader(type_anno, element_name).function_name)
+    return Stripped(_scalar_item_reader_name(type_anno, element_name))
 
 
-def _requires_dispatch(type_anno: intermediate.TypeAnnotation) -> bool:
-    """
-    Check whether a *single* property of ``type_anno`` is read by dispatch.
-
-    A single property of a concrete class without concrete descendants is wrapped in
-    an element named after the *property*, not after the class, so there is no
-    discriminator to dispatch on. Everything else polymorphic -- an abstract class,
-    a concrete class with concrete descendants, and a named union -- is wrapped twice,
-    the inner element naming the concrete alternative.
-    """
-    if not isinstance(type_anno, intermediate.OurTypeAnnotation):
-        return False
-
-    our_type = type_anno.our_type
-
-    if isinstance(our_type, intermediate.ConcreteClass):
-        return len(our_type.concrete_descendants) > 0
-
-    return isinstance(our_type, (intermediate.AbstractClass, intermediate.NamedUnion))
-
-
-class _ReadRequirements:
-    """Specify which of the optional read functions are actually needed."""
-
-    def __init__(
-        self,
-        dispatched_type_ids: Set[int],
-        scalar_item_readers: List[_ScalarItemReader],
-    ) -> None:
-        """Initialize with the given values."""
-        #: IDs of our types for which a ``read*Dispatched`` function must be generated
-        self.dispatched_type_ids = dispatched_type_ids
-
-        #: Scalar item readers to be generated, in the order of the first occurrence
-        self.scalar_item_readers = scalar_item_readers
-
-
-def _collect_read_requirements(
-    symbol_table: intermediate.SymbolTable,
-) -> _ReadRequirements:
-    """
-    Collect the read functions which are actually reachable from ``Unmarshal``.
-
-    ``Unmarshal`` dispatches to ``read*AsSequence`` of *every* concrete class, so
-    every concrete class is reachable, and it suffices to look at the properties of
-    the concrete classes: a ``read*Dispatched`` and a scalar item reader are called
-    only from a property read.
-    """
-    dispatched_type_ids = set()  # type: Set[int]
-
-    scalar_item_readers = []  # type: List[_ScalarItemReader]
-    observed_scalar_item_readers = set()  # type: Set[Identifier]
-
-    def require_item_reader(
-        item_type_anno: intermediate.AtomicTypeAnnotation, element_name: str
-    ) -> None:
-        """Require the reader of an item of ``item_type_anno`` in ``element_name``."""
-        if isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
-            item_type_anno.our_type,
-            (
-                intermediate.AbstractClass,
-                intermediate.ConcreteClass,
-                intermediate.NamedUnion,
-            ),
-        ):
-            dispatched_type_ids.add(id(item_type_anno.our_type))
-            return
-
-        scalar_item_reader = _to_scalar_item_reader(item_type_anno, element_name)
-        if scalar_item_reader.function_name not in observed_scalar_item_readers:
-            observed_scalar_item_readers.add(scalar_item_reader.function_name)
-            scalar_item_readers.append(scalar_item_reader)
-
-    for cls in symbol_table.concrete_classes:
-        for prop in cls.properties:
-            type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-            if isinstance(type_anno, intermediate.ListTypeAnnotation):
-                assert isinstance(
-                    type_anno.items, intermediate.AtomicTypeAnnotationAsTuple
-                )
-                require_item_reader(type_anno.items, "v")
-
-            elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-                for i, item_type_anno in enumerate(type_anno.items):
-                    assert isinstance(
-                        item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
-                    )
-                    require_item_reader(item_type_anno, f"v{i + 1}")
-
-            elif _requires_dispatch(type_anno):
-                assert isinstance(type_anno, intermediate.OurTypeAnnotation)
-                dispatched_type_ids.add(id(type_anno.our_type))
-
-    return _ReadRequirements(
-        dispatched_type_ids=dispatched_type_ids,
-        scalar_item_readers=scalar_item_readers,
+def _generate_read_scalar_item(scalar_item: _ScalarItem) -> Stripped:
+    """Generate the function to read a scalar item at a fixed element name."""
+    function_name = _scalar_item_reader_name(
+        scalar_item.type_anno, scalar_item.element_name
     )
 
+    value_type = golang_common.generate_type(
+        type_annotation=scalar_item.type_anno, types_package=Identifier("aastypes")
+    )
 
-def _generate_read_scalar_item(scalar_item_reader: _ScalarItemReader) -> Stripped:
-    """Generate the function to read a scalar item at a fixed element name."""
-    element_name_literal = golang_common.string_literal(scalar_item_reader.element_name)
+    element_name_literal = golang_common.string_literal(scalar_item.element_name)
 
     return Stripped(
         f"""\
-// Read a scalar item expected in the element `{scalar_item_reader.element_name}`.
+// Read a scalar item expected in the element `{scalar_item.element_name}`.
 //
 // The `current` token is expected to point to the content of that element, and
 // the resulting `next` token points to its end element.
-func {scalar_item_reader.function_name}(
+func {function_name}(
 {I}decoder *xml.Decoder,
 {I}current xml.Token,
 {I}local string,
-) (value {scalar_item_reader.value_type},
+) (value {value_type},
 {I}next xml.Token,
 {I}err error,
 ) {{
@@ -1345,7 +1465,7 @@ func {scalar_item_reader.function_name}(
 {II}return
 {I}}}
 
-{I}return {scalar_item_reader.read_text_function}(decoder, current)
+{I}return {_read_text_function(scalar_item.type_anno)}(decoder, current)
 }}"""
     )
 
@@ -2135,51 +2255,196 @@ func writeBytesAsText(
     )
 
 
-# NOTE (mristin):
-# We provide wrapper function for scalar values to reduce
-# the already copious amounts of generated code. While it might seem like unnecessary
-# abstraction (basically just a start element, a call to writeXxxAsText, and an end
-# element), it still reduces the lines of generated code substantially.
-#
-# In addition, we also re-use the writeXxxAsText in writeListOfScalarsProperty.
+def _generate_write_element() -> Stripped:
+    """
+    Generate the single function which frames an XML element around a value.
 
-
-def _generate_write_scalar_property() -> Stripped:
+    Everything else in the serialization only decides *what* is written --
+    the framing itself lives here, so that a property, a list item and
+    a tuple item differ solely in the given content writer. An optional
+    property goes through the ``writeOptional*`` family instead, which
+    calls this function only if the value is set.
+    """
     return Stripped(
         f"""\
-// Write the scalar `value` of a property enclosed in an XML element.
+// Write `that` as an XML element with the `local` name, its content written by
+// `writeContent`.
 //
 // Do not flush.
 //
+// This is the one place which frames an XML element around a *value*: a property,
+// a list item and a tuple item all go through it, and differ only in the given
+// `writeContent`. A list frames its own element in [writeList], and an instance
+// the element naming its model type in [writeClassElement], as neither of the two
+// can be reduced to a content writer without allocating a closure.
+//
 // The XML namespace is expected to have been defined outside of the resulting XML
 // element.
-func writeScalarProperty[T Scalar](
+func writeElement[T any](
 {I}encoder *xml.Encoder,
 {I}local string,
-{I}value T,
-{I}writeTAsText func(anEncoder *xml.Encoder, aValue T) (anErr error),
+{I}that T,
+{I}writeContent func(anEncoder *xml.Encoder, aValue T) (anErr error),
 ) (err error) {{
-{I}err = writeStartElement(
-{II}encoder,
-{II}local,
-{II}false,
-{I})
+{I}err = writeStartElement(encoder, local, false)
 {I}if err != nil {{
 {II}return
 {I}}}
 
-{I}err = writeTAsText(encoder, value)
+{I}err = writeContent(encoder, that)
 {I}if err != nil {{
 {II}return
 {I}}}
 
-{I}err = writeEndElement(
-{II}encoder,
-{II}local,
-{II}false,
-{I})
-{I}if err != nil {{
+{I}err = writeEndElement(encoder, local, false)
+{I}return
+}}"""
+    )
+
+
+def _generate_write_optional_pointer() -> Stripped:
+    """
+    Generate the writer of an optional value represented as a pointer.
+
+    This is the first of the ``writeOptional*`` family. There is one member
+    per way Golang spells an optional -- each named after that spelling,
+    since the check for the presence, and *only* it, is what differs between
+    them: a pointer here, a value which is nil on its own in
+    :py:func:`_generate_write_optional_instance` and a slice in
+    :py:func:`_generate_write_optional_slice`.
+
+    The three can not be collapsed into one. Golang decides ``nil``-ness by
+    the representation: a type parameter can not be compared against
+    ``nil`` at all, ``any(that) == nil`` is false for a nil *pointer* boxed
+    in an ``any``, and comparing against the zero value of a type parameter
+    panics on a slice, which is not comparable. Nor can the write be handed
+    over as its *result*, the way a read is handed to ``readOptional``:
+    Golang would already have performed it.
+
+    They are worth having nevertheless. An ``if value := that.X(); value !=
+    nil`` at the call site would indeed decide all four at once, as the type
+    is concrete there, but it names the value twice and does not compose
+    into the single ``finishProperty`` expression -- so a property would no
+    longer be written by one call whether it is optional or not.
+    """
+    return Stripped(
+        f"""\
+// Write the optional `that` as an XML element with the `local` name, or write
+// nothing at all if it is not set.
+//
+// Do not flush.
+//
+// A scalar and a tuple are not nilable in Golang, so an optional one is represented
+// as a pointer. The pointer is dereferenced here, so that `writeContent` sees only
+// the value. See also [writeOptionalInstance] and [writeOptionalSlice], which differ
+// from this function only in how the presence is decided.
+func writeOptionalPointer[T any](
+{I}encoder *xml.Encoder,
+{I}local string,
+{I}that *T,
+{I}writeContent func(anEncoder *xml.Encoder, aValue T) (anErr error),
+) (err error) {{
+{I}if that == nil {{
 {II}return
+{I}}}
+
+{I}return writeElement(encoder, local, *that, writeContent)
+}}"""
+    )
+
+
+def _generate_write_optional_instance() -> Stripped:
+    """Generate the writer of an optional value which is nil on its own."""
+    return Stripped(
+        f"""\
+// Write the optional instance `that` as an XML element with the `local` name, or
+// write nothing at all if it is not set.
+//
+// Do not flush.
+//
+// An instance is represented as an interface and a named union as a pointer to
+// a struct, both of which are nil on their own, so -- unlike in [writeOptionalPointer] --
+// there is no pointer to dereference.
+//
+// Golang does not allow a value of a type parameter to be compared against `nil`,
+// and `any(that) == nil` would not do either: a nil *pointer* converted to `any` is
+// a non-nil `any` which carries the type of that pointer. Comparing against
+// the zero value of `T` covers both, as it compares nil against nil for
+// an interface, and a nil pointer against a nil pointer of the same type for
+// a named union.
+func writeOptionalInstance[T any](
+{I}encoder *xml.Encoder,
+{I}local string,
+{I}that T,
+{I}writeContent func(anEncoder *xml.Encoder, aValue T) (anErr error),
+) (err error) {{
+{I}var unset T
+{I}if any(that) == any(unset) {{
+{II}return
+{I}}}
+
+{I}return writeElement(encoder, local, that, writeContent)
+}}"""
+    )
+
+
+def _generate_write_optional_slice() -> Stripped:
+    """Generate the writer of an optional slice, nil on its own."""
+    return Stripped(
+        f"""\
+// Write the optional `that` as an XML element with the `local` name, or write
+// nothing at all if it is not set.
+//
+// Do not flush.
+//
+// A list and the bytes are represented as a slice, which is nil on its own, but --
+// unlike an instance in [writeOptionalInstance] -- can not be compared against
+// the zero value, as a slice is not comparable at all. Mind that a nil slice and
+// an empty slice differ here: only the former is considered absent, while
+// the latter is written as an empty XML element.
+func writeOptionalSlice[T any](
+{I}encoder *xml.Encoder,
+{I}local string,
+{I}that []T,
+{I}writeContent func(anEncoder *xml.Encoder, aValue []T) (anErr error),
+) (err error) {{
+{I}if that == nil {{
+{II}return
+{I}}}
+
+{I}return writeElement(encoder, local, that, writeContent)
+}}"""
+    )
+
+
+def _generate_write_list() -> Stripped:
+    """Generate the writer of the items of a list."""
+    return Stripped(
+        f"""\
+// Write the items of the `list`, each as an XML element of its own.
+//
+// Do not flush.
+//
+// The element *around* the list is framed by whoever writes the list, see
+// the generated `writeListOf*` functions. Every item frames its own element
+// through `writeItem`: an instance is written as an element named after its model
+// type, while a scalar is wrapped in the element `v`. A list of instances and
+// a list of scalars therefore share this one function.
+func writeList[T any](
+{I}encoder *xml.Encoder,
+{I}list []T,
+{I}writeItem func(anEncoder *xml.Encoder, aValue T) (anErr error),
+) (err error) {{
+{I}for i, item := range list {{
+{II}err = writeItem(encoder, item)
+{II}if err != nil {{
+{III}if seriaErr, ok := err.(*SerializationError); ok {{
+{IIII}seriaErr.Path.PrependIndex(
+{IIIII}&aasreporting.IndexSegment{{Index: i}},
+{IIII})
+{III}}}
+{III}return
+{II}}}
 {I}}}
 
 {I}return
@@ -2187,71 +2452,68 @@ func writeScalarProperty[T Scalar](
     )
 
 
-def _generate_as_scalar_tuple_item_writer() -> Stripped:
-    """
-    Generate the adapter to bind a scalar writer's name for a tuple item.
-
-    ``writeTupleN`` (see :py:func:`_generate_write_tuple_helper`) expects a
-    uniform ``func(encoder, value T) error`` per item, so that a single
-    generic function can be shared by *every* tuple-typed property of a
-    given arity, regardless of which mix of scalar and instance items
-    appears at each position (an instance item is adapted instead by
-    :py:func:`_generate_as_instance_tuple_item_writer`). A scalar item,
-    unlike a list item, is wrapped in a positional element name (``v1``,
-    ``v2``, *etc.*) instead of always the fixed ``v`` -- this name is a
-    runtime string that differs at every call site, so it must be bound in
-    via a closure (Go has no partial-application syntax); this adapter
-    builds that closure once, instead of repeating it inline at every such
-    tuple item.
-    """
+def _generate_finish_property() -> Stripped:
+    """Generate the function concluding the writing of a single property."""
     return Stripped(
         f"""\
-// Adapt `writeTAsText` together with `name` into a tuple item writer.
+// Conclude the writing of the property read by `getter` by attributing the error,
+// if any, to that property.
 //
-// `name` (`v1`, `v2`, ...) is a plain runtime string, not a type, so it
-// can not be pinned via a generic type parameter the way
-// `asInstanceTupleItemWriter` pins its own type parameter -- binding it
-// requires an actual closure, built once here.
-func asScalarTupleItemWriter[T Scalar](
-{I}name string,
-{I}writeTAsText func(anEncoder *xml.Encoder, aValue T) (anErr error),
-) func(encoder *xml.Encoder, value T) error {{
-{I}return func(encoder *xml.Encoder, value T) error {{
-{II}return writeScalarProperty(encoder, name, value, writeTAsText)
+// Do not flush.
+//
+// `getter` is the getter of the property *as it is spelled in Golang*, `Value()`
+// and not `value`, since it is prepended to the path of a serialization error,
+// which [SerializationError.PathString] renders as a Golang expression through
+// [aasreporting.ToGolangPath]. (Golang has no way to name a member at compile time,
+// so the getter has to be spelled out; mind that the de-serialization reports
+// an XPath instead, and hence prepends the XML name there.)
+//
+// The write itself is given as its *result*, not as a function to be called, so that
+// this one function concludes every property, no matter which of the `write*`
+// functions wrote it, and no matter how many arguments that function took. Golang
+// evaluates the argument, hence performs the write, before this call.
+func finishProperty(
+{I}getter string,
+{I}err error,
+) error {{
+{I}if err != nil {{
+{II}if seriaErr, ok := err.(*SerializationError); ok {{
+{III}seriaErr.Path.PrependName(
+{IIII}&aasreporting.NameSegment{{Name: getter}},
+{III})
+{II}}}
+{II}return err
 {I}}}
+
+{I}return nil
 }}"""
     )
 
 
-def _generate_as_instance_tuple_item_writer() -> Stripped:
-    """
-    Generate the adapter so an instance can be written as a tuple item writer.
-
-    See :py:func:`_generate_as_scalar_tuple_item_writer` for why
-    ``writeTupleN`` needs this uniform shape. Unlike the scalar adapter
-    above -- and unlike the read side, which needs no adapter whatsoever,
-    as every item reader there is a generated top-level function (see
-    :py:func:`_generate_read_dispatched` and
-    :py:func:`_generate_read_scalar_item`) -- no closure is needed here at
-    all: every class shares the very same
-    ``Marshal`` function (there is no per-class function value to bind in),
-    so the only thing that varies per tuple item is the *type* parameter
-    ``T``. ``Marshal`` itself takes the wide ``aastypes.IClass``, which can
-    not be used as a ``func(encoder, value T) error`` for a tuple item's own
-    (more specific) interface type -- Go function values are invariant in
-    their parameter type (no contravariance, verified against the
-    compiler) -- so this plain generic function exists solely to narrow
-    the parameter type to ``T``. Go can not infer ``T`` for it from
-    context, so every call site instantiates it explicitly, *e.g.*,
-    ``asInstanceTupleItemWriter[ISomeItem]`` -- passed on as that
-    instantiated function value directly (no call, no closure), since
-    Go allows referencing a generic function this way without invoking it.
-    """
+def _generate_write_instance() -> Stripped:
+    """Generate the content writer of an instance written as its own element."""
     return Stripped(
         f"""\
-// Adapt `Marshal` into a tuple item writer for instances of `T`.
-func asInstanceTupleItemWriter[T aastypes.IClass](encoder *xml.Encoder, value T) error {{
-{I}return Marshal(encoder, value, false)
+// Write the instance `that` as an XML element named after its model type.
+//
+// Do not flush.
+//
+// This is the content writer of every instance which is not embedded in the element
+// of its property, be it a property, a list item or a tuple item: [Marshal] picks
+// the element name from the runtime model type.
+//
+// Golang function values are invariant in their parameter type, so [Marshal], which
+// takes the wide [aastypes.IClass], can not be used where a writer of a more
+// specific interface is expected -- this generic function exists solely to narrow
+// the parameter type to `T`. Golang can not infer `T` from the context here, so
+// every call site instantiates it explicitly, *e.g.*,
+// `writeInstance[aastypes.IReference]`, and passes it on as that instantiated
+// function value, without a closure.
+func writeInstance[T aastypes.IClass](
+{I}encoder *xml.Encoder,
+{I}that T,
+) error {{
+{I}return writeClass(encoder, that, false)
 }}"""
     )
 
@@ -2276,89 +2538,31 @@ type namedUnion interface {{
     )
 
 
-def _generate_write_list_of_union_instances_property() -> Stripped:
-    """
-    Generate a list writer for named-union items.
-
-    Unlike :py:func:`_generate_write_list_of_instances_property`, this
-    writer calls ``Marshal`` on each item's *underlying* instance -- through
-    the :py:func:`_generate_named_union_constraint` constraint -- since a
-    named union is deliberately not an ``aastypes.IClass`` itself. This
-    avoids first copying the list into a fresh ``[]aastypes.IClass`` slice
-    just to satisfy that constraint.
-    """
+def _generate_write_union() -> Stripped:
+    """Generate the content writer of a named union."""
     return Stripped(
         f"""\
-// Serialize the list of named-union instances as a sequence of XML elements
-// enclosed in a parent XML element with the `local` name.
-func writeListOfUnionInstancesProperty[T namedUnion](
+// Write the named union `that` as the XML element of its underlying instance.
+//
+// Do not flush.
+//
+// A named union is deliberately not an [aastypes.IClass], so [writeInstance] can not
+// serve it; this writer narrows through the [namedUnion] constraint instead, and one
+// generic writer thus covers every named union.
+//
+// Do not flush.
+func writeUnion[T namedUnion](
 {I}encoder *xml.Encoder,
-{I}local string,
-{I}list []T,
-) (err error) {{
-{I}err = writeStartElement(
-{II}encoder,
-{II}local,
-{II}false,
-{I})
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}for i, item := range list {{
-{II}err = Marshal(
-{III}encoder,
-{III}item.Underlying(),
-{III}false,
-{II})
-{II}if err != nil {{
-{III}if seriaErr, ok := err.(*SerializationError); ok {{
-{IIII}seriaErr.Path.PrependIndex(
-{IIIII}&aasreporting.IndexSegment{{
-{IIIIII}Index: i,
-{IIIII}}},
-{IIII})
-{III}}}
-{III}return
-{II}}}
-{I}}}
-
-{I}err = writeEndElement(
-{II}encoder,
-{II}local,
-{II}false,
-{I})
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}return
-}}"""
-    )
-
-
-def _generate_write_union_as_tuple_item() -> Stripped:
-    """
-    Generate the adapter so a named union can be written as a tuple item writer.
-
-    See :py:func:`_generate_as_instance_tuple_item_writer` for why
-    ``writeTupleN`` needs this uniform shape. ``Marshal`` requires an
-    ``aastypes.IClass``, which a named union is deliberately not, so this
-    adapter narrows through the :py:func:`_generate_named_union_constraint`
-    constraint instead -- one generic adapter thus covers every named union.
-    """
-    return Stripped(
-        f"""\
-// Adapt `Marshal` into a tuple item writer for a named union.
-func writeUnionAsTupleItem[T namedUnion](encoder *xml.Encoder, value T) error {{
-{I}return Marshal(encoder, value.Underlying(), false)
+{I}that T,
+) error {{
+{I}return writeClass(encoder, that.Underlying(), false)
 }}"""
     )
 
 
 @require(lambda arity: arity > 0)
 def _generate_write_tuple_helper(arity: int) -> Stripped:
-    """Generate a generic function to write a tuple of the given ``arity``."""
+    """Generate a generic function to write the items of a tuple of ``arity``."""
     type_params = [f"T{i + 1}" for i in range(arity)]
     type_params_joined = ", ".join(f"{t} any" for t in type_params)
 
@@ -2394,6 +2598,11 @@ if err != nil {{
         f"""\
 // Write `that` with `writeItem1`, `writeItem2`, *etc.* on the
 // correspondingly positioned item, or return an error.
+//
+// Do not flush.
+//
+// Every item writes its own element, so this function is shared by every tuple of
+// arity {arity}, whichever mix of scalar and instance items it holds.
 func {function_name}[{type_params_joined}](
 {I}encoder *xml.Encoder,
 {I}that {tuple_type},
@@ -2406,203 +2615,37 @@ func {function_name}[{type_params_joined}](
     )
 
 
-def _generate_write_embedded_instance_property() -> Stripped:
+def _generate_write_class_element() -> Stripped:
+    """Generate the function writing an instance as the element of its class."""
     return Stripped(
         f"""\
-// Serialize the `instance` as a sequence of elements directly embedded
-// in an XML element with `local` name representing the property.
+// Write `that` as an XML element with the `local` name representing its model type.
 //
 // Do not flush.
-func writeEmbeddedInstanceProperty[T aastypes.IClass](
-{I}encoder *xml.Encoder,
-{I}local string,
-{I}instance T,
-{I}writeTAsSequence func(anEncoder *xml.Encoder, that T) (anErr error),
-) (err error) {{
-{I}err = writeStartElement(
-{II}encoder,
-{II}local,
-{II}false,
-{I})
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}err = writeTAsSequence(
-{II}encoder,
-{II}instance,
-{I})
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}err = writeEndElement(
-{II}encoder,
-{II}local,
-{II}false,
-{I})
-{I}return
-}}"""
-    )
-
-
-def _generate_write_instance_property_with_discriminator() -> Stripped:
-    return Stripped(
-        f"""\
-// Serialize the `instance` as a sequence of elements within a discriminator
-// element which is then embedded in an XML element with `local` name
-// representing the property.
 //
-// Do not flush.
-func writeDiscriminatedInstanceProperty(
+// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
+//
+// Unlike [writeElement], which frames a *property*, this function frames an instance
+// in the element which discriminates its model type, and is therefore the one place
+// where the XML namespace can be set.
+func writeClassElement[T any](
 {I}encoder *xml.Encoder,
 {I}local string,
-{I}instance aastypes.IClass,
+{I}withNamespace bool,
+{I}that T,
+{I}writeTAsSequence func(anEncoder *xml.Encoder, aValue T) (anErr error),
 ) (err error) {{
-{I}err = writeStartElement(
-{II}encoder,
-{II}local,
-{II}false,
-{I})
+{I}err = writeStartElement(encoder, local, withNamespace)
 {I}if err != nil {{
 {II}return
 {I}}}
 
-{I}err = Marshal(
-{II}encoder,
-{II}instance,
-{II}false,
-{I})
+{I}err = writeTAsSequence(encoder, that)
 {I}if err != nil {{
 {II}return
 {I}}}
 
-{I}err = writeEndElement(
-{II}encoder,
-{II}local,
-{II}false,
-{I})
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}return
-}}"""
-    )
-
-
-def _generate_write_list_of_instances_property() -> Stripped:
-    return Stripped(
-        f"""\
-// Serialize the list of instances as a sequence of XML elements enclosed in a parent
-// XML element with the `local` name.
-func writeListOfInstancesProperty[T aastypes.IClass](
-{I}encoder *xml.Encoder,
-{I}local string,
-{I}list []T,
-) (err error) {{
-{I}err = writeStartElement(
-{II}encoder,
-{II}local,
-{II}false,
-{I})
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}for i, item := range list {{
-{II}err = Marshal(
-{III}encoder,
-{III}item,
-{III}false,
-{II})
-{II}if err != nil {{
-{III}if seriaErr, ok := err.(*SerializationError); ok {{
-{IIII}seriaErr.Path.PrependIndex(
-{IIIII}&aasreporting.IndexSegment{{
-{IIIIII}Index: i,
-{IIIII}}},
-{IIII})
-{III}}}
-{III}return
-{II}}}
-{I}}}
-
-{I}err = writeEndElement(
-{II}encoder,
-{II}local,
-{II}false,
-{I})
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}return
-}}"""
-    )
-
-
-def _generate_write_list_of_scalars_property() -> Stripped:
-    return Stripped(
-        f"""\
-// Serialize the list of scalars as a sequence of XML `<v>` elements
-// enclosed in a parent XML element with the `local` name.
-func writeListOfScalarsProperty[T Scalar](
-{I}encoder *xml.Encoder,
-{I}local string,
-{I}list []T,
-{I}writeTAsText func(anEncoder *xml.Encoder, aValue T) (anErr error),
-) (err error) {{
-{I}err = writeStartElement(
-{II}encoder,
-{II}local,
-{II}false,
-{I})
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}for i, item := range list {{
-{II}err = writeStartElement(
-{III}encoder,
-{III}"v",
-{III}false,
-{II})
-{II}if err != nil {{
-{III}return
-{II}}}
-
-{II}err = writeTAsText(encoder, item)
-{II}if err != nil {{
-{III}if seriaErr, ok := err.(*SerializationError); ok {{
-{IIII}seriaErr.Path.PrependIndex(
-{IIIII}&aasreporting.IndexSegment{{
-{IIIIII}Index: i,
-{IIIII}}},
-{IIII})
-{III}}}
-{III}return
-{II}}}
-
-{II}err = writeEndElement(
-{III}encoder,
-{III}"v",
-{III}false,
-{II})
-{II}if err != nil {{
-{III}return
-{II}}}
-{I}}}
-
-{I}err = writeEndElement(
-{II}encoder,
-{II}local,
-{II}false,
-{I})
-{I}if err != nil {{
-{II}return
-{I}}}
-
+{I}err = writeEndElement(encoder, local, withNamespace)
 {I}return
 }}"""
     )
@@ -2662,337 +2705,325 @@ assert all(
 )
 
 
-def _generate_snippet_to_serialize_property(prop: intermediate.Property) -> Stripped:
-    blocks = []  # type: List[Stripped]
+def _write_text_function(type_anno: intermediate.AtomicTypeAnnotation) -> Stripped:
+    """Determine the function which writes a scalar ``type_anno`` as text."""
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        return Stripped(_WRITE_FUNCTION_BY_PRIMITIVE_TYPE[primitive_type])
 
-    local_literal = golang_common.string_literal(prop.xml_name)
-
-    segment_name_literal = golang_common.string_literal(
-        f"{golang_naming.getter_name(prop.name)}()"
+    assert isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+        type_anno.our_type, intermediate.Enumeration
+    ), (
+        f"Expected a scalar type annotation, but got {type_anno}; "
+        f"the instances are written as their own element instead"
     )
 
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-    getter_name = golang_naming.getter_name(prop.name)
-    access_expr = f"that.{getter_name}()"
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        prop_var = golang_naming.variable_name(Identifier(f"the_{prop.name}"))
-        access_expr = prop_var
-
-        blocks.append(
-            Stripped(
-                f"""\
-{prop_var} := that.{getter_name}()"""
-            )
+    return Stripped(
+        golang_naming.private_function_name(
+            Identifier(f"write_{type_anno.our_type.name}_as_text")
         )
+    )
 
-    if_err_nil_prepend_name_if_serialization_error_return = Stripped(
+
+def _generate_write_scalar_item(scalar_item: _ScalarItem) -> Stripped:
+    """Generate the function to write a scalar item in a fixed element name."""
+    function_name = _scalar_item_writer_name(
+        scalar_item.type_anno, scalar_item.element_name
+    )
+
+    value_type = golang_common.generate_type(
+        type_annotation=scalar_item.type_anno, types_package=Identifier("aastypes")
+    )
+
+    element_name_literal = golang_common.string_literal(scalar_item.element_name)
+
+    arguments_joined = _join_arguments(
+        [
+            "encoder",
+            element_name_literal,
+            "value",
+            _write_text_function(scalar_item.type_anno),
+        ],
+        indention=2,
+    )
+
+    return Stripped(
         f"""\
-if err != nil {{
-{I}if seriaErr, ok := err.(*SerializationError); ok {{
-{II}seriaErr.Path.PrependName(
-{III}&aasreporting.NameSegment{{
-{IIII}Name: {segment_name_literal},
-{III}}},
-{II})
-{I}}}
-{I}return
+// Write the scalar `value` in the element `{scalar_item.element_name}`.
+//
+// Do not flush.
+func {function_name}(
+{I}encoder *xml.Encoder,
+{I}value {value_type},
+) error {{
+{I}return writeElement(
+{II}{indent_but_first_line(arguments_joined, II)}
+{I})
 }}"""
     )
 
-    write_block = None  # type: Optional[Stripped]
 
-    if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation) or (
-        isinstance(type_anno, intermediate.OurTypeAnnotation)
-        and isinstance(
-            type_anno.our_type,
-            (intermediate.ConstrainedPrimitive, intermediate.Enumeration),
-        )
-    ):
-        primitive_type = intermediate.try_primitive_type(type_anno)
+def _item_writer_expr(
+    type_anno: intermediate.AtomicTypeAnnotation, element_name: str
+) -> Stripped:
+    """
+    Determine the writer of an item of ``type_anno`` in a list or in a tuple.
 
-        if primitive_type is not None:
-            write_function = _WRITE_FUNCTION_BY_PRIMITIVE_TYPE[primitive_type]
-        else:
-            assert isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
-                type_anno.our_type, intermediate.Enumeration
-            )
-            write_function = golang_naming.private_function_name(
-                Identifier(f"write_{type_anno.our_type.name}_as_text")
-            )
-
-        pointer = golang_pointering.is_pointer_type(prop.type_annotation)
-
-        if pointer:
-            write_block = Stripped(
-                f"""\
-err = writeScalarProperty(
-{I}encoder,
-{I}{local_literal},
-{I}*{access_expr},
-{I}{write_function},
-)
-{if_err_nil_prepend_name_if_serialization_error_return}"""
-            )
-        else:
-            write_block = Stripped(
-                f"""\
-err = writeScalarProperty(
-{I}encoder,
-{I}{local_literal},
-{I}{access_expr},
-{I}{write_function},
-)
-{if_err_nil_prepend_name_if_serialization_error_return}"""
-            )
-
-    elif isinstance(type_anno, intermediate.OurTypeAnnotation):
+    An instance and a named union write their own, self-describing element, so
+    ``element_name`` is disregarded for them.
+    """
+    if isinstance(type_anno, intermediate.OurTypeAnnotation):
         our_type = type_anno.our_type
 
-        if isinstance(our_type, intermediate.Enumeration):
-            raise AssertionError("Must have been handled before")
+        item_type = golang_common.generate_type(
+            type_annotation=type_anno, types_package=Identifier("aastypes")
+        )
 
-        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-            raise AssertionError("Must have been handled before")
-
-        elif isinstance(
+        if isinstance(
             our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
         ):
-            if (
-                isinstance(our_type, intermediate.ConcreteClass)
-                and len(our_type.concrete_descendants) == 0
-            ):
-                write_as_sequence_function = golang_naming.private_function_name(
-                    Identifier(f"write_{our_type.name}_as_sequence")
-                )
-                write_block = Stripped(
-                    f"""\
-err = writeEmbeddedInstanceProperty(
-{I}encoder,
-{I}{local_literal},
-{I}{access_expr},
-{I}{write_as_sequence_function},
-)
-{if_err_nil_prepend_name_if_serialization_error_return}"""
-                )
-            else:
-                write_block = Stripped(
-                    f"""\
-err = writeDiscriminatedInstanceProperty(
-{I}encoder,
-{I}{local_literal},
-{I}{access_expr},
-)
-{if_err_nil_prepend_name_if_serialization_error_return}"""
-                )
+            return Stripped(f"writeInstance[{item_type}]")
 
-        elif isinstance(our_type, intermediate.NamedUnion):
-            # NOTE (mristin):
-            # A named union always takes the discriminator-nesting code
-            # path, exactly like a polymorphic class, so this branch mirrors
-            # the polymorphic-class branch above -- we keep it separate, as
-            # its own branch, so that it can diverge independently, *e.g.*,
-            # if primitive alternatives are ever allowed into a named union.
-            write_block = Stripped(
-                f"""\
-err = writeDiscriminatedInstanceProperty(
-{I}encoder,
-{I}{local_literal},
-{I}{access_expr}.Underlying(),
-)
-{if_err_nil_prepend_name_if_serialization_error_return}"""
-            )
+        if isinstance(our_type, intermediate.NamedUnion):
+            return Stripped(f"writeUnion[{item_type}]")
 
-        else:
-            assert_never(our_type)
+    return Stripped(_scalar_item_writer_name(type_anno, element_name))
 
-    elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
-            f"NOTE (mristin): We expect only lists of atomic values "
-            f"at the moment, but you specified {type_anno}. "
-            f"Please contact the developers if you need this feature."
-        )
 
-        if isinstance(type_anno.items, intermediate.PrimitiveTypeAnnotation) or (
-            isinstance(type_anno.items, intermediate.OurTypeAnnotation)
-            and isinstance(
-                type_anno.items.our_type,
-                (intermediate.ConstrainedPrimitive, intermediate.Enumeration),
-            )
-        ):
-            items_primitive_type = intermediate.try_primitive_type(type_anno.items)
+def _generate_write_list_content_writer(
+    items_type_anno: intermediate.AtomicTypeAnnotation,
+) -> Stripped:
+    """
+    Generate the writer of the content of a list of ``items_type_anno``.
 
-            if items_primitive_type is not None:
-                write_function = _WRITE_FUNCTION_BY_PRIMITIVE_TYPE[items_primitive_type]
-            else:
-                assert isinstance(
-                    type_anno.items, intermediate.OurTypeAnnotation
-                ) and isinstance(type_anno.items.our_type, intermediate.Enumeration)
-                write_function = golang_naming.private_function_name(
-                    Identifier(f"write_{type_anno.items.our_type.name}_as_text")
-                )
+    ``writeList`` takes the writer of a single item, so it can not be passed on
+    as a content writer itself -- and Golang gives no partial application which
+    would bind that item writer in without allocating a closure. This function
+    binds it at the package level instead, so that a list is written by exactly
+    the same call as any other value, be it optional or not.
+    """
+    items_type = golang_common.generate_type(
+        type_annotation=items_type_anno, types_package=Identifier("aastypes")
+    )
 
-            write_block = Stripped(
-                f"""\
-err = writeListOfScalarsProperty(
-{I}encoder,
-{I}{local_literal},
-{I}{access_expr},
-{I}{write_function},
-)
-{if_err_nil_prepend_name_if_serialization_error_return}"""
-            )
-        elif isinstance(type_anno.items, intermediate.OurTypeAnnotation) and isinstance(
-            type_anno.items.our_type,
-            (intermediate.AbstractClass, intermediate.ConcreteClass),
-        ):
-            write_block = Stripped(
-                f"""\
-err = writeListOfInstancesProperty(
-{I}encoder,
-{I}{local_literal},
-{I}{access_expr},
-)
-{if_err_nil_prepend_name_if_serialization_error_return}"""
-            )
+    arguments_joined = _join_arguments(
+        ["encoder", "list", _item_writer_expr(items_type_anno, "v")], indention=2
+    )
 
-        elif isinstance(type_anno.items, intermediate.OurTypeAnnotation) and isinstance(
-            type_anno.items.our_type, intermediate.NamedUnion
-        ):
-            write_block = Stripped(
-                f"""\
-err = writeListOfUnionInstancesProperty(
-{I}encoder,
-{I}{local_literal},
-{I}{access_expr},
-)
-{if_err_nil_prepend_name_if_serialization_error_return}"""
-            )
-
-        else:
-            raise AssertionError(
-                f"Unexpected list item type annotation: {type_anno.items}"
-            )
-
-    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        arity = len(type_anno.items)
-
-        item_writer_exprs = []  # type: List[Stripped]
-
-        for i, item_type_anno in enumerate(type_anno.items):
-            if isinstance(
-                item_type_anno, intermediate.OurTypeAnnotation
-            ) and isinstance(
-                item_type_anno.our_type,
-                (intermediate.AbstractClass, intermediate.ConcreteClass),
-            ):
-                item_type = golang_common.generate_type(
-                    type_annotation=item_type_anno, types_package=Identifier("aastypes")
-                )
-
-                item_writer_exprs.append(
-                    Stripped(f"asInstanceTupleItemWriter[{item_type}],")
-                )
-
-            elif isinstance(
-                item_type_anno, intermediate.OurTypeAnnotation
-            ) and isinstance(item_type_anno.our_type, intermediate.NamedUnion):
-                item_type = golang_common.generate_type(
-                    type_annotation=item_type_anno, types_package=Identifier("aastypes")
-                )
-
-                item_writer_exprs.append(
-                    Stripped(f"writeUnionAsTupleItem[{item_type}],")
-                )
-
-            else:
-                if isinstance(
-                    item_type_anno, intermediate.OurTypeAnnotation
-                ) and isinstance(item_type_anno.our_type, intermediate.Enumeration):
-                    write_function = golang_naming.private_function_name(
-                        Identifier(f"write_{item_type_anno.our_type.name}_as_text")
-                    )
-                else:
-                    items_primitive_type = intermediate.try_primitive_type(
-                        item_type_anno
-                    )
-                    assert items_primitive_type is not None
-                    write_function = _WRITE_FUNCTION_BY_PRIMITIVE_TYPE[
-                        items_primitive_type
-                    ]
-
-                v_name_literal = golang_common.string_literal(f"v{i + 1}")
-
-                item_writer_exprs.append(
-                    Stripped(
-                        f"asScalarTupleItemWriter({v_name_literal}, {write_function}),"
-                    )
-                )
-
-        item_writer_exprs_joined = "\n".join(item_writer_exprs)
-
-        write_block = Stripped(
-            f"""\
-err = writeStartElement(
-{I}encoder,
-{I}{local_literal},
-{I}false,
-)
-if err != nil {{
-{I}return
-}}
-
-err = writeTuple{arity}(
-{I}encoder,
-{I}{access_expr},
-{I}{indent_but_first_line(item_writer_exprs_joined, I)}
-)
-if err != nil {{
-{I}return
-}}
-
-err = writeEndElement(
-{I}encoder,
-{I}{local_literal},
-{I}false,
-)
-{if_err_nil_prepend_name_if_serialization_error_return}"""
-        )
-
-    else:
-        assert_never(type_anno)
-
-    assert write_block is not None
-
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        blocks.append(
-            Stripped(
-                f"""\
-if {access_expr} != nil {{
-{I}{indent_but_first_line(write_block, I)}
+    return Stripped(
+        f"""\
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func {_list_content_writer_name(items_type_anno)}(
+{I}encoder *xml.Encoder,
+{I}list []{items_type},
+) error {{
+{I}return writeList(
+{II}{indent_but_first_line(arguments_joined, II)}
+{I})
 }}"""
-            )
-        )
-    else:
-        blocks.append(write_block)
+    )
 
-    blocks.append(
-        Stripped(
-            f"""\
-err = encoder.Flush()
-if err != nil {{
-{I}return err
+
+def _generate_write_tuple_content_writer(
+    type_anno: intermediate.TupleTypeAnnotation,
+) -> Stripped:
+    """
+    Generate the writer of the content of a tuple.
+
+    A ``writeTuple*`` takes an item writer per item, so it can not be passed on
+    as a content writer itself -- and Golang gives no partial application which
+    would bind those item writers in without allocating a closure. This function
+    binds them at the package level instead, so that a tuple is written by exactly
+    the same call as any other value, be it optional or not.
+    """
+    tuple_type = golang_common.generate_type(
+        type_annotation=type_anno, types_package=Identifier("aastypes")
+    )
+
+    item_writer_exprs = []  # type: List[Stripped]
+    for i, item_type_anno in enumerate(type_anno.items):
+        assert isinstance(item_type_anno, intermediate.AtomicTypeAnnotationAsTuple)
+        item_writer_exprs.append(_item_writer_expr(item_type_anno, f"v{i + 1}"))
+
+    arguments_joined = _join_arguments(
+        ["encoder", "that", *item_writer_exprs], indention=2
+    )
+
+    return Stripped(
+        f"""\
+// Write the items of `that` as a sequence of XML elements.
+//
+// Do not flush.
+func {_tuple_content_writer_name(type_anno)}(
+{I}encoder *xml.Encoder,
+{I}that {tuple_type},
+) error {{
+{I}return writeTuple{len(type_anno.items)}(
+{II}{indent_but_first_line(arguments_joined, II)}
+{I})
 }}"""
+    )
+
+
+def _content_writer_expr(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
+    """
+    Determine the writer of the content of an XML element holding ``type_anno``.
+
+    Mind the difference to :py:func:`_item_writer_expr`: an instance embedded in
+    the element of its property writes only its sequence of properties, while
+    an item of a list or of a tuple writes its own element on top of it.
+    """
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        return Stripped(_WRITE_FUNCTION_BY_PRIMITIVE_TYPE[primitive_type])
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple)
+        return _list_content_writer_name(type_anno.items)
+
+    if isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        return _tuple_content_writer_name(type_anno)
+
+    assert isinstance(
+        type_anno, intermediate.OurTypeAnnotation
+    ), f"Unexpected type annotation for a content writer: {type_anno}"
+
+    our_type = type_anno.our_type
+
+    if isinstance(our_type, intermediate.Enumeration):
+        return _write_text_function(type_anno)
+
+    golang_type = golang_common.generate_type(
+        type_annotation=type_anno, types_package=Identifier("aastypes")
+    )
+
+    if isinstance(our_type, intermediate.NamedUnion):
+        return Stripped(f"writeUnion[{golang_type}]")
+
+    assert isinstance(
+        our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+    ), f"Unexpected our type for a content writer: {our_type}"
+
+    if _requires_dispatch(type_anno):
+        return Stripped(f"writeInstance[{golang_type}]")
+
+    # NOTE (mristin):
+    # A concrete class without any concrete descendant is embedded directly in
+    # the element of its property, so its sequence of properties *is* the content.
+    return Stripped(
+        golang_naming.private_function_name(
+            Identifier(f"write_{our_type.name}_as_sequence")
         )
     )
 
-    blocks.insert(0, Stripped(f"// region {getter_name}"))
-    blocks.append(Stripped("// endregion"))
 
-    return Stripped("\n\n".join(blocks))
+def _wrap_in_finish_property(getter_name: Identifier, write_expr: Stripped) -> Stripped:
+    """
+    Conclude the ``write_expr`` of the property with the given ``getter_name``.
+
+    The getter is spelled out as a call, ``SemanticID()``, since that is how
+    the path of a serialization error is reported back to the user -- as a Golang
+    expression, not as an XML name.
+    """
+    getter_literal = golang_common.string_literal(f"{getter_name}()")
+
+    return Stripped(
+        f"""\
+err = finishProperty(
+{I}{getter_literal},
+{I}{indent_but_first_line(write_expr, I)},
+)
+if err != nil {{
+{I}return
+}}"""
+    )
 
 
-def _generate_write_as_sequence(cls: intermediate.ConcreteClass) -> Stripped:
+@require(lambda prop, cls: id(prop) in cls.property_id_set)
+def _generate_snippet_to_serialize_property(
+    prop: intermediate.Property, cls: intermediate.ConcreteClass
+) -> Tuple[Optional[Stripped], Optional[Error]]:
+    """
+    Generate the snippet to serialize the property ``prop``.
+
+    Every property is written by the same call and concluded by the same
+    ``finishProperty``; only the entry point -- which decides on the presence of
+    an optional, see :py:func:`_generate_write_optional` -- and the content writer
+    differ.
+    """
+    type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation) and not isinstance(
+        type_anno.items, intermediate.AtomicTypeAnnotationAsTuple
+    ):
+        return None, Error(
+            prop.parsed.node,
+            f"(mristin) We only handle the XML serialization of lists of "
+            f"atomic values, but you want to generate the code for a list of "
+            f"type {type_anno}. Please contact the developers if you need "
+            f"this feature.",
+        )
+
+    optional = isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
+
+    if not optional:
+        function_name = "writeElement"
+    elif golang_pointering.is_pointer_type(prop.type_annotation):
+        function_name = "writeOptionalPointer"
+    elif isinstance(
+        type_anno, intermediate.ListTypeAnnotation
+    ) or intermediate.try_primitive_type(type_anno) is (
+        intermediate.PrimitiveType.BYTEARRAY
+    ):
+        function_name = "writeOptionalSlice"
+    else:
+        assert isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+            type_anno.our_type,
+            (
+                intermediate.AbstractClass,
+                intermediate.ConcreteClass,
+                intermediate.NamedUnion,
+            ),
+        ), (
+            f"Expected an instance or a named union, the only optionals which are "
+            f"nil on their own, but got {type_anno}; mind that "
+            f"``writeOptionalInstance`` compares against the zero value, which "
+            f"panics at runtime on a slice"
+        )
+
+        function_name = "writeOptionalInstance"
+
+    getter_name = golang_naming.getter_name(prop.name)
+
+    arguments_joined = _join_arguments(
+        [
+            "encoder",
+            golang_common.string_literal(prop.xml_name),
+            f"that.{getter_name}()",
+            _content_writer_expr(type_anno),
+        ],
+        indention=3,
+    )
+
+    return (
+        _wrap_in_finish_property(
+            getter_name=getter_name,
+            write_expr=Stripped(
+                f"""\
+{function_name}(
+{I}{indent_but_first_line(arguments_joined, I)}
+)"""
+            ),
+        ),
+        None,
+    )
+
+
+def _generate_write_as_sequence(
+    cls: intermediate.ConcreteClass,
+) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     function_name = golang_naming.private_function_name(
         Identifier(f"write_{cls.name}_as_sequence")
     )
@@ -3000,17 +3031,28 @@ def _generate_write_as_sequence(cls: intermediate.ConcreteClass) -> Stripped:
     interface_name = golang_naming.interface_name(cls.name)
 
     prop_blocks = []  # type: List[Stripped]
+    errors = []  # type: List[Error]
 
     for prop in cls.properties:
-        prop_blocks.append(_generate_snippet_to_serialize_property(prop=prop))
+        prop_block, error = _generate_snippet_to_serialize_property(prop=prop, cls=cls)
+        if error is not None:
+            errors.append(error)
+            continue
+
+        assert prop_block is not None
+        prop_blocks.append(prop_block)
+
+    if len(errors) > 0:
+        return None, errors
 
     if len(prop_blocks) == 0:
         prop_blocks.append(Stripped("// Intentionally empty."))
 
     prop_blocks_joined = "\n\n".join(prop_blocks)
 
-    return Stripped(
-        f"""\
+    return (
+        Stripped(
+            f"""\
 // Serialize the instance
 // of [aastypes.{interface_name}]
 // as a sequence of properties, each represented as an XML element.
@@ -3018,7 +3060,7 @@ def _generate_write_as_sequence(cls: intermediate.ConcreteClass) -> Stripped:
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func {function_name}(
 {I}encoder *xml.Encoder,
 {I}that aastypes.{interface_name},
@@ -3027,99 +3069,18 @@ func {function_name}(
 
 {I}return
 }}"""
+        ),
+        None,
     )
 
 
-def _generate_write_for(cls: intermediate.ConcreteClass) -> Stripped:
-    interface_name = golang_naming.interface_name(cls.name)
+def _generate_write_class(symbol_table: intermediate.SymbolTable) -> Stripped:
+    """
+    Generate the function which dispatches on the model type of an instance.
 
-    if len(cls.concrete_descendants) == 0:
-        function_name = golang_naming.private_function_name(
-            Identifier(f"write_{cls.name}")
-        )
-        doc_comment = Stripped(
-            f"""\
-// Serialize the instance of [aastypes.{interface_name}]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written."""
-        )
-    else:
-        model_type_literal = golang_naming.enum_literal_name(
-            enumeration_name=Identifier("Model_type"), literal_name=cls.name
-        )
-
-        doc_comment = Stripped(
-            f"""\
-// Serialize the instance of [aastypes.{interface_name}]
-// enclosed in an XML element which represents the model type.
-//
-// Do not dispatch on the runtime model type, *i.e.*, assume that the runtime model type
-// is exactly [aastypes.{model_type_literal}]. If you need dispatch,
-// call [Marshal].
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written."""
-        )
-
-        function_name = golang_naming.private_function_name(
-            Identifier(f"write_{cls.name}_without_dispatch")
-        )
-
-    xml_class_name_literal = golang_common.string_literal(
-        naming.xml_class_name(cls.name)
-    )
-
-    write_as_sequence_name = golang_naming.private_function_name(
-        Identifier(f"write_{cls.name}_as_sequence")
-    )
-
-    return Stripped(
-        f"""\
-{doc_comment}
-func {function_name}(
-{I}encoder *xml.Encoder,
-{I}that aastypes.{interface_name},
-{I}withNamespace bool,
-) (err error) {{
-{I}local := {xml_class_name_literal}
-{I}
-{I}err = writeStartElement(
-{II}encoder,
-{II}local,
-{II}withNamespace,
-{I})
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}err = {write_as_sequence_name}(
-{II}encoder,
-{II}that,
-{I})
-{I}if err != nil {{
-{II}return
-{I}}}
-{I}
-{I}err = writeEndElement(
-{II}encoder,
-{II}local,
-{II}withNamespace,
-{I})
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}err = encoder.Flush()
-{I}return
-}}"""
-    )
-
-
-def _generate_marshal(symbol_table: intermediate.SymbolTable) -> Stripped:
+    This is [Marshal] without the flush, so that the flush happens exactly
+    once per [Marshal], and not once per instance nested in it.
+    """
     case_blocks = []  # type: List[Stripped]
     for cls in symbol_table.concrete_classes:
         model_type_literal = golang_naming.enum_literal_name(
@@ -3128,23 +3089,31 @@ def _generate_marshal(symbol_table: intermediate.SymbolTable) -> Stripped:
 
         interface_name = golang_naming.interface_name(cls.name)
 
-        if len(cls.concrete_descendants) == 0:
-            write_function = golang_naming.private_function_name(
-                Identifier(f"write_{cls.name}")
-            )
-        else:
-            write_function = golang_naming.private_function_name(
-                Identifier(f"write_{cls.name}_without_dispatch")
-            )
+        xml_class_name_literal = golang_common.string_literal(
+            naming.xml_class_name(cls.name)
+        )
+
+        write_as_sequence_name = golang_naming.private_function_name(
+            Identifier(f"write_{cls.name}_as_sequence")
+        )
+
+        arguments_joined = _join_arguments(
+            [
+                "encoder",
+                xml_class_name_literal,
+                "withNamespace",
+                f"that.(aastypes.{interface_name})",
+                write_as_sequence_name,
+            ],
+            indention=3,
+        )
 
         case_blocks.append(
             Stripped(
                 f"""\
 case aastypes.{model_type_literal}:
-{I}err = {write_function}(
-{II}encoder,
-{II}that.(aastypes.{interface_name}),
-{II}withNamespace,
+{I}err = writeClassElement(
+{II}{indent_but_first_line(arguments_joined, II)}
 {I})"""
             )
         )
@@ -3167,11 +3136,13 @@ default:
 
     return Stripped(
         f"""\
-// Serialize `that` instance as an XML element.
+// Serialize `that` instance as an XML element named after its model type.
+//
+// Do not flush.
 //
 // If `withNamespace` is set, the `xmlns` attribute is set in the XML element
 // to [Namespace].
-func Marshal(
+func writeClass(
 {I}encoder *xml.Encoder,
 {I}that aastypes.IClass,
 {I}withNamespace bool,
@@ -3180,6 +3151,36 @@ func Marshal(
 {I}{indent_but_first_line(case_blocks_joined, I)}
 {I}}}
 {I}return
+}}"""
+    )
+
+
+def _generate_marshal() -> Stripped:
+    """
+    Generate the public entry point of the serialization.
+
+    Encoding a token does not flush -- [xml.Encoder.EncodeToken] leaves that
+    to the caller -- so the encoder has to be flushed exactly once, when
+    the whole element has been written. Flushing more often, say after every
+    property, only defeats the buffering of the encoder.
+    """
+    return Stripped(
+        f"""\
+// Serialize `that` instance as an XML element, and flush the encoder.
+//
+// If `withNamespace` is set, the `xmlns` attribute is set in the XML element
+// to [Namespace].
+func Marshal(
+{I}encoder *xml.Encoder,
+{I}that aastypes.IClass,
+{I}withNamespace bool,
+) (err error) {{
+{I}err = writeClass(encoder, that, withNamespace)
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}return encoder.Flush()
 }}"""
     )
 
@@ -3273,7 +3274,6 @@ const Namespace = {namespace_literal}"""
             _generate_parse_as_start_element_and_extract_local_name(),
             _generate_check_end_element(),
             *_generate_error_constructors(),
-            _generate_scalar_definition(),
             _generate_read_element_dispatched(),
             _generate_read_list_of(),
             _generate_read_optional(),
@@ -3282,10 +3282,10 @@ const Namespace = {namespace_literal}"""
         ]
     )
 
-    read_requirements = _collect_read_requirements(symbol_table)
+    requirements = _collect_requirements(symbol_table)
 
-    for scalar_item_reader in read_requirements.scalar_item_readers:
-        blocks.append(_generate_read_scalar_item(scalar_item_reader=scalar_item_reader))
+    for scalar_item in requirements.scalar_items:
+        blocks.append(_generate_read_scalar_item(scalar_item=scalar_item))
 
     for arity in intermediate.tuple_arities(symbol_table):
         blocks.append(_generate_read_tuple_helper(arity))
@@ -3299,7 +3299,7 @@ const Namespace = {namespace_literal}"""
         elif isinstance(our_type, intermediate.ConstrainedPrimitive):
             pass
         elif isinstance(our_type, intermediate.AbstractClass):
-            if id(our_type) in read_requirements.dispatched_type_ids:
+            if id(our_type) in requirements.dispatched_type_ids:
                 blocks.append(_generate_read_dispatched(our_type=our_type))
 
         elif isinstance(our_type, intermediate.ConcreteClass):
@@ -3322,11 +3322,11 @@ const Namespace = {namespace_literal}"""
             else:
                 blocks.append(_generate_read_as_sequence(cls=our_type))
 
-            if id(our_type) in read_requirements.dispatched_type_ids:
+            if id(our_type) in requirements.dispatched_type_ids:
                 blocks.append(_generate_read_dispatched(our_type=our_type))
 
         elif isinstance(our_type, intermediate.NamedUnion):
-            if id(our_type) in read_requirements.dispatched_type_ids:
+            if id(our_type) in requirements.dispatched_type_ids:
                 blocks.append(_generate_read_dispatched(our_type=our_type))
 
         else:
@@ -3352,26 +3352,34 @@ const Namespace = {namespace_literal}"""
             _generate_write_double_as_text(),
             _generate_write_string_as_text(),
             _generate_write_bytes_as_text(),
-            _generate_write_scalar_property(),
-            _generate_write_embedded_instance_property(),
-            _generate_write_instance_property_with_discriminator(),
-            _generate_write_list_of_instances_property(),
-            _generate_write_list_of_scalars_property(),
+            _generate_write_element(),
+            _generate_write_optional_pointer(),
+            _generate_write_optional_instance(),
+            _generate_write_optional_slice(),
+            _generate_write_list(),
+            _generate_finish_property(),
+            _generate_write_instance(),
+            _generate_write_class_element(),
         ]
     )
 
     if len(symbol_table.named_unions) > 0:
         blocks.append(_generate_named_union_constraint())
-        blocks.append(_generate_write_list_of_union_instances_property())
+        blocks.append(_generate_write_union())
 
-    tuple_arities = intermediate.tuple_arities(symbol_table)
-    if len(tuple_arities) > 0:
-        blocks.append(_generate_as_scalar_tuple_item_writer())
-        blocks.append(_generate_as_instance_tuple_item_writer())
-        if len(symbol_table.named_unions) > 0:
-            blocks.append(_generate_write_union_as_tuple_item())
-        for arity in tuple_arities:
-            blocks.append(_generate_write_tuple_helper(arity))
+    for scalar_item in requirements.scalar_items:
+        blocks.append(_generate_write_scalar_item(scalar_item=scalar_item))
+
+    for arity in intermediate.tuple_arities(symbol_table):
+        blocks.append(_generate_write_tuple_helper(arity))
+
+    for items_type_anno in requirements.list_items_type_annos:
+        blocks.append(
+            _generate_write_list_content_writer(items_type_anno=items_type_anno)
+        )
+
+    for tuple_type_anno in requirements.tuple_type_annos:
+        blocks.append(_generate_write_tuple_content_writer(type_anno=tuple_type_anno))
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
@@ -3405,9 +3413,13 @@ const Namespace = {namespace_literal}"""
                     )
                     continue
             else:
-                blocks.append(_generate_write_as_sequence(cls=our_type))
+                block, block_errors = _generate_write_as_sequence(cls=our_type)
+                if block_errors is not None:
+                    errors.extend(block_errors)
+                    continue
 
-            blocks.append(_generate_write_for(cls=our_type))
+                assert block is not None
+                blocks.append(block)
 
         elif isinstance(our_type, intermediate.NamedUnion):
             # NOTE (mristin):
@@ -3419,7 +3431,9 @@ const Namespace = {namespace_literal}"""
         else:
             assert_never(our_type)
 
-    blocks.append(_generate_marshal(symbol_table=symbol_table))
+    blocks.append(_generate_write_class(symbol_table=symbol_table))
+
+    blocks.append(_generate_marshal())
 
     blocks.append(Stripped("// endregion"))
 

@@ -594,15 +594,6 @@ func unexpectedItemElement(local string, expectedLocal string) error {
 	)
 }
 
-type Scalar interface {
-	~bool |
-	~int |
-	~int64 |
-	~float64 |
-	~string |
-	~[]byte
-}
-
 // Read a value wrapped in a single XML element, dispatching on the local name of
 // that element.
 //
@@ -1514,223 +1505,223 @@ func writeBytesAsText(
 	return
 }
 
-// Write the scalar `value` of a property enclosed in an XML element.
+// Write `that` as an XML element with the `local` name, its content written by
+// `writeContent`.
 //
 // Do not flush.
+//
+// This is the one place which frames an XML element around a *value*: a property,
+// a list item and a tuple item all go through it, and differ only in the given
+// `writeContent`. A list frames its own element in [writeList], and an instance
+// the element naming its model type in [writeClassElement], as neither of the two
+// can be reduced to a content writer without allocating a closure.
 //
 // The XML namespace is expected to have been defined outside of the resulting XML
 // element.
-func writeScalarProperty[T Scalar](
+func writeElement[T any](
 	encoder *xml.Encoder,
 	local string,
-	value T,
-	writeTAsText func(anEncoder *xml.Encoder, aValue T) (anErr error),
+	that T,
+	writeContent func(anEncoder *xml.Encoder, aValue T) (anErr error),
 ) (err error) {
-	err = writeStartElement(
-		encoder,
-		local,
-		false,
-	)
+	err = writeStartElement(encoder, local, false)
 	if err != nil {
 		return
 	}
 
-	err = writeTAsText(encoder, value)
+	err = writeContent(encoder, that)
 	if err != nil {
 		return
 	}
 
-	err = writeEndElement(
-		encoder,
-		local,
-		false,
-	)
-	if err != nil {
-		return
-	}
-
+	err = writeEndElement(encoder, local, false)
 	return
 }
 
-// Serialize the `instance` as a sequence of elements directly embedded
-// in an XML element with `local` name representing the property.
+// Write the optional `that` as an XML element with the `local` name, or write
+// nothing at all if it is not set.
 //
 // Do not flush.
-func writeEmbeddedInstanceProperty[T aastypes.IClass](
+//
+// A scalar and a tuple are not nilable in Golang, so an optional one is represented
+// as a pointer. The pointer is dereferenced here, so that `writeContent` sees only
+// the value. See also [writeOptionalInstance] and [writeOptionalSlice], which differ
+// from this function only in how the presence is decided.
+func writeOptionalPointer[T any](
 	encoder *xml.Encoder,
 	local string,
-	instance T,
-	writeTAsSequence func(anEncoder *xml.Encoder, that T) (anErr error),
+	that *T,
+	writeContent func(anEncoder *xml.Encoder, aValue T) (anErr error),
 ) (err error) {
-	err = writeStartElement(
-		encoder,
-		local,
-		false,
-	)
-	if err != nil {
+	if that == nil {
 		return
 	}
 
-	err = writeTAsSequence(
-		encoder,
-		instance,
-	)
-	if err != nil {
-		return
-	}
-
-	err = writeEndElement(
-		encoder,
-		local,
-		false,
-	)
-	return
+	return writeElement(encoder, local, *that, writeContent)
 }
 
-// Serialize the `instance` as a sequence of elements within a discriminator
-// element which is then embedded in an XML element with `local` name
-// representing the property.
+// Write the optional instance `that` as an XML element with the `local` name, or
+// write nothing at all if it is not set.
 //
 // Do not flush.
-func writeDiscriminatedInstanceProperty(
+//
+// An instance is represented as an interface and a named union as a pointer to
+// a struct, both of which are nil on their own, so -- unlike in [writeOptionalPointer] --
+// there is no pointer to dereference.
+//
+// Golang does not allow a value of a type parameter to be compared against `nil`,
+// and `any(that) == nil` would not do either: a nil *pointer* converted to `any` is
+// a non-nil `any` which carries the type of that pointer. Comparing against
+// the zero value of `T` covers both, as it compares nil against nil for
+// an interface, and a nil pointer against a nil pointer of the same type for
+// a named union.
+func writeOptionalInstance[T any](
 	encoder *xml.Encoder,
 	local string,
-	instance aastypes.IClass,
+	that T,
+	writeContent func(anEncoder *xml.Encoder, aValue T) (anErr error),
 ) (err error) {
-	err = writeStartElement(
-		encoder,
-		local,
-		false,
-	)
-	if err != nil {
+	var unset T
+	if any(that) == any(unset) {
 		return
 	}
 
-	err = Marshal(
-		encoder,
-		instance,
-		false,
-	)
-	if err != nil {
-		return
-	}
-
-	err = writeEndElement(
-		encoder,
-		local,
-		false,
-	)
-	if err != nil {
-		return
-	}
-
-	return
+	return writeElement(encoder, local, that, writeContent)
 }
 
-// Serialize the list of instances as a sequence of XML elements enclosed in a parent
-// XML element with the `local` name.
-func writeListOfInstancesProperty[T aastypes.IClass](
+// Write the optional `that` as an XML element with the `local` name, or write
+// nothing at all if it is not set.
+//
+// Do not flush.
+//
+// A list and the bytes are represented as a slice, which is nil on its own, but --
+// unlike an instance in [writeOptionalInstance] -- can not be compared against
+// the zero value, as a slice is not comparable at all. Mind that a nil slice and
+// an empty slice differ here: only the former is considered absent, while
+// the latter is written as an empty XML element.
+func writeOptionalSlice[T any](
 	encoder *xml.Encoder,
 	local string,
+	that []T,
+	writeContent func(anEncoder *xml.Encoder, aValue []T) (anErr error),
+) (err error) {
+	if that == nil {
+		return
+	}
+
+	return writeElement(encoder, local, that, writeContent)
+}
+
+// Write the items of the `list`, each as an XML element of its own.
+//
+// Do not flush.
+//
+// The element *around* the list is framed by whoever writes the list, see
+// the generated `writeListOf*` functions. Every item frames its own element
+// through `writeItem`: an instance is written as an element named after its model
+// type, while a scalar is wrapped in the element `v`. A list of instances and
+// a list of scalars therefore share this one function.
+func writeList[T any](
+	encoder *xml.Encoder,
 	list []T,
+	writeItem func(anEncoder *xml.Encoder, aValue T) (anErr error),
 ) (err error) {
-	err = writeStartElement(
-		encoder,
-		local,
-		false,
-	)
-	if err != nil {
-		return
-	}
-
 	for i, item := range list {
-		err = Marshal(
-			encoder,
-			item,
-			false,
-		)
+		err = writeItem(encoder, item)
 		if err != nil {
 			if seriaErr, ok := err.(*SerializationError); ok {
 				seriaErr.Path.PrependIndex(
-					&aasreporting.IndexSegment{
-						Index: i,
-					},
+					&aasreporting.IndexSegment{Index: i},
 				)
 			}
 			return
 		}
 	}
 
-	err = writeEndElement(
-		encoder,
-		local,
-		false,
-	)
-	if err != nil {
-		return
-	}
-
 	return
 }
 
-// Serialize the list of scalars as a sequence of XML `<v>` elements
-// enclosed in a parent XML element with the `local` name.
-func writeListOfScalarsProperty[T Scalar](
+// Conclude the writing of the property read by `getter` by attributing the error,
+// if any, to that property.
+//
+// Do not flush.
+//
+// `getter` is the getter of the property *as it is spelled in Golang*, `Value()`
+// and not `value`, since it is prepended to the path of a serialization error,
+// which [SerializationError.PathString] renders as a Golang expression through
+// [aasreporting.ToGolangPath]. (Golang has no way to name a member at compile time,
+// so the getter has to be spelled out; mind that the de-serialization reports
+// an XPath instead, and hence prepends the XML name there.)
+//
+// The write itself is given as its *result*, not as a function to be called, so that
+// this one function concludes every property, no matter which of the `write*`
+// functions wrote it, and no matter how many arguments that function took. Golang
+// evaluates the argument, hence performs the write, before this call.
+func finishProperty(
+	getter string,
+	err error,
+) error {
+	if err != nil {
+		if seriaErr, ok := err.(*SerializationError); ok {
+			seriaErr.Path.PrependName(
+				&aasreporting.NameSegment{Name: getter},
+			)
+		}
+		return err
+	}
+
+	return nil
+}
+
+// Write the instance `that` as an XML element named after its model type.
+//
+// Do not flush.
+//
+// This is the content writer of every instance which is not embedded in the element
+// of its property, be it a property, a list item or a tuple item: [Marshal] picks
+// the element name from the runtime model type.
+//
+// Golang function values are invariant in their parameter type, so [Marshal], which
+// takes the wide [aastypes.IClass], can not be used where a writer of a more
+// specific interface is expected -- this generic function exists solely to narrow
+// the parameter type to `T`. Golang can not infer `T` from the context here, so
+// every call site instantiates it explicitly, *e.g.*,
+// `writeInstance[aastypes.IReference]`, and passes it on as that instantiated
+// function value, without a closure.
+func writeInstance[T aastypes.IClass](
+	encoder *xml.Encoder,
+	that T,
+) error {
+	return writeClass(encoder, that, false)
+}
+
+// Write `that` as an XML element with the `local` name representing its model type.
+//
+// Do not flush.
+//
+// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
+//
+// Unlike [writeElement], which frames a *property*, this function frames an instance
+// in the element which discriminates its model type, and is therefore the one place
+// where the XML namespace can be set.
+func writeClassElement[T any](
 	encoder *xml.Encoder,
 	local string,
-	list []T,
-	writeTAsText func(anEncoder *xml.Encoder, aValue T) (anErr error),
+	withNamespace bool,
+	that T,
+	writeTAsSequence func(anEncoder *xml.Encoder, aValue T) (anErr error),
 ) (err error) {
-	err = writeStartElement(
-		encoder,
-		local,
-		false,
-	)
+	err = writeStartElement(encoder, local, withNamespace)
 	if err != nil {
 		return
 	}
 
-	for i, item := range list {
-		err = writeStartElement(
-			encoder,
-			"v",
-			false,
-		)
-		if err != nil {
-			return
-		}
-
-		err = writeTAsText(encoder, item)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependIndex(
-					&aasreporting.IndexSegment{
-						Index: i,
-					},
-				)
-			}
-			return
-		}
-
-		err = writeEndElement(
-			encoder,
-			"v",
-			false,
-		)
-		if err != nil {
-			return
-		}
-	}
-
-	err = writeEndElement(
-		encoder,
-		local,
-		false,
-	)
+	err = writeTAsSequence(encoder, that)
 	if err != nil {
 		return
 	}
 
+	err = writeEndElement(encoder, local, withNamespace)
 	return
 }
 
@@ -1741,110 +1732,31 @@ func writeListOfScalarsProperty[T Scalar](
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeBranchAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IBranch,
 ) (err error) {
-	// region Identifier
-
-	err = writeScalarProperty(
-		encoder,
-		"identifier",
-		that.Identifier(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Identifier()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Description
-
-	err = writeScalarProperty(
-		encoder,
-		"description",
-		that.Description(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Description()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IBranch]
-// enclosed in an XML element which represents the model type.
-//
-// Do not dispatch on the runtime model type, *i.e.*, assume that the runtime model type
-// is exactly [aastypes.ModelTypeBranch]. If you need dispatch,
-// call [Marshal].
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeBranchWithoutDispatch(
-	encoder *xml.Encoder,
-	that aastypes.IBranch,
-	withNamespace bool,
-) (err error) {
-	local := "branch"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Identifier()",
+		writeElement(
+			encoder, "identifier", that.Identifier(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeBranchAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Description()",
+		writeElement(
+			encoder, "description", that.Description(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
 	return
 }
 
@@ -1855,136 +1767,41 @@ func writeBranchWithoutDispatch(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeLeafAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.ILeaf,
 ) (err error) {
-	// region Identifier
-
-	err = writeScalarProperty(
-		encoder,
-		"identifier",
-		that.Identifier(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Identifier()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Description
-
-	err = writeScalarProperty(
-		encoder,
-		"description",
-		that.Description(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Description()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Value
-
-	err = writeScalarProperty(
-		encoder,
-		"value",
-		that.Value(),
-		writeLongAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Value()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.ILeaf]
-// enclosed in an XML element which represents the model type.
-//
-// Do not dispatch on the runtime model type, *i.e.*, assume that the runtime model type
-// is exactly [aastypes.ModelTypeLeaf]. If you need dispatch,
-// call [Marshal].
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeLeafWithoutDispatch(
-	encoder *xml.Encoder,
-	that aastypes.ILeaf,
-	withNamespace bool,
-) (err error) {
-	local := "leaf"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Identifier()",
+		writeElement(
+			encoder, "identifier", that.Identifier(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeLeafAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Description()",
+		writeElement(
+			encoder, "description", that.Description(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"Value()",
+		writeElement(
+			encoder, "value", that.Value(), writeLongAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -1995,158 +1812,51 @@ func writeLeafWithoutDispatch(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeBlossomAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IBlossom,
 ) (err error) {
-	// region Identifier
-
-	err = writeScalarProperty(
-		encoder,
-		"identifier",
-		that.Identifier(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Identifier()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Description
-
-	err = writeScalarProperty(
-		encoder,
-		"description",
-		that.Description(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Description()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Value
-
-	err = writeScalarProperty(
-		encoder,
-		"value",
-		that.Value(),
-		writeLongAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Value()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Details
-
-	err = writeScalarProperty(
-		encoder,
-		"details",
-		that.Details(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Details()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IBlossom]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeBlossom(
-	encoder *xml.Encoder,
-	that aastypes.IBlossom,
-	withNamespace bool,
-) (err error) {
-	local := "blossom"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Identifier()",
+		writeElement(
+			encoder, "identifier", that.Identifier(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeBlossomAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Description()",
+		writeElement(
+			encoder, "description", that.Description(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"Value()",
+		writeElement(
+			encoder, "value", that.Value(), writeLongAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"Details()",
+		writeElement(
+			encoder, "details", that.Details(), writeStringAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -2157,104 +1867,34 @@ func writeBlossom(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeSomethingAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.ISomething,
 ) (err error) {
-	// region SomeChoice
-
-	err = writeDiscriminatedInstanceProperty(
-		encoder,
-		"someChoice",
-		that.SomeChoice(),
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "SomeChoice()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region SomethingWithoutChoice
-
-	err = writeDiscriminatedInstanceProperty(
-		encoder,
-		"somethingWithoutChoice",
-		that.SomethingWithoutChoice(),
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "SomethingWithoutChoice()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.ISomething]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeSomething(
-	encoder *xml.Encoder,
-	that aastypes.ISomething,
-	withNamespace bool,
-) (err error) {
-	local := "something"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"SomeChoice()",
+		writeElement(
+			encoder, "someChoice", that.SomeChoice(), writeInstance[aastypes.INode],
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeSomethingAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"SomethingWithoutChoice()",
+		writeElement(
+			encoder,
+			"somethingWithoutChoice",
+			that.SomethingWithoutChoice(),
+			writeInstance[aastypes.IBranch],
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
 	return
 }
 
@@ -2265,147 +1905,81 @@ func writeSomething(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeContainerAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IContainer,
 ) (err error) {
-	// region Node
-
-	err = writeDiscriminatedInstanceProperty(
-		encoder,
-		"node",
-		that.Node(),
+	err = finishProperty(
+		"Node()",
+		writeElement(
+			encoder, "node", that.Node(), writeInstance[aastypes.INode],
+		),
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Node()",
-				},
-			)
-		}
 		return
 	}
 
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Something
-
-	err = writeEmbeddedInstanceProperty(
-		encoder,
-		"something",
-		that.Something(),
-		writeSomethingAsSequence,
+	err = finishProperty(
+		"Something()",
+		writeElement(
+			encoder, "something", that.Something(), writeSomethingAsSequence,
+		),
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Something()",
-				},
-			)
-		}
 		return
 	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
 
 	return
 }
 
-// Serialize the instance of [aastypes.IContainer]
-// enclosed in an XML element which represents the model type.
+// Serialize `that` instance as an XML element named after its model type.
 //
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeContainer(
-	encoder *xml.Encoder,
-	that aastypes.IContainer,
-	withNamespace bool,
-) (err error) {
-	local := "container"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
-	)
-	if err != nil {
-		return
-	}
-
-	err = writeContainerAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
-	)
-	if err != nil {
-		return
-	}
-
-	err = encoder.Flush()
-	return
-}
-
-// Serialize `that` instance as an XML element.
+// Do not flush.
 //
 // If `withNamespace` is set, the `xmlns` attribute is set in the XML element
 // to [Namespace].
-func Marshal(
+func writeClass(
 	encoder *xml.Encoder,
 	that aastypes.IClass,
 	withNamespace bool,
 ) (err error) {
 	switch that.ModelType() {
 	case aastypes.ModelTypeBranch:
-		err = writeBranchWithoutDispatch(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IBranch),
+			"branch",
 			withNamespace,
+			that.(aastypes.IBranch),
+			writeBranchAsSequence,
 		)
 	case aastypes.ModelTypeLeaf:
-		err = writeLeafWithoutDispatch(
-			encoder,
-			that.(aastypes.ILeaf),
-			withNamespace,
+		err = writeClassElement(
+			encoder, "leaf", withNamespace, that.(aastypes.ILeaf), writeLeafAsSequence,
 		)
 	case aastypes.ModelTypeBlossom:
-		err = writeBlossom(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IBlossom),
+			"blossom",
 			withNamespace,
+			that.(aastypes.IBlossom),
+			writeBlossomAsSequence,
 		)
 	case aastypes.ModelTypeSomething:
-		err = writeSomething(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.ISomething),
+			"something",
 			withNamespace,
+			that.(aastypes.ISomething),
+			writeSomethingAsSequence,
 		)
 	case aastypes.ModelTypeContainer:
-		err = writeContainer(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IContainer),
+			"container",
 			withNamespace,
+			that.(aastypes.IContainer),
+			writeContainerAsSequence,
 		)
 	default:
 		err = newSerializationError(
@@ -2416,6 +1990,23 @@ func Marshal(
 		)
 	}
 	return
+}
+
+// Serialize `that` instance as an XML element, and flush the encoder.
+//
+// If `withNamespace` is set, the `xmlns` attribute is set in the XML element
+// to [Namespace].
+func Marshal(
+	encoder *xml.Encoder,
+	that aastypes.IClass,
+	withNamespace bool,
+) (err error) {
+	err = writeClass(encoder, that, withNamespace)
+	if err != nil {
+		return
+	}
+
+	return encoder.Flush()
 }
 
 // endregion
