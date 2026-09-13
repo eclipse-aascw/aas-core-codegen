@@ -382,8 +382,6 @@ const Namespace = "https://dummy.com"
 func checkStartElement(
 	current xml.StartElement,
 ) (err error) {
-	const xmlnsLen = len("xmlns")
-
 	unexpectedAttr := 0
 	for _, attr := range current.Attr {
 		if (attr.Name.Space == "" && attr.Name.Local == "xmlns") ||
@@ -551,6 +549,51 @@ func checkEndElement(current xml.Token, local string) (err error) {
 	return
 }
 
+// Report that the required property with the given `name` has not been observed.
+func missingProperty(name string) error {
+	return newDeserializationError(
+		fmt.Sprintf(
+			"The required property '%s' is missing",
+			name,
+		),
+	)
+}
+
+// Report that we got a start element with the `local` name, but expected a start
+// element with the `expectedLocal` name.
+func unexpectedStartElement(local string, expectedLocal string) error {
+	return newDeserializationError(
+		fmt.Sprintf(
+			"Expected a start element with local name %s, "+
+				"but got a start element with local name %s",
+			expectedLocal, local,
+		),
+	)
+}
+
+// Report that the start element with the `local` name does not discriminate any of
+// the alternatives of `expectedType`.
+func unexpectedDiscriminator(local string, expectedType string) error {
+	return newDeserializationError(
+		fmt.Sprintf(
+			"Unexpected start element %s as discriminator for %s",
+			local, expectedType,
+		),
+	)
+}
+
+// Report that we got an item delimited by a start element with the `local` name,
+// but expected the delimiter with the `expectedLocal` name.
+func unexpectedItemElement(local string, expectedLocal string) error {
+	return newDeserializationError(
+		fmt.Sprintf(
+			"Expected start element %s as an item delimiter, "+
+				"but got %s",
+			expectedLocal, local,
+		),
+	)
+}
+
 type Scalar interface {
 	~bool |
 	~int |
@@ -560,18 +603,28 @@ type Scalar interface {
 	~[]byte
 }
 
-// Read a scalar, *i.e.*, a non-instance, wrapped in a single element bearing
-// the `expectedName`, as a positional item of a tuple.
+// Read a value wrapped in a single XML element, dispatching on the local name of
+// that element.
 //
-// The resulting `next` token points to the first token just after the wrapping
-// element.
-func readScalarWithName[T Scalar](
+// The element is read in full: the resulting `next` token points to the first token
+// just after the end element.
+//
+// This is the *only* place which frames an XML element around a value. Both
+// [readListOf] and the `readTuple*` functions delegate the framing here, so that
+// a scalar item and an instance item differ only in the given `readByLocal`, and
+// never in the container which reads them.
+//
+// `T` is left unconstrained (instead of `aastypes.IClass`) since this
+// function never invokes any `aastypes.IClass` method on `T` -- this lets it
+// be reused for a scalar and for a named union as well, the latter being
+// deliberately not an `aastypes.IClass` itself.
+func readElementDispatched[T any](
 	decoder *xml.Decoder,
 	current xml.Token,
-	expectedName string,
-	readTextAsT func(
+	readByLocal func(
 		aDecoder *xml.Decoder,
 		aCurrent xml.Token,
+		aLocal string,
 	) (value T, aNext xml.Token, anErr error),
 ) (value T, next xml.Token, err error) {
 	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
@@ -580,31 +633,18 @@ func readScalarWithName[T Scalar](
 	}
 
 	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
+	local, err = parseAsStartElementAndExtractLocalName(current)
 	if err != nil {
 		return
 	}
 
-	if local != expectedName {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected start element %s as a tuple item delimiter, "+
-					"but got %s",
-				expectedName, local,
-			),
-		)
-		return
-	}
-
-	// Move the current to the value
+	// Move the current to the content of the XML element
 	current, err = readNext(decoder, current)
 	if err != nil {
 		return
 	}
 
-	value, current, err = readTextAsT(decoder, current)
+	value, current, err = readByLocal(decoder, current, local)
 	if err != nil {
 		return
 	}
@@ -618,20 +658,29 @@ func readScalarWithName[T Scalar](
 	return
 }
 
-// Read a list of scalars, *i.e.*, non-instances as a sequence of `<v>` elements.
-//
-// The item is serialized as text in the `<v>` element.
+// Read a list of values as a sequence of XML elements.
 //
 // Every start element is considered to mark the start of an item serialization. We
 // stop the reading as soon as we encounter a non-start element.
 //
 // That last non-start element is returned as `next` element.
-func readListOfScalars[T Scalar](
+//
+// An item is read with [readElementDispatched], so `readItem` decides on its own
+// which local names it accepts. A list of instances and a list of scalars therefore
+// share this one function: an instance is discriminated by its own element name,
+// while a scalar is expected in an element named `v`.
+//
+// `T` is left unconstrained (instead of `aastypes.IClass`) since this
+// function never invokes any `aastypes.IClass` method on `T` -- this lets it
+// be reused for a list of scalars and for a list of a named union as well,
+// the latter being deliberately not an `aastypes.IClass` itself.
+func readListOf[T any](
 	decoder *xml.Decoder,
 	current xml.Token,
-	readTextAsT func(
+	readItem func(
 		aDecoder *xml.Decoder,
 		aCurrent xml.Token,
+		aLocal string,
 	) (value T, aNext xml.Token, anErr error),
 ) (values []T, next xml.Token, err error) {
 	i := 0
@@ -647,8 +696,8 @@ func readListOfScalars[T Scalar](
 
 		var value T
 		var valueErr error
-		value, current, valueErr = readScalarWithName(
-			decoder, current, "v", readTextAsT,
+		value, current, valueErr = readElementDispatched(
+			decoder, current, readItem,
 		)
 		if valueErr != nil {
 			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
@@ -669,60 +718,121 @@ func readListOfScalars[T Scalar](
 	return
 }
 
-// Read a list of AAS instances as a sequence of XML elements.
+// Turn a just-read value into a pointer, so that it can be stored in an optional
+// property.
 //
-// Every start element is considered to mark the start of an instance serialization. We
-// stop the reading as soon as we encounter a non-start element.
+// An optional is represented as a pointer, so the value has to live outside the
+// caller's frame. This allocates exactly the one value that the caller would
+// otherwise allocate by taking the address of its own local variable, and no more.
 //
-// That last non-start element is returned as `next` element.
-//
-// `T` is left unconstrained (instead of `aastypes.IClass`) since this
-// function never invokes any `aastypes.IClass` method on `T` -- this lets it
-// be reused for a list of a named union as well, which is deliberately not
-// an `aastypes.IClass` itself.
-func readListOfInstances[T any](
-	decoder *xml.Decoder,
+// The arguments are the *results* of a read, not the reader itself. Go passes
+// a multi-valued call on as a complete argument list, so this composes with any read,
+// no matter how many arguments that read takes on its own --
+// `readOptional(readTextAsLong(decoder, current))` just as much as
+// `readOptional(readTuple2(decoder, current, readXAtV1, readYAtV2))`, which no
+// reader-taking signature could express, since the item readers of a tuple vary in
+// number and in type.
+func readOptional[T any](
+	value T,
 	current xml.Token,
-	readTWithLookahead func(
-		aDecoder *xml.Decoder,
-		aCurrent xml.Token,
-	) (anInstance T, anErr error),
-) (instances []T, next xml.Token, err error) {
-	i := 0
-	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, ok := current.(xml.StartElement); !ok {
-			break
-		}
-
-		var instance T
-		var instanceErr error
-		instance, instanceErr = readTWithLookahead(decoder, current)
-		if instanceErr != nil {
-			if deseriaErr, ok := instanceErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependIndex(
-					&aasreporting.IndexSegment{Index: i},
-				)
-			}
-			err = instanceErr
-			return
-		}
-
-		instances = append(instances, instance)
-
-		i++
-
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
-		}
+	err error,
+) (*T, xml.Token, error) {
+	if err != nil {
+		return nil, current, err
 	}
 
-	next = current
+	return &value, current, nil
+}
+
+// Advance to the next property of an instance serialized as a sequence of XML
+// elements, and return the `local` name of the corresponding start element.
+//
+// The resulting `next` token points to the content of that element.
+//
+// If there are no more properties, `ok` is false and `next` points to the token
+// which stopped the reading, be it a non-start element or [eof].
+//
+// `interfaceName` is only used for error reporting.
+func nextProperty(
+	decoder *xml.Decoder,
+	current xml.Token,
+	interfaceName string,
+) (local string, next xml.Token, ok bool, err error) {
+	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
+	if err != nil {
+		return
+	}
+
+	if _, isEOF := current.(eof); isEOF {
+		next = current
+		return
+	}
+
+	startElement, isStartElement := current.(xml.StartElement)
+	if !isStartElement {
+		if charData, isCharData := current.(xml.CharData); isCharData {
+			err = newDeserializationError(
+				fmt.Sprintf(
+					"Expected a sequence of XML elements representing properties "+
+						"of %s, but got text: %s",
+					interfaceName, string(charData),
+				),
+			)
+			return
+		}
+
+		next = current
+		return
+	}
+
+	local, err = extractLocalNameFromStartElement(startElement)
+	if err != nil {
+		return
+	}
+
+	// Move the current to the content of the XML element
+	next, err = readNext(decoder, current)
+	if err != nil {
+		return
+	}
+
+	ok = true
+	return
+}
+
+// Conclude the reading of the property delimited by the element with the `local`
+// name.
+//
+// If `valueErr` is set, report it in the context of that property. Otherwise,
+// consume the end element, so that the resulting `next` token points to the first
+// token just after it.
+func concludeProperty(
+	decoder *xml.Decoder,
+	current xml.Token,
+	local string,
+	valueErr error,
+) (next xml.Token, err error) {
+	if valueErr != nil {
+		if deseriaErr, ok := valueErr.(*DeserializationError); ok {
+			deseriaErr.Path.PrependName(
+				&aasreporting.NameSegment{Name: local},
+			)
+		}
+		err = valueErr
+		return
+	}
+
+	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
+	if err != nil {
+		return
+	}
+
+	err = checkEndElement(current, local)
+	if err != nil {
+		return
+	}
+
+	next, err = readNext(decoder, current)
 	return
 }
 
@@ -743,166 +853,70 @@ func readQueryConditionAsSequence(
 	var theNotEq *string
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IQueryCondition, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IQueryCondition")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "eq":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theEq, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theEq = &value
-
 		case "not-eq":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theNotEq, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theNotEq = &value
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	instance = aastypes.NewQueryCondition()
-	instance.SetEq(
-		theEq,
-	)
-	instance.SetNotEq(
-		theNotEq,
-	)
+	instance.SetEq(theEq)
+	instance.SetNotEq(theNotEq)
 	return
 }
 
-// De-serialize an instance of [aastypes.IQueryCondition]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.IClass] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readQueryConditionWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readClassDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
-) (instance aastypes.IQueryCondition,
+	local string,
+) (instance aastypes.IClass,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "queryCondition"
-	if local != expectedLocal {
+	switch local {
+	case "queryCondition":
+		instance, next, err = readQueryConditionAsSequence(decoder, current)
+	default:
 		err = newDeserializationError(
 			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
+				"Unexpected XML element name %s as class discriminator",
+				local,
 			),
 		)
-		return
 	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readQueryConditionAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -918,43 +932,9 @@ func Unmarshal(
 		return
 	}
 
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
+	instance, _, err = readElementDispatched(
+		decoder, current, readClassDispatched,
 	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	switch local {
-		case "queryCondition":
-			instance, current, err = readQueryConditionAsSequence(
-				decoder, current,
-			)
-		default:
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Unexpected XML element name %s as class discriminator",
-						local,
-					),
-				)
-	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 

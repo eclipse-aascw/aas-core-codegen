@@ -382,8 +382,6 @@ const Namespace = "https://admin-shell.io/aas/3/0"
 func checkStartElement(
 	current xml.StartElement,
 ) (err error) {
-	const xmlnsLen = len("xmlns")
-
 	unexpectedAttr := 0
 	for _, attr := range current.Attr {
 		if (attr.Name.Space == "" && attr.Name.Local == "xmlns") ||
@@ -551,6 +549,51 @@ func checkEndElement(current xml.Token, local string) (err error) {
 	return
 }
 
+// Report that the required property with the given `name` has not been observed.
+func missingProperty(name string) error {
+	return newDeserializationError(
+		fmt.Sprintf(
+			"The required property '%s' is missing",
+			name,
+		),
+	)
+}
+
+// Report that we got a start element with the `local` name, but expected a start
+// element with the `expectedLocal` name.
+func unexpectedStartElement(local string, expectedLocal string) error {
+	return newDeserializationError(
+		fmt.Sprintf(
+			"Expected a start element with local name %s, "+
+				"but got a start element with local name %s",
+			expectedLocal, local,
+		),
+	)
+}
+
+// Report that the start element with the `local` name does not discriminate any of
+// the alternatives of `expectedType`.
+func unexpectedDiscriminator(local string, expectedType string) error {
+	return newDeserializationError(
+		fmt.Sprintf(
+			"Unexpected start element %s as discriminator for %s",
+			local, expectedType,
+		),
+	)
+}
+
+// Report that we got an item delimited by a start element with the `local` name,
+// but expected the delimiter with the `expectedLocal` name.
+func unexpectedItemElement(local string, expectedLocal string) error {
+	return newDeserializationError(
+		fmt.Sprintf(
+			"Expected start element %s as an item delimiter, "+
+				"but got %s",
+			expectedLocal, local,
+		),
+	)
+}
+
 type Scalar interface {
 	~bool |
 	~int |
@@ -560,18 +603,28 @@ type Scalar interface {
 	~[]byte
 }
 
-// Read a scalar, *i.e.*, a non-instance, wrapped in a single element bearing
-// the `expectedName`, as a positional item of a tuple.
+// Read a value wrapped in a single XML element, dispatching on the local name of
+// that element.
 //
-// The resulting `next` token points to the first token just after the wrapping
-// element.
-func readScalarWithName[T Scalar](
+// The element is read in full: the resulting `next` token points to the first token
+// just after the end element.
+//
+// This is the *only* place which frames an XML element around a value. Both
+// [readListOf] and the `readTuple*` functions delegate the framing here, so that
+// a scalar item and an instance item differ only in the given `readByLocal`, and
+// never in the container which reads them.
+//
+// `T` is left unconstrained (instead of `aastypes.IClass`) since this
+// function never invokes any `aastypes.IClass` method on `T` -- this lets it
+// be reused for a scalar and for a named union as well, the latter being
+// deliberately not an `aastypes.IClass` itself.
+func readElementDispatched[T any](
 	decoder *xml.Decoder,
 	current xml.Token,
-	expectedName string,
-	readTextAsT func(
+	readByLocal func(
 		aDecoder *xml.Decoder,
 		aCurrent xml.Token,
+		aLocal string,
 	) (value T, aNext xml.Token, anErr error),
 ) (value T, next xml.Token, err error) {
 	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
@@ -580,31 +633,18 @@ func readScalarWithName[T Scalar](
 	}
 
 	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
+	local, err = parseAsStartElementAndExtractLocalName(current)
 	if err != nil {
 		return
 	}
 
-	if local != expectedName {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected start element %s as a tuple item delimiter, "+
-					"but got %s",
-				expectedName, local,
-			),
-		)
-		return
-	}
-
-	// Move the current to the value
+	// Move the current to the content of the XML element
 	current, err = readNext(decoder, current)
 	if err != nil {
 		return
 	}
 
-	value, current, err = readTextAsT(decoder, current)
+	value, current, err = readByLocal(decoder, current, local)
 	if err != nil {
 		return
 	}
@@ -618,20 +658,29 @@ func readScalarWithName[T Scalar](
 	return
 }
 
-// Read a list of scalars, *i.e.*, non-instances as a sequence of `<v>` elements.
-//
-// The item is serialized as text in the `<v>` element.
+// Read a list of values as a sequence of XML elements.
 //
 // Every start element is considered to mark the start of an item serialization. We
 // stop the reading as soon as we encounter a non-start element.
 //
 // That last non-start element is returned as `next` element.
-func readListOfScalars[T Scalar](
+//
+// An item is read with [readElementDispatched], so `readItem` decides on its own
+// which local names it accepts. A list of instances and a list of scalars therefore
+// share this one function: an instance is discriminated by its own element name,
+// while a scalar is expected in an element named `v`.
+//
+// `T` is left unconstrained (instead of `aastypes.IClass`) since this
+// function never invokes any `aastypes.IClass` method on `T` -- this lets it
+// be reused for a list of scalars and for a list of a named union as well,
+// the latter being deliberately not an `aastypes.IClass` itself.
+func readListOf[T any](
 	decoder *xml.Decoder,
 	current xml.Token,
-	readTextAsT func(
+	readItem func(
 		aDecoder *xml.Decoder,
 		aCurrent xml.Token,
+		aLocal string,
 	) (value T, aNext xml.Token, anErr error),
 ) (values []T, next xml.Token, err error) {
 	i := 0
@@ -647,8 +696,8 @@ func readListOfScalars[T Scalar](
 
 		var value T
 		var valueErr error
-		value, current, valueErr = readScalarWithName(
-			decoder, current, "v", readTextAsT,
+		value, current, valueErr = readElementDispatched(
+			decoder, current, readItem,
 		)
 		if valueErr != nil {
 			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
@@ -669,181 +718,121 @@ func readListOfScalars[T Scalar](
 	return
 }
 
-// Read a list of AAS instances as a sequence of XML elements.
+// Turn a just-read value into a pointer, so that it can be stored in an optional
+// property.
 //
-// Every start element is considered to mark the start of an instance serialization. We
-// stop the reading as soon as we encounter a non-start element.
+// An optional is represented as a pointer, so the value has to live outside the
+// caller's frame. This allocates exactly the one value that the caller would
+// otherwise allocate by taking the address of its own local variable, and no more.
 //
-// That last non-start element is returned as `next` element.
-//
-// `T` is left unconstrained (instead of `aastypes.IClass`) since this
-// function never invokes any `aastypes.IClass` method on `T` -- this lets it
-// be reused for a list of a named union as well, which is deliberately not
-// an `aastypes.IClass` itself.
-func readListOfInstances[T any](
-	decoder *xml.Decoder,
+// The arguments are the *results* of a read, not the reader itself. Go passes
+// a multi-valued call on as a complete argument list, so this composes with any read,
+// no matter how many arguments that read takes on its own --
+// `readOptional(readTextAsLong(decoder, current))` just as much as
+// `readOptional(readTuple2(decoder, current, readXAtV1, readYAtV2))`, which no
+// reader-taking signature could express, since the item readers of a tuple vary in
+// number and in type.
+func readOptional[T any](
+	value T,
 	current xml.Token,
-	readTWithLookahead func(
-		aDecoder *xml.Decoder,
-		aCurrent xml.Token,
-	) (anInstance T, anErr error),
-) (instances []T, next xml.Token, err error) {
-	i := 0
-	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, ok := current.(xml.StartElement); !ok {
-			break
-		}
-
-		var instance T
-		var instanceErr error
-		instance, instanceErr = readTWithLookahead(decoder, current)
-		if instanceErr != nil {
-			if deseriaErr, ok := instanceErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependIndex(
-					&aasreporting.IndexSegment{Index: i},
-				)
-			}
-			err = instanceErr
-			return
-		}
-
-		instances = append(instances, instance)
-
-		i++
-
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
-		}
+	err error,
+) (*T, xml.Token, error) {
+	if err != nil {
+		return nil, current, err
 	}
 
-	next = current
-	return
+	return &value, current, nil
 }
 
-// De-serialize an instance of [aastypes.IHasSemantics]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
+// Advance to the next property of an instance serialized as a sequence of XML
+// elements, and return the `local` name of the corresponding start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readHasSemanticsWithLookahead(
+// The resulting `next` token points to the content of that element.
+//
+// If there are no more properties, `ok` is false and `next` points to the token
+// which stopped the reading, be it a non-start element or [eof].
+//
+// `interfaceName` is only used for error reporting.
+func nextProperty(
 	decoder *xml.Decoder,
 	current xml.Token,
-) (instance aastypes.IHasSemantics,
-	err error,
-) {
+	interfaceName string,
+) (local string, next xml.Token, ok bool, err error) {
 	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
 	if err != nil {
 		return
 	}
 
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
+	if _, isEOF := current.(eof); isEOF {
+		next = current
+		return
+	}
+
+	startElement, isStartElement := current.(xml.StartElement)
+	if !isStartElement {
+		if charData, isCharData := current.(xml.CharData); isCharData {
+			err = newDeserializationError(
+				fmt.Sprintf(
+					"Expected a sequence of XML elements representing properties "+
+						"of %s, but got text: %s",
+					interfaceName, string(charData),
+				),
+			)
+			return
+		}
+
+		next = current
+		return
+	}
+
+	local, err = extractLocalNameFromStartElement(startElement)
 	if err != nil {
 		return
 	}
 
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
+	// Move the current to the content of the XML element
+	next, err = readNext(decoder, current)
 	if err != nil {
 		return
 	}
 
-	switch local {
-	case "relationshipElement":
-		instance, current, err = readRelationshipElementAsSequence(
-			decoder, current,
-		)
-	case "annotatedRelationshipElement":
-		instance, current, err = readAnnotatedRelationshipElementAsSequence(
-			decoder, current,
-		)
-	case "basicEventElement":
-		instance, current, err = readBasicEventElementAsSequence(
-			decoder, current,
-		)
-	case "blob":
-		instance, current, err = readBlobAsSequence(
-			decoder, current,
-		)
-	case "capability":
-		instance, current, err = readCapabilityAsSequence(
-			decoder, current,
-		)
-	case "entity":
-		instance, current, err = readEntityAsSequence(
-			decoder, current,
-		)
-	case "extension":
-		instance, current, err = readExtensionAsSequence(
-			decoder, current,
-		)
-	case "file":
-		instance, current, err = readFileAsSequence(
-			decoder, current,
-		)
-	case "multiLanguageProperty":
-		instance, current, err = readMultiLanguagePropertyAsSequence(
-			decoder, current,
-		)
-	case "operation":
-		instance, current, err = readOperationAsSequence(
-			decoder, current,
-		)
-	case "property":
-		instance, current, err = readPropertyAsSequence(
-			decoder, current,
-		)
-	case "qualifier":
-		instance, current, err = readQualifierAsSequence(
-			decoder, current,
-		)
-	case "range":
-		instance, current, err = readRangeAsSequence(
-			decoder, current,
-		)
-	case "referenceElement":
-		instance, current, err = readReferenceElementAsSequence(
-			decoder, current,
-		)
-	case "specificAssetId":
-		instance, current, err = readSpecificAssetIDAsSequence(
-			decoder, current,
-		)
-	case "submodel":
-		instance, current, err = readSubmodelAsSequence(
-			decoder, current,
-		)
-	case "submodelElementCollection":
-		instance, current, err = readSubmodelElementCollectionAsSequence(
-			decoder, current,
-		)
-	case "submodelElementList":
-		instance, current, err = readSubmodelElementListAsSequence(
-			decoder, current,
-		)
-	default:
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Unexpected start element %s as discriminator "+
-					"for IHasSemantics",
-				local,
-			),
-		)
+	ok = true
+	return
+}
+
+// Conclude the reading of the property delimited by the element with the `local`
+// name.
+//
+// If `valueErr` is set, report it in the context of that property. Otherwise,
+// consume the end element, so that the resulting `next` token points to the first
+// token just after it.
+func concludeProperty(
+	decoder *xml.Decoder,
+	current xml.Token,
+	local string,
+	valueErr error,
+) (next xml.Token, err error) {
+	if valueErr != nil {
+		if deseriaErr, ok := valueErr.(*DeserializationError); ok {
+			deseriaErr.Path.PrependName(
+				&aasreporting.NameSegment{Name: local},
+			)
+		}
+		err = valueErr
+		return
 	}
+
+	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
 	if err != nil {
 		return
 	}
 
 	err = checkEndElement(current, local)
+	if err != nil {
+		return
+	}
+
+	next, err = readNext(decoder, current)
 	return
 }
 
@@ -870,506 +859,92 @@ func readExtensionAsSequence(
 	foundName := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IExtension, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IExtension")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "semanticId":
-			theSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "supplementalSemanticIds":
-			theSupplementalSemanticIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theSupplementalSemanticIDs, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		case "name":
 			theName, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundName = true
-
 		case "valueType":
-			var value aastypes.DataTypeDefXSD
-			value, current, valueErr = readTextAsDataTypeDefXSD(
-				decoder,
-				current,
+			theValueType, current, valueErr = readOptional(
+				readTextAsDataTypeDefXSD(decoder, current),
 			)
-			theValueType = &value
-
 		case "value":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theValue, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theValue = &value
-
 		case "refersTo":
-			theRefersTo, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theRefersTo, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundName {
-		err = newDeserializationError(
-			"The required property 'name' is missing",
-		)
+		err = missingProperty("name")
 		return
 	}
 
 	instance = aastypes.NewExtension(
 		theName,
 	)
-	instance.SetSemanticID(
-		theSemanticID,
-	)
-	instance.SetSupplementalSemanticIDs(
-		theSupplementalSemanticIDs,
-	)
-	instance.SetValueType(
-		theValueType,
-	)
-	instance.SetValue(
-		theValue,
-	)
-	instance.SetRefersTo(
-		theRefersTo,
-	)
+	instance.SetSemanticID(theSemanticID)
+	instance.SetSupplementalSemanticIDs(theSupplementalSemanticIDs)
+	instance.SetValueType(theValueType)
+	instance.SetValue(theValue)
+	instance.SetRefersTo(theRefersTo)
 	return
 }
 
-// De-serialize an instance of [aastypes.IExtension]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.IExtension] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readExtensionWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readExtensionDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
+	local string,
 ) (instance aastypes.IExtension,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "extension"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readExtensionAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
-	return
-}
-
-// De-serialize an instance of [aastypes.IHasExtensions]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readHasExtensionsWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IHasExtensions,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
 	switch local {
-	case "relationshipElement":
-		instance, current, err = readRelationshipElementAsSequence(
-			decoder, current,
-		)
-	case "annotatedRelationshipElement":
-		instance, current, err = readAnnotatedRelationshipElementAsSequence(
-			decoder, current,
-		)
-	case "assetAdministrationShell":
-		instance, current, err = readAssetAdministrationShellAsSequence(
-			decoder, current,
-		)
-	case "basicEventElement":
-		instance, current, err = readBasicEventElementAsSequence(
-			decoder, current,
-		)
-	case "blob":
-		instance, current, err = readBlobAsSequence(
-			decoder, current,
-		)
-	case "capability":
-		instance, current, err = readCapabilityAsSequence(
-			decoder, current,
-		)
-	case "conceptDescription":
-		instance, current, err = readConceptDescriptionAsSequence(
-			decoder, current,
-		)
-	case "entity":
-		instance, current, err = readEntityAsSequence(
-			decoder, current,
-		)
-	case "file":
-		instance, current, err = readFileAsSequence(
-			decoder, current,
-		)
-	case "multiLanguageProperty":
-		instance, current, err = readMultiLanguagePropertyAsSequence(
-			decoder, current,
-		)
-	case "operation":
-		instance, current, err = readOperationAsSequence(
-			decoder, current,
-		)
-	case "property":
-		instance, current, err = readPropertyAsSequence(
-			decoder, current,
-		)
-	case "range":
-		instance, current, err = readRangeAsSequence(
-			decoder, current,
-		)
-	case "referenceElement":
-		instance, current, err = readReferenceElementAsSequence(
-			decoder, current,
-		)
-	case "submodel":
-		instance, current, err = readSubmodelAsSequence(
-			decoder, current,
-		)
-	case "submodelElementCollection":
-		instance, current, err = readSubmodelElementCollectionAsSequence(
-			decoder, current,
-		)
-	case "submodelElementList":
-		instance, current, err = readSubmodelElementListAsSequence(
-			decoder, current,
-		)
+	case "extension":
+		instance, next, err = readExtensionAsSequence(decoder, current)
 	default:
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Unexpected start element %s as discriminator "+
-					"for IHasExtensions",
-				local,
-			),
-		)
+		err = unexpectedStartElement(local, "extension")
 	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
-	return
-}
-
-// De-serialize an instance of [aastypes.IReferable]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readReferableWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IReferable,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	switch local {
-	case "relationshipElement":
-		instance, current, err = readRelationshipElementAsSequence(
-			decoder, current,
-		)
-	case "annotatedRelationshipElement":
-		instance, current, err = readAnnotatedRelationshipElementAsSequence(
-			decoder, current,
-		)
-	case "assetAdministrationShell":
-		instance, current, err = readAssetAdministrationShellAsSequence(
-			decoder, current,
-		)
-	case "basicEventElement":
-		instance, current, err = readBasicEventElementAsSequence(
-			decoder, current,
-		)
-	case "blob":
-		instance, current, err = readBlobAsSequence(
-			decoder, current,
-		)
-	case "capability":
-		instance, current, err = readCapabilityAsSequence(
-			decoder, current,
-		)
-	case "conceptDescription":
-		instance, current, err = readConceptDescriptionAsSequence(
-			decoder, current,
-		)
-	case "entity":
-		instance, current, err = readEntityAsSequence(
-			decoder, current,
-		)
-	case "file":
-		instance, current, err = readFileAsSequence(
-			decoder, current,
-		)
-	case "multiLanguageProperty":
-		instance, current, err = readMultiLanguagePropertyAsSequence(
-			decoder, current,
-		)
-	case "operation":
-		instance, current, err = readOperationAsSequence(
-			decoder, current,
-		)
-	case "property":
-		instance, current, err = readPropertyAsSequence(
-			decoder, current,
-		)
-	case "range":
-		instance, current, err = readRangeAsSequence(
-			decoder, current,
-		)
-	case "referenceElement":
-		instance, current, err = readReferenceElementAsSequence(
-			decoder, current,
-		)
-	case "submodel":
-		instance, current, err = readSubmodelAsSequence(
-			decoder, current,
-		)
-	case "submodelElementCollection":
-		instance, current, err = readSubmodelElementCollectionAsSequence(
-			decoder, current,
-		)
-	case "submodelElementList":
-		instance, current, err = readSubmodelElementListAsSequence(
-			decoder, current,
-		)
-	default:
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Unexpected start element %s as discriminator "+
-					"for IReferable",
-				local,
-			),
-		)
-	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
-	return
-}
-
-// De-serialize an instance of [aastypes.IIdentifiable]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readIdentifiableWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IIdentifiable,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	switch local {
-	case "assetAdministrationShell":
-		instance, current, err = readAssetAdministrationShellAsSequence(
-			decoder, current,
-		)
-	case "conceptDescription":
-		instance, current, err = readConceptDescriptionAsSequence(
-			decoder, current,
-		)
-	case "submodel":
-		instance, current, err = readSubmodelAsSequence(
-			decoder, current,
-		)
-	default:
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Unexpected start element %s as discriminator "+
-					"for IIdentifiable",
-				local,
-			),
-		)
-	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -1410,180 +985,6 @@ func readTextAsModellingKind(
 	return
 }
 
-// De-serialize an instance of [aastypes.IHasKind]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readHasKindWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IHasKind,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	switch local {
-	case "submodel":
-		instance, current, err = readSubmodelAsSequence(
-			decoder, current,
-		)
-	default:
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Unexpected start element %s as discriminator "+
-					"for IHasKind",
-				local,
-			),
-		)
-	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
-	return
-}
-
-// De-serialize an instance of [aastypes.IHasDataSpecification]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readHasDataSpecificationWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IHasDataSpecification,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	switch local {
-	case "administrativeInformation":
-		instance, current, err = readAdministrativeInformationAsSequence(
-			decoder, current,
-		)
-	case "relationshipElement":
-		instance, current, err = readRelationshipElementAsSequence(
-			decoder, current,
-		)
-	case "annotatedRelationshipElement":
-		instance, current, err = readAnnotatedRelationshipElementAsSequence(
-			decoder, current,
-		)
-	case "assetAdministrationShell":
-		instance, current, err = readAssetAdministrationShellAsSequence(
-			decoder, current,
-		)
-	case "basicEventElement":
-		instance, current, err = readBasicEventElementAsSequence(
-			decoder, current,
-		)
-	case "blob":
-		instance, current, err = readBlobAsSequence(
-			decoder, current,
-		)
-	case "capability":
-		instance, current, err = readCapabilityAsSequence(
-			decoder, current,
-		)
-	case "conceptDescription":
-		instance, current, err = readConceptDescriptionAsSequence(
-			decoder, current,
-		)
-	case "entity":
-		instance, current, err = readEntityAsSequence(
-			decoder, current,
-		)
-	case "file":
-		instance, current, err = readFileAsSequence(
-			decoder, current,
-		)
-	case "multiLanguageProperty":
-		instance, current, err = readMultiLanguagePropertyAsSequence(
-			decoder, current,
-		)
-	case "operation":
-		instance, current, err = readOperationAsSequence(
-			decoder, current,
-		)
-	case "property":
-		instance, current, err = readPropertyAsSequence(
-			decoder, current,
-		)
-	case "range":
-		instance, current, err = readRangeAsSequence(
-			decoder, current,
-		)
-	case "referenceElement":
-		instance, current, err = readReferenceElementAsSequence(
-			decoder, current,
-		)
-	case "submodel":
-		instance, current, err = readSubmodelAsSequence(
-			decoder, current,
-		)
-	case "submodelElementCollection":
-		instance, current, err = readSubmodelElementCollectionAsSequence(
-			decoder, current,
-		)
-	case "submodelElementList":
-		instance, current, err = readSubmodelElementListAsSequence(
-			decoder, current,
-		)
-	default:
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Unexpected start element %s as discriminator "+
-					"for IHasDataSpecification",
-				local,
-			),
-		)
-	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
-	return
-}
-
 // De-serialize the instance of [aastypes.IAdministrativeInformation]
 // as a sequence of XML elements, each representing a property
 // of [aastypes.IAdministrativeInformation].
@@ -1604,305 +1005,58 @@ func readAdministrativeInformationAsSequence(
 	var theTemplateID *string
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IAdministrativeInformation, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IAdministrativeInformation")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "embeddedDataSpecifications":
-			theEmbeddedDataSpecifications, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readEmbeddedDataSpecificationWithLookahead,
+			theEmbeddedDataSpecifications, current, valueErr = readListOf(
+				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
-
 		case "version":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theVersion, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theVersion = &value
-
 		case "revision":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theRevision, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theRevision = &value
-
 		case "creator":
-			theCreator, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theCreator, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "templateId":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theTemplateID, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theTemplateID = &value
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	instance = aastypes.NewAdministrativeInformation()
-	instance.SetEmbeddedDataSpecifications(
-		theEmbeddedDataSpecifications,
-	)
-	instance.SetVersion(
-		theVersion,
-	)
-	instance.SetRevision(
-		theRevision,
-	)
-	instance.SetCreator(
-		theCreator,
-	)
-	instance.SetTemplateID(
-		theTemplateID,
-	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IAdministrativeInformation]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readAdministrativeInformationWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IAdministrativeInformation,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "administrativeInformation"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readAdministrativeInformationAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
-	return
-}
-
-// De-serialize an instance of [aastypes.IQualifiable]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readQualifiableWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IQualifiable,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	switch local {
-	case "relationshipElement":
-		instance, current, err = readRelationshipElementAsSequence(
-			decoder, current,
-		)
-	case "annotatedRelationshipElement":
-		instance, current, err = readAnnotatedRelationshipElementAsSequence(
-			decoder, current,
-		)
-	case "basicEventElement":
-		instance, current, err = readBasicEventElementAsSequence(
-			decoder, current,
-		)
-	case "blob":
-		instance, current, err = readBlobAsSequence(
-			decoder, current,
-		)
-	case "capability":
-		instance, current, err = readCapabilityAsSequence(
-			decoder, current,
-		)
-	case "entity":
-		instance, current, err = readEntityAsSequence(
-			decoder, current,
-		)
-	case "file":
-		instance, current, err = readFileAsSequence(
-			decoder, current,
-		)
-	case "multiLanguageProperty":
-		instance, current, err = readMultiLanguagePropertyAsSequence(
-			decoder, current,
-		)
-	case "operation":
-		instance, current, err = readOperationAsSequence(
-			decoder, current,
-		)
-	case "property":
-		instance, current, err = readPropertyAsSequence(
-			decoder, current,
-		)
-	case "range":
-		instance, current, err = readRangeAsSequence(
-			decoder, current,
-		)
-	case "referenceElement":
-		instance, current, err = readReferenceElementAsSequence(
-			decoder, current,
-		)
-	case "submodel":
-		instance, current, err = readSubmodelAsSequence(
-			decoder, current,
-		)
-	case "submodelElementCollection":
-		instance, current, err = readSubmodelElementCollectionAsSequence(
-			decoder, current,
-		)
-	case "submodelElementList":
-		instance, current, err = readSubmodelElementListAsSequence(
-			decoder, current,
-		)
-	default:
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Unexpected start element %s as discriminator "+
-					"for IQualifiable",
-				local,
-			),
-		)
-	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
+	instance.SetEmbeddedDataSpecifications(theEmbeddedDataSpecifications)
+	instance.SetVersion(theVersion)
+	instance.SetRevision(theRevision)
+	instance.SetCreator(theCreator)
+	instance.SetTemplateID(theTemplateID)
 	return
 }
 
@@ -1968,149 +1122,69 @@ func readQualifierAsSequence(
 	foundValueType := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IQualifier, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IQualifier")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "semanticId":
-			theSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "supplementalSemanticIds":
-			theSupplementalSemanticIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theSupplementalSemanticIDs, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		case "kind":
-			var value aastypes.QualifierKind
-			value, current, valueErr = readTextAsQualifierKind(
-				decoder,
-				current,
+			theKind, current, valueErr = readOptional(
+				readTextAsQualifierKind(decoder, current),
 			)
-			theKind = &value
-
 		case "type":
 			theType, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundType = true
-
 		case "valueType":
 			theValueType, current, valueErr = readTextAsDataTypeDefXSD(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundValueType = true
-
 		case "value":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theValue, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theValue = &value
-
 		case "valueId":
-			theValueID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theValueID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundType {
-		err = newDeserializationError(
-			"The required property 'type' is missing",
-		)
+		err = missingProperty("type")
 		return
 	}
 
 	if !foundValueType {
-		err = newDeserializationError(
-			"The required property 'valueType' is missing",
-		)
+		err = missingProperty("valueType")
 		return
 	}
 
@@ -2118,75 +1192,33 @@ func readQualifierAsSequence(
 		theType,
 		theValueType,
 	)
-	instance.SetSemanticID(
-		theSemanticID,
-	)
-	instance.SetSupplementalSemanticIDs(
-		theSupplementalSemanticIDs,
-	)
-	instance.SetKind(
-		theKind,
-	)
-	instance.SetValue(
-		theValue,
-	)
-	instance.SetValueID(
-		theValueID,
-	)
+	instance.SetSemanticID(theSemanticID)
+	instance.SetSupplementalSemanticIDs(theSupplementalSemanticIDs)
+	instance.SetKind(theKind)
+	instance.SetValue(theValue)
+	instance.SetValueID(theValueID)
 	return
 }
 
-// De-serialize an instance of [aastypes.IQualifier]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.IQualifier] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readQualifierWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readQualifierDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
+	local string,
 ) (instance aastypes.IQualifier,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
+	switch local {
+	case "qualifier":
+		instance, next, err = readQualifierAsSequence(decoder, current)
+	default:
+		err = unexpectedStartElement(local, "qualifier")
 	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "qualifier"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readQualifierAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -2219,177 +1251,85 @@ func readAssetAdministrationShellAsSequence(
 	foundAssetInformation := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IAssetAdministrationShell, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IAssetAdministrationShell")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "extensions":
-			theExtensions, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readExtensionWithLookahead,
+			theExtensions, current, valueErr = readListOf(
+				decoder, current, readExtensionDispatched,
 			)
-
 		case "category":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theCategory, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theCategory = &value
-
 		case "idShort":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theIDShort, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theIDShort = &value
-
 		case "displayName":
-			theDisplayName, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringNameTypeWithLookahead,
+			theDisplayName, current, valueErr = readListOf(
+				decoder, current, readLangStringNameTypeDispatched,
 			)
-
 		case "description":
-			theDescription, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringTextTypeWithLookahead,
+			theDescription, current, valueErr = readListOf(
+				decoder, current, readLangStringTextTypeDispatched,
 			)
-
 		case "administration":
-			theAdministration, current, valueErr =  readAdministrativeInformationAsSequence(
-				decoder,
-				current,
+			theAdministration, current, valueErr = readAdministrativeInformationAsSequence(
+				decoder, current,
 			)
-
 		case "id":
 			theID, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundID = true
-
 		case "embeddedDataSpecifications":
-			theEmbeddedDataSpecifications, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readEmbeddedDataSpecificationWithLookahead,
+			theEmbeddedDataSpecifications, current, valueErr = readListOf(
+				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
-
 		case "derivedFrom":
-			theDerivedFrom, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theDerivedFrom, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "assetInformation":
-			theAssetInformation, current, valueErr =  readAssetInformationAsSequence(
-				decoder,
-				current,
+			theAssetInformation, current, valueErr = readAssetInformationAsSequence(
+				decoder, current,
 			)
 			foundAssetInformation = true
-
 		case "submodels":
-			theSubmodels, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theSubmodels, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundID {
-		err = newDeserializationError(
-			"The required property 'id' is missing",
-		)
+		err = missingProperty("id")
 		return
 	}
 
 	if !foundAssetInformation {
-		err = newDeserializationError(
-			"The required property 'assetInformation' is missing",
-		)
+		err = missingProperty("assetInformation")
 		return
 	}
 
@@ -2397,87 +1337,37 @@ func readAssetAdministrationShellAsSequence(
 		theID,
 		theAssetInformation,
 	)
-	instance.SetExtensions(
-		theExtensions,
-	)
-	instance.SetCategory(
-		theCategory,
-	)
-	instance.SetIDShort(
-		theIDShort,
-	)
-	instance.SetDisplayName(
-		theDisplayName,
-	)
-	instance.SetDescription(
-		theDescription,
-	)
-	instance.SetAdministration(
-		theAdministration,
-	)
-	instance.SetEmbeddedDataSpecifications(
-		theEmbeddedDataSpecifications,
-	)
-	instance.SetDerivedFrom(
-		theDerivedFrom,
-	)
-	instance.SetSubmodels(
-		theSubmodels,
-	)
+	instance.SetExtensions(theExtensions)
+	instance.SetCategory(theCategory)
+	instance.SetIDShort(theIDShort)
+	instance.SetDisplayName(theDisplayName)
+	instance.SetDescription(theDescription)
+	instance.SetAdministration(theAdministration)
+	instance.SetEmbeddedDataSpecifications(theEmbeddedDataSpecifications)
+	instance.SetDerivedFrom(theDerivedFrom)
+	instance.SetSubmodels(theSubmodels)
 	return
 }
 
-// De-serialize an instance of [aastypes.IAssetAdministrationShell]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.IAssetAdministrationShell] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readAssetAdministrationShellWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readAssetAdministrationShellDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
+	local string,
 ) (instance aastypes.IAssetAdministrationShell,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
+	switch local {
+	case "assetAdministrationShell":
+		instance, next, err = readAssetAdministrationShellAsSequence(decoder, current)
+	default:
+		err = unexpectedStartElement(local, "assetAdministrationShell")
 	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "assetAdministrationShell"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readAssetAdministrationShellAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -2503,201 +1393,65 @@ func readAssetInformationAsSequence(
 	foundAssetKind := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IAssetInformation, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IAssetInformation")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "assetKind":
 			theAssetKind, current, valueErr = readTextAsAssetKind(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundAssetKind = true
-
 		case "globalAssetId":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theGlobalAssetID, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theGlobalAssetID = &value
-
 		case "specificAssetIds":
-			theSpecificAssetIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readSpecificAssetIDWithLookahead,
+			theSpecificAssetIDs, current, valueErr = readListOf(
+				decoder, current, readSpecificAssetIDDispatched,
 			)
-
 		case "assetType":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theAssetType, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theAssetType = &value
-
 		case "defaultThumbnail":
-			theDefaultThumbnail, current, valueErr =  readResourceAsSequence(
-				decoder,
-				current,
+			theDefaultThumbnail, current, valueErr = readResourceAsSequence(
+				decoder, current,
 			)
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundAssetKind {
-		err = newDeserializationError(
-			"The required property 'assetKind' is missing",
-		)
+		err = missingProperty("assetKind")
 		return
 	}
 
 	instance = aastypes.NewAssetInformation(
 		theAssetKind,
 	)
-	instance.SetGlobalAssetID(
-		theGlobalAssetID,
-	)
-	instance.SetSpecificAssetIDs(
-		theSpecificAssetIDs,
-	)
-	instance.SetAssetType(
-		theAssetType,
-	)
-	instance.SetDefaultThumbnail(
-		theDefaultThumbnail,
-	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IAssetInformation]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readAssetInformationWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IAssetInformation,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "assetInformation"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readAssetInformationAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
+	instance.SetGlobalAssetID(theGlobalAssetID)
+	instance.SetSpecificAssetIDs(theSpecificAssetIDs)
+	instance.SetAssetType(theAssetType)
+	instance.SetDefaultThumbnail(theDefaultThumbnail)
 	return
 }
 
@@ -2720,171 +1474,50 @@ func readResourceAsSequence(
 	foundPath := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IResource, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IResource")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "path":
 			thePath, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundPath = true
-
 		case "contentType":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theContentType, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theContentType = &value
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundPath {
-		err = newDeserializationError(
-			"The required property 'path' is missing",
-		)
+		err = missingProperty("path")
 		return
 	}
 
 	instance = aastypes.NewResource(
 		thePath,
 	)
-	instance.SetContentType(
-		theContentType,
-	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IResource]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readResourceWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IResource,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "resource"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readResourceAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
+	instance.SetContentType(theContentType)
 	return
 }
 
@@ -2948,133 +1581,61 @@ func readSpecificAssetIDAsSequence(
 	foundValue := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of ISpecificAssetID, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "ISpecificAssetID")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "semanticId":
-			theSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "supplementalSemanticIds":
-			theSupplementalSemanticIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theSupplementalSemanticIDs, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		case "name":
 			theName, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundName = true
-
 		case "value":
 			theValue, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundValue = true
-
 		case "externalSubjectId":
-			theExternalSubjectID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theExternalSubjectID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundName {
-		err = newDeserializationError(
-			"The required property 'name' is missing",
-		)
+		err = missingProperty("name")
 		return
 	}
 
 	if !foundValue {
-		err = newDeserializationError(
-			"The required property 'value' is missing",
-		)
+		err = missingProperty("value")
 		return
 	}
 
@@ -3082,69 +1643,31 @@ func readSpecificAssetIDAsSequence(
 		theName,
 		theValue,
 	)
-	instance.SetSemanticID(
-		theSemanticID,
-	)
-	instance.SetSupplementalSemanticIDs(
-		theSupplementalSemanticIDs,
-	)
-	instance.SetExternalSubjectID(
-		theExternalSubjectID,
-	)
+	instance.SetSemanticID(theSemanticID)
+	instance.SetSupplementalSemanticIDs(theSupplementalSemanticIDs)
+	instance.SetExternalSubjectID(theExternalSubjectID)
 	return
 }
 
-// De-serialize an instance of [aastypes.ISpecificAssetID]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.ISpecificAssetID] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readSpecificAssetIDWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readSpecificAssetIDDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
+	local string,
 ) (instance aastypes.ISpecificAssetID,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
+	switch local {
+	case "specificAssetId":
+		instance, next, err = readSpecificAssetIDAsSequence(decoder, current)
+	default:
+		err = unexpectedStartElement(local, "specificAssetId")
 	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "specificAssetId"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readSpecificAssetIDAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -3178,386 +1701,175 @@ func readSubmodelAsSequence(
 	foundID := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of ISubmodel, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "ISubmodel")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "extensions":
-			theExtensions, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readExtensionWithLookahead,
+			theExtensions, current, valueErr = readListOf(
+				decoder, current, readExtensionDispatched,
 			)
-
 		case "category":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theCategory, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theCategory = &value
-
 		case "idShort":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theIDShort, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theIDShort = &value
-
 		case "displayName":
-			theDisplayName, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringNameTypeWithLookahead,
+			theDisplayName, current, valueErr = readListOf(
+				decoder, current, readLangStringNameTypeDispatched,
 			)
-
 		case "description":
-			theDescription, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringTextTypeWithLookahead,
+			theDescription, current, valueErr = readListOf(
+				decoder, current, readLangStringTextTypeDispatched,
 			)
-
 		case "administration":
-			theAdministration, current, valueErr =  readAdministrativeInformationAsSequence(
-				decoder,
-				current,
+			theAdministration, current, valueErr = readAdministrativeInformationAsSequence(
+				decoder, current,
 			)
-
 		case "id":
 			theID, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundID = true
-
 		case "kind":
-			var value aastypes.ModellingKind
-			value, current, valueErr = readTextAsModellingKind(
-				decoder,
-				current,
+			theKind, current, valueErr = readOptional(
+				readTextAsModellingKind(decoder, current),
 			)
-			theKind = &value
-
 		case "semanticId":
-			theSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "supplementalSemanticIds":
-			theSupplementalSemanticIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theSupplementalSemanticIDs, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		case "qualifiers":
-			theQualifiers, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readQualifierWithLookahead,
+			theQualifiers, current, valueErr = readListOf(
+				decoder, current, readQualifierDispatched,
 			)
-
 		case "embeddedDataSpecifications":
-			theEmbeddedDataSpecifications, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readEmbeddedDataSpecificationWithLookahead,
+			theEmbeddedDataSpecifications, current, valueErr = readListOf(
+				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
-
 		case "submodelElements":
-			theSubmodelElements, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readSubmodelElementWithLookahead,
+			theSubmodelElements, current, valueErr = readListOf(
+				decoder, current, readSubmodelElementDispatched,
 			)
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundID {
-		err = newDeserializationError(
-			"The required property 'id' is missing",
-		)
+		err = missingProperty("id")
 		return
 	}
 
 	instance = aastypes.NewSubmodel(
 		theID,
 	)
-	instance.SetExtensions(
-		theExtensions,
-	)
-	instance.SetCategory(
-		theCategory,
-	)
-	instance.SetIDShort(
-		theIDShort,
-	)
-	instance.SetDisplayName(
-		theDisplayName,
-	)
-	instance.SetDescription(
-		theDescription,
-	)
-	instance.SetAdministration(
-		theAdministration,
-	)
-	instance.SetKind(
-		theKind,
-	)
-	instance.SetSemanticID(
-		theSemanticID,
-	)
-	instance.SetSupplementalSemanticIDs(
-		theSupplementalSemanticIDs,
-	)
-	instance.SetQualifiers(
-		theQualifiers,
-	)
-	instance.SetEmbeddedDataSpecifications(
-		theEmbeddedDataSpecifications,
-	)
-	instance.SetSubmodelElements(
-		theSubmodelElements,
-	)
+	instance.SetExtensions(theExtensions)
+	instance.SetCategory(theCategory)
+	instance.SetIDShort(theIDShort)
+	instance.SetDisplayName(theDisplayName)
+	instance.SetDescription(theDescription)
+	instance.SetAdministration(theAdministration)
+	instance.SetKind(theKind)
+	instance.SetSemanticID(theSemanticID)
+	instance.SetSupplementalSemanticIDs(theSupplementalSemanticIDs)
+	instance.SetQualifiers(theQualifiers)
+	instance.SetEmbeddedDataSpecifications(theEmbeddedDataSpecifications)
+	instance.SetSubmodelElements(theSubmodelElements)
 	return
 }
 
-// De-serialize an instance of [aastypes.ISubmodel]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.ISubmodel] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readSubmodelWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readSubmodelDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
+	local string,
 ) (instance aastypes.ISubmodel,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
+	switch local {
+	case "submodel":
+		instance, next, err = readSubmodelAsSequence(decoder, current)
+	default:
+		err = unexpectedStartElement(local, "submodel")
 	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "submodel"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readSubmodelAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
-// De-serialize an instance of [aastypes.ISubmodelElement]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
+// De-serialize an instance of [aastypes.ISubmodelElement] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readSubmodelElementWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readSubmodelElementDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
+	local string,
 ) (instance aastypes.ISubmodelElement,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
 	switch local {
 	case "relationshipElement":
-		instance, current, err = readRelationshipElementAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readRelationshipElementAsSequence(decoder, current)
 	case "annotatedRelationshipElement":
-		instance, current, err = readAnnotatedRelationshipElementAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readAnnotatedRelationshipElementAsSequence(decoder, current)
 	case "basicEventElement":
-		instance, current, err = readBasicEventElementAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readBasicEventElementAsSequence(decoder, current)
 	case "blob":
-		instance, current, err = readBlobAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readBlobAsSequence(decoder, current)
 	case "capability":
-		instance, current, err = readCapabilityAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readCapabilityAsSequence(decoder, current)
 	case "entity":
-		instance, current, err = readEntityAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readEntityAsSequence(decoder, current)
 	case "file":
-		instance, current, err = readFileAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readFileAsSequence(decoder, current)
 	case "multiLanguageProperty":
-		instance, current, err = readMultiLanguagePropertyAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readMultiLanguagePropertyAsSequence(decoder, current)
 	case "operation":
-		instance, current, err = readOperationAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readOperationAsSequence(decoder, current)
 	case "property":
-		instance, current, err = readPropertyAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readPropertyAsSequence(decoder, current)
 	case "range":
-		instance, current, err = readRangeAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readRangeAsSequence(decoder, current)
 	case "referenceElement":
-		instance, current, err = readReferenceElementAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readReferenceElementAsSequence(decoder, current)
 	case "submodelElementCollection":
-		instance, current, err = readSubmodelElementCollectionAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readSubmodelElementCollectionAsSequence(decoder, current)
 	case "submodelElementList":
-		instance, current, err = readSubmodelElementListAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readSubmodelElementListAsSequence(decoder, current)
 	default:
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Unexpected start element %s as discriminator "+
-					"for ISubmodelElement",
-				local,
-			),
-		)
+		err = unexpectedDiscriminator(local, "ISubmodelElement")
 	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -3590,178 +1902,85 @@ func readRelationshipElementAsSequence(
 	foundSecond := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IRelationshipElement, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IRelationshipElement")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "extensions":
-			theExtensions, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readExtensionWithLookahead,
+			theExtensions, current, valueErr = readListOf(
+				decoder, current, readExtensionDispatched,
 			)
-
 		case "category":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theCategory, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theCategory = &value
-
 		case "idShort":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theIDShort, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theIDShort = &value
-
 		case "displayName":
-			theDisplayName, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringNameTypeWithLookahead,
+			theDisplayName, current, valueErr = readListOf(
+				decoder, current, readLangStringNameTypeDispatched,
 			)
-
 		case "description":
-			theDescription, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringTextTypeWithLookahead,
+			theDescription, current, valueErr = readListOf(
+				decoder, current, readLangStringTextTypeDispatched,
 			)
-
 		case "semanticId":
-			theSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "supplementalSemanticIds":
-			theSupplementalSemanticIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theSupplementalSemanticIDs, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		case "qualifiers":
-			theQualifiers, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readQualifierWithLookahead,
+			theQualifiers, current, valueErr = readListOf(
+				decoder, current, readQualifierDispatched,
 			)
-
 		case "embeddedDataSpecifications":
-			theEmbeddedDataSpecifications, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readEmbeddedDataSpecificationWithLookahead,
+			theEmbeddedDataSpecifications, current, valueErr = readListOf(
+				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
-
 		case "first":
-			theFirst, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theFirst, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
 			foundFirst = true
-
 		case "second":
-			theSecond, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSecond, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
 			foundSecond = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundFirst {
-		err = newDeserializationError(
-			"The required property 'first' is missing",
-		)
+		err = missingProperty("first")
 		return
 	}
 
 	if !foundSecond {
-		err = newDeserializationError(
-			"The required property 'second' is missing",
-		)
+		err = missingProperty("second")
 		return
 	}
 
@@ -3769,90 +1988,15 @@ func readRelationshipElementAsSequence(
 		theFirst,
 		theSecond,
 	)
-	instance.SetExtensions(
-		theExtensions,
-	)
-	instance.SetCategory(
-		theCategory,
-	)
-	instance.SetIDShort(
-		theIDShort,
-	)
-	instance.SetDisplayName(
-		theDisplayName,
-	)
-	instance.SetDescription(
-		theDescription,
-	)
-	instance.SetSemanticID(
-		theSemanticID,
-	)
-	instance.SetSupplementalSemanticIDs(
-		theSupplementalSemanticIDs,
-	)
-	instance.SetQualifiers(
-		theQualifiers,
-	)
-	instance.SetEmbeddedDataSpecifications(
-		theEmbeddedDataSpecifications,
-	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IRelationshipElement]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readRelationshipElementWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IRelationshipElement,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	switch local {
-	case "annotatedRelationshipElement":
-		instance, current, err = readAnnotatedRelationshipElementAsSequence(
-			decoder, current,
-		)
-	case "relationshipElement":
-		instance, current, err = readRelationshipElementAsSequence(
-			decoder, current,
-		)
-	default:
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Unexpected start element %s as discriminator "+
-					"for IRelationshipElement",
-				local,
-			),
-		)
-	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
+	instance.SetExtensions(theExtensions)
+	instance.SetCategory(theCategory)
+	instance.SetIDShort(theIDShort)
+	instance.SetDisplayName(theDisplayName)
+	instance.SetDescription(theDescription)
+	instance.SetSemanticID(theSemanticID)
+	instance.SetSupplementalSemanticIDs(theSupplementalSemanticIDs)
+	instance.SetQualifiers(theQualifiers)
+	instance.SetEmbeddedDataSpecifications(theEmbeddedDataSpecifications)
 	return
 }
 
@@ -3924,292 +2068,110 @@ func readSubmodelElementListAsSequence(
 	foundTypeValueListElement := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of ISubmodelElementList, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "ISubmodelElementList")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "extensions":
-			theExtensions, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readExtensionWithLookahead,
+			theExtensions, current, valueErr = readListOf(
+				decoder, current, readExtensionDispatched,
 			)
-
 		case "category":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theCategory, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theCategory = &value
-
 		case "idShort":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theIDShort, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theIDShort = &value
-
 		case "displayName":
-			theDisplayName, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringNameTypeWithLookahead,
+			theDisplayName, current, valueErr = readListOf(
+				decoder, current, readLangStringNameTypeDispatched,
 			)
-
 		case "description":
-			theDescription, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringTextTypeWithLookahead,
+			theDescription, current, valueErr = readListOf(
+				decoder, current, readLangStringTextTypeDispatched,
 			)
-
 		case "semanticId":
-			theSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "supplementalSemanticIds":
-			theSupplementalSemanticIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theSupplementalSemanticIDs, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		case "qualifiers":
-			theQualifiers, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readQualifierWithLookahead,
+			theQualifiers, current, valueErr = readListOf(
+				decoder, current, readQualifierDispatched,
 			)
-
 		case "embeddedDataSpecifications":
-			theEmbeddedDataSpecifications, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readEmbeddedDataSpecificationWithLookahead,
+			theEmbeddedDataSpecifications, current, valueErr = readListOf(
+				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
-
 		case "orderRelevant":
-			var value bool
-			value, current, valueErr = readTextAsBoolean(
-				decoder,
-				current,
+			theOrderRelevant, current, valueErr = readOptional(
+				readTextAsBoolean(decoder, current),
 			)
-			theOrderRelevant = &value
-
 		case "semanticIdListElement":
-			theSemanticIDListElement, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSemanticIDListElement, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "typeValueListElement":
 			theTypeValueListElement, current, valueErr = readTextAsAASSubmodelElements(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundTypeValueListElement = true
-
 		case "valueTypeListElement":
-			var value aastypes.DataTypeDefXSD
-			value, current, valueErr = readTextAsDataTypeDefXSD(
-				decoder,
-				current,
+			theValueTypeListElement, current, valueErr = readOptional(
+				readTextAsDataTypeDefXSD(decoder, current),
 			)
-			theValueTypeListElement = &value
-
 		case "value":
-			theValue, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readSubmodelElementWithLookahead,
+			theValue, current, valueErr = readListOf(
+				decoder, current, readSubmodelElementDispatched,
 			)
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundTypeValueListElement {
-		err = newDeserializationError(
-			"The required property 'typeValueListElement' is missing",
-		)
+		err = missingProperty("typeValueListElement")
 		return
 	}
 
 	instance = aastypes.NewSubmodelElementList(
 		theTypeValueListElement,
 	)
-	instance.SetExtensions(
-		theExtensions,
-	)
-	instance.SetCategory(
-		theCategory,
-	)
-	instance.SetIDShort(
-		theIDShort,
-	)
-	instance.SetDisplayName(
-		theDisplayName,
-	)
-	instance.SetDescription(
-		theDescription,
-	)
-	instance.SetSemanticID(
-		theSemanticID,
-	)
-	instance.SetSupplementalSemanticIDs(
-		theSupplementalSemanticIDs,
-	)
-	instance.SetQualifiers(
-		theQualifiers,
-	)
-	instance.SetEmbeddedDataSpecifications(
-		theEmbeddedDataSpecifications,
-	)
-	instance.SetOrderRelevant(
-		theOrderRelevant,
-	)
-	instance.SetSemanticIDListElement(
-		theSemanticIDListElement,
-	)
-	instance.SetValueTypeListElement(
-		theValueTypeListElement,
-	)
-	instance.SetValue(
-		theValue,
-	)
-	return
-}
-
-// De-serialize an instance of [aastypes.ISubmodelElementList]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readSubmodelElementListWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.ISubmodelElementList,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "submodelElementList"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readSubmodelElementListAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
+	instance.SetExtensions(theExtensions)
+	instance.SetCategory(theCategory)
+	instance.SetIDShort(theIDShort)
+	instance.SetDisplayName(theDisplayName)
+	instance.SetDescription(theDescription)
+	instance.SetSemanticID(theSemanticID)
+	instance.SetSupplementalSemanticIDs(theSupplementalSemanticIDs)
+	instance.SetQualifiers(theQualifiers)
+	instance.SetEmbeddedDataSpecifications(theEmbeddedDataSpecifications)
+	instance.SetOrderRelevant(theOrderRelevant)
+	instance.SetSemanticIDListElement(theSemanticIDListElement)
+	instance.SetValueTypeListElement(theValueTypeListElement)
+	instance.SetValue(theValue)
 	return
 }
 
@@ -4238,318 +2200,115 @@ func readSubmodelElementCollectionAsSequence(
 	var theValue []aastypes.ISubmodelElement
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of ISubmodelElementCollection, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "ISubmodelElementCollection")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "extensions":
-			theExtensions, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readExtensionWithLookahead,
+			theExtensions, current, valueErr = readListOf(
+				decoder, current, readExtensionDispatched,
 			)
-
 		case "category":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theCategory, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theCategory = &value
-
 		case "idShort":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theIDShort, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theIDShort = &value
-
 		case "displayName":
-			theDisplayName, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringNameTypeWithLookahead,
+			theDisplayName, current, valueErr = readListOf(
+				decoder, current, readLangStringNameTypeDispatched,
 			)
-
 		case "description":
-			theDescription, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringTextTypeWithLookahead,
+			theDescription, current, valueErr = readListOf(
+				decoder, current, readLangStringTextTypeDispatched,
 			)
-
 		case "semanticId":
-			theSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "supplementalSemanticIds":
-			theSupplementalSemanticIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theSupplementalSemanticIDs, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		case "qualifiers":
-			theQualifiers, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readQualifierWithLookahead,
+			theQualifiers, current, valueErr = readListOf(
+				decoder, current, readQualifierDispatched,
 			)
-
 		case "embeddedDataSpecifications":
-			theEmbeddedDataSpecifications, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readEmbeddedDataSpecificationWithLookahead,
+			theEmbeddedDataSpecifications, current, valueErr = readListOf(
+				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
-
 		case "value":
-			theValue, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readSubmodelElementWithLookahead,
+			theValue, current, valueErr = readListOf(
+				decoder, current, readSubmodelElementDispatched,
 			)
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	instance = aastypes.NewSubmodelElementCollection()
-	instance.SetExtensions(
-		theExtensions,
-	)
-	instance.SetCategory(
-		theCategory,
-	)
-	instance.SetIDShort(
-		theIDShort,
-	)
-	instance.SetDisplayName(
-		theDisplayName,
-	)
-	instance.SetDescription(
-		theDescription,
-	)
-	instance.SetSemanticID(
-		theSemanticID,
-	)
-	instance.SetSupplementalSemanticIDs(
-		theSupplementalSemanticIDs,
-	)
-	instance.SetQualifiers(
-		theQualifiers,
-	)
-	instance.SetEmbeddedDataSpecifications(
-		theEmbeddedDataSpecifications,
-	)
-	instance.SetValue(
-		theValue,
-	)
+	instance.SetExtensions(theExtensions)
+	instance.SetCategory(theCategory)
+	instance.SetIDShort(theIDShort)
+	instance.SetDisplayName(theDisplayName)
+	instance.SetDescription(theDescription)
+	instance.SetSemanticID(theSemanticID)
+	instance.SetSupplementalSemanticIDs(theSupplementalSemanticIDs)
+	instance.SetQualifiers(theQualifiers)
+	instance.SetEmbeddedDataSpecifications(theEmbeddedDataSpecifications)
+	instance.SetValue(theValue)
 	return
 }
 
-// De-serialize an instance of [aastypes.ISubmodelElementCollection]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.IDataElement] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readSubmodelElementCollectionWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readDataElementDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
-) (instance aastypes.ISubmodelElementCollection,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "submodelElementCollection"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readSubmodelElementCollectionAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
-	return
-}
-
-// De-serialize an instance of [aastypes.IDataElement]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readDataElementWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
+	local string,
 ) (instance aastypes.IDataElement,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
 	switch local {
 	case "blob":
-		instance, current, err = readBlobAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readBlobAsSequence(decoder, current)
 	case "file":
-		instance, current, err = readFileAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readFileAsSequence(decoder, current)
 	case "multiLanguageProperty":
-		instance, current, err = readMultiLanguagePropertyAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readMultiLanguagePropertyAsSequence(decoder, current)
 	case "property":
-		instance, current, err = readPropertyAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readPropertyAsSequence(decoder, current)
 	case "range":
-		instance, current, err = readRangeAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readRangeAsSequence(decoder, current)
 	case "referenceElement":
-		instance, current, err = readReferenceElementAsSequence(
-			decoder, current,
-		)
+		instance, next, err = readReferenceElementAsSequence(decoder, current)
 	default:
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Unexpected start element %s as discriminator "+
-					"for IDataElement",
-				local,
-			),
-		)
+		err = unexpectedDiscriminator(local, "IDataElement")
 	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -4582,271 +2341,100 @@ func readPropertyAsSequence(
 	foundValueType := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IProperty, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IProperty")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "extensions":
-			theExtensions, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readExtensionWithLookahead,
+			theExtensions, current, valueErr = readListOf(
+				decoder, current, readExtensionDispatched,
 			)
-
 		case "category":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theCategory, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theCategory = &value
-
 		case "idShort":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theIDShort, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theIDShort = &value
-
 		case "displayName":
-			theDisplayName, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringNameTypeWithLookahead,
+			theDisplayName, current, valueErr = readListOf(
+				decoder, current, readLangStringNameTypeDispatched,
 			)
-
 		case "description":
-			theDescription, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringTextTypeWithLookahead,
+			theDescription, current, valueErr = readListOf(
+				decoder, current, readLangStringTextTypeDispatched,
 			)
-
 		case "semanticId":
-			theSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "supplementalSemanticIds":
-			theSupplementalSemanticIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theSupplementalSemanticIDs, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		case "qualifiers":
-			theQualifiers, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readQualifierWithLookahead,
+			theQualifiers, current, valueErr = readListOf(
+				decoder, current, readQualifierDispatched,
 			)
-
 		case "embeddedDataSpecifications":
-			theEmbeddedDataSpecifications, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readEmbeddedDataSpecificationWithLookahead,
+			theEmbeddedDataSpecifications, current, valueErr = readListOf(
+				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
-
 		case "valueType":
 			theValueType, current, valueErr = readTextAsDataTypeDefXSD(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundValueType = true
-
 		case "value":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theValue, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theValue = &value
-
 		case "valueId":
-			theValueID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theValueID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundValueType {
-		err = newDeserializationError(
-			"The required property 'valueType' is missing",
-		)
+		err = missingProperty("valueType")
 		return
 	}
 
 	instance = aastypes.NewProperty(
 		theValueType,
 	)
-	instance.SetExtensions(
-		theExtensions,
-	)
-	instance.SetCategory(
-		theCategory,
-	)
-	instance.SetIDShort(
-		theIDShort,
-	)
-	instance.SetDisplayName(
-		theDisplayName,
-	)
-	instance.SetDescription(
-		theDescription,
-	)
-	instance.SetSemanticID(
-		theSemanticID,
-	)
-	instance.SetSupplementalSemanticIDs(
-		theSupplementalSemanticIDs,
-	)
-	instance.SetQualifiers(
-		theQualifiers,
-	)
-	instance.SetEmbeddedDataSpecifications(
-		theEmbeddedDataSpecifications,
-	)
-	instance.SetValue(
-		theValue,
-	)
-	instance.SetValueID(
-		theValueID,
-	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IProperty]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readPropertyWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IProperty,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "property"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readPropertyAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
+	instance.SetExtensions(theExtensions)
+	instance.SetCategory(theCategory)
+	instance.SetIDShort(theIDShort)
+	instance.SetDisplayName(theDisplayName)
+	instance.SetDescription(theDescription)
+	instance.SetSemanticID(theSemanticID)
+	instance.SetSupplementalSemanticIDs(theSupplementalSemanticIDs)
+	instance.SetQualifiers(theQualifiers)
+	instance.SetEmbeddedDataSpecifications(theEmbeddedDataSpecifications)
+	instance.SetValue(theValue)
+	instance.SetValueID(theValueID)
 	return
 }
 
@@ -4876,254 +2464,88 @@ func readMultiLanguagePropertyAsSequence(
 	var theValueID aastypes.IReference
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IMultiLanguageProperty, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IMultiLanguageProperty")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "extensions":
-			theExtensions, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readExtensionWithLookahead,
+			theExtensions, current, valueErr = readListOf(
+				decoder, current, readExtensionDispatched,
 			)
-
 		case "category":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theCategory, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theCategory = &value
-
 		case "idShort":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theIDShort, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theIDShort = &value
-
 		case "displayName":
-			theDisplayName, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringNameTypeWithLookahead,
+			theDisplayName, current, valueErr = readListOf(
+				decoder, current, readLangStringNameTypeDispatched,
 			)
-
 		case "description":
-			theDescription, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringTextTypeWithLookahead,
+			theDescription, current, valueErr = readListOf(
+				decoder, current, readLangStringTextTypeDispatched,
 			)
-
 		case "semanticId":
-			theSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "supplementalSemanticIds":
-			theSupplementalSemanticIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theSupplementalSemanticIDs, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		case "qualifiers":
-			theQualifiers, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readQualifierWithLookahead,
+			theQualifiers, current, valueErr = readListOf(
+				decoder, current, readQualifierDispatched,
 			)
-
 		case "embeddedDataSpecifications":
-			theEmbeddedDataSpecifications, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readEmbeddedDataSpecificationWithLookahead,
+			theEmbeddedDataSpecifications, current, valueErr = readListOf(
+				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
-
 		case "value":
-			theValue, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringTextTypeWithLookahead,
+			theValue, current, valueErr = readListOf(
+				decoder, current, readLangStringTextTypeDispatched,
 			)
-
 		case "valueId":
-			theValueID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theValueID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	instance = aastypes.NewMultiLanguageProperty()
-	instance.SetExtensions(
-		theExtensions,
-	)
-	instance.SetCategory(
-		theCategory,
-	)
-	instance.SetIDShort(
-		theIDShort,
-	)
-	instance.SetDisplayName(
-		theDisplayName,
-	)
-	instance.SetDescription(
-		theDescription,
-	)
-	instance.SetSemanticID(
-		theSemanticID,
-	)
-	instance.SetSupplementalSemanticIDs(
-		theSupplementalSemanticIDs,
-	)
-	instance.SetQualifiers(
-		theQualifiers,
-	)
-	instance.SetEmbeddedDataSpecifications(
-		theEmbeddedDataSpecifications,
-	)
-	instance.SetValue(
-		theValue,
-	)
-	instance.SetValueID(
-		theValueID,
-	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IMultiLanguageProperty]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readMultiLanguagePropertyWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IMultiLanguageProperty,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "multiLanguageProperty"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readMultiLanguagePropertyAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
+	instance.SetExtensions(theExtensions)
+	instance.SetCategory(theCategory)
+	instance.SetIDShort(theIDShort)
+	instance.SetDisplayName(theDisplayName)
+	instance.SetDescription(theDescription)
+	instance.SetSemanticID(theSemanticID)
+	instance.SetSupplementalSemanticIDs(theSupplementalSemanticIDs)
+	instance.SetQualifiers(theQualifiers)
+	instance.SetEmbeddedDataSpecifications(theEmbeddedDataSpecifications)
+	instance.SetValue(theValue)
+	instance.SetValueID(theValueID)
 	return
 }
 
@@ -5156,273 +2578,100 @@ func readRangeAsSequence(
 	foundValueType := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IRange, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IRange")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "extensions":
-			theExtensions, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readExtensionWithLookahead,
+			theExtensions, current, valueErr = readListOf(
+				decoder, current, readExtensionDispatched,
 			)
-
 		case "category":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theCategory, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theCategory = &value
-
 		case "idShort":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theIDShort, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theIDShort = &value
-
 		case "displayName":
-			theDisplayName, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringNameTypeWithLookahead,
+			theDisplayName, current, valueErr = readListOf(
+				decoder, current, readLangStringNameTypeDispatched,
 			)
-
 		case "description":
-			theDescription, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringTextTypeWithLookahead,
+			theDescription, current, valueErr = readListOf(
+				decoder, current, readLangStringTextTypeDispatched,
 			)
-
 		case "semanticId":
-			theSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "supplementalSemanticIds":
-			theSupplementalSemanticIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theSupplementalSemanticIDs, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		case "qualifiers":
-			theQualifiers, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readQualifierWithLookahead,
+			theQualifiers, current, valueErr = readListOf(
+				decoder, current, readQualifierDispatched,
 			)
-
 		case "embeddedDataSpecifications":
-			theEmbeddedDataSpecifications, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readEmbeddedDataSpecificationWithLookahead,
+			theEmbeddedDataSpecifications, current, valueErr = readListOf(
+				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
-
 		case "valueType":
 			theValueType, current, valueErr = readTextAsDataTypeDefXSD(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundValueType = true
-
 		case "min":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theMin, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theMin = &value
-
 		case "max":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theMax, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theMax = &value
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundValueType {
-		err = newDeserializationError(
-			"The required property 'valueType' is missing",
-		)
+		err = missingProperty("valueType")
 		return
 	}
 
 	instance = aastypes.NewRange(
 		theValueType,
 	)
-	instance.SetExtensions(
-		theExtensions,
-	)
-	instance.SetCategory(
-		theCategory,
-	)
-	instance.SetIDShort(
-		theIDShort,
-	)
-	instance.SetDisplayName(
-		theDisplayName,
-	)
-	instance.SetDescription(
-		theDescription,
-	)
-	instance.SetSemanticID(
-		theSemanticID,
-	)
-	instance.SetSupplementalSemanticIDs(
-		theSupplementalSemanticIDs,
-	)
-	instance.SetQualifiers(
-		theQualifiers,
-	)
-	instance.SetEmbeddedDataSpecifications(
-		theEmbeddedDataSpecifications,
-	)
-	instance.SetMin(
-		theMin,
-	)
-	instance.SetMax(
-		theMax,
-	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IRange]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readRangeWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IRange,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "range"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readRangeAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
+	instance.SetExtensions(theExtensions)
+	instance.SetCategory(theCategory)
+	instance.SetIDShort(theIDShort)
+	instance.SetDisplayName(theDisplayName)
+	instance.SetDescription(theDescription)
+	instance.SetSemanticID(theSemanticID)
+	instance.SetSupplementalSemanticIDs(theSupplementalSemanticIDs)
+	instance.SetQualifiers(theQualifiers)
+	instance.SetEmbeddedDataSpecifications(theEmbeddedDataSpecifications)
+	instance.SetMin(theMin)
+	instance.SetMax(theMax)
 	return
 }
 
@@ -5451,244 +2700,83 @@ func readReferenceElementAsSequence(
 	var theValue aastypes.IReference
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IReferenceElement, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IReferenceElement")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "extensions":
-			theExtensions, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readExtensionWithLookahead,
+			theExtensions, current, valueErr = readListOf(
+				decoder, current, readExtensionDispatched,
 			)
-
 		case "category":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theCategory, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theCategory = &value
-
 		case "idShort":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theIDShort, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theIDShort = &value
-
 		case "displayName":
-			theDisplayName, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringNameTypeWithLookahead,
+			theDisplayName, current, valueErr = readListOf(
+				decoder, current, readLangStringNameTypeDispatched,
 			)
-
 		case "description":
-			theDescription, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringTextTypeWithLookahead,
+			theDescription, current, valueErr = readListOf(
+				decoder, current, readLangStringTextTypeDispatched,
 			)
-
 		case "semanticId":
-			theSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "supplementalSemanticIds":
-			theSupplementalSemanticIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theSupplementalSemanticIDs, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		case "qualifiers":
-			theQualifiers, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readQualifierWithLookahead,
+			theQualifiers, current, valueErr = readListOf(
+				decoder, current, readQualifierDispatched,
 			)
-
 		case "embeddedDataSpecifications":
-			theEmbeddedDataSpecifications, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readEmbeddedDataSpecificationWithLookahead,
+			theEmbeddedDataSpecifications, current, valueErr = readListOf(
+				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
-
 		case "value":
-			theValue, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theValue, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	instance = aastypes.NewReferenceElement()
-	instance.SetExtensions(
-		theExtensions,
-	)
-	instance.SetCategory(
-		theCategory,
-	)
-	instance.SetIDShort(
-		theIDShort,
-	)
-	instance.SetDisplayName(
-		theDisplayName,
-	)
-	instance.SetDescription(
-		theDescription,
-	)
-	instance.SetSemanticID(
-		theSemanticID,
-	)
-	instance.SetSupplementalSemanticIDs(
-		theSupplementalSemanticIDs,
-	)
-	instance.SetQualifiers(
-		theQualifiers,
-	)
-	instance.SetEmbeddedDataSpecifications(
-		theEmbeddedDataSpecifications,
-	)
-	instance.SetValue(
-		theValue,
-	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IReferenceElement]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readReferenceElementWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IReferenceElement,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "referenceElement"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readReferenceElementAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
+	instance.SetExtensions(theExtensions)
+	instance.SetCategory(theCategory)
+	instance.SetIDShort(theIDShort)
+	instance.SetDisplayName(theDisplayName)
+	instance.SetDescription(theDescription)
+	instance.SetSemanticID(theSemanticID)
+	instance.SetSupplementalSemanticIDs(theSupplementalSemanticIDs)
+	instance.SetQualifiers(theQualifiers)
+	instance.SetEmbeddedDataSpecifications(theEmbeddedDataSpecifications)
+	instance.SetValue(theValue)
 	return
 }
 
@@ -5720,260 +2808,95 @@ func readBlobAsSequence(
 	foundContentType := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IBlob, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IBlob")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "extensions":
-			theExtensions, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readExtensionWithLookahead,
+			theExtensions, current, valueErr = readListOf(
+				decoder, current, readExtensionDispatched,
 			)
-
 		case "category":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theCategory, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theCategory = &value
-
 		case "idShort":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theIDShort, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theIDShort = &value
-
 		case "displayName":
-			theDisplayName, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringNameTypeWithLookahead,
+			theDisplayName, current, valueErr = readListOf(
+				decoder, current, readLangStringNameTypeDispatched,
 			)
-
 		case "description":
-			theDescription, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringTextTypeWithLookahead,
+			theDescription, current, valueErr = readListOf(
+				decoder, current, readLangStringTextTypeDispatched,
 			)
-
 		case "semanticId":
-			theSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "supplementalSemanticIds":
-			theSupplementalSemanticIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theSupplementalSemanticIDs, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		case "qualifiers":
-			theQualifiers, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readQualifierWithLookahead,
+			theQualifiers, current, valueErr = readListOf(
+				decoder, current, readQualifierDispatched,
 			)
-
 		case "embeddedDataSpecifications":
-			theEmbeddedDataSpecifications, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readEmbeddedDataSpecificationWithLookahead,
+			theEmbeddedDataSpecifications, current, valueErr = readListOf(
+				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
-
 		case "value":
 			theValue, current, valueErr = readTextAsBase64EncodedBytes(
-				decoder,
-				current,
+				decoder, current,
 			)
-
 		case "contentType":
 			theContentType, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundContentType = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundContentType {
-		err = newDeserializationError(
-			"The required property 'contentType' is missing",
-		)
+		err = missingProperty("contentType")
 		return
 	}
 
 	instance = aastypes.NewBlob(
 		theContentType,
 	)
-	instance.SetExtensions(
-		theExtensions,
-	)
-	instance.SetCategory(
-		theCategory,
-	)
-	instance.SetIDShort(
-		theIDShort,
-	)
-	instance.SetDisplayName(
-		theDisplayName,
-	)
-	instance.SetDescription(
-		theDescription,
-	)
-	instance.SetSemanticID(
-		theSemanticID,
-	)
-	instance.SetSupplementalSemanticIDs(
-		theSupplementalSemanticIDs,
-	)
-	instance.SetQualifiers(
-		theQualifiers,
-	)
-	instance.SetEmbeddedDataSpecifications(
-		theEmbeddedDataSpecifications,
-	)
-	instance.SetValue(
-		theValue,
-	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IBlob]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readBlobWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IBlob,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "blob"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readBlobAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
+	instance.SetExtensions(theExtensions)
+	instance.SetCategory(theCategory)
+	instance.SetIDShort(theIDShort)
+	instance.SetDisplayName(theDisplayName)
+	instance.SetDescription(theDescription)
+	instance.SetSemanticID(theSemanticID)
+	instance.SetSupplementalSemanticIDs(theSupplementalSemanticIDs)
+	instance.SetQualifiers(theQualifiers)
+	instance.SetEmbeddedDataSpecifications(theEmbeddedDataSpecifications)
+	instance.SetValue(theValue)
 	return
 }
 
@@ -6005,262 +2928,95 @@ func readFileAsSequence(
 	foundContentType := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IFile, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IFile")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "extensions":
-			theExtensions, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readExtensionWithLookahead,
+			theExtensions, current, valueErr = readListOf(
+				decoder, current, readExtensionDispatched,
 			)
-
 		case "category":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theCategory, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theCategory = &value
-
 		case "idShort":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theIDShort, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theIDShort = &value
-
 		case "displayName":
-			theDisplayName, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringNameTypeWithLookahead,
+			theDisplayName, current, valueErr = readListOf(
+				decoder, current, readLangStringNameTypeDispatched,
 			)
-
 		case "description":
-			theDescription, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringTextTypeWithLookahead,
+			theDescription, current, valueErr = readListOf(
+				decoder, current, readLangStringTextTypeDispatched,
 			)
-
 		case "semanticId":
-			theSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "supplementalSemanticIds":
-			theSupplementalSemanticIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theSupplementalSemanticIDs, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		case "qualifiers":
-			theQualifiers, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readQualifierWithLookahead,
+			theQualifiers, current, valueErr = readListOf(
+				decoder, current, readQualifierDispatched,
 			)
-
 		case "embeddedDataSpecifications":
-			theEmbeddedDataSpecifications, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readEmbeddedDataSpecificationWithLookahead,
+			theEmbeddedDataSpecifications, current, valueErr = readListOf(
+				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
-
 		case "value":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theValue, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theValue = &value
-
 		case "contentType":
 			theContentType, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundContentType = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundContentType {
-		err = newDeserializationError(
-			"The required property 'contentType' is missing",
-		)
+		err = missingProperty("contentType")
 		return
 	}
 
 	instance = aastypes.NewFile(
 		theContentType,
 	)
-	instance.SetExtensions(
-		theExtensions,
-	)
-	instance.SetCategory(
-		theCategory,
-	)
-	instance.SetIDShort(
-		theIDShort,
-	)
-	instance.SetDisplayName(
-		theDisplayName,
-	)
-	instance.SetDescription(
-		theDescription,
-	)
-	instance.SetSemanticID(
-		theSemanticID,
-	)
-	instance.SetSupplementalSemanticIDs(
-		theSupplementalSemanticIDs,
-	)
-	instance.SetQualifiers(
-		theQualifiers,
-	)
-	instance.SetEmbeddedDataSpecifications(
-		theEmbeddedDataSpecifications,
-	)
-	instance.SetValue(
-		theValue,
-	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IFile]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readFileWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IFile,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "file"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readFileAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
+	instance.SetExtensions(theExtensions)
+	instance.SetCategory(theCategory)
+	instance.SetIDShort(theIDShort)
+	instance.SetDisplayName(theDisplayName)
+	instance.SetDescription(theDescription)
+	instance.SetSemanticID(theSemanticID)
+	instance.SetSupplementalSemanticIDs(theSupplementalSemanticIDs)
+	instance.SetQualifiers(theQualifiers)
+	instance.SetEmbeddedDataSpecifications(theEmbeddedDataSpecifications)
+	instance.SetValue(theValue)
 	return
 }
 
@@ -6294,185 +3050,89 @@ func readAnnotatedRelationshipElementAsSequence(
 	foundSecond := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IAnnotatedRelationshipElement, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IAnnotatedRelationshipElement")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "extensions":
-			theExtensions, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readExtensionWithLookahead,
+			theExtensions, current, valueErr = readListOf(
+				decoder, current, readExtensionDispatched,
 			)
-
 		case "category":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theCategory, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theCategory = &value
-
 		case "idShort":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theIDShort, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theIDShort = &value
-
 		case "displayName":
-			theDisplayName, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringNameTypeWithLookahead,
+			theDisplayName, current, valueErr = readListOf(
+				decoder, current, readLangStringNameTypeDispatched,
 			)
-
 		case "description":
-			theDescription, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringTextTypeWithLookahead,
+			theDescription, current, valueErr = readListOf(
+				decoder, current, readLangStringTextTypeDispatched,
 			)
-
 		case "semanticId":
-			theSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "supplementalSemanticIds":
-			theSupplementalSemanticIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theSupplementalSemanticIDs, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		case "qualifiers":
-			theQualifiers, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readQualifierWithLookahead,
+			theQualifiers, current, valueErr = readListOf(
+				decoder, current, readQualifierDispatched,
 			)
-
 		case "embeddedDataSpecifications":
-			theEmbeddedDataSpecifications, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readEmbeddedDataSpecificationWithLookahead,
+			theEmbeddedDataSpecifications, current, valueErr = readListOf(
+				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
-
 		case "first":
-			theFirst, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theFirst, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
 			foundFirst = true
-
 		case "second":
-			theSecond, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSecond, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
 			foundSecond = true
-
 		case "annotations":
-			theAnnotations, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readDataElementWithLookahead,
+			theAnnotations, current, valueErr = readListOf(
+				decoder, current, readDataElementDispatched,
 			)
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundFirst {
-		err = newDeserializationError(
-			"The required property 'first' is missing",
-		)
+		err = missingProperty("first")
 		return
 	}
 
 	if !foundSecond {
-		err = newDeserializationError(
-			"The required property 'second' is missing",
-		)
+		err = missingProperty("second")
 		return
 	}
 
@@ -6480,90 +3140,16 @@ func readAnnotatedRelationshipElementAsSequence(
 		theFirst,
 		theSecond,
 	)
-	instance.SetExtensions(
-		theExtensions,
-	)
-	instance.SetCategory(
-		theCategory,
-	)
-	instance.SetIDShort(
-		theIDShort,
-	)
-	instance.SetDisplayName(
-		theDisplayName,
-	)
-	instance.SetDescription(
-		theDescription,
-	)
-	instance.SetSemanticID(
-		theSemanticID,
-	)
-	instance.SetSupplementalSemanticIDs(
-		theSupplementalSemanticIDs,
-	)
-	instance.SetQualifiers(
-		theQualifiers,
-	)
-	instance.SetEmbeddedDataSpecifications(
-		theEmbeddedDataSpecifications,
-	)
-	instance.SetAnnotations(
-		theAnnotations,
-	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IAnnotatedRelationshipElement]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readAnnotatedRelationshipElementWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IAnnotatedRelationshipElement,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "annotatedRelationshipElement"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readAnnotatedRelationshipElementAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
+	instance.SetExtensions(theExtensions)
+	instance.SetCategory(theCategory)
+	instance.SetIDShort(theIDShort)
+	instance.SetDisplayName(theDisplayName)
+	instance.SetDescription(theDescription)
+	instance.SetSemanticID(theSemanticID)
+	instance.SetSupplementalSemanticIDs(theSupplementalSemanticIDs)
+	instance.SetQualifiers(theQualifiers)
+	instance.SetEmbeddedDataSpecifications(theEmbeddedDataSpecifications)
+	instance.SetAnnotations(theAnnotations)
 	return
 }
 
@@ -6597,282 +3183,105 @@ func readEntityAsSequence(
 	foundEntityType := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IEntity, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IEntity")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "extensions":
-			theExtensions, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readExtensionWithLookahead,
+			theExtensions, current, valueErr = readListOf(
+				decoder, current, readExtensionDispatched,
 			)
-
 		case "category":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theCategory, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theCategory = &value
-
 		case "idShort":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theIDShort, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theIDShort = &value
-
 		case "displayName":
-			theDisplayName, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringNameTypeWithLookahead,
+			theDisplayName, current, valueErr = readListOf(
+				decoder, current, readLangStringNameTypeDispatched,
 			)
-
 		case "description":
-			theDescription, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringTextTypeWithLookahead,
+			theDescription, current, valueErr = readListOf(
+				decoder, current, readLangStringTextTypeDispatched,
 			)
-
 		case "semanticId":
-			theSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "supplementalSemanticIds":
-			theSupplementalSemanticIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theSupplementalSemanticIDs, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		case "qualifiers":
-			theQualifiers, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readQualifierWithLookahead,
+			theQualifiers, current, valueErr = readListOf(
+				decoder, current, readQualifierDispatched,
 			)
-
 		case "embeddedDataSpecifications":
-			theEmbeddedDataSpecifications, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readEmbeddedDataSpecificationWithLookahead,
+			theEmbeddedDataSpecifications, current, valueErr = readListOf(
+				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
-
 		case "statements":
-			theStatements, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readSubmodelElementWithLookahead,
+			theStatements, current, valueErr = readListOf(
+				decoder, current, readSubmodelElementDispatched,
 			)
-
 		case "entityType":
 			theEntityType, current, valueErr = readTextAsEntityType(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundEntityType = true
-
 		case "globalAssetId":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theGlobalAssetID, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theGlobalAssetID = &value
-
 		case "specificAssetIds":
-			theSpecificAssetIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readSpecificAssetIDWithLookahead,
+			theSpecificAssetIDs, current, valueErr = readListOf(
+				decoder, current, readSpecificAssetIDDispatched,
 			)
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundEntityType {
-		err = newDeserializationError(
-			"The required property 'entityType' is missing",
-		)
+		err = missingProperty("entityType")
 		return
 	}
 
 	instance = aastypes.NewEntity(
 		theEntityType,
 	)
-	instance.SetExtensions(
-		theExtensions,
-	)
-	instance.SetCategory(
-		theCategory,
-	)
-	instance.SetIDShort(
-		theIDShort,
-	)
-	instance.SetDisplayName(
-		theDisplayName,
-	)
-	instance.SetDescription(
-		theDescription,
-	)
-	instance.SetSemanticID(
-		theSemanticID,
-	)
-	instance.SetSupplementalSemanticIDs(
-		theSupplementalSemanticIDs,
-	)
-	instance.SetQualifiers(
-		theQualifiers,
-	)
-	instance.SetEmbeddedDataSpecifications(
-		theEmbeddedDataSpecifications,
-	)
-	instance.SetStatements(
-		theStatements,
-	)
-	instance.SetGlobalAssetID(
-		theGlobalAssetID,
-	)
-	instance.SetSpecificAssetIDs(
-		theSpecificAssetIDs,
-	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IEntity]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readEntityWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IEntity,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "entity"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readEntityAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
+	instance.SetExtensions(theExtensions)
+	instance.SetCategory(theCategory)
+	instance.SetIDShort(theIDShort)
+	instance.SetDisplayName(theDisplayName)
+	instance.SetDescription(theDescription)
+	instance.SetSemanticID(theSemanticID)
+	instance.SetSupplementalSemanticIDs(theSupplementalSemanticIDs)
+	instance.SetQualifiers(theQualifiers)
+	instance.SetEmbeddedDataSpecifications(theEmbeddedDataSpecifications)
+	instance.SetStatements(theStatements)
+	instance.SetGlobalAssetID(theGlobalAssetID)
+	instance.SetSpecificAssetIDs(theSpecificAssetIDs)
 	return
 }
 
@@ -7014,160 +3423,79 @@ func readEventPayloadAsSequence(
 	foundTimeStamp := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IEventPayload, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IEventPayload")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "source":
-			theSource, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSource, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
 			foundSource = true
-
 		case "sourceSemanticId":
-			theSourceSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSourceSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "observableReference":
-			theObservableReference, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theObservableReference, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
 			foundObservableReference = true
-
 		case "observableSemanticId":
-			theObservableSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theObservableSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "topic":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theTopic, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theTopic = &value
-
 		case "subjectId":
-			theSubjectID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSubjectID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "timeStamp":
 			theTimeStamp, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundTimeStamp = true
-
 		case "payload":
 			thePayload, current, valueErr = readTextAsBase64EncodedBytes(
-				decoder,
-				current,
+				decoder, current,
 			)
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundSource {
-		err = newDeserializationError(
-			"The required property 'source' is missing",
-		)
+		err = missingProperty("source")
 		return
 	}
 
 	if !foundObservableReference {
-		err = newDeserializationError(
-			"The required property 'observableReference' is missing",
-		)
+		err = missingProperty("observableReference")
 		return
 	}
 
 	if !foundTimeStamp {
-		err = newDeserializationError(
-			"The required property 'timeStamp' is missing",
-		)
+		err = missingProperty("timeStamp")
 		return
 	}
 
@@ -7176,128 +3504,11 @@ func readEventPayloadAsSequence(
 		theObservableReference,
 		theTimeStamp,
 	)
-	instance.SetSourceSemanticID(
-		theSourceSemanticID,
-	)
-	instance.SetObservableSemanticID(
-		theObservableSemanticID,
-	)
-	instance.SetTopic(
-		theTopic,
-	)
-	instance.SetSubjectID(
-		theSubjectID,
-	)
-	instance.SetPayload(
-		thePayload,
-	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IEventPayload]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readEventPayloadWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IEventPayload,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "eventPayload"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readEventPayloadAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
-	return
-}
-
-// De-serialize an instance of [aastypes.IEventElement]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readEventElementWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IEventElement,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	switch local {
-	case "basicEventElement":
-		instance, current, err = readBasicEventElementAsSequence(
-			decoder, current,
-		)
-	default:
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Unexpected start element %s as discriminator "+
-					"for IEventElement",
-				local,
-			),
-		)
-	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
+	instance.SetSourceSemanticID(theSourceSemanticID)
+	instance.SetObservableSemanticID(theObservableSemanticID)
+	instance.SetTopic(theTopic)
+	instance.SetSubjectID(theSubjectID)
+	instance.SetPayload(thePayload)
 	return
 }
 
@@ -7337,230 +3548,115 @@ func readBasicEventElementAsSequence(
 	foundState := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IBasicEventElement, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IBasicEventElement")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "extensions":
-			theExtensions, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readExtensionWithLookahead,
+			theExtensions, current, valueErr = readListOf(
+				decoder, current, readExtensionDispatched,
 			)
-
 		case "category":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theCategory, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theCategory = &value
-
 		case "idShort":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theIDShort, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theIDShort = &value
-
 		case "displayName":
-			theDisplayName, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringNameTypeWithLookahead,
+			theDisplayName, current, valueErr = readListOf(
+				decoder, current, readLangStringNameTypeDispatched,
 			)
-
 		case "description":
-			theDescription, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringTextTypeWithLookahead,
+			theDescription, current, valueErr = readListOf(
+				decoder, current, readLangStringTextTypeDispatched,
 			)
-
 		case "semanticId":
-			theSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "supplementalSemanticIds":
-			theSupplementalSemanticIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theSupplementalSemanticIDs, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		case "qualifiers":
-			theQualifiers, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readQualifierWithLookahead,
+			theQualifiers, current, valueErr = readListOf(
+				decoder, current, readQualifierDispatched,
 			)
-
 		case "embeddedDataSpecifications":
-			theEmbeddedDataSpecifications, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readEmbeddedDataSpecificationWithLookahead,
+			theEmbeddedDataSpecifications, current, valueErr = readListOf(
+				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
-
 		case "observed":
-			theObserved, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theObserved, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
 			foundObserved = true
-
 		case "direction":
 			theDirection, current, valueErr = readTextAsDirection(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundDirection = true
-
 		case "state":
 			theState, current, valueErr = readTextAsStateOfEvent(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundState = true
-
 		case "messageTopic":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theMessageTopic, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theMessageTopic = &value
-
 		case "messageBroker":
-			theMessageBroker, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theMessageBroker, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "lastUpdate":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theLastUpdate, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theLastUpdate = &value
-
 		case "minInterval":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theMinInterval, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theMinInterval = &value
-
 		case "maxInterval":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theMaxInterval, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theMaxInterval = &value
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundObserved {
-		err = newDeserializationError(
-			"The required property 'observed' is missing",
-		)
+		err = missingProperty("observed")
 		return
 	}
 
 	if !foundDirection {
-		err = newDeserializationError(
-			"The required property 'direction' is missing",
-		)
+		err = missingProperty("direction")
 		return
 	}
 
 	if !foundState {
-		err = newDeserializationError(
-			"The required property 'state' is missing",
-		)
+		err = missingProperty("state")
 		return
 	}
 
@@ -7569,102 +3665,20 @@ func readBasicEventElementAsSequence(
 		theDirection,
 		theState,
 	)
-	instance.SetExtensions(
-		theExtensions,
-	)
-	instance.SetCategory(
-		theCategory,
-	)
-	instance.SetIDShort(
-		theIDShort,
-	)
-	instance.SetDisplayName(
-		theDisplayName,
-	)
-	instance.SetDescription(
-		theDescription,
-	)
-	instance.SetSemanticID(
-		theSemanticID,
-	)
-	instance.SetSupplementalSemanticIDs(
-		theSupplementalSemanticIDs,
-	)
-	instance.SetQualifiers(
-		theQualifiers,
-	)
-	instance.SetEmbeddedDataSpecifications(
-		theEmbeddedDataSpecifications,
-	)
-	instance.SetMessageTopic(
-		theMessageTopic,
-	)
-	instance.SetMessageBroker(
-		theMessageBroker,
-	)
-	instance.SetLastUpdate(
-		theLastUpdate,
-	)
-	instance.SetMinInterval(
-		theMinInterval,
-	)
-	instance.SetMaxInterval(
-		theMaxInterval,
-	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IBasicEventElement]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readBasicEventElementWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IBasicEventElement,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "basicEventElement"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readBasicEventElementAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
+	instance.SetExtensions(theExtensions)
+	instance.SetCategory(theCategory)
+	instance.SetIDShort(theIDShort)
+	instance.SetDisplayName(theDisplayName)
+	instance.SetDescription(theDescription)
+	instance.SetSemanticID(theSemanticID)
+	instance.SetSupplementalSemanticIDs(theSupplementalSemanticIDs)
+	instance.SetQualifiers(theQualifiers)
+	instance.SetEmbeddedDataSpecifications(theEmbeddedDataSpecifications)
+	instance.SetMessageTopic(theMessageTopic)
+	instance.SetMessageBroker(theMessageBroker)
+	instance.SetLastUpdate(theLastUpdate)
+	instance.SetMinInterval(theMinInterval)
+	instance.SetMaxInterval(theMaxInterval)
 	return
 }
 
@@ -7695,265 +3709,93 @@ func readOperationAsSequence(
 	var theInoutputVariables []aastypes.IOperationVariable
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IOperation, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IOperation")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "extensions":
-			theExtensions, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readExtensionWithLookahead,
+			theExtensions, current, valueErr = readListOf(
+				decoder, current, readExtensionDispatched,
 			)
-
 		case "category":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theCategory, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theCategory = &value
-
 		case "idShort":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theIDShort, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theIDShort = &value
-
 		case "displayName":
-			theDisplayName, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringNameTypeWithLookahead,
+			theDisplayName, current, valueErr = readListOf(
+				decoder, current, readLangStringNameTypeDispatched,
 			)
-
 		case "description":
-			theDescription, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringTextTypeWithLookahead,
+			theDescription, current, valueErr = readListOf(
+				decoder, current, readLangStringTextTypeDispatched,
 			)
-
 		case "semanticId":
-			theSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "supplementalSemanticIds":
-			theSupplementalSemanticIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theSupplementalSemanticIDs, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		case "qualifiers":
-			theQualifiers, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readQualifierWithLookahead,
+			theQualifiers, current, valueErr = readListOf(
+				decoder, current, readQualifierDispatched,
 			)
-
 		case "embeddedDataSpecifications":
-			theEmbeddedDataSpecifications, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readEmbeddedDataSpecificationWithLookahead,
+			theEmbeddedDataSpecifications, current, valueErr = readListOf(
+				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
-
 		case "inputVariables":
-			theInputVariables, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readOperationVariableWithLookahead,
+			theInputVariables, current, valueErr = readListOf(
+				decoder, current, readOperationVariableDispatched,
 			)
-
 		case "outputVariables":
-			theOutputVariables, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readOperationVariableWithLookahead,
+			theOutputVariables, current, valueErr = readListOf(
+				decoder, current, readOperationVariableDispatched,
 			)
-
 		case "inoutputVariables":
-			theInoutputVariables, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readOperationVariableWithLookahead,
+			theInoutputVariables, current, valueErr = readListOf(
+				decoder, current, readOperationVariableDispatched,
 			)
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	instance = aastypes.NewOperation()
-	instance.SetExtensions(
-		theExtensions,
-	)
-	instance.SetCategory(
-		theCategory,
-	)
-	instance.SetIDShort(
-		theIDShort,
-	)
-	instance.SetDisplayName(
-		theDisplayName,
-	)
-	instance.SetDescription(
-		theDescription,
-	)
-	instance.SetSemanticID(
-		theSemanticID,
-	)
-	instance.SetSupplementalSemanticIDs(
-		theSupplementalSemanticIDs,
-	)
-	instance.SetQualifiers(
-		theQualifiers,
-	)
-	instance.SetEmbeddedDataSpecifications(
-		theEmbeddedDataSpecifications,
-	)
-	instance.SetInputVariables(
-		theInputVariables,
-	)
-	instance.SetOutputVariables(
-		theOutputVariables,
-	)
-	instance.SetInoutputVariables(
-		theInoutputVariables,
-	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IOperation]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readOperationWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IOperation,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "operation"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readOperationAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
+	instance.SetExtensions(theExtensions)
+	instance.SetCategory(theCategory)
+	instance.SetIDShort(theIDShort)
+	instance.SetDisplayName(theDisplayName)
+	instance.SetDescription(theDescription)
+	instance.SetSemanticID(theSemanticID)
+	instance.SetSupplementalSemanticIDs(theSupplementalSemanticIDs)
+	instance.SetQualifiers(theQualifiers)
+	instance.SetEmbeddedDataSpecifications(theEmbeddedDataSpecifications)
+	instance.SetInputVariables(theInputVariables)
+	instance.SetOutputVariables(theOutputVariables)
+	instance.SetInoutputVariables(theInoutputVariables)
 	return
 }
 
@@ -7975,105 +3817,39 @@ func readOperationVariableAsSequence(
 	foundValue := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IOperationVariable, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IOperationVariable")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "value":
-			theValue, valueErr =  readSubmodelElementWithLookahead(
-				decoder,
-				current,
+			theValue, current, valueErr = readElementDispatched(
+				decoder, current, readSubmodelElementDispatched,
 			)
-			// readSubmodelElementWithLookahead stops at the end element,
-			// so we look ahead to the next element, just after the end element.
-			if valueErr == nil {
-				current, valueErr = readNext(decoder, current)
-			}
 			foundValue = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundValue {
-		err = newDeserializationError(
-			"The required property 'value' is missing",
-		)
+		err = missingProperty("value")
 		return
 	}
 
@@ -8083,57 +3859,25 @@ func readOperationVariableAsSequence(
 	return
 }
 
-// De-serialize an instance of [aastypes.IOperationVariable]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.IOperationVariable] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readOperationVariableWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readOperationVariableDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
+	local string,
 ) (instance aastypes.IOperationVariable,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
+	switch local {
+	case "operationVariable":
+		instance, next, err = readOperationVariableAsSequence(decoder, current)
+	default:
+		err = unexpectedStartElement(local, "operationVariable")
 	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "operationVariable"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readOperationVariableAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -8161,235 +3905,78 @@ func readCapabilityAsSequence(
 	var theEmbeddedDataSpecifications []aastypes.IEmbeddedDataSpecification
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of ICapability, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "ICapability")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "extensions":
-			theExtensions, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readExtensionWithLookahead,
+			theExtensions, current, valueErr = readListOf(
+				decoder, current, readExtensionDispatched,
 			)
-
 		case "category":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theCategory, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theCategory = &value
-
 		case "idShort":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theIDShort, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theIDShort = &value
-
 		case "displayName":
-			theDisplayName, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringNameTypeWithLookahead,
+			theDisplayName, current, valueErr = readListOf(
+				decoder, current, readLangStringNameTypeDispatched,
 			)
-
 		case "description":
-			theDescription, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringTextTypeWithLookahead,
+			theDescription, current, valueErr = readListOf(
+				decoder, current, readLangStringTextTypeDispatched,
 			)
-
 		case "semanticId":
-			theSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "supplementalSemanticIds":
-			theSupplementalSemanticIDs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theSupplementalSemanticIDs, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		case "qualifiers":
-			theQualifiers, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readQualifierWithLookahead,
+			theQualifiers, current, valueErr = readListOf(
+				decoder, current, readQualifierDispatched,
 			)
-
 		case "embeddedDataSpecifications":
-			theEmbeddedDataSpecifications, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readEmbeddedDataSpecificationWithLookahead,
+			theEmbeddedDataSpecifications, current, valueErr = readListOf(
+				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	instance = aastypes.NewCapability()
-	instance.SetExtensions(
-		theExtensions,
-	)
-	instance.SetCategory(
-		theCategory,
-	)
-	instance.SetIDShort(
-		theIDShort,
-	)
-	instance.SetDisplayName(
-		theDisplayName,
-	)
-	instance.SetDescription(
-		theDescription,
-	)
-	instance.SetSemanticID(
-		theSemanticID,
-	)
-	instance.SetSupplementalSemanticIDs(
-		theSupplementalSemanticIDs,
-	)
-	instance.SetQualifiers(
-		theQualifiers,
-	)
-	instance.SetEmbeddedDataSpecifications(
-		theEmbeddedDataSpecifications,
-	)
-	return
-}
-
-// De-serialize an instance of [aastypes.ICapability]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readCapabilityWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.ICapability,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "capability"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readCapabilityAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
+	instance.SetExtensions(theExtensions)
+	instance.SetCategory(theCategory)
+	instance.SetIDShort(theIDShort)
+	instance.SetDisplayName(theDisplayName)
+	instance.SetDescription(theDescription)
+	instance.SetSemanticID(theSemanticID)
+	instance.SetSupplementalSemanticIDs(theSupplementalSemanticIDs)
+	instance.SetQualifiers(theQualifiers)
+	instance.SetEmbeddedDataSpecifications(theEmbeddedDataSpecifications)
 	return
 }
 
@@ -8419,241 +4006,107 @@ func readConceptDescriptionAsSequence(
 	foundID := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IConceptDescription, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IConceptDescription")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "extensions":
-			theExtensions, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readExtensionWithLookahead,
+			theExtensions, current, valueErr = readListOf(
+				decoder, current, readExtensionDispatched,
 			)
-
 		case "category":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theCategory, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theCategory = &value
-
 		case "idShort":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theIDShort, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theIDShort = &value
-
 		case "displayName":
-			theDisplayName, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringNameTypeWithLookahead,
+			theDisplayName, current, valueErr = readListOf(
+				decoder, current, readLangStringNameTypeDispatched,
 			)
-
 		case "description":
-			theDescription, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringTextTypeWithLookahead,
+			theDescription, current, valueErr = readListOf(
+				decoder, current, readLangStringTextTypeDispatched,
 			)
-
 		case "administration":
-			theAdministration, current, valueErr =  readAdministrativeInformationAsSequence(
-				decoder,
-				current,
+			theAdministration, current, valueErr = readAdministrativeInformationAsSequence(
+				decoder, current,
 			)
-
 		case "id":
 			theID, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundID = true
-
 		case "embeddedDataSpecifications":
-			theEmbeddedDataSpecifications, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readEmbeddedDataSpecificationWithLookahead,
+			theEmbeddedDataSpecifications, current, valueErr = readListOf(
+				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
-
 		case "isCaseOf":
-			theIsCaseOf, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readReferenceWithLookahead,
+			theIsCaseOf, current, valueErr = readListOf(
+				decoder, current, readReferenceDispatched,
 			)
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundID {
-		err = newDeserializationError(
-			"The required property 'id' is missing",
-		)
+		err = missingProperty("id")
 		return
 	}
 
 	instance = aastypes.NewConceptDescription(
 		theID,
 	)
-	instance.SetExtensions(
-		theExtensions,
-	)
-	instance.SetCategory(
-		theCategory,
-	)
-	instance.SetIDShort(
-		theIDShort,
-	)
-	instance.SetDisplayName(
-		theDisplayName,
-	)
-	instance.SetDescription(
-		theDescription,
-	)
-	instance.SetAdministration(
-		theAdministration,
-	)
-	instance.SetEmbeddedDataSpecifications(
-		theEmbeddedDataSpecifications,
-	)
-	instance.SetIsCaseOf(
-		theIsCaseOf,
-	)
+	instance.SetExtensions(theExtensions)
+	instance.SetCategory(theCategory)
+	instance.SetIDShort(theIDShort)
+	instance.SetDisplayName(theDisplayName)
+	instance.SetDescription(theDescription)
+	instance.SetAdministration(theAdministration)
+	instance.SetEmbeddedDataSpecifications(theEmbeddedDataSpecifications)
+	instance.SetIsCaseOf(theIsCaseOf)
 	return
 }
 
-// De-serialize an instance of [aastypes.IConceptDescription]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.IConceptDescription] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readConceptDescriptionWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readConceptDescriptionDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
+	local string,
 ) (instance aastypes.IConceptDescription,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
+	switch local {
+	case "conceptDescription":
+		instance, next, err = readConceptDescriptionAsSequence(decoder, current)
+	default:
+		err = unexpectedStartElement(local, "conceptDescription")
 	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "conceptDescription"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readConceptDescriptionAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -8715,121 +4168,53 @@ func readReferenceAsSequence(
 	foundKeys := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IReference, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IReference")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "type":
 			theType, current, valueErr = readTextAsReferenceTypes(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundType = true
-
 		case "referredSemanticId":
-			theReferredSemanticID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theReferredSemanticID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "keys":
-			theKeys, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readKeyWithLookahead,
+			theKeys, current, valueErr = readListOf(
+				decoder, current, readKeyDispatched,
 			)
 			foundKeys = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundType {
-		err = newDeserializationError(
-			"The required property 'type' is missing",
-		)
+		err = missingProperty("type")
 		return
 	}
 
 	if !foundKeys {
-		err = newDeserializationError(
-			"The required property 'keys' is missing",
-		)
+		err = missingProperty("keys")
 		return
 	}
 
@@ -8837,63 +4222,29 @@ func readReferenceAsSequence(
 		theType,
 		theKeys,
 	)
-	instance.SetReferredSemanticID(
-		theReferredSemanticID,
-	)
+	instance.SetReferredSemanticID(theReferredSemanticID)
 	return
 }
 
-// De-serialize an instance of [aastypes.IReference]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.IReference] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readReferenceWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readReferenceDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
+	local string,
 ) (instance aastypes.IReference,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
+	switch local {
+	case "reference":
+		instance, next, err = readReferenceAsSequence(decoder, current)
+	default:
+		err = unexpectedStartElement(local, "reference")
 	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "reference"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readReferenceAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -8917,114 +4268,49 @@ func readKeyAsSequence(
 	foundValue := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IKey, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IKey")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "type":
 			theType, current, valueErr = readTextAsKeyTypes(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundType = true
-
 		case "value":
 			theValue, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundValue = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundType {
-		err = newDeserializationError(
-			"The required property 'type' is missing",
-		)
+		err = missingProperty("type")
 		return
 	}
 
 	if !foundValue {
-		err = newDeserializationError(
-			"The required property 'value' is missing",
-		)
+		err = missingProperty("value")
 		return
 	}
 
@@ -9035,57 +4321,25 @@ func readKeyAsSequence(
 	return
 }
 
-// De-serialize an instance of [aastypes.IKey]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.IKey] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readKeyWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readKeyDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
+	local string,
 ) (instance aastypes.IKey,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
+	switch local {
+	case "key":
+		instance, next, err = readKeyAsSequence(decoder, current)
+	default:
+		err = unexpectedStartElement(local, "key")
 	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "key"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readKeyAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -9163,75 +4417,6 @@ func readTextAsDataTypeDefXSD(
 	return
 }
 
-// De-serialize an instance of [aastypes.IAbstractLangString]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readAbstractLangStringWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IAbstractLangString,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	switch local {
-	case "langStringDefinitionTypeIec61360":
-		instance, current, err = readLangStringDefinitionTypeIEC61360AsSequence(
-			decoder, current,
-		)
-	case "langStringNameType":
-		instance, current, err = readLangStringNameTypeAsSequence(
-			decoder, current,
-		)
-	case "langStringPreferredNameTypeIec61360":
-		instance, current, err = readLangStringPreferredNameTypeIEC61360AsSequence(
-			decoder, current,
-		)
-	case "langStringShortNameTypeIec61360":
-		instance, current, err = readLangStringShortNameTypeIEC61360AsSequence(
-			decoder, current,
-		)
-	case "langStringTextType":
-		instance, current, err = readLangStringTextTypeAsSequence(
-			decoder, current,
-		)
-	default:
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Unexpected start element %s as discriminator "+
-					"for IAbstractLangString",
-				local,
-			),
-		)
-	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
-	return
-}
-
 // De-serialize the instance of [aastypes.ILangStringNameType]
 // as a sequence of XML elements, each representing a property
 // of [aastypes.ILangStringNameType].
@@ -9252,114 +4437,49 @@ func readLangStringNameTypeAsSequence(
 	foundText := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of ILangStringNameType, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "ILangStringNameType")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "language":
 			theLanguage, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundLanguage = true
-
 		case "text":
 			theText, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundText = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundLanguage {
-		err = newDeserializationError(
-			"The required property 'language' is missing",
-		)
+		err = missingProperty("language")
 		return
 	}
 
 	if !foundText {
-		err = newDeserializationError(
-			"The required property 'text' is missing",
-		)
+		err = missingProperty("text")
 		return
 	}
 
@@ -9370,57 +4490,25 @@ func readLangStringNameTypeAsSequence(
 	return
 }
 
-// De-serialize an instance of [aastypes.ILangStringNameType]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.ILangStringNameType] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readLangStringNameTypeWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readLangStringNameTypeDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
+	local string,
 ) (instance aastypes.ILangStringNameType,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
+	switch local {
+	case "langStringNameType":
+		instance, next, err = readLangStringNameTypeAsSequence(decoder, current)
+	default:
+		err = unexpectedStartElement(local, "langStringNameType")
 	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "langStringNameType"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readLangStringNameTypeAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -9444,114 +4532,49 @@ func readLangStringTextTypeAsSequence(
 	foundText := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of ILangStringTextType, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "ILangStringTextType")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "language":
 			theLanguage, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundLanguage = true
-
 		case "text":
 			theText, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundText = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundLanguage {
-		err = newDeserializationError(
-			"The required property 'language' is missing",
-		)
+		err = missingProperty("language")
 		return
 	}
 
 	if !foundText {
-		err = newDeserializationError(
-			"The required property 'text' is missing",
-		)
+		err = missingProperty("text")
 		return
 	}
 
@@ -9562,57 +4585,25 @@ func readLangStringTextTypeAsSequence(
 	return
 }
 
-// De-serialize an instance of [aastypes.ILangStringTextType]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.ILangStringTextType] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readLangStringTextTypeWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readLangStringTextTypeDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
+	local string,
 ) (instance aastypes.ILangStringTextType,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
+	switch local {
+	case "langStringTextType":
+		instance, next, err = readLangStringTextTypeAsSequence(decoder, current)
+	default:
+		err = unexpectedStartElement(local, "langStringTextType")
 	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "langStringTextType"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readLangStringTextTypeAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -9634,227 +4625,70 @@ func readEnvironmentAsSequence(
 	var theConceptDescriptions []aastypes.IConceptDescription
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IEnvironment, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IEnvironment")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "assetAdministrationShells":
-			theAssetAdministrationShells, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readAssetAdministrationShellWithLookahead,
+			theAssetAdministrationShells, current, valueErr = readListOf(
+				decoder, current, readAssetAdministrationShellDispatched,
 			)
-
 		case "submodels":
-			theSubmodels, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readSubmodelWithLookahead,
+			theSubmodels, current, valueErr = readListOf(
+				decoder, current, readSubmodelDispatched,
 			)
-
 		case "conceptDescriptions":
-			theConceptDescriptions, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readConceptDescriptionWithLookahead,
+			theConceptDescriptions, current, valueErr = readListOf(
+				decoder, current, readConceptDescriptionDispatched,
 			)
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	instance = aastypes.NewEnvironment()
-	instance.SetAssetAdministrationShells(
-		theAssetAdministrationShells,
-	)
-	instance.SetSubmodels(
-		theSubmodels,
-	)
-	instance.SetConceptDescriptions(
-		theConceptDescriptions,
-	)
+	instance.SetAssetAdministrationShells(theAssetAdministrationShells)
+	instance.SetSubmodels(theSubmodels)
+	instance.SetConceptDescriptions(theConceptDescriptions)
 	return
 }
 
-// De-serialize an instance of [aastypes.IEnvironment]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.IDataSpecificationContent] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readEnvironmentWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readDataSpecificationContentDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
-) (instance aastypes.IEnvironment,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "environment"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readEnvironmentAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
-	return
-}
-
-// De-serialize an instance of [aastypes.IDataSpecificationContent]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readDataSpecificationContentWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
+	local string,
 ) (instance aastypes.IDataSpecificationContent,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
 	switch local {
 	case "dataSpecificationIec61360":
-		instance, current, err = readDataSpecificationIEC61360AsSequence(
-			decoder, current,
-		)
+		instance, next, err = readDataSpecificationIEC61360AsSequence(decoder, current)
 	default:
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Unexpected start element %s as discriminator "+
-					"for IDataSpecificationContent",
-				local,
-			),
-		)
+		err = unexpectedDiscriminator(local, "IDataSpecificationContent")
 	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -9878,119 +4712,49 @@ func readEmbeddedDataSpecificationAsSequence(
 	foundDataSpecificationContent := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IEmbeddedDataSpecification, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IEmbeddedDataSpecification")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "dataSpecification":
-			theDataSpecification, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theDataSpecification, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
 			foundDataSpecification = true
-
 		case "dataSpecificationContent":
-			theDataSpecificationContent, valueErr =  readDataSpecificationContentWithLookahead(
-				decoder,
-				current,
+			theDataSpecificationContent, current, valueErr = readElementDispatched(
+				decoder, current, readDataSpecificationContentDispatched,
 			)
-			// readDataSpecificationContentWithLookahead stops at the end element,
-			// so we look ahead to the next element, just after the end element.
-			if valueErr == nil {
-				current, valueErr = readNext(decoder, current)
-			}
 			foundDataSpecificationContent = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundDataSpecification {
-		err = newDeserializationError(
-			"The required property 'dataSpecification' is missing",
-		)
+		err = missingProperty("dataSpecification")
 		return
 	}
 
 	if !foundDataSpecificationContent {
-		err = newDeserializationError(
-			"The required property 'dataSpecificationContent' is missing",
-		)
+		err = missingProperty("dataSpecificationContent")
 		return
 	}
 
@@ -10001,57 +4765,25 @@ func readEmbeddedDataSpecificationAsSequence(
 	return
 }
 
-// De-serialize an instance of [aastypes.IEmbeddedDataSpecification]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.IEmbeddedDataSpecification] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readEmbeddedDataSpecificationWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readEmbeddedDataSpecificationDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
+	local string,
 ) (instance aastypes.IEmbeddedDataSpecification,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
+	switch local {
+	case "embeddedDataSpecification":
+		instance, next, err = readEmbeddedDataSpecificationAsSequence(decoder, current)
+	default:
+		err = unexpectedStartElement(local, "embeddedDataSpecification")
 	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "embeddedDataSpecification"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readEmbeddedDataSpecificationAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -10116,142 +4848,69 @@ func readLevelTypeAsSequence(
 	foundMax := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of ILevelType, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "ILevelType")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "min":
 			theMin, current, valueErr = readTextAsBoolean(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundMin = true
-
 		case "nom":
 			theNom, current, valueErr = readTextAsBoolean(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundNom = true
-
 		case "typ":
 			theTyp, current, valueErr = readTextAsBoolean(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundTyp = true
-
 		case "max":
 			theMax, current, valueErr = readTextAsBoolean(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundMax = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundMin {
-		err = newDeserializationError(
-			"The required property 'min' is missing",
-		)
+		err = missingProperty("min")
 		return
 	}
 
 	if !foundNom {
-		err = newDeserializationError(
-			"The required property 'nom' is missing",
-		)
+		err = missingProperty("nom")
 		return
 	}
 
 	if !foundTyp {
-		err = newDeserializationError(
-			"The required property 'typ' is missing",
-		)
+		err = missingProperty("typ")
 		return
 	}
 
 	if !foundMax {
-		err = newDeserializationError(
-			"The required property 'max' is missing",
-		)
+		err = missingProperty("max")
 		return
 	}
 
@@ -10261,60 +4920,6 @@ func readLevelTypeAsSequence(
 		theTyp,
 		theMax,
 	)
-	return
-}
-
-// De-serialize an instance of [aastypes.ILevelType]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readLevelTypeWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.ILevelType,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "levelType"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readLevelTypeAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -10338,114 +4943,49 @@ func readValueReferencePairAsSequence(
 	foundValueID := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IValueReferencePair, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IValueReferencePair")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "value":
 			theValue, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundValue = true
-
 		case "valueId":
-			theValueID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theValueID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
 			foundValueID = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundValue {
-		err = newDeserializationError(
-			"The required property 'value' is missing",
-		)
+		err = missingProperty("value")
 		return
 	}
 
 	if !foundValueID {
-		err = newDeserializationError(
-			"The required property 'valueId' is missing",
-		)
+		err = missingProperty("valueId")
 		return
 	}
 
@@ -10456,57 +4996,25 @@ func readValueReferencePairAsSequence(
 	return
 }
 
-// De-serialize an instance of [aastypes.IValueReferencePair]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.IValueReferencePair] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readValueReferencePairWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readValueReferencePairDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
+	local string,
 ) (instance aastypes.IValueReferencePair,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
+	switch local {
+	case "valueReferencePair":
+		instance, next, err = readValueReferencePairAsSequence(decoder, current)
+	default:
+		err = unexpectedStartElement(local, "valueReferencePair")
 	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "valueReferencePair"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readValueReferencePairAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -10528,161 +5036,45 @@ func readValueListAsSequence(
 	foundValueReferencePairs := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IValueList, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IValueList")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "valueReferencePairs":
-			theValueReferencePairs, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readValueReferencePairWithLookahead,
+			theValueReferencePairs, current, valueErr = readListOf(
+				decoder, current, readValueReferencePairDispatched,
 			)
 			foundValueReferencePairs = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundValueReferencePairs {
-		err = newDeserializationError(
-			"The required property 'valueReferencePairs' is missing",
-		)
+		err = missingProperty("valueReferencePairs")
 		return
 	}
 
 	instance = aastypes.NewValueList(
 		theValueReferencePairs,
 	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IValueList]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readValueListWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IValueList,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "valueList"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readValueListAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -10706,114 +5098,49 @@ func readLangStringPreferredNameTypeIEC61360AsSequence(
 	foundText := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of ILangStringPreferredNameTypeIEC61360, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "ILangStringPreferredNameTypeIEC61360")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "language":
 			theLanguage, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundLanguage = true
-
 		case "text":
 			theText, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundText = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundLanguage {
-		err = newDeserializationError(
-			"The required property 'language' is missing",
-		)
+		err = missingProperty("language")
 		return
 	}
 
 	if !foundText {
-		err = newDeserializationError(
-			"The required property 'text' is missing",
-		)
+		err = missingProperty("text")
 		return
 	}
 
@@ -10824,57 +5151,25 @@ func readLangStringPreferredNameTypeIEC61360AsSequence(
 	return
 }
 
-// De-serialize an instance of [aastypes.ILangStringPreferredNameTypeIEC61360]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.ILangStringPreferredNameTypeIEC61360] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readLangStringPreferredNameTypeIEC61360WithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readLangStringPreferredNameTypeIEC61360Dispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
+	local string,
 ) (instance aastypes.ILangStringPreferredNameTypeIEC61360,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
+	switch local {
+	case "langStringPreferredNameTypeIec61360":
+		instance, next, err = readLangStringPreferredNameTypeIEC61360AsSequence(decoder, current)
+	default:
+		err = unexpectedStartElement(local, "langStringPreferredNameTypeIec61360")
 	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "langStringPreferredNameTypeIec61360"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readLangStringPreferredNameTypeIEC61360AsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -10898,114 +5193,49 @@ func readLangStringShortNameTypeIEC61360AsSequence(
 	foundText := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of ILangStringShortNameTypeIEC61360, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "ILangStringShortNameTypeIEC61360")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "language":
 			theLanguage, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundLanguage = true
-
 		case "text":
 			theText, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundText = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundLanguage {
-		err = newDeserializationError(
-			"The required property 'language' is missing",
-		)
+		err = missingProperty("language")
 		return
 	}
 
 	if !foundText {
-		err = newDeserializationError(
-			"The required property 'text' is missing",
-		)
+		err = missingProperty("text")
 		return
 	}
 
@@ -11016,57 +5246,25 @@ func readLangStringShortNameTypeIEC61360AsSequence(
 	return
 }
 
-// De-serialize an instance of [aastypes.ILangStringShortNameTypeIEC61360]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.ILangStringShortNameTypeIEC61360] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readLangStringShortNameTypeIEC61360WithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readLangStringShortNameTypeIEC61360Dispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
+	local string,
 ) (instance aastypes.ILangStringShortNameTypeIEC61360,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
+	switch local {
+	case "langStringShortNameTypeIec61360":
+		instance, next, err = readLangStringShortNameTypeIEC61360AsSequence(decoder, current)
+	default:
+		err = unexpectedStartElement(local, "langStringShortNameTypeIec61360")
 	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "langStringShortNameTypeIec61360"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readLangStringShortNameTypeIEC61360AsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -11090,114 +5288,49 @@ func readLangStringDefinitionTypeIEC61360AsSequence(
 	foundText := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of ILangStringDefinitionTypeIEC61360, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "ILangStringDefinitionTypeIEC61360")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "language":
 			theLanguage, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundLanguage = true
-
 		case "text":
 			theText, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundText = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundLanguage {
-		err = newDeserializationError(
-			"The required property 'language' is missing",
-		)
+		err = missingProperty("language")
 		return
 	}
 
 	if !foundText {
-		err = newDeserializationError(
-			"The required property 'text' is missing",
-		)
+		err = missingProperty("text")
 		return
 	}
 
@@ -11208,57 +5341,25 @@ func readLangStringDefinitionTypeIEC61360AsSequence(
 	return
 }
 
-// De-serialize an instance of [aastypes.ILangStringDefinitionTypeIEC61360]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.ILangStringDefinitionTypeIEC61360] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readLangStringDefinitionTypeIEC61360WithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readLangStringDefinitionTypeIEC61360Dispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
+	local string,
 ) (instance aastypes.ILangStringDefinitionTypeIEC61360,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
+	switch local {
+	case "langStringDefinitionTypeIec61360":
+		instance, next, err = readLangStringDefinitionTypeIEC61360AsSequence(decoder, current)
+	default:
+		err = unexpectedStartElement(local, "langStringDefinitionTypeIec61360")
 	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "langStringDefinitionTypeIec61360"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readLangStringDefinitionTypeIEC61360AsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -11291,274 +5392,201 @@ func readDataSpecificationIEC61360AsSequence(
 	foundPreferredName := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IDataSpecificationIEC61360, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IDataSpecificationIEC61360")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "preferredName":
-			thePreferredName, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringPreferredNameTypeIEC61360WithLookahead,
+			thePreferredName, current, valueErr = readListOf(
+				decoder, current, readLangStringPreferredNameTypeIEC61360Dispatched,
 			)
 			foundPreferredName = true
-
 		case "shortName":
-			theShortName, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringShortNameTypeIEC61360WithLookahead,
+			theShortName, current, valueErr = readListOf(
+				decoder, current, readLangStringShortNameTypeIEC61360Dispatched,
 			)
-
 		case "unit":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theUnit, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theUnit = &value
-
 		case "unitId":
-			theUnitID, current, valueErr =  readReferenceAsSequence(
-				decoder,
-				current,
+			theUnitID, current, valueErr = readReferenceAsSequence(
+				decoder, current,
 			)
-
 		case "sourceOfDefinition":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theSourceOfDefinition, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theSourceOfDefinition = &value
-
 		case "symbol":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theSymbol, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theSymbol = &value
-
 		case "dataType":
-			var value aastypes.DataTypeIEC61360
-			value, current, valueErr = readTextAsDataTypeIEC61360(
-				decoder,
-				current,
+			theDataType, current, valueErr = readOptional(
+				readTextAsDataTypeIEC61360(decoder, current),
 			)
-			theDataType = &value
-
 		case "definition":
-			theDefinition, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readLangStringDefinitionTypeIEC61360WithLookahead,
+			theDefinition, current, valueErr = readListOf(
+				decoder, current, readLangStringDefinitionTypeIEC61360Dispatched,
 			)
-
 		case "valueFormat":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theValueFormat, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theValueFormat = &value
-
 		case "valueList":
-			theValueList, current, valueErr =  readValueListAsSequence(
-				decoder,
-				current,
+			theValueList, current, valueErr = readValueListAsSequence(
+				decoder, current,
 			)
-
 		case "value":
-			var value string
-			value, current, valueErr = readText(
-				decoder,
-				current,
+			theValue, current, valueErr = readOptional(
+				readText(decoder, current),
 			)
-			theValue = &value
-
 		case "levelType":
-			theLevelType, current, valueErr =  readLevelTypeAsSequence(
-				decoder,
-				current,
+			theLevelType, current, valueErr = readLevelTypeAsSequence(
+				decoder, current,
 			)
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundPreferredName {
-		err = newDeserializationError(
-			"The required property 'preferredName' is missing",
-		)
+		err = missingProperty("preferredName")
 		return
 	}
 
 	instance = aastypes.NewDataSpecificationIEC61360(
 		thePreferredName,
 	)
-	instance.SetShortName(
-		theShortName,
-	)
-	instance.SetUnit(
-		theUnit,
-	)
-	instance.SetUnitID(
-		theUnitID,
-	)
-	instance.SetSourceOfDefinition(
-		theSourceOfDefinition,
-	)
-	instance.SetSymbol(
-		theSymbol,
-	)
-	instance.SetDataType(
-		theDataType,
-	)
-	instance.SetDefinition(
-		theDefinition,
-	)
-	instance.SetValueFormat(
-		theValueFormat,
-	)
-	instance.SetValueList(
-		theValueList,
-	)
-	instance.SetValue(
-		theValue,
-	)
-	instance.SetLevelType(
-		theLevelType,
-	)
+	instance.SetShortName(theShortName)
+	instance.SetUnit(theUnit)
+	instance.SetUnitID(theUnitID)
+	instance.SetSourceOfDefinition(theSourceOfDefinition)
+	instance.SetSymbol(theSymbol)
+	instance.SetDataType(theDataType)
+	instance.SetDefinition(theDefinition)
+	instance.SetValueFormat(theValueFormat)
+	instance.SetValueList(theValueList)
+	instance.SetValue(theValue)
+	instance.SetLevelType(theLevelType)
 	return
 }
 
-// De-serialize an instance of [aastypes.IDataSpecificationIEC61360]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.IClass] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readDataSpecificationIEC61360WithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readClassDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
-) (instance aastypes.IDataSpecificationIEC61360,
+	local string,
+) (instance aastypes.IClass,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "dataSpecificationIec61360"
-	if local != expectedLocal {
+	switch local {
+	case "extension":
+		instance, next, err = readExtensionAsSequence(decoder, current)
+	case "administrativeInformation":
+		instance, next, err = readAdministrativeInformationAsSequence(decoder, current)
+	case "qualifier":
+		instance, next, err = readQualifierAsSequence(decoder, current)
+	case "assetAdministrationShell":
+		instance, next, err = readAssetAdministrationShellAsSequence(decoder, current)
+	case "assetInformation":
+		instance, next, err = readAssetInformationAsSequence(decoder, current)
+	case "resource":
+		instance, next, err = readResourceAsSequence(decoder, current)
+	case "specificAssetId":
+		instance, next, err = readSpecificAssetIDAsSequence(decoder, current)
+	case "submodel":
+		instance, next, err = readSubmodelAsSequence(decoder, current)
+	case "relationshipElement":
+		instance, next, err = readRelationshipElementAsSequence(decoder, current)
+	case "submodelElementList":
+		instance, next, err = readSubmodelElementListAsSequence(decoder, current)
+	case "submodelElementCollection":
+		instance, next, err = readSubmodelElementCollectionAsSequence(decoder, current)
+	case "property":
+		instance, next, err = readPropertyAsSequence(decoder, current)
+	case "multiLanguageProperty":
+		instance, next, err = readMultiLanguagePropertyAsSequence(decoder, current)
+	case "range":
+		instance, next, err = readRangeAsSequence(decoder, current)
+	case "referenceElement":
+		instance, next, err = readReferenceElementAsSequence(decoder, current)
+	case "blob":
+		instance, next, err = readBlobAsSequence(decoder, current)
+	case "file":
+		instance, next, err = readFileAsSequence(decoder, current)
+	case "annotatedRelationshipElement":
+		instance, next, err = readAnnotatedRelationshipElementAsSequence(decoder, current)
+	case "entity":
+		instance, next, err = readEntityAsSequence(decoder, current)
+	case "eventPayload":
+		instance, next, err = readEventPayloadAsSequence(decoder, current)
+	case "basicEventElement":
+		instance, next, err = readBasicEventElementAsSequence(decoder, current)
+	case "operation":
+		instance, next, err = readOperationAsSequence(decoder, current)
+	case "operationVariable":
+		instance, next, err = readOperationVariableAsSequence(decoder, current)
+	case "capability":
+		instance, next, err = readCapabilityAsSequence(decoder, current)
+	case "conceptDescription":
+		instance, next, err = readConceptDescriptionAsSequence(decoder, current)
+	case "reference":
+		instance, next, err = readReferenceAsSequence(decoder, current)
+	case "key":
+		instance, next, err = readKeyAsSequence(decoder, current)
+	case "langStringNameType":
+		instance, next, err = readLangStringNameTypeAsSequence(decoder, current)
+	case "langStringTextType":
+		instance, next, err = readLangStringTextTypeAsSequence(decoder, current)
+	case "environment":
+		instance, next, err = readEnvironmentAsSequence(decoder, current)
+	case "embeddedDataSpecification":
+		instance, next, err = readEmbeddedDataSpecificationAsSequence(decoder, current)
+	case "levelType":
+		instance, next, err = readLevelTypeAsSequence(decoder, current)
+	case "valueReferencePair":
+		instance, next, err = readValueReferencePairAsSequence(decoder, current)
+	case "valueList":
+		instance, next, err = readValueListAsSequence(decoder, current)
+	case "langStringPreferredNameTypeIec61360":
+		instance, next, err = readLangStringPreferredNameTypeIEC61360AsSequence(decoder, current)
+	case "langStringShortNameTypeIec61360":
+		instance, next, err = readLangStringShortNameTypeIEC61360AsSequence(decoder, current)
+	case "langStringDefinitionTypeIec61360":
+		instance, next, err = readLangStringDefinitionTypeIEC61360AsSequence(decoder, current)
+	case "dataSpecificationIec61360":
+		instance, next, err = readDataSpecificationIEC61360AsSequence(decoder, current)
+	default:
 		err = newDeserializationError(
 			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
+				"Unexpected XML element name %s as class discriminator",
+				local,
 			),
 		)
-		return
 	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readDataSpecificationIEC61360AsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -11574,191 +5602,9 @@ func Unmarshal(
 		return
 	}
 
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
+	instance, _, err = readElementDispatched(
+		decoder, current, readClassDispatched,
 	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	switch local {
-		case "extension":
-			instance, current, err = readExtensionAsSequence(
-				decoder, current,
-			)
-		case "administrativeInformation":
-			instance, current, err = readAdministrativeInformationAsSequence(
-				decoder, current,
-			)
-		case "qualifier":
-			instance, current, err = readQualifierAsSequence(
-				decoder, current,
-			)
-		case "assetAdministrationShell":
-			instance, current, err = readAssetAdministrationShellAsSequence(
-				decoder, current,
-			)
-		case "assetInformation":
-			instance, current, err = readAssetInformationAsSequence(
-				decoder, current,
-			)
-		case "resource":
-			instance, current, err = readResourceAsSequence(
-				decoder, current,
-			)
-		case "specificAssetId":
-			instance, current, err = readSpecificAssetIDAsSequence(
-				decoder, current,
-			)
-		case "submodel":
-			instance, current, err = readSubmodelAsSequence(
-				decoder, current,
-			)
-		case "relationshipElement":
-			instance, current, err = readRelationshipElementAsSequence(
-				decoder, current,
-			)
-		case "submodelElementList":
-			instance, current, err = readSubmodelElementListAsSequence(
-				decoder, current,
-			)
-		case "submodelElementCollection":
-			instance, current, err = readSubmodelElementCollectionAsSequence(
-				decoder, current,
-			)
-		case "property":
-			instance, current, err = readPropertyAsSequence(
-				decoder, current,
-			)
-		case "multiLanguageProperty":
-			instance, current, err = readMultiLanguagePropertyAsSequence(
-				decoder, current,
-			)
-		case "range":
-			instance, current, err = readRangeAsSequence(
-				decoder, current,
-			)
-		case "referenceElement":
-			instance, current, err = readReferenceElementAsSequence(
-				decoder, current,
-			)
-		case "blob":
-			instance, current, err = readBlobAsSequence(
-				decoder, current,
-			)
-		case "file":
-			instance, current, err = readFileAsSequence(
-				decoder, current,
-			)
-		case "annotatedRelationshipElement":
-			instance, current, err = readAnnotatedRelationshipElementAsSequence(
-				decoder, current,
-			)
-		case "entity":
-			instance, current, err = readEntityAsSequence(
-				decoder, current,
-			)
-		case "eventPayload":
-			instance, current, err = readEventPayloadAsSequence(
-				decoder, current,
-			)
-		case "basicEventElement":
-			instance, current, err = readBasicEventElementAsSequence(
-				decoder, current,
-			)
-		case "operation":
-			instance, current, err = readOperationAsSequence(
-				decoder, current,
-			)
-		case "operationVariable":
-			instance, current, err = readOperationVariableAsSequence(
-				decoder, current,
-			)
-		case "capability":
-			instance, current, err = readCapabilityAsSequence(
-				decoder, current,
-			)
-		case "conceptDescription":
-			instance, current, err = readConceptDescriptionAsSequence(
-				decoder, current,
-			)
-		case "reference":
-			instance, current, err = readReferenceAsSequence(
-				decoder, current,
-			)
-		case "key":
-			instance, current, err = readKeyAsSequence(
-				decoder, current,
-			)
-		case "langStringNameType":
-			instance, current, err = readLangStringNameTypeAsSequence(
-				decoder, current,
-			)
-		case "langStringTextType":
-			instance, current, err = readLangStringTextTypeAsSequence(
-				decoder, current,
-			)
-		case "environment":
-			instance, current, err = readEnvironmentAsSequence(
-				decoder, current,
-			)
-		case "embeddedDataSpecification":
-			instance, current, err = readEmbeddedDataSpecificationAsSequence(
-				decoder, current,
-			)
-		case "levelType":
-			instance, current, err = readLevelTypeAsSequence(
-				decoder, current,
-			)
-		case "valueReferencePair":
-			instance, current, err = readValueReferencePairAsSequence(
-				decoder, current,
-			)
-		case "valueList":
-			instance, current, err = readValueListAsSequence(
-				decoder, current,
-			)
-		case "langStringPreferredNameTypeIec61360":
-			instance, current, err = readLangStringPreferredNameTypeIEC61360AsSequence(
-				decoder, current,
-			)
-		case "langStringShortNameTypeIec61360":
-			instance, current, err = readLangStringShortNameTypeIEC61360AsSequence(
-				decoder, current,
-			)
-		case "langStringDefinitionTypeIec61360":
-			instance, current, err = readLangStringDefinitionTypeIEC61360AsSequence(
-				decoder, current,
-			)
-		case "dataSpecificationIec61360":
-			instance, current, err = readDataSpecificationIEC61360AsSequence(
-				decoder, current,
-			)
-		default:
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Unexpected XML element name %s as class discriminator",
-						local,
-					),
-				)
-	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 

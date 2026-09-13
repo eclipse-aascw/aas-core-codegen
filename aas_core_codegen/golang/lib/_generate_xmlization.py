@@ -1,7 +1,7 @@
 """Generate code for XML de/serialization."""
 
 import io
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Set, Union
 
 from icontract import ensure, require
 
@@ -457,8 +457,6 @@ def _generate_check_start_element() -> Stripped:
 func checkStartElement(
 {I}current xml.StartElement,
 ) (err error) {{
-{I}const xmlnsLen = len("xmlns")
-
 {I}unexpectedAttr := 0
 {I}for _, attr := range current.Attr {{
 {II}if (attr.Name.Space == "" && attr.Name.Local == "xmlns") ||
@@ -657,23 +655,153 @@ type Scalar interface {{
     )
 
 
-def _generate_read_list_of_scalars() -> Stripped:
+def _generate_error_constructors() -> List[Stripped]:
+    """Generate the constructors of the recurring de-serialization errors."""
+    return [
+        Stripped(
+            f"""\
+// Report that the required property with the given `name` has not been observed.
+func missingProperty(name string) error {{
+{I}return newDeserializationError(
+{II}fmt.Sprintf(
+{III}"The required property '%s' is missing",
+{III}name,
+{II}),
+{I})
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Report that we got a start element with the `local` name, but expected a start
+// element with the `expectedLocal` name.
+func unexpectedStartElement(local string, expectedLocal string) error {{
+{I}return newDeserializationError(
+{II}fmt.Sprintf(
+{III}"Expected a start element with local name %s, "+
+{IIII}"but got a start element with local name %s",
+{III}expectedLocal, local,
+{II}),
+{I})
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Report that the start element with the `local` name does not discriminate any of
+// the alternatives of `expectedType`.
+func unexpectedDiscriminator(local string, expectedType string) error {{
+{I}return newDeserializationError(
+{II}fmt.Sprintf(
+{III}"Unexpected start element %s as discriminator for %s",
+{III}local, expectedType,
+{II}),
+{I})
+}}"""
+        ),
+        Stripped(
+            f"""\
+// Report that we got an item delimited by a start element with the `local` name,
+// but expected the delimiter with the `expectedLocal` name.
+func unexpectedItemElement(local string, expectedLocal string) error {{
+{I}return newDeserializationError(
+{II}fmt.Sprintf(
+{III}"Expected start element %s as an item delimiter, "+
+{IIII}"but got %s",
+{III}expectedLocal, local,
+{II}),
+{I})
+}}"""
+        ),
+    ]
+
+
+def _generate_read_element_dispatched() -> Stripped:
+    """Generate the function to read a single value wrapped in an XML element."""
     return Stripped(
         f"""\
-// Read a list of scalars, *i.e.*, non-instances as a sequence of `<v>` elements.
+// Read a value wrapped in a single XML element, dispatching on the local name of
+// that element.
 //
-// The item is serialized as text in the `<v>` element.
+// The element is read in full: the resulting `next` token points to the first token
+// just after the end element.
+//
+// This is the *only* place which frames an XML element around a value. Both
+// [readListOf] and the `readTuple*` functions delegate the framing here, so that
+// a scalar item and an instance item differ only in the given `readByLocal`, and
+// never in the container which reads them.
+//
+// `T` is left unconstrained (instead of `aastypes.IClass`) since this
+// function never invokes any `aastypes.IClass` method on `T` -- this lets it
+// be reused for a scalar and for a named union as well, the latter being
+// deliberately not an `aastypes.IClass` itself.
+func readElementDispatched[T any](
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+{I}readByLocal func(
+{II}aDecoder *xml.Decoder,
+{II}aCurrent xml.Token,
+{II}aLocal string,
+{I}) (value T, aNext xml.Token, anErr error),
+) (value T, next xml.Token, err error) {{
+{I}current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}var local string
+{I}local, err = parseAsStartElementAndExtractLocalName(current)
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}// Move the current to the content of the XML element
+{I}current, err = readNext(decoder, current)
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}value, current, err = readByLocal(decoder, current, local)
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}err = checkEndElement(current, local)
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}next, err = readNext(decoder, current)
+{I}return
+}}"""
+    )
+
+
+def _generate_read_list_of() -> Stripped:
+    """Generate the function to read a list of values as a sequence of XML elements."""
+    return Stripped(
+        f"""\
+// Read a list of values as a sequence of XML elements.
 //
 // Every start element is considered to mark the start of an item serialization. We
 // stop the reading as soon as we encounter a non-start element.
 //
 // That last non-start element is returned as `next` element.
-func readListOfScalars[T Scalar](
+//
+// An item is read with [readElementDispatched], so `readItem` decides on its own
+// which local names it accepts. A list of instances and a list of scalars therefore
+// share this one function: an instance is discriminated by its own element name,
+// while a scalar is expected in an element named `v`.
+//
+// `T` is left unconstrained (instead of `aastypes.IClass`) since this
+// function never invokes any `aastypes.IClass` method on `T` -- this lets it
+// be reused for a list of scalars and for a list of a named union as well,
+// the latter being deliberately not an `aastypes.IClass` itself.
+func readListOf[T any](
 {I}decoder *xml.Decoder,
 {I}current xml.Token,
-{I}readTextAsT func(
+{I}readItem func(
 {II}aDecoder *xml.Decoder,
 {II}aCurrent xml.Token,
+{II}aLocal string,
 {I}) (value T, aNext xml.Token, anErr error),
 ) (values []T, next xml.Token, err error) {{
 {I}i := 0
@@ -689,8 +817,8 @@ func readListOfScalars[T Scalar](
 
 {II}var value T
 {II}var valueErr error
-{II}value, current, valueErr = readScalarWithName(
-{III}decoder, current, "v", readTextAsT,
+{II}value, current, valueErr = readElementDispatched(
+{III}decoder, current, readItem,
 {II})
 {II}if valueErr != nil {{
 {III}if deseriaErr, ok := valueErr.(*DeserializationError); ok {{
@@ -713,54 +841,127 @@ func readListOfScalars[T Scalar](
     )
 
 
-def _generate_read_scalar_with_name() -> Stripped:
+def _generate_read_optional() -> Stripped:
+    """Generate the function to turn a just-read value into a pointer."""
     return Stripped(
         f"""\
-// Read a scalar, *i.e.*, a non-instance, wrapped in a single element bearing
-// the `expectedName`, as a positional item of a tuple.
+// Turn a just-read value into a pointer, so that it can be stored in an optional
+// property.
 //
-// The resulting `next` token points to the first token just after the wrapping
-// element.
-func readScalarWithName[T Scalar](
+// An optional is represented as a pointer, so the value has to live outside the
+// caller's frame. This allocates exactly the one value that the caller would
+// otherwise allocate by taking the address of its own local variable, and no more.
+//
+// The arguments are the *results* of a read, not the reader itself. Go passes
+// a multi-valued call on as a complete argument list, so this composes with any read,
+// no matter how many arguments that read takes on its own --
+// `readOptional(readTextAsLong(decoder, current))` just as much as
+// `readOptional(readTuple2(decoder, current, readXAtV1, readYAtV2))`, which no
+// reader-taking signature could express, since the item readers of a tuple vary in
+// number and in type.
+func readOptional[T any](
+{I}value T,
+{I}current xml.Token,
+{I}err error,
+) (*T, xml.Token, error) {{
+{I}if err != nil {{
+{II}return nil, current, err
+{I}}}
+
+{I}return &value, current, nil
+}}"""
+    )
+
+
+def _generate_next_property() -> Stripped:
+    """Generate the function to advance to the next property of an instance."""
+    return Stripped(
+        f"""\
+// Advance to the next property of an instance serialized as a sequence of XML
+// elements, and return the `local` name of the corresponding start element.
+//
+// The resulting `next` token points to the content of that element.
+//
+// If there are no more properties, `ok` is false and `next` points to the token
+// which stopped the reading, be it a non-start element or [eof].
+//
+// `interfaceName` is only used for error reporting.
+func nextProperty(
 {I}decoder *xml.Decoder,
 {I}current xml.Token,
-{I}expectedName string,
-{I}readTextAsT func(
-{II}aDecoder *xml.Decoder,
-{II}aCurrent xml.Token,
-{I}) (value T, aNext xml.Token, anErr error),
-) (value T, next xml.Token, err error) {{
+{I}interfaceName string,
+) (local string, next xml.Token, ok bool, err error) {{
 {I}current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
 {I}if err != nil {{
 {II}return
 {I}}}
 
-{I}var local string
-{I}local, err = parseAsStartElementAndExtractLocalName(
-{II}current,
-{I})
+{I}if _, isEOF := current.(eof); isEOF {{
+{II}next = current
+{II}return
+{I}}}
+
+{I}startElement, isStartElement := current.(xml.StartElement)
+{I}if !isStartElement {{
+{II}if charData, isCharData := current.(xml.CharData); isCharData {{
+{III}err = newDeserializationError(
+{IIII}fmt.Sprintf(
+{IIIII}"Expected a sequence of XML elements representing properties "+
+{IIIIII}"of %s, but got text: %s",
+{IIIII}interfaceName, string(charData),
+{IIII}),
+{III})
+{III}return
+{II}}}
+
+{II}next = current
+{II}return
+{I}}}
+
+{I}local, err = extractLocalNameFromStartElement(startElement)
 {I}if err != nil {{
 {II}return
 {I}}}
 
-{I}if local != expectedName {{
-{II}err = newDeserializationError(
-{III}fmt.Sprintf(
-{IIII}"Expected start element %s as a tuple item delimiter, "+
-{IIIII}"but got %s",
-{IIII}expectedName, local,
-{III}),
-{II})
-{II}return
-{I}}}
-
-{I}// Move the current to the value
-{I}current, err = readNext(decoder, current)
+{I}// Move the current to the content of the XML element
+{I}next, err = readNext(decoder, current)
 {I}if err != nil {{
 {II}return
 {I}}}
 
-{I}value, current, err = readTextAsT(decoder, current)
+{I}ok = true
+{I}return
+}}"""
+    )
+
+
+def _generate_conclude_property() -> Stripped:
+    """Generate the function to conclude the reading of a single property."""
+    return Stripped(
+        f"""\
+// Conclude the reading of the property delimited by the element with the `local`
+// name.
+//
+// If `valueErr` is set, report it in the context of that property. Otherwise,
+// consume the end element, so that the resulting `next` token points to the first
+// token just after it.
+func concludeProperty(
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+{I}local string,
+{I}valueErr error,
+) (next xml.Token, err error) {{
+{I}if valueErr != nil {{
+{II}if deseriaErr, ok := valueErr.(*DeserializationError); ok {{
+{III}deseriaErr.Path.PrependName(
+{IIII}&aasreporting.NameSegment{{Name: local}},
+{III})
+{II}}}
+{II}err = valueErr
+{II}return
+{I}}}
+
+{I}current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
 {I}if err != nil {{
 {II}return
 {I}}}
@@ -776,163 +977,6 @@ func readScalarWithName[T Scalar](
     )
 
 
-def _generate_read_list_of_instances() -> Stripped:
-    return Stripped(
-        f"""\
-// Read a list of AAS instances as a sequence of XML elements.
-//
-// Every start element is considered to mark the start of an instance serialization. We
-// stop the reading as soon as we encounter a non-start element.
-//
-// That last non-start element is returned as `next` element.
-//
-// `T` is left unconstrained (instead of `aastypes.IClass`) since this
-// function never invokes any `aastypes.IClass` method on `T` -- this lets it
-// be reused for a list of a named union as well, which is deliberately not
-// an `aastypes.IClass` itself.
-func readListOfInstances[T any](
-{I}decoder *xml.Decoder,
-{I}current xml.Token,
-{I}readTWithLookahead func(
-{II}aDecoder *xml.Decoder,
-{II}aCurrent xml.Token,
-{I}) (anInstance T, anErr error),
-) (instances []T, next xml.Token, err error) {{
-{I}i := 0
-{I}for {{
-{II}current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-{II}if err != nil {{
-{III}return
-{II}}}
-
-{II}if _, ok := current.(xml.StartElement); !ok {{
-{III}break
-{II}}}
-
-{II}var instance T
-{II}var instanceErr error
-{II}instance, instanceErr = readTWithLookahead(decoder, current)
-{II}if instanceErr != nil {{
-{III}if deseriaErr, ok := instanceErr.(*DeserializationError); ok {{
-{IIII}deseriaErr.Path.PrependIndex(
-{IIIII}&aasreporting.IndexSegment{{Index: i}},
-{IIII})
-{III}}}
-{III}err = instanceErr
-{III}return
-{II}}}
-
-{II}instances = append(instances, instance)
-
-{II}i++
-
-{II}current, err = readNext(decoder, nil)
-{II}if err != nil {{
-{III}return
-{II}}}
-{I}}}
-
-{I}next = current
-{I}return
-}}"""
-    )
-
-
-def _generate_as_scalar_tuple_item_reader() -> Stripped:
-    """
-    Generate the adapter to bind a scalar reader's name for a tuple item.
-
-    ``readTupleN`` (see :py:func:`_generate_read_tuple_helper`) expects a
-    uniform ``func(decoder, current) (T, xml.Token, error)`` per item, so
-    that a single generic function can be shared by *every* tuple-typed
-    property of a given arity, regardless of which mix of scalar and
-    instance items appears at each position (an instance item is adapted
-    instead by :py:func:`_generate_as_instance_tuple_item_reader`). A scalar
-    item, unlike a list item, is wrapped in a positional element name
-    (``v1``, ``v2``, *etc.*) instead of always the fixed ``v`` -- this name
-    is a runtime string that differs at every call site, so it must be
-    bound in via a closure (Go has no partial-application syntax); this
-    adapter builds that closure once, instead of repeating it inline at
-    every such tuple item.
-    """
-    return Stripped(
-        f"""\
-// Adapt `readTextAsT` together with `expectedName` into a tuple item reader.
-//
-// `expectedName` (`v1`, `v2`, ...) is a plain runtime string, not a type,
-// so it can not be pinned via a generic type parameter the way
-// `asInstanceTupleItemWriter` pins its own type parameter -- binding it
-// requires an actual closure, built once here.
-func asScalarTupleItemReader[T Scalar](
-{I}expectedName string,
-{I}readTextAsT func(
-{II}aDecoder *xml.Decoder,
-{II}aCurrent xml.Token,
-{I}) (value T, aNext xml.Token, anErr error),
-) func(decoder *xml.Decoder, current xml.Token) (T, xml.Token, error) {{
-{I}return func(decoder *xml.Decoder, current xml.Token) (T, xml.Token, error) {{
-{II}return readScalarWithName(decoder, current, expectedName, readTextAsT)
-{I}}}
-}}"""
-    )
-
-
-def _generate_as_instance_tuple_item_reader() -> Stripped:
-    """
-    Generate the adapter so an instance item reader fits a tuple item reader.
-
-    See :py:func:`_generate_as_scalar_tuple_item_reader` for why
-    ``readTupleN`` needs this uniform shape. An instance item, unlike a
-    scalar item, dispatches through its own element tag, so it needs no
-    name bound in -- but each class has its *own* ``read...WithLookahead``
-    function (there is no single shared reader for all classes, unlike
-    ``Marshal`` on the writing side), so this adapter must bind that
-    specific, varying function value in via a closure -- a type parameter
-    alone can not do it, since a function *value*, not just its type,
-    varies per call site. The bound function only returns the instance and
-    an error, not the next token either, so this closure also threads the
-    whitespace-skip and the advance-past-the-element steps that
-    :py:func:`_generate_read_list_of_instances` already performs inline for
-    list items.
-    """
-    return Stripped(
-        f"""\
-// Adapt `readTWithLookahead` into a tuple item reader.
-//
-// `readTWithLookahead` is a distinct function value per class (there is no
-// single shared "read any instance" function to instantiate generically),
-// so it must be bound in via a closure, built once here.
-//
-// `T` is left unconstrained (instead of `aastypes.IClass`) since this
-// function never invokes any `aastypes.IClass` method on `T` -- this lets it
-// be reused for a named union tuple item as well, which is deliberately not
-// an `aastypes.IClass` itself.
-func asInstanceTupleItemReader[T any](
-{I}readTWithLookahead func(
-{II}aDecoder *xml.Decoder,
-{II}aCurrent xml.Token,
-{I}) (anInstance T, anErr error),
-) func(decoder *xml.Decoder, current xml.Token) (T, xml.Token, error) {{
-{I}return func(
-{II}decoder *xml.Decoder, current xml.Token,
-{I}) (value T, next xml.Token, err error) {{
-{II}current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-{II}if err != nil {{
-{III}return
-{II}}}
-
-{II}value, err = readTWithLookahead(decoder, current)
-{II}if err != nil {{
-{III}return
-{II}}}
-
-{II}next, err = readNext(decoder, current)
-{II}return
-{I}}}
-}}"""
-    )
-
-
 @require(lambda arity: arity > 0)
 def _generate_read_tuple_helper(arity: int) -> Stripped:
     """Generate a generic function to read a tuple of the given ``arity``."""
@@ -943,7 +987,9 @@ def _generate_read_tuple_helper(arity: int) -> Stripped:
 
     params_joined = ",\n".join(
         f"readItem{i + 1} func(\n"
-        f"{I}decoder *xml.Decoder, current xml.Token,\n"
+        f"{I}aDecoder *xml.Decoder,\n"
+        f"{I}aCurrent xml.Token,\n"
+        f"{I}aLocal string,\n"
         f") ({type_params[i]}, xml.Token, error)"
         for i in range(arity)
     )
@@ -954,7 +1000,9 @@ def _generate_read_tuple_helper(arity: int) -> Stripped:
             Stripped(
                 f"""\
 var item{i + 1} {type_params[i]}
-item{i + 1}, current, err = readItem{i + 1}(decoder, current)
+item{i + 1}, current, err = readElementDispatched(
+{I}decoder, current, readItem{i + 1},
+)
 if err != nil {{
 {I}if deseriaErr, ok := err.(*DeserializationError); ok {{
 {II}deseriaErr.Path.PrependIndex(
@@ -976,6 +1024,10 @@ if err != nil {{
         f"""\
 // Read a tuple of {arity} item(s) with `readItem1`, `readItem2`, *etc.* on
 // the correspondingly positioned item, or return an error.
+//
+// Each item is framed by [readElementDispatched], so an item reader accepts or
+// rejects the positional element name (`v1`, `v2`, *etc.*) on its own for a scalar
+// item, and discriminates on the class element name for an instance item.
 func {function_name}[{type_params_joined}](
 {I}decoder *xml.Decoder,
 {I}current xml.Token,
@@ -1058,6 +1110,246 @@ assert all(
 )
 
 
+_SCALAR_NAME_BY_PRIMITIVE_TYPE = {
+    intermediate.PrimitiveType.BOOL: "boolean",
+    intermediate.PrimitiveType.INT: "long",
+    intermediate.PrimitiveType.FLOAT: "double",
+    intermediate.PrimitiveType.STR: "string",
+    intermediate.PrimitiveType.BYTEARRAY: "base64_encoded_bytes",
+}
+assert all(
+    literal in _SCALAR_NAME_BY_PRIMITIVE_TYPE for literal in intermediate.PrimitiveType
+)
+
+
+def _read_text_function(type_anno: intermediate.AtomicTypeAnnotation) -> Stripped:
+    """Determine the function which reads the text of a scalar ``type_anno``."""
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        return Stripped(_READ_FUNCTION_BY_PRIMITIVE_TYPE[primitive_type])
+
+    assert isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+        type_anno.our_type, intermediate.Enumeration
+    ), (
+        f"Expected a scalar type annotation, but got {type_anno}; "
+        f"the instances are read by dispatch on their own element name instead"
+    )
+
+    return Stripped(
+        golang_naming.private_function_name(
+            Identifier(f"read_text_as_{type_anno.our_type.name}")
+        )
+    )
+
+
+class _ScalarItemReader:
+    """
+    Specify a function which reads a scalar item wrapped in a fixed element name.
+
+    A scalar element is not self-describing: its name denotes its *position*, ``v``
+    in a list and ``v1``, ``v2``, *etc.* in a tuple, and never its type. The expected
+    name is therefore checked by the item reader itself, so that a container such as
+    :py:func:`_generate_read_list_of` needs to know nothing about its items. See
+    :py:func:`_generate_read_scalar_item` for the generated code.
+    """
+
+    def __init__(
+        self,
+        function_name: Identifier,
+        value_type: Stripped,
+        element_name: str,
+        read_text_function: Stripped,
+    ) -> None:
+        """Initialize with the given values."""
+        self.function_name = function_name
+        self.value_type = value_type
+        self.element_name = element_name
+        self.read_text_function = read_text_function
+
+
+def _to_scalar_item_reader(
+    type_anno: intermediate.AtomicTypeAnnotation, element_name: str
+) -> _ScalarItemReader:
+    """Determine the reader of a scalar ``type_anno`` wrapped in ``element_name``."""
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        scalar_name = _SCALAR_NAME_BY_PRIMITIVE_TYPE[primitive_type]
+    else:
+        assert isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+            type_anno.our_type, intermediate.Enumeration
+        ), (
+            f"Expected a scalar type annotation, but got {type_anno}; "
+            f"the instances are read by dispatch on their own element name instead"
+        )
+
+        scalar_name = type_anno.our_type.name
+
+    return _ScalarItemReader(
+        function_name=golang_naming.private_function_name(
+            Identifier(f"read_{scalar_name}_at_{element_name}")
+        ),
+        value_type=golang_common.generate_type(
+            type_annotation=type_anno, types_package=Identifier("aastypes")
+        ),
+        element_name=element_name,
+        read_text_function=_read_text_function(type_anno),
+    )
+
+
+def _item_reader_name(
+    type_anno: intermediate.AtomicTypeAnnotation, element_name: str
+) -> Stripped:
+    """
+    Determine the reader of an item of ``type_anno`` wrapped in ``element_name``.
+
+    An instance is read by dispatch on its own element name, so ``element_name`` is
+    disregarded in that case.
+    """
+    if isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+        type_anno.our_type,
+        (
+            intermediate.AbstractClass,
+            intermediate.ConcreteClass,
+            intermediate.NamedUnion,
+        ),
+    ):
+        return Stripped(
+            golang_naming.private_function_name(
+                Identifier(f"read_{type_anno.our_type.name}_dispatched")
+            )
+        )
+
+    return Stripped(_to_scalar_item_reader(type_anno, element_name).function_name)
+
+
+def _requires_dispatch(type_anno: intermediate.TypeAnnotation) -> bool:
+    """
+    Check whether a *single* property of ``type_anno`` is read by dispatch.
+
+    A single property of a concrete class without concrete descendants is wrapped in
+    an element named after the *property*, not after the class, so there is no
+    discriminator to dispatch on. Everything else polymorphic -- an abstract class,
+    a concrete class with concrete descendants, and a named union -- is wrapped twice,
+    the inner element naming the concrete alternative.
+    """
+    if not isinstance(type_anno, intermediate.OurTypeAnnotation):
+        return False
+
+    our_type = type_anno.our_type
+
+    if isinstance(our_type, intermediate.ConcreteClass):
+        return len(our_type.concrete_descendants) > 0
+
+    return isinstance(our_type, (intermediate.AbstractClass, intermediate.NamedUnion))
+
+
+class _ReadRequirements:
+    """Specify which of the optional read functions are actually needed."""
+
+    def __init__(
+        self,
+        dispatched_type_ids: Set[int],
+        scalar_item_readers: List[_ScalarItemReader],
+    ) -> None:
+        """Initialize with the given values."""
+        #: IDs of our types for which a ``read*Dispatched`` function must be generated
+        self.dispatched_type_ids = dispatched_type_ids
+
+        #: Scalar item readers to be generated, in the order of the first occurrence
+        self.scalar_item_readers = scalar_item_readers
+
+
+def _collect_read_requirements(
+    symbol_table: intermediate.SymbolTable,
+) -> _ReadRequirements:
+    """
+    Collect the read functions which are actually reachable from ``Unmarshal``.
+
+    ``Unmarshal`` dispatches to ``read*AsSequence`` of *every* concrete class, so
+    every concrete class is reachable, and it suffices to look at the properties of
+    the concrete classes: a ``read*Dispatched`` and a scalar item reader are called
+    only from a property read.
+    """
+    dispatched_type_ids = set()  # type: Set[int]
+
+    scalar_item_readers = []  # type: List[_ScalarItemReader]
+    observed_scalar_item_readers = set()  # type: Set[Identifier]
+
+    def require_item_reader(
+        item_type_anno: intermediate.AtomicTypeAnnotation, element_name: str
+    ) -> None:
+        """Require the reader of an item of ``item_type_anno`` in ``element_name``."""
+        if isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
+            item_type_anno.our_type,
+            (
+                intermediate.AbstractClass,
+                intermediate.ConcreteClass,
+                intermediate.NamedUnion,
+            ),
+        ):
+            dispatched_type_ids.add(id(item_type_anno.our_type))
+            return
+
+        scalar_item_reader = _to_scalar_item_reader(item_type_anno, element_name)
+        if scalar_item_reader.function_name not in observed_scalar_item_readers:
+            observed_scalar_item_readers.add(scalar_item_reader.function_name)
+            scalar_item_readers.append(scalar_item_reader)
+
+    for cls in symbol_table.concrete_classes:
+        for prop in cls.properties:
+            type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+            if isinstance(type_anno, intermediate.ListTypeAnnotation):
+                assert isinstance(
+                    type_anno.items, intermediate.AtomicTypeAnnotationAsTuple
+                )
+                require_item_reader(type_anno.items, "v")
+
+            elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+                for i, item_type_anno in enumerate(type_anno.items):
+                    assert isinstance(
+                        item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+                    )
+                    require_item_reader(item_type_anno, f"v{i + 1}")
+
+            elif _requires_dispatch(type_anno):
+                assert isinstance(type_anno, intermediate.OurTypeAnnotation)
+                dispatched_type_ids.add(id(type_anno.our_type))
+
+    return _ReadRequirements(
+        dispatched_type_ids=dispatched_type_ids,
+        scalar_item_readers=scalar_item_readers,
+    )
+
+
+def _generate_read_scalar_item(scalar_item_reader: _ScalarItemReader) -> Stripped:
+    """Generate the function to read a scalar item at a fixed element name."""
+    element_name_literal = golang_common.string_literal(scalar_item_reader.element_name)
+
+    return Stripped(
+        f"""\
+// Read a scalar item expected in the element `{scalar_item_reader.element_name}`.
+//
+// The `current` token is expected to point to the content of that element, and
+// the resulting `next` token points to its end element.
+func {scalar_item_reader.function_name}(
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+{I}local string,
+) (value {scalar_item_reader.value_type},
+{I}next xml.Token,
+{I}err error,
+) {{
+{I}if local != {element_name_literal} {{
+{II}err = unexpectedItemElement(local, {element_name_literal})
+{II}return
+{I}}}
+
+{I}return {scalar_item_reader.read_text_function}(decoder, current)
+}}"""
+    )
+
+
 def _generate_snippet_to_switch_on_property_deserialization(
     cls: intermediate.ConcreteClass,
 ) -> Stripped:
@@ -1080,7 +1372,7 @@ def _generate_snippet_to_switch_on_property_deserialization(
 
         xml_prop_literal = golang_common.string_literal(prop.xml_name)
 
-        case_body_blocks = []  # type: List[Stripped]
+        case_body = None  # type: Optional[Stripped]
 
         if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation) or (
             isinstance(type_anno, intermediate.OurTypeAnnotation)
@@ -1089,127 +1381,65 @@ def _generate_snippet_to_switch_on_property_deserialization(
                 (intermediate.ConstrainedPrimitive, intermediate.Enumeration),
             )
         ):
-            primitive_type = intermediate.try_primitive_type(type_anno)
+            read_text_function = _read_text_function(type_anno)
 
-            if primitive_type is not None:
-                read_function = _READ_FUNCTION_BY_PRIMITIVE_TYPE[primitive_type]
-            else:
-                assert isinstance(
-                    type_anno, intermediate.OurTypeAnnotation
-                ) and isinstance(type_anno.our_type, intermediate.Enumeration)
-
-                read_function = golang_naming.private_function_name(
-                    Identifier(f"read_text_as_{type_anno.our_type.name}")
-                )
-
-            pointer = golang_pointering.is_pointer_type(prop.type_annotation)
-
-            if pointer:
-                # NOTE (mristin, 2023-06-17):
-                # We explicitly pass in ``type_anno`` to the type as the read function
-                # will return a non-optional.
-                value_type = golang_common.generate_type(
-                    type_annotation=type_anno, types_package=Identifier("aastypes")
-                )
-
-                case_body_blocks.append(
-                    Stripped(
-                        f"""\
-var value {value_type}
-value, current, valueErr = {read_function}(
-{I}decoder,
-{I}current,
-)
-{prop_var} = &value"""
-                    )
-                )
-            else:
-                case_body_blocks.append(
-                    Stripped(
-                        f"""\
-{prop_var}, current, valueErr = {read_function}(
-{I}decoder,
-{I}current,
+            if golang_pointering.is_pointer_type(prop.type_annotation):
+                case_body = Stripped(
+                    f"""\
+{prop_var}, current, valueErr = readOptional(
+{I}{read_text_function}(decoder, current),
 )"""
-                    )
+                )
+            else:
+                case_body = Stripped(
+                    f"""\
+{prop_var}, current, valueErr = {read_text_function}(
+{I}decoder, current,
+)"""
                 )
 
         elif isinstance(type_anno, intermediate.OurTypeAnnotation):
             our_type = type_anno.our_type
 
-            if isinstance(our_type, intermediate.Enumeration):
-                raise AssertionError("Must have been handled before")
-
-            elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+            if isinstance(
+                our_type, (intermediate.Enumeration, intermediate.ConstrainedPrimitive)
+            ):
                 raise AssertionError("Must have been handled before")
 
             elif isinstance(
-                our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+                our_type,
+                (
+                    intermediate.AbstractClass,
+                    intermediate.ConcreteClass,
+                    intermediate.NamedUnion,
+                ),
             ):
-                if (
-                    isinstance(our_type, intermediate.ConcreteClass)
-                    and len(our_type.concrete_descendants) == 0
-                ):
-                    read_function = golang_naming.private_function_name(
-                        Identifier(f"read_{type_anno.our_type.name}_as_sequence")
+                if _requires_dispatch(type_anno):
+                    read_dispatched = golang_naming.private_function_name(
+                        Identifier(f"read_{our_type.name}_dispatched")
                     )
 
-                    case_body_blocks.append(
-                        Stripped(
-                            f"""\
-{prop_var}, current, valueErr =  {read_function}(
-{I}decoder,
-{I}current,
-)"""
-                        )
-                    )
-
-                else:
-                    read_with_lookahead_function = golang_naming.private_function_name(
-                        Identifier(f"read_{type_anno.our_type.name}_with_lookahead")
-                    )
-
-                    case_body_blocks.append(
-                        Stripped(
-                            f"""\
-{prop_var}, valueErr =  {read_with_lookahead_function}(
-{I}decoder,
-{I}current,
-)
-// {read_with_lookahead_function} stops at the end element,
-// so we look ahead to the next element, just after the end element.
-if valueErr == nil {{
-{I}current, valueErr = readNext(decoder, current)
-}}"""
-                        )
-                    )
-
-            elif isinstance(our_type, intermediate.NamedUnion):
-                # NOTE (mristin):
-                # A named union always takes the discriminator-nesting code
-                # path, exactly like a polymorphic class, so this branch
-                # mirrors the ``else`` branch above -- we keep it separate,
-                # as its own branch, so that it can diverge independently,
-                # *e.g.*, if primitive alternatives are ever allowed into
-                # a named union.
-                read_with_lookahead_function = golang_naming.private_function_name(
-                    Identifier(f"read_{type_anno.our_type.name}_with_lookahead")
-                )
-
-                case_body_blocks.append(
-                    Stripped(
+                    case_body = Stripped(
                         f"""\
-{prop_var}, valueErr =  {read_with_lookahead_function}(
-{I}decoder,
-{I}current,
-)
-// {read_with_lookahead_function} stops at the end element,
-// so we look ahead to the next element, just after the end element.
-if valueErr == nil {{
-{I}current, valueErr = readNext(decoder, current)
-}}"""
+{prop_var}, current, valueErr = readElementDispatched(
+{I}decoder, current, {read_dispatched},
+)"""
                     )
-                )
+                else:
+                    # NOTE (mristin):
+                    # The property is wrapped in an element named after the property
+                    # itself, and there is only a single alternative, so there is no
+                    # discriminating element in-between to dispatch on.
+                    read_as_sequence = golang_naming.private_function_name(
+                        Identifier(f"read_{our_type.name}_as_sequence")
+                    )
+
+                    case_body = Stripped(
+                        f"""\
+{prop_var}, current, valueErr = {read_as_sequence}(
+{I}decoder, current,
+)"""
+                    )
 
             else:
                 assert_never(our_type)
@@ -1223,193 +1453,66 @@ if valueErr == nil {{
                 f"Please contact the developers if you need this feature."
             )
 
-            items_primitive_type = intermediate.try_primitive_type(type_anno.items)
+            read_item = _item_reader_name(type_anno.items, "v")
 
-            if items_primitive_type is not None:
-                read_text_function = _READ_FUNCTION_BY_PRIMITIVE_TYPE[
-                    items_primitive_type
-                ]
-
-                case_body_blocks.append(
-                    Stripped(
-                        f"""\
-{prop_var}, current, valueErr = readListOfScalars(
-{I}decoder,
-{I}current,
-{I}{read_text_function},
+            case_body = Stripped(
+                f"""\
+{prop_var}, current, valueErr = readListOf(
+{I}decoder, current, {read_item},
 )"""
-                    )
-                )
-            else:
-                if isinstance(type_anno.items, intermediate.PrimitiveTypeAnnotation):
-                    raise AssertionError(
-                        "This code path should have been handled before, "
-                        "in the try-primitive-type branch."
-                    )
-
-                elif isinstance(type_anno.items, intermediate.OurTypeAnnotation):
-                    if isinstance(type_anno.items.our_type, intermediate.Enumeration):
-                        read_text_function = golang_naming.private_function_name(
-                            Identifier(f"read_text_as_{type_anno.items.our_type.name}")
-                        )
-
-                        case_body_blocks.append(
-                            Stripped(
-                                f"""\
-{prop_var}, current, valueErr = readListOfScalars(
-{I}decoder,
-{I}current,
-{I}{read_text_function},
-)"""
-                            )
-                        )
-                    elif isinstance(
-                        type_anno.items.our_type, intermediate.ConstrainedPrimitive
-                    ):
-                        raise AssertionError(
-                            "This code path should have been handled before, "
-                            "in the try-primitive-type branch."
-                        )
-                    elif isinstance(
-                        type_anno.items.our_type,
-                        (intermediate.AbstractClass, intermediate.ConcreteClass),
-                    ):
-                        read_item_function = golang_naming.private_function_name(
-                            Identifier(
-                                f"read_{type_anno.items.our_type.name}_with_lookahead"
-                            )
-                        )
-
-                        case_body_blocks.append(
-                            Stripped(
-                                f"""\
-{prop_var}, current, valueErr = readListOfInstances(
-{I}decoder,
-{I}current,
-{I}{read_item_function},
-)"""
-                            )
-                        )
-
-                    elif isinstance(type_anno.items.our_type, intermediate.NamedUnion):
-                        read_item_function = golang_naming.private_function_name(
-                            Identifier(
-                                f"read_{type_anno.items.our_type.name}_with_lookahead"
-                            )
-                        )
-
-                        case_body_blocks.append(
-                            Stripped(
-                                f"""\
-{prop_var}, current, valueErr = readListOfInstances(
-{I}decoder,
-{I}current,
-{I}{read_item_function},
-)"""
-                            )
-                        )
-
-                    else:
-                        # noinspection PyTypeChecker
-                        assert_never(type_anno.items.our_type)
-                else:
-                    # noinspection PyTypeChecker
-                    assert_never(type_anno.items)
+            )
 
         elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
             arity = len(type_anno.items)
 
-            item_reader_exprs = []  # type: List[Stripped]
-
+            item_readers = []  # type: List[Stripped]
             for i, item_type_anno in enumerate(type_anno.items):
-                if isinstance(
-                    item_type_anno, intermediate.OurTypeAnnotation
-                ) and isinstance(
-                    item_type_anno.our_type,
-                    (intermediate.AbstractClass, intermediate.ConcreteClass),
-                ):
-                    read_with_lookahead_function = golang_naming.private_function_name(
-                        Identifier(
-                            f"read_{item_type_anno.our_type.name}_with_lookahead"
-                        )
-                    )
+                assert isinstance(
+                    item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+                ), (
+                    f"NOTE (mristin): We expect only tuples of atomic values "
+                    f"at the moment, but you specified {type_anno}. "
+                    f"Please contact the developers if you need this feature."
+                )
 
-                    item_reader_exprs.append(
-                        Stripped(
-                            f"asInstanceTupleItemReader({read_with_lookahead_function}),"
-                        )
-                    )
+                item_readers.append(_item_reader_name(item_type_anno, f"v{i + 1}"))
 
-                elif isinstance(
-                    item_type_anno, intermediate.OurTypeAnnotation
-                ) and isinstance(item_type_anno.our_type, intermediate.NamedUnion):
-                    # NOTE (mristin):
-                    # A named union always takes the discriminator-nesting
-                    # code path, exactly like a polymorphic class, so this
-                    # branch mirrors the class branch above -- we keep it
-                    # separate, as its own branch, so that it can diverge
-                    # independently, *e.g.*, if primitive alternatives are
-                    # ever allowed into a named union.
-                    read_with_lookahead_function = golang_naming.private_function_name(
-                        Identifier(
-                            f"read_{item_type_anno.our_type.name}_with_lookahead"
-                        )
-                    )
+            item_readers_joined = "\n".join(
+                f"{item_reader}," for item_reader in item_readers
+            )
 
-                    item_reader_exprs.append(
-                        Stripped(
-                            f"asInstanceTupleItemReader({read_with_lookahead_function}),"
-                        )
-                    )
+            read_tuple = Stripped(
+                f"""\
+readTuple{arity}(
+{I}decoder, current,
+{I}{indent_but_first_line(item_readers_joined, I)}
+)"""
+            )
 
-                else:
-                    if isinstance(
-                        item_type_anno, intermediate.OurTypeAnnotation
-                    ) and isinstance(item_type_anno.our_type, intermediate.Enumeration):
-                        read_text_function = golang_naming.private_function_name(
-                            Identifier(f"read_text_as_{item_type_anno.our_type.name}")
-                        )
-                    else:
-                        items_primitive_type = intermediate.try_primitive_type(
-                            item_type_anno
-                        )
-                        assert items_primitive_type is not None
-                        read_text_function = _READ_FUNCTION_BY_PRIMITIVE_TYPE[
-                            items_primitive_type
-                        ]
-
-                    v_name_literal = golang_common.string_literal(f"v{i + 1}")
-
-                    item_reader_exprs.append(
-                        Stripped(
-                            f"asScalarTupleItemReader({v_name_literal}, {read_text_function}),"
-                        )
-                    )
-
-            item_reader_exprs_joined = "\n".join(item_reader_exprs)
-
-            case_body_blocks.append(
-                Stripped(
+            if golang_pointering.is_pointer_type(prop.type_annotation):
+                # NOTE (mristin):
+                # A tuple is represented as a Go struct, which is not nilable, so
+                # an optional tuple is a pointer, just like an optional scalar, and
+                # goes through the very same ``readOptional``.
+                case_body = Stripped(
                     f"""\
-{prop_var}, current, valueErr = readTuple{arity}(
-{I}decoder,
-{I}current,
-{I}{indent_but_first_line(item_reader_exprs_joined, I)}
+{prop_var}, current, valueErr = readOptional(
+{I}{indent_but_first_line(read_tuple, I)},
 )"""
                 )
-            )
+            else:
+                case_body = Stripped(f"{prop_var}, current, valueErr = {read_tuple}")
 
         else:
             # noinspection PyTypeChecker
             assert_never(type_anno)
 
-        assert len(case_body_blocks) > 0
+        assert case_body is not None
 
         if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
             found_var = golang_naming.variable_name(Identifier(f"found_{prop.name}"))
-            case_body_blocks.append(Stripped(f"{found_var} = true"))
+            case_body = Stripped(f"{case_body}\n{found_var} = true")
 
-        case_body = "\n".join(case_body_blocks)
         case_blocks.append(
             Stripped(
                 f"""\
@@ -1423,14 +1526,12 @@ case {xml_prop_literal}:
             f"""\
 default:
 {I}valueErr = newDeserializationError(
-{II}fmt.Sprintf(
-{III}"Unexpected property",
-{II}),
+{II}"Unexpected property",
 {I})"""
         )
     )
 
-    case_blocks_joined = "\n\n".join(case_blocks)
+    case_blocks_joined = "\n".join(case_blocks)
 
     return Stripped(
         f"""\
@@ -1443,6 +1544,7 @@ switch local {{
 
 def _generate_read_as_sequence(cls: intermediate.ConcreteClass) -> Stripped:
     interface_name = golang_naming.interface_name(cls.name)
+    interface_name_literal = golang_common.string_literal(interface_name)
 
     # region Initialize
 
@@ -1498,17 +1600,13 @@ def _generate_read_as_sequence(cls: intermediate.ConcreteClass) -> Stripped:
 
         found_var = golang_naming.variable_name(Identifier(f"found_{prop.name}"))
 
-        message_literal = golang_common.string_literal(
-            f"The required property {prop.xml_name!r} is missing"
-        )
+        xml_prop_literal = golang_common.string_literal(prop.xml_name)
 
         construct_blocks.append(
             Stripped(
                 f"""\
 if !{found_var} {{
-{I}err = newDeserializationError(
-{II}{message_literal},
-{I})
+{I}err = missingProperty({xml_prop_literal})
 {I}return
 }}"""
             )
@@ -1549,14 +1647,7 @@ instance = aastypes.{new_function}(
         setter_name = golang_naming.setter_name(arg.name)
         prop_var = golang_naming.variable_name(Identifier(f"the_{arg.name}"))
 
-        constructing_statements.append(
-            Stripped(
-                f"""\
-instance.{setter_name}(
-{I}{prop_var},
-)"""
-            )
-        )
+        constructing_statements.append(Stripped(f"instance.{setter_name}({prop_var})"))
 
     construct_blocks.append(Stripped("\n".join(constructing_statements)))
 
@@ -1586,77 +1677,22 @@ func {function_name}(
 {I}{indent_but_first_line(initialization, I)}
 
 {I}for {{
-{II}current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-{II}if err != nil {{
-{III}return
-{II}}}
-
-{II}if _, isEOF := current.(eof); isEOF {{
-{III}break
-{II}}}
-
-{II}startElement, ok := current.(xml.StartElement)
-{II}if !ok {{
-{III}if charData, isCharData := current.(xml.CharData); isCharData {{
-{IIII}err = newDeserializationError(
-{IIIII}fmt.Sprintf(
-{IIIIII}"Expected a sequence of XML elements representing properties "+
-{IIIIII}"of {interface_name}, but got text: %s",
-{IIIIII}string(charData),
-{IIIII}),
-{IIII})
-{IIII}return
-{III}}}
-
-{III}break
-{II}}}
-
 {II}var local string
-{II}local, err = extractLocalNameFromStartElement(startElement)
+{II}var ok bool
+{II}local, current, ok, err = nextProperty(decoder, current, {interface_name_literal})
 {II}if err != nil {{
 {III}return
 {II}}}
-
-{II}// Move the current to the content of the XML element
-{II}current, err = readNext(decoder, nil)
-{II}if err != nil {{
-{III}return
+{II}if !ok {{
+{III}break
 {II}}}
 
 {II}{indent_but_first_line(switch_snippet, II)}
 
-{II}if valueErr != nil {{
-{III}if deseriaErr, ok := valueErr.(*DeserializationError); ok {{
-{IIII}deseriaErr.Path.PrependName(
-{IIIII}&aasreporting.NameSegment{{Name: local}},
-{IIII})
-{III}}}
-{III}err = valueErr
-{II}}}
-
+{II}current, err = concludeProperty(decoder, current, local, valueErr)
 {II}if err != nil {{
 {III}return
 {II}}}
-
-{II}current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-{II}if err != nil {{
-{III}return
-{II}}}
-
-{II}err = checkEndElement(current, local)
-{II}if err != nil {{
-{III}return
-{II}}}
-
-{II}current, err = readNext(decoder, current)
-{II}if err != nil {{
-{III}return
-{II}}}
-{I}}}
-
-{I}current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-{I}if err != nil {{
-{II}return
 {I}}}
 
 {I}next = current
@@ -1667,312 +1703,136 @@ func {function_name}(
     )
 
 
-def _generate_read_with_lookahead_without_dispatch(
-    cls: intermediate.ConcreteClass,
+def _generate_read_dispatched(
+    our_type: Union[intermediate.ClassUnion, intermediate.NamedUnion]
 ) -> Stripped:
-    interface_name = golang_naming.interface_name(cls.name)
-    function_name = golang_naming.private_function_name(
-        Identifier(f"read_{cls.name}_with_lookahead")
-    )
+    """
+    Generate the function to read an instance of ``our_type`` by its element name.
 
-    xml_class_name_literal = golang_common.string_literal(
-        naming.xml_class_name(cls.name)
-    )
+    An instance element is self-describing: its local name *is* its type. This one
+    function covers every such case -- an abstract class dispatches over its concrete
+    descendants, a concrete class over its concrete descendants and itself, and
+    a named union over its implementers. A concrete class without concrete descendants
+    thus degenerates to a single alternative, which is still worth a function: it is
+    what lets [readListOf] and the ``readTuple*`` functions read an item without
+    knowing anything about it.
 
-    read_as_sequence_name = golang_naming.private_function_name(
-        Identifier(f"read_{cls.name}_as_sequence")
-    )
+    The element framing is deliberately *not* part of the generated function. It lives
+    in ``readElementDispatched`` alone (see
+    :py:func:`_generate_read_element_dispatched`), which every container delegates to.
+    """
+    if isinstance(our_type, intermediate.NamedUnion):
+        alternatives = list(
+            our_type.implementers
+        )  # type: List[intermediate.ConcreteClass]
+        union_name = golang_naming.union_name(our_type.name)
+        value_type = Stripped(f"*aastypes.{union_name}")
+        doc_reference = Stripped(f"aastypes.{union_name}")
+        default_error = Stripped(
+            f"unexpectedDiscriminator(local, "
+            f"{golang_common.string_literal(f'the union {union_name}')})"
+        )
+    else:
+        alternatives = list(our_type.concrete_descendants)
+        if isinstance(our_type, intermediate.ConcreteClass):
+            alternatives.append(our_type)
 
-    return Stripped(
-        f"""\
-// De-serialize an instance of [aastypes.{interface_name}]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func {function_name}(
-{I}decoder *xml.Decoder,
-{I}current xml.Token,
-) (instance aastypes.{interface_name},
-{I}err error,
-) {{
-{I}current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-{I}if err != nil {{
-{II}return
-{I}}}
+        interface_name = golang_naming.interface_name(our_type.name)
+        value_type = Stripped(f"aastypes.{interface_name}")
+        doc_reference = Stripped(f"aastypes.{interface_name}")
 
-{I}var local string
-{I}local, err = parseAsStartElementAndExtractLocalName(
-{II}current,
-{I})
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}expectedLocal := {xml_class_name_literal}
-{I}if local != expectedLocal {{
-{II}err = newDeserializationError(
-{III}fmt.Sprintf(
-{IIII}"Expected a start element with local name %s, "+
-{IIIII}"but got a start element with local name %s",
-{IIII}expectedLocal, local,
-{III}),
-{II})
-{II}return
-{I}}}
-
-{I}current, err = readNext(decoder, current)
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}instance, current, err = {read_as_sequence_name}(
-{II}decoder,
-{II}current,
-)
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}err = checkEndElement(current, local)
-{I}return
-}}"""
-    )
-
-
-@require(
-    lambda cls: len(cls.concrete_descendants) > 0,
-    "The class must have one or more concrete descendants; "
-    "otherwise the dispatch makes no sense",
-)
-def _generate_read_with_lookahead_with_dispatch(
-    cls: intermediate.ClassUnion,
-) -> Stripped:
-    interface_name = golang_naming.interface_name(cls.name)
-    function_name = golang_naming.private_function_name(
-        Identifier(f"read_{cls.name}_with_lookahead")
-    )
+        if isinstance(our_type, intermediate.ConcreteClass) and (
+            len(our_type.concrete_descendants) == 0
+        ):
+            # NOTE (mristin):
+            # There is only a single alternative, so naming it in the error message
+            # is more informative than pointing at a discriminator which does not
+            # actually discriminate anything.
+            default_error = Stripped(
+                f"unexpectedStartElement(local, "
+                f"{golang_common.string_literal(naming.xml_class_name(our_type.name))})"
+            )
+        else:
+            default_error = Stripped(
+                f"unexpectedDiscriminator(local, "
+                f"{golang_common.string_literal(interface_name)})"
+            )
 
     case_blocks = []  # type: List[Stripped]
 
-    for descendant_cls in cls.concrete_descendants:
+    for alternative in alternatives:
         xml_class_name_literal = golang_common.string_literal(
-            naming.xml_class_name(descendant_cls.name)
+            naming.xml_class_name(alternative.name)
         )
         read_as_sequence = golang_naming.private_function_name(
-            Identifier(f"read_{descendant_cls.name}_as_sequence")
+            Identifier(f"read_{alternative.name}_as_sequence")
         )
-        case_blocks.append(
-            Stripped(
-                f"""\
-case {xml_class_name_literal}:
-{I}instance, current, err = {read_as_sequence}(
-{II}decoder, current,
-{I})"""
+
+        if isinstance(our_type, intermediate.NamedUnion):
+            alternative_interface_name = golang_naming.interface_name(alternative.name)
+            from_function_name = golang_naming.function_name(
+                Identifier(f"new_{our_type.name}_from_{alternative.name}")
             )
-        )
 
-    if isinstance(cls, intermediate.ConcreteClass):
-        xml_class_name_literal = golang_common.string_literal(
-            naming.xml_class_name(cls.name)
-        )
-        read_as_sequence = golang_naming.private_function_name(
-            Identifier(f"read_{cls.name}_as_sequence")
-        )
-        case_blocks.append(
-            Stripped(
-                f"""\
+            case_blocks.append(
+                Stripped(
+                    f"""\
 case {xml_class_name_literal}:
-{I}instance, current, err = {read_as_sequence}(
-{II}decoder, current,
-{I})"""
-            )
-        )
-
-    case_blocks.append(
-        Stripped(
-            f"""\
-default:
-{I}err = newDeserializationError(
-{II}fmt.Sprintf(
-{III}"Unexpected start element %s as discriminator "+
-{IIII}"for {interface_name}",
-{III}local,
-{II}),
-{I})"""
-        )
-    )
-
-    case_blocks_joined = "\n".join(case_blocks)
-
-    switch_stmt = Stripped(
-        f"""\
-switch local {{
-{case_blocks_joined}
-}}"""
-    )
-
-    return Stripped(
-        f"""\
-// De-serialize an instance of [aastypes.{interface_name}]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func {function_name}(
-{I}decoder *xml.Decoder,
-{I}current xml.Token,
-) (instance aastypes.{interface_name},
-{I}err error,
-) {{
-{I}current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}var local string
-{I}local, err = parseAsStartElementAndExtractLocalName(
-{II}current,
-{I})
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}// Move the current to the properties of the instance
-{I}current, err = readNext(decoder, current)
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}{indent_but_first_line(switch_stmt, I)}
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}err = checkEndElement(current, local)
-{I}return
-}}"""
-    )
-
-
-def _generate_read_with_lookahead_for_named_union(
-    named_union: intermediate.NamedUnion,
-) -> Stripped:
-    """
-    Generate the de-serialization function for ``named_union``.
-
-    Unlike a class-typed property, a named-union-typed property always takes
-    the discriminator-nesting code path, so this dispatch is unconditional
-    and uniform, keyed by each implementer's own XML element name -- exactly
-    as for an abstract class with concrete descendants (see
-    :py:func:`_generate_read_with_lookahead_with_dispatch`), except that
-    every case additionally wraps the result into the union.
-    """
-    name = golang_naming.union_name(named_union.name)
-    function_name = golang_naming.private_function_name(
-        Identifier(f"read_{named_union.name}_with_lookahead")
-    )
-
-    case_blocks = []  # type: List[Stripped]
-
-    for implementer in named_union.implementers:
-        xml_class_name_literal = golang_common.string_literal(
-            naming.xml_class_name(implementer.name)
-        )
-        read_as_sequence = golang_naming.private_function_name(
-            Identifier(f"read_{implementer.name}_as_sequence")
-        )
-        implementer_interface_name = golang_naming.interface_name(implementer.name)
-        from_method_name = golang_naming.function_name(
-            Identifier(f"new_{named_union.name}_from_{implementer.name}")
-        )
-
-        case_blocks.append(
-            Stripped(
-                f"""\
-case {xml_class_name_literal}:
-{I}var casted aastypes.{implementer_interface_name}
-{I}casted, current, err = {read_as_sequence}(
-{II}decoder, current,
-{I})
+{I}var casted aastypes.{alternative_interface_name}
+{I}casted, next, err = {read_as_sequence}(decoder, current)
 {I}if err == nil {{
-{II}instance = aastypes.{from_method_name}(
-{III}casted,
-{II})
+{II}instance = aastypes.{from_function_name}(casted)
 {I}}}"""
+                )
             )
-        )
+        else:
+            case_blocks.append(
+                Stripped(
+                    f"""\
+case {xml_class_name_literal}:
+{I}instance, next, err = {read_as_sequence}(decoder, current)"""
+                )
+            )
 
     case_blocks.append(
         Stripped(
             f"""\
 default:
-{I}err = newDeserializationError(
-{II}fmt.Sprintf(
-{III}"Unexpected start element %s as discriminator "+
-{IIII}"for the union {name}",
-{III}local,
-{II}),
-{I})"""
+{I}err = {default_error}"""
         )
     )
 
     case_blocks_joined = "\n".join(case_blocks)
 
-    switch_stmt = Stripped(
-        f"""\
-switch local {{
-{case_blocks_joined}
-}}"""
+    function_name = golang_naming.private_function_name(
+        Identifier(f"read_{our_type.name}_dispatched")
     )
 
     return Stripped(
         f"""\
-// De-serialize an instance of [aastypes.{name}]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
+// De-serialize an instance of [{doc_reference}] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
 func {function_name}(
 {I}decoder *xml.Decoder,
 {I}current xml.Token,
-) (instance *aastypes.{name},
+{I}local string,
+) (instance {value_type},
+{I}next xml.Token,
 {I}err error,
 ) {{
-{I}current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-{I}if err != nil {{
-{II}return
+{I}switch local {{
+{I}{indent_but_first_line(case_blocks_joined, I)}
 {I}}}
-
-{I}var local string
-{I}local, err = parseAsStartElementAndExtractLocalName(
-{II}current,
-{I})
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}// Move the current to the properties of the instance
-{I}current, err = readNext(decoder, current)
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}{indent_but_first_line(switch_stmt, I)}
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}err = checkEndElement(current, local)
 {I}return
 }}"""
     )
 
 
-def _generate_unmarshal(symbol_table: intermediate.SymbolTable) -> Stripped:
+def _generate_read_class_dispatched(symbol_table: intermediate.SymbolTable) -> Stripped:
+    """Generate the function to read any instance by its element name."""
     case_blocks = []  # type: List[Stripped]
     for cls in symbol_table.concrete_classes:
         read_as_sequence = golang_naming.private_function_name(
@@ -1987,9 +1847,7 @@ def _generate_unmarshal(symbol_table: intermediate.SymbolTable) -> Stripped:
             Stripped(
                 f"""\
 case {xml_class_name_literal}:
-{I}instance, current, err = {read_as_sequence}(
-{II}decoder, current,
-{I})"""
+{I}instance, next, err = {read_as_sequence}(decoder, current)"""
             )
         )
 
@@ -1997,17 +1855,41 @@ case {xml_class_name_literal}:
         Stripped(
             f"""\
 default:
-{II}err = newDeserializationError(
-{III}fmt.Sprintf(
-{IIII}"Unexpected XML element name %s as class discriminator",
-{IIII}local,
-{III}),
-{II})"""
+{I}err = newDeserializationError(
+{II}fmt.Sprintf(
+{III}"Unexpected XML element name %s as class discriminator",
+{III}local,
+{II}),
+{I})"""
         )
     )
 
     case_blocks_joined = "\n".join(case_blocks)
 
+    return Stripped(
+        f"""\
+// De-serialize an instance of [aastypes.IClass] based on the `local` name
+// of its start element.
+//
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readClassDispatched(
+{I}decoder *xml.Decoder,
+{I}current xml.Token,
+{I}local string,
+) (instance aastypes.IClass,
+{I}next xml.Token,
+{I}err error,
+) {{
+{I}switch local {{
+{I}{indent_but_first_line(case_blocks_joined, I)}
+{I}}}
+{I}return
+}}"""
+    )
+
+
+def _generate_unmarshal() -> Stripped:
     return Stripped(
         f"""\
 // Unmarshal an instance of [aastypes.IClass] serialized as an XML element.
@@ -2022,33 +1904,9 @@ func Unmarshal(
 {II}return
 {I}}}
 
-{I}current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}var local string
-{I}local, err = parseAsStartElementAndExtractLocalName(
-{II}current,
+{I}instance, _, err = readElementDispatched(
+{II}decoder, current, readClassDispatched,
 {I})
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}// Move the current to the properties of the instance
-{I}current, err = readNext(decoder, current)
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}switch local {{
-{II}{indent_but_first_line(case_blocks_joined, II)}
-{I}}}
-{I}if err != nil {{
-{II}return
-{I}}}
-
-{I}err = checkEndElement(current, local)
 {I}return
 }}"""
     )
@@ -2370,9 +2228,12 @@ def _generate_as_instance_tuple_item_writer() -> Stripped:
     Generate the adapter so an instance can be written as a tuple item writer.
 
     See :py:func:`_generate_as_scalar_tuple_item_writer` for why
-    ``writeTupleN`` needs this uniform shape. Unlike the two adapters above
-    (and unlike :py:func:`_generate_as_instance_tuple_item_reader`), no
-    closure is needed here at all: every class shares the very same
+    ``writeTupleN`` needs this uniform shape. Unlike the scalar adapter
+    above -- and unlike the read side, which needs no adapter whatsoever,
+    as every item reader there is a generated top-level function (see
+    :py:func:`_generate_read_dispatched` and
+    :py:func:`_generate_read_scalar_item`) -- no closure is needed here at
+    all: every class shares the very same
     ``Marshal`` function (there is no per-class function value to bind in),
     so the only thing that varies per tuple item is the *type* parameter
     ``T``. ``Marshal`` itself takes the wide ``aastypes.IClass``, which can
@@ -3411,19 +3272,23 @@ const Namespace = {namespace_literal}"""
             _generate_extract_local_name_from_start_element(),
             _generate_parse_as_start_element_and_extract_local_name(),
             _generate_check_end_element(),
+            *_generate_error_constructors(),
             _generate_scalar_definition(),
-            _generate_read_scalar_with_name(),
-            _generate_read_list_of_scalars(),
-            _generate_read_list_of_instances(),
+            _generate_read_element_dispatched(),
+            _generate_read_list_of(),
+            _generate_read_optional(),
+            _generate_next_property(),
+            _generate_conclude_property(),
         ]
     )
 
-    tuple_arities = intermediate.tuple_arities(symbol_table)
-    if len(tuple_arities) > 0:
-        blocks.append(_generate_as_scalar_tuple_item_reader())
-        blocks.append(_generate_as_instance_tuple_item_reader())
-        for arity in tuple_arities:
-            blocks.append(_generate_read_tuple_helper(arity))
+    read_requirements = _collect_read_requirements(symbol_table)
+
+    for scalar_item_reader in read_requirements.scalar_item_readers:
+        blocks.append(_generate_read_scalar_item(scalar_item_reader=scalar_item_reader))
+
+    for arity in intermediate.tuple_arities(symbol_table):
+        blocks.append(_generate_read_tuple_helper(arity))
 
     errors = []  # type: List[Error]
 
@@ -3434,7 +3299,8 @@ const Namespace = {namespace_literal}"""
         elif isinstance(our_type, intermediate.ConstrainedPrimitive):
             pass
         elif isinstance(our_type, intermediate.AbstractClass):
-            blocks.append(_generate_read_with_lookahead_with_dispatch(cls=our_type))
+            if id(our_type) in read_requirements.dispatched_type_ids:
+                blocks.append(_generate_read_dispatched(our_type=our_type))
 
         elif isinstance(our_type, intermediate.ConcreteClass):
             if our_type.is_implementation_specific:
@@ -3456,20 +3322,19 @@ const Namespace = {namespace_literal}"""
             else:
                 blocks.append(_generate_read_as_sequence(cls=our_type))
 
-            if len(our_type.concrete_descendants) > 0:
-                blocks.append(_generate_read_with_lookahead_with_dispatch(cls=our_type))
-            else:
-                blocks.append(
-                    _generate_read_with_lookahead_without_dispatch(cls=our_type)
-                )
+            if id(our_type) in read_requirements.dispatched_type_ids:
+                blocks.append(_generate_read_dispatched(our_type=our_type))
+
         elif isinstance(our_type, intermediate.NamedUnion):
-            blocks.append(
-                _generate_read_with_lookahead_for_named_union(named_union=our_type)
-            )
+            if id(our_type) in read_requirements.dispatched_type_ids:
+                blocks.append(_generate_read_dispatched(our_type=our_type))
+
         else:
             assert_never(our_type)
 
-    blocks.append(_generate_unmarshal(symbol_table=symbol_table))
+    blocks.append(_generate_read_class_dispatched(symbol_table=symbol_table))
+
+    blocks.append(_generate_unmarshal())
 
     blocks.append(Stripped("// endregion"))
 
