@@ -382,8 +382,6 @@ const Namespace = "https://dummy.com"
 func checkStartElement(
 	current xml.StartElement,
 ) (err error) {
-	const xmlnsLen = len("xmlns")
-
 	unexpectedAttr := 0
 	for _, attr := range current.Attr {
 		if (attr.Name.Space == "" && attr.Name.Local == "xmlns") ||
@@ -551,6 +549,51 @@ func checkEndElement(current xml.Token, local string) (err error) {
 	return
 }
 
+// Report that the required property with the given `name` has not been observed.
+func missingProperty(name string) error {
+	return newDeserializationError(
+		fmt.Sprintf(
+			"The required property '%s' is missing",
+			name,
+		),
+	)
+}
+
+// Report that we got a start element with the `local` name, but expected a start
+// element with the `expectedLocal` name.
+func unexpectedStartElement(local string, expectedLocal string) error {
+	return newDeserializationError(
+		fmt.Sprintf(
+			"Expected a start element with local name %s, "+
+				"but got a start element with local name %s",
+			expectedLocal, local,
+		),
+	)
+}
+
+// Report that the start element with the `local` name does not discriminate any of
+// the alternatives of `expectedType`.
+func unexpectedDiscriminator(local string, expectedType string) error {
+	return newDeserializationError(
+		fmt.Sprintf(
+			"Unexpected start element %s as discriminator for %s",
+			local, expectedType,
+		),
+	)
+}
+
+// Report that we got an item delimited by a start element with the `local` name,
+// but expected the delimiter with the `expectedLocal` name.
+func unexpectedItemElement(local string, expectedLocal string) error {
+	return newDeserializationError(
+		fmt.Sprintf(
+			"Expected start element %s as an item delimiter, "+
+				"but got %s",
+			expectedLocal, local,
+		),
+	)
+}
+
 type Scalar interface {
 	~bool |
 	~int |
@@ -560,18 +603,28 @@ type Scalar interface {
 	~[]byte
 }
 
-// Read a scalar, *i.e.*, a non-instance, wrapped in a single element bearing
-// the `expectedName`, as a positional item of a tuple.
+// Read a value wrapped in a single XML element, dispatching on the local name of
+// that element.
 //
-// The resulting `next` token points to the first token just after the wrapping
-// element.
-func readScalarWithName[T Scalar](
+// The element is read in full: the resulting `next` token points to the first token
+// just after the end element.
+//
+// This is the *only* place which frames an XML element around a value. Both
+// [readListOf] and the `readTuple*` functions delegate the framing here, so that
+// a scalar item and an instance item differ only in the given `readByLocal`, and
+// never in the container which reads them.
+//
+// `T` is left unconstrained (instead of `aastypes.IClass`) since this
+// function never invokes any `aastypes.IClass` method on `T` -- this lets it
+// be reused for a scalar and for a named union as well, the latter being
+// deliberately not an `aastypes.IClass` itself.
+func readElementDispatched[T any](
 	decoder *xml.Decoder,
 	current xml.Token,
-	expectedName string,
-	readTextAsT func(
+	readByLocal func(
 		aDecoder *xml.Decoder,
 		aCurrent xml.Token,
+		aLocal string,
 	) (value T, aNext xml.Token, anErr error),
 ) (value T, next xml.Token, err error) {
 	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
@@ -580,31 +633,18 @@ func readScalarWithName[T Scalar](
 	}
 
 	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
+	local, err = parseAsStartElementAndExtractLocalName(current)
 	if err != nil {
 		return
 	}
 
-	if local != expectedName {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected start element %s as a tuple item delimiter, "+
-					"but got %s",
-				expectedName, local,
-			),
-		)
-		return
-	}
-
-	// Move the current to the value
+	// Move the current to the content of the XML element
 	current, err = readNext(decoder, current)
 	if err != nil {
 		return
 	}
 
-	value, current, err = readTextAsT(decoder, current)
+	value, current, err = readByLocal(decoder, current, local)
 	if err != nil {
 		return
 	}
@@ -618,20 +658,29 @@ func readScalarWithName[T Scalar](
 	return
 }
 
-// Read a list of scalars, *i.e.*, non-instances as a sequence of `<v>` elements.
-//
-// The item is serialized as text in the `<v>` element.
+// Read a list of values as a sequence of XML elements.
 //
 // Every start element is considered to mark the start of an item serialization. We
 // stop the reading as soon as we encounter a non-start element.
 //
 // That last non-start element is returned as `next` element.
-func readListOfScalars[T Scalar](
+//
+// An item is read with [readElementDispatched], so `readItem` decides on its own
+// which local names it accepts. A list of instances and a list of scalars therefore
+// share this one function: an instance is discriminated by its own element name,
+// while a scalar is expected in an element named `v`.
+//
+// `T` is left unconstrained (instead of `aastypes.IClass`) since this
+// function never invokes any `aastypes.IClass` method on `T` -- this lets it
+// be reused for a list of scalars and for a list of a named union as well,
+// the latter being deliberately not an `aastypes.IClass` itself.
+func readListOf[T any](
 	decoder *xml.Decoder,
 	current xml.Token,
-	readTextAsT func(
+	readItem func(
 		aDecoder *xml.Decoder,
 		aCurrent xml.Token,
+		aLocal string,
 	) (value T, aNext xml.Token, anErr error),
 ) (values []T, next xml.Token, err error) {
 	i := 0
@@ -647,8 +696,8 @@ func readListOfScalars[T Scalar](
 
 		var value T
 		var valueErr error
-		value, current, valueErr = readScalarWithName(
-			decoder, current, "v", readTextAsT,
+		value, current, valueErr = readElementDispatched(
+			decoder, current, readItem,
 		)
 		if valueErr != nil {
 			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
@@ -669,132 +718,153 @@ func readListOfScalars[T Scalar](
 	return
 }
 
-// Read a list of AAS instances as a sequence of XML elements.
+// Turn a just-read value into a pointer, so that it can be stored in an optional
+// property.
 //
-// Every start element is considered to mark the start of an instance serialization. We
-// stop the reading as soon as we encounter a non-start element.
+// An optional is represented as a pointer, so the value has to live outside the
+// caller's frame. This allocates exactly the one value that the caller would
+// otherwise allocate by taking the address of its own local variable, and no more.
 //
-// That last non-start element is returned as `next` element.
-//
-// `T` is left unconstrained (instead of `aastypes.IClass`) since this
-// function never invokes any `aastypes.IClass` method on `T` -- this lets it
-// be reused for a list of a named union as well, which is deliberately not
-// an `aastypes.IClass` itself.
-func readListOfInstances[T any](
-	decoder *xml.Decoder,
+// The arguments are the *results* of a read, not the reader itself. Go passes
+// a multi-valued call on as a complete argument list, so this composes with any read,
+// no matter how many arguments that read takes on its own --
+// `readOptional(readTextAsLong(decoder, current))` just as much as
+// `readOptional(readTuple2(decoder, current, readXAtV1, readYAtV2))`, which no
+// reader-taking signature could express, since the item readers of a tuple vary in
+// number and in type.
+func readOptional[T any](
+	value T,
 	current xml.Token,
-	readTWithLookahead func(
-		aDecoder *xml.Decoder,
-		aCurrent xml.Token,
-	) (anInstance T, anErr error),
-) (instances []T, next xml.Token, err error) {
-	i := 0
-	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, ok := current.(xml.StartElement); !ok {
-			break
-		}
-
-		var instance T
-		var instanceErr error
-		instance, instanceErr = readTWithLookahead(decoder, current)
-		if instanceErr != nil {
-			if deseriaErr, ok := instanceErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependIndex(
-					&aasreporting.IndexSegment{Index: i},
-				)
-			}
-			err = instanceErr
-			return
-		}
-
-		instances = append(instances, instance)
-
-		i++
-
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
-		}
+	err error,
+) (*T, xml.Token, error) {
+	if err != nil {
+		return nil, current, err
 	}
 
-	next = current
+	return &value, current, nil
+}
+
+// Advance to the next property of an instance serialized as a sequence of XML
+// elements, and return the `local` name of the corresponding start element.
+//
+// The resulting `next` token points to the content of that element.
+//
+// If there are no more properties, `ok` is false and `next` points to the token
+// which stopped the reading, be it a non-start element or [eof].
+//
+// `interfaceName` is only used for error reporting.
+func nextProperty(
+	decoder *xml.Decoder,
+	current xml.Token,
+	interfaceName string,
+) (local string, next xml.Token, ok bool, err error) {
+	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
+	if err != nil {
+		return
+	}
+
+	if _, isEOF := current.(eof); isEOF {
+		next = current
+		return
+	}
+
+	startElement, isStartElement := current.(xml.StartElement)
+	if !isStartElement {
+		if charData, isCharData := current.(xml.CharData); isCharData {
+			err = newDeserializationError(
+				fmt.Sprintf(
+					"Expected a sequence of XML elements representing properties "+
+						"of %s, but got text: %s",
+					interfaceName, string(charData),
+				),
+			)
+			return
+		}
+
+		next = current
+		return
+	}
+
+	local, err = extractLocalNameFromStartElement(startElement)
+	if err != nil {
+		return
+	}
+
+	// Move the current to the content of the XML element
+	next, err = readNext(decoder, current)
+	if err != nil {
+		return
+	}
+
+	ok = true
 	return
 }
 
-// Adapt `readTextAsT` together with `expectedName` into a tuple item reader.
+// Conclude the reading of the property delimited by the element with the `local`
+// name.
 //
-// `expectedName` (`v1`, `v2`, ...) is a plain runtime string, not a type,
-// so it can not be pinned via a generic type parameter the way
-// `asInstanceTupleItemWriter` pins its own type parameter -- binding it
-// requires an actual closure, built once here.
-func asScalarTupleItemReader[T Scalar](
-	expectedName string,
-	readTextAsT func(
-		aDecoder *xml.Decoder,
-		aCurrent xml.Token,
-	) (value T, aNext xml.Token, anErr error),
-) func(decoder *xml.Decoder, current xml.Token) (T, xml.Token, error) {
-	return func(decoder *xml.Decoder, current xml.Token) (T, xml.Token, error) {
-		return readScalarWithName(decoder, current, expectedName, readTextAsT)
-	}
-}
-
-// Adapt `readTWithLookahead` into a tuple item reader.
-//
-// `readTWithLookahead` is a distinct function value per class (there is no
-// single shared "read any instance" function to instantiate generically),
-// so it must be bound in via a closure, built once here.
-//
-// `T` is left unconstrained (instead of `aastypes.IClass`) since this
-// function never invokes any `aastypes.IClass` method on `T` -- this lets it
-// be reused for a named union tuple item as well, which is deliberately not
-// an `aastypes.IClass` itself.
-func asInstanceTupleItemReader[T any](
-	readTWithLookahead func(
-		aDecoder *xml.Decoder,
-		aCurrent xml.Token,
-	) (anInstance T, anErr error),
-) func(decoder *xml.Decoder, current xml.Token) (T, xml.Token, error) {
-	return func(
-		decoder *xml.Decoder, current xml.Token,
-	) (value T, next xml.Token, err error) {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
+// If `valueErr` is set, report it in the context of that property. Otherwise,
+// consume the end element, so that the resulting `next` token points to the first
+// token just after it.
+func concludeProperty(
+	decoder *xml.Decoder,
+	current xml.Token,
+	local string,
+	valueErr error,
+) (next xml.Token, err error) {
+	if valueErr != nil {
+		if deseriaErr, ok := valueErr.(*DeserializationError); ok {
+			deseriaErr.Path.PrependName(
+				&aasreporting.NameSegment{Name: local},
+			)
 		}
-
-		value, err = readTWithLookahead(decoder, current)
-		if err != nil {
-			return
-		}
-
-		next, err = readNext(decoder, current)
+		err = valueErr
 		return
 	}
+
+	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
+	if err != nil {
+		return
+	}
+
+	err = checkEndElement(current, local)
+	if err != nil {
+		return
+	}
+
+	next, err = readNext(decoder, current)
+	return
 }
 
 // Read a tuple of 3 item(s) with `readItem1`, `readItem2`, *etc.* on
 // the correspondingly positioned item, or return an error.
+//
+// Each item is framed by [readElementDispatched], so an item reader accepts or
+// rejects the positional element name (`v1`, `v2`, *etc.*) on its own for a scalar
+// item, and discriminates on the class element name for an instance item.
 func readTuple3[T1 any, T2 any, T3 any](
 	decoder *xml.Decoder,
 	current xml.Token,
 	readItem1 func(
-		decoder *xml.Decoder, current xml.Token,
+		aDecoder *xml.Decoder,
+		aCurrent xml.Token,
+		aLocal string,
 	) (T1, xml.Token, error),
 	readItem2 func(
-		decoder *xml.Decoder, current xml.Token,
+		aDecoder *xml.Decoder,
+		aCurrent xml.Token,
+		aLocal string,
 	) (T2, xml.Token, error),
 	readItem3 func(
-		decoder *xml.Decoder, current xml.Token,
+		aDecoder *xml.Decoder,
+		aCurrent xml.Token,
+		aLocal string,
 	) (T3, xml.Token, error),
 ) (result aascommon.Tuple3[T1, T2, T3], next xml.Token, err error) {
 	var item1 T1
-	item1, current, err = readItem1(decoder, current)
+	item1, current, err = readElementDispatched(
+		decoder, current, readItem1,
+	)
 	if err != nil {
 		if deseriaErr, ok := err.(*DeserializationError); ok {
 			deseriaErr.Path.PrependIndex(
@@ -805,7 +875,9 @@ func readTuple3[T1 any, T2 any, T3 any](
 	}
 
 	var item2 T2
-	item2, current, err = readItem2(decoder, current)
+	item2, current, err = readElementDispatched(
+		decoder, current, readItem2,
+	)
 	if err != nil {
 		if deseriaErr, ok := err.(*DeserializationError); ok {
 			deseriaErr.Path.PrependIndex(
@@ -816,7 +888,9 @@ func readTuple3[T1 any, T2 any, T3 any](
 	}
 
 	var item3 T3
-	item3, current, err = readItem3(decoder, current)
+	item3, current, err = readElementDispatched(
+		decoder, current, readItem3,
+	)
 	if err != nil {
 		if deseriaErr, ok := err.(*DeserializationError); ok {
 			deseriaErr.Path.PrependIndex(
@@ -853,160 +927,45 @@ func readStructuralFirstAsSequence(
 	foundUniqueToFirst := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IStructuralFirst, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IStructuralFirst")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "uniqueToFirst":
 			theUniqueToFirst, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundUniqueToFirst = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundUniqueToFirst {
-		err = newDeserializationError(
-			"The required property 'uniqueToFirst' is missing",
-		)
+		err = missingProperty("uniqueToFirst")
 		return
 	}
 
 	instance = aastypes.NewStructuralFirst(
 		theUniqueToFirst,
 	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IStructuralFirst]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readStructuralFirstWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IStructuralFirst,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "structuralFirst"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readStructuralFirstAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -1028,100 +987,39 @@ func readStructuralSecondAsSequence(
 	foundUniqueToSecond := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IStructuralSecond, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IStructuralSecond")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "uniqueToSecond":
 			theUniqueToSecond, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundUniqueToSecond = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundUniqueToSecond {
-		err = newDeserializationError(
-			"The required property 'uniqueToSecond' is missing",
-		)
+		err = missingProperty("uniqueToSecond")
 		return
 	}
 
@@ -1131,183 +1029,35 @@ func readStructuralSecondAsSequence(
 	return
 }
 
-// De-serialize an instance of [aastypes.IStructuralSecond]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.StructuralUnion] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readStructuralSecondWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readStructuralUnionDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
-) (instance aastypes.IStructuralSecond,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "structuralSecond"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readStructuralSecondAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
-	return
-}
-
-// De-serialize an instance of [aastypes.StructuralUnion]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readStructuralUnionWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
+	local string,
 ) (instance *aastypes.StructuralUnion,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
 	switch local {
 	case "structuralFirst":
 		var casted aastypes.IStructuralFirst
-		casted, current, err = readStructuralFirstAsSequence(
-			decoder, current,
-		)
+		casted, next, err = readStructuralFirstAsSequence(decoder, current)
 		if err == nil {
-			instance = aastypes.NewStructuralUnionFromStructuralFirst(
-				casted,
-			)
+			instance = aastypes.NewStructuralUnionFromStructuralFirst(casted)
 		}
 	case "structuralSecond":
 		var casted aastypes.IStructuralSecond
-		casted, current, err = readStructuralSecondAsSequence(
-			decoder, current,
-		)
+		casted, next, err = readStructuralSecondAsSequence(decoder, current)
 		if err == nil {
-			instance = aastypes.NewStructuralUnionFromStructuralSecond(
-				casted,
-			)
+			instance = aastypes.NewStructuralUnionFromStructuralSecond(casted)
 		}
 	default:
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Unexpected start element %s as discriminator "+
-					"for the union StructuralUnion",
-				local,
-			),
-		)
+		err = unexpectedDiscriminator(local, "the union StructuralUnion")
 	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
-	return
-}
-
-// De-serialize an instance of [aastypes.IMixedAbstractMember]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readMixedAbstractMemberWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IMixedAbstractMember,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	switch local {
-	case "mixedAbstractDescendantOne":
-		instance, current, err = readMixedAbstractDescendantOneAsSequence(
-			decoder, current,
-		)
-	case "mixedAbstractDescendantTwo":
-		instance, current, err = readMixedAbstractDescendantTwoAsSequence(
-			decoder, current,
-		)
-	default:
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Unexpected start element %s as discriminator "+
-					"for IMixedAbstractMember",
-				local,
-			),
-		)
-	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -1329,160 +1079,45 @@ func readMixedAbstractDescendantOneAsSequence(
 	foundUniqueToAbstractDescendantOne := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IMixedAbstractDescendantOne, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IMixedAbstractDescendantOne")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "uniqueToAbstractDescendantOne":
 			theUniqueToAbstractDescendantOne, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundUniqueToAbstractDescendantOne = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundUniqueToAbstractDescendantOne {
-		err = newDeserializationError(
-			"The required property 'uniqueToAbstractDescendantOne' is missing",
-		)
+		err = missingProperty("uniqueToAbstractDescendantOne")
 		return
 	}
 
 	instance = aastypes.NewMixedAbstractDescendantOne(
 		theUniqueToAbstractDescendantOne,
 	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IMixedAbstractDescendantOne]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readMixedAbstractDescendantOneWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IMixedAbstractDescendantOne,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "mixedAbstractDescendantOne"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readMixedAbstractDescendantOneAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -1504,160 +1139,45 @@ func readMixedAbstractDescendantTwoAsSequence(
 	foundUniqueToAbstractDescendantTwo := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IMixedAbstractDescendantTwo, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IMixedAbstractDescendantTwo")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "uniqueToAbstractDescendantTwo":
 			theUniqueToAbstractDescendantTwo, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundUniqueToAbstractDescendantTwo = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundUniqueToAbstractDescendantTwo {
-		err = newDeserializationError(
-			"The required property 'uniqueToAbstractDescendantTwo' is missing",
-		)
+		err = missingProperty("uniqueToAbstractDescendantTwo")
 		return
 	}
 
 	instance = aastypes.NewMixedAbstractDescendantTwo(
 		theUniqueToAbstractDescendantTwo,
 	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IMixedAbstractDescendantTwo]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readMixedAbstractDescendantTwoWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IMixedAbstractDescendantTwo,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "mixedAbstractDescendantTwo"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readMixedAbstractDescendantTwoAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -1679,163 +1199,45 @@ func readMixedConcreteWithDescendantsAsSequence(
 	foundSomeBaseProperty := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IMixedConcreteWithDescendants, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IMixedConcreteWithDescendants")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "someBaseProperty":
 			theSomeBaseProperty, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundSomeBaseProperty = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundSomeBaseProperty {
-		err = newDeserializationError(
-			"The required property 'someBaseProperty' is missing",
-		)
+		err = missingProperty("someBaseProperty")
 		return
 	}
 
 	instance = aastypes.NewMixedConcreteWithDescendants(
 		theSomeBaseProperty,
 	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IMixedConcreteWithDescendants]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readMixedConcreteWithDescendantsWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IMixedConcreteWithDescendants,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	switch local {
-	case "mixedConcreteWithDescendantsChild":
-		instance, current, err = readMixedConcreteWithDescendantsChildAsSequence(
-			decoder, current,
-		)
-	case "mixedConcreteWithDescendants":
-		instance, current, err = readMixedConcreteWithDescendantsAsSequence(
-			decoder, current,
-		)
-	default:
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Unexpected start element %s as discriminator "+
-					"for IMixedConcreteWithDescendants",
-				local,
-			),
-		)
-	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -1859,114 +1261,49 @@ func readMixedConcreteWithDescendantsChildAsSequence(
 	foundSomeChildProperty := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IMixedConcreteWithDescendantsChild, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IMixedConcreteWithDescendantsChild")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "someBaseProperty":
 			theSomeBaseProperty, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundSomeBaseProperty = true
-
 		case "someChildProperty":
 			theSomeChildProperty, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundSomeChildProperty = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundSomeBaseProperty {
-		err = newDeserializationError(
-			"The required property 'someBaseProperty' is missing",
-		)
+		err = missingProperty("someBaseProperty")
 		return
 	}
 
 	if !foundSomeChildProperty {
-		err = newDeserializationError(
-			"The required property 'someChildProperty' is missing",
-		)
+		err = missingProperty("someChildProperty")
 		return
 	}
 
@@ -1974,60 +1311,6 @@ func readMixedConcreteWithDescendantsChildAsSequence(
 		theSomeBaseProperty,
 		theSomeChildProperty,
 	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IMixedConcreteWithDescendantsChild]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readMixedConcreteWithDescendantsChildWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IMixedConcreteWithDescendantsChild,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "mixedConcreteWithDescendantsChild"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readMixedConcreteWithDescendantsChildAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -2049,100 +1332,39 @@ func readMixedConcreteLeafAsSequence(
 	foundUniqueToConcreteLeaf := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IMixedConcreteLeaf, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IMixedConcreteLeaf")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "uniqueToConcreteLeaf":
 			theUniqueToConcreteLeaf, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundUniqueToConcreteLeaf = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundUniqueToConcreteLeaf {
-		err = newDeserializationError(
-			"The required property 'uniqueToConcreteLeaf' is missing",
-		)
+		err = missingProperty("uniqueToConcreteLeaf")
 		return
 	}
 
@@ -2152,156 +1374,53 @@ func readMixedConcreteLeafAsSequence(
 	return
 }
 
-// De-serialize an instance of [aastypes.IMixedConcreteLeaf]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.MixedUnion] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readMixedConcreteLeafWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readMixedUnionDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
-) (instance aastypes.IMixedConcreteLeaf,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "mixedConcreteLeaf"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readMixedConcreteLeafAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
-	return
-}
-
-// De-serialize an instance of [aastypes.MixedUnion]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readMixedUnionWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
+	local string,
 ) (instance *aastypes.MixedUnion,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
 	switch local {
 	case "mixedAbstractDescendantOne":
 		var casted aastypes.IMixedAbstractDescendantOne
-		casted, current, err = readMixedAbstractDescendantOneAsSequence(
-			decoder, current,
-		)
+		casted, next, err = readMixedAbstractDescendantOneAsSequence(decoder, current)
 		if err == nil {
-			instance = aastypes.NewMixedUnionFromMixedAbstractDescendantOne(
-				casted,
-			)
+			instance = aastypes.NewMixedUnionFromMixedAbstractDescendantOne(casted)
 		}
 	case "mixedAbstractDescendantTwo":
 		var casted aastypes.IMixedAbstractDescendantTwo
-		casted, current, err = readMixedAbstractDescendantTwoAsSequence(
-			decoder, current,
-		)
+		casted, next, err = readMixedAbstractDescendantTwoAsSequence(decoder, current)
 		if err == nil {
-			instance = aastypes.NewMixedUnionFromMixedAbstractDescendantTwo(
-				casted,
-			)
+			instance = aastypes.NewMixedUnionFromMixedAbstractDescendantTwo(casted)
 		}
 	case "mixedConcreteWithDescendantsChild":
 		var casted aastypes.IMixedConcreteWithDescendantsChild
-		casted, current, err = readMixedConcreteWithDescendantsChildAsSequence(
-			decoder, current,
-		)
+		casted, next, err = readMixedConcreteWithDescendantsChildAsSequence(decoder, current)
 		if err == nil {
-			instance = aastypes.NewMixedUnionFromMixedConcreteWithDescendantsChild(
-				casted,
-			)
+			instance = aastypes.NewMixedUnionFromMixedConcreteWithDescendantsChild(casted)
 		}
 	case "mixedConcreteWithDescendants":
 		var casted aastypes.IMixedConcreteWithDescendants
-		casted, current, err = readMixedConcreteWithDescendantsAsSequence(
-			decoder, current,
-		)
+		casted, next, err = readMixedConcreteWithDescendantsAsSequence(decoder, current)
 		if err == nil {
-			instance = aastypes.NewMixedUnionFromMixedConcreteWithDescendants(
-				casted,
-			)
+			instance = aastypes.NewMixedUnionFromMixedConcreteWithDescendants(casted)
 		}
 	case "mixedConcreteLeaf":
 		var casted aastypes.IMixedConcreteLeaf
-		casted, current, err = readMixedConcreteLeafAsSequence(
-			decoder, current,
-		)
+		casted, next, err = readMixedConcreteLeafAsSequence(decoder, current)
 		if err == nil {
-			instance = aastypes.NewMixedUnionFromMixedConcreteLeaf(
-				casted,
-			)
+			instance = aastypes.NewMixedUnionFromMixedConcreteLeaf(casted)
 		}
 	default:
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Unexpected start element %s as discriminator "+
-					"for the union MixedUnion",
-				local,
-			),
-		)
+		err = unexpectedDiscriminator(local, "the union MixedUnion")
 	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -2323,160 +1442,45 @@ func readModelTypedFirstAsSequence(
 	foundSomeProperty := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IModelTypedFirst, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IModelTypedFirst")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "someProperty":
 			theSomeProperty, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundSomeProperty = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundSomeProperty {
-		err = newDeserializationError(
-			"The required property 'someProperty' is missing",
-		)
+		err = missingProperty("someProperty")
 		return
 	}
 
 	instance = aastypes.NewModelTypedFirst(
 		theSomeProperty,
 	)
-	return
-}
-
-// De-serialize an instance of [aastypes.IModelTypedFirst]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readModelTypedFirstWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
-) (instance aastypes.IModelTypedFirst,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "modelTypedFirst"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readModelTypedFirstAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -2498,100 +1502,39 @@ func readModelTypedSecondAsSequence(
 	foundSomeProperty := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of IModelTypedSecond, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "IModelTypedSecond")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "someProperty":
 			theSomeProperty, current, valueErr = readText(
-				decoder,
-				current,
+				decoder, current,
 			)
 			foundSomeProperty = true
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundSomeProperty {
-		err = newDeserializationError(
-			"The required property 'someProperty' is missing",
-		)
+		err = missingProperty("someProperty")
 		return
 	}
 
@@ -2601,126 +1544,35 @@ func readModelTypedSecondAsSequence(
 	return
 }
 
-// De-serialize an instance of [aastypes.IModelTypedSecond]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.ModelTypedUnion] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readModelTypedSecondWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readModelTypedUnionDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
-) (instance aastypes.IModelTypedSecond,
-	err error,
-) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "modelTypedSecond"
-	if local != expectedLocal {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
-			),
-		)
-		return
-	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readModelTypedSecondAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
-	return
-}
-
-// De-serialize an instance of [aastypes.ModelTypedUnion]
-// as an XML element where the start element is expected to have been already read
-// as `current` token.
-//
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readModelTypedUnionWithLookahead(
-	decoder *xml.Decoder,
-	current xml.Token,
+	local string,
 ) (instance *aastypes.ModelTypedUnion,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
 	switch local {
 	case "modelTypedFirst":
 		var casted aastypes.IModelTypedFirst
-		casted, current, err = readModelTypedFirstAsSequence(
-			decoder, current,
-		)
+		casted, next, err = readModelTypedFirstAsSequence(decoder, current)
 		if err == nil {
-			instance = aastypes.NewModelTypedUnionFromModelTypedFirst(
-				casted,
-			)
+			instance = aastypes.NewModelTypedUnionFromModelTypedFirst(casted)
 		}
 	case "modelTypedSecond":
 		var casted aastypes.IModelTypedSecond
-		casted, current, err = readModelTypedSecondAsSequence(
-			decoder, current,
-		)
+		casted, next, err = readModelTypedSecondAsSequence(decoder, current)
 		if err == nil {
-			instance = aastypes.NewModelTypedUnionFromModelTypedSecond(
-				casted,
-			)
+			instance = aastypes.NewModelTypedUnionFromModelTypedSecond(casted)
 		}
 	default:
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Unexpected start element %s as discriminator "+
-					"for the union ModelTypedUnion",
-				local,
-			),
-		)
+		err = unexpectedDiscriminator(local, "the union ModelTypedUnion")
 	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -2757,238 +1609,114 @@ func readSomethingAsSequence(
 	foundTupleProperty := false
 
 	for {
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		if _, isEOF := current.(eof); isEOF {
-			break
-		}
-
-		startElement, ok := current.(xml.StartElement)
-		if !ok {
-			if charData, isCharData := current.(xml.CharData); isCharData {
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Expected a sequence of XML elements representing properties "+
-						"of ISomething, but got text: %s",
-						string(charData),
-					),
-				)
-				return
-			}
-
-			break
-		}
-
 		var local string
-		local, err = extractLocalNameFromStartElement(startElement)
+		var ok bool
+		local, current, ok, err = nextProperty(decoder, current, "ISomething")
 		if err != nil {
 			return
 		}
-
-		// Move the current to the content of the XML element
-		current, err = readNext(decoder, nil)
-		if err != nil {
-			return
+		if !ok {
+			break
 		}
 
 		var valueErr error
 		switch local {
 		case "structuralProperty":
-			theStructuralProperty, valueErr =  readStructuralUnionWithLookahead(
-				decoder,
-				current,
+			theStructuralProperty, current, valueErr = readElementDispatched(
+				decoder, current, readStructuralUnionDispatched,
 			)
-			// readStructuralUnionWithLookahead stops at the end element,
-			// so we look ahead to the next element, just after the end element.
-			if valueErr == nil {
-				current, valueErr = readNext(decoder, current)
-			}
 			foundStructuralProperty = true
-
 		case "mixedProperty":
-			theMixedProperty, valueErr =  readMixedUnionWithLookahead(
-				decoder,
-				current,
+			theMixedProperty, current, valueErr = readElementDispatched(
+				decoder, current, readMixedUnionDispatched,
 			)
-			// readMixedUnionWithLookahead stops at the end element,
-			// so we look ahead to the next element, just after the end element.
-			if valueErr == nil {
-				current, valueErr = readNext(decoder, current)
-			}
 			foundMixedProperty = true
-
 		case "modelTypedProperty":
-			theModelTypedProperty, valueErr =  readModelTypedUnionWithLookahead(
-				decoder,
-				current,
+			theModelTypedProperty, current, valueErr = readElementDispatched(
+				decoder, current, readModelTypedUnionDispatched,
 			)
-			// readModelTypedUnionWithLookahead stops at the end element,
-			// so we look ahead to the next element, just after the end element.
-			if valueErr == nil {
-				current, valueErr = readNext(decoder, current)
-			}
 			foundModelTypedProperty = true
-
 		case "listStructuralProperty":
-			theListStructuralProperty, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readStructuralUnionWithLookahead,
+			theListStructuralProperty, current, valueErr = readListOf(
+				decoder, current, readStructuralUnionDispatched,
 			)
 			foundListStructuralProperty = true
-
 		case "listMixedProperty":
-			theListMixedProperty, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readMixedUnionWithLookahead,
+			theListMixedProperty, current, valueErr = readListOf(
+				decoder, current, readMixedUnionDispatched,
 			)
 			foundListMixedProperty = true
-
 		case "listModelTypedProperty":
-			theListModelTypedProperty, current, valueErr = readListOfInstances(
-				decoder,
-				current,
-				readModelTypedUnionWithLookahead,
+			theListModelTypedProperty, current, valueErr = readListOf(
+				decoder, current, readModelTypedUnionDispatched,
 			)
 			foundListModelTypedProperty = true
-
 		case "tupleProperty":
 			theTupleProperty, current, valueErr = readTuple3(
-				decoder,
-				current,
-				asInstanceTupleItemReader(readStructuralUnionWithLookahead),
-				asInstanceTupleItemReader(readMixedUnionWithLookahead),
-				asInstanceTupleItemReader(readModelTypedUnionWithLookahead),
+				decoder, current,
+				readStructuralUnionDispatched,
+				readMixedUnionDispatched,
+				readModelTypedUnionDispatched,
 			)
 			foundTupleProperty = true
-
 		case "optionalStructuralProperty":
-			theOptionalStructuralProperty, valueErr =  readStructuralUnionWithLookahead(
-				decoder,
-				current,
+			theOptionalStructuralProperty, current, valueErr = readElementDispatched(
+				decoder, current, readStructuralUnionDispatched,
 			)
-			// readStructuralUnionWithLookahead stops at the end element,
-			// so we look ahead to the next element, just after the end element.
-			if valueErr == nil {
-				current, valueErr = readNext(decoder, current)
-			}
-
 		case "optionalMixedProperty":
-			theOptionalMixedProperty, valueErr =  readMixedUnionWithLookahead(
-				decoder,
-				current,
+			theOptionalMixedProperty, current, valueErr = readElementDispatched(
+				decoder, current, readMixedUnionDispatched,
 			)
-			// readMixedUnionWithLookahead stops at the end element,
-			// so we look ahead to the next element, just after the end element.
-			if valueErr == nil {
-				current, valueErr = readNext(decoder, current)
-			}
-
 		case "optionalModelTypedProperty":
-			theOptionalModelTypedProperty, valueErr =  readModelTypedUnionWithLookahead(
-				decoder,
-				current,
+			theOptionalModelTypedProperty, current, valueErr = readElementDispatched(
+				decoder, current, readModelTypedUnionDispatched,
 			)
-			// readModelTypedUnionWithLookahead stops at the end element,
-			// so we look ahead to the next element, just after the end element.
-			if valueErr == nil {
-				current, valueErr = readNext(decoder, current)
-			}
-
 		default:
 			valueErr = newDeserializationError(
-				fmt.Sprintf(
-					"Unexpected property",
-				),
+				"Unexpected property",
 			)
 		}
 
-		if valueErr != nil {
-			if deseriaErr, ok := valueErr.(*DeserializationError); ok {
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{Name: local},
-				)
-			}
-			err = valueErr
-		}
-
+		current, err = concludeProperty(decoder, current, local, valueErr)
 		if err != nil {
 			return
 		}
-
-		current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-		if err != nil {
-			return
-		}
-
-		err = checkEndElement(current, local)
-		if err != nil {
-			return
-		}
-
-		current, err = readNext(decoder, current)
-		if err != nil {
-			return
-		}
-	}
-
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
 	}
 
 	next = current
 
 	if !foundStructuralProperty {
-		err = newDeserializationError(
-			"The required property 'structuralProperty' is missing",
-		)
+		err = missingProperty("structuralProperty")
 		return
 	}
 
 	if !foundMixedProperty {
-		err = newDeserializationError(
-			"The required property 'mixedProperty' is missing",
-		)
+		err = missingProperty("mixedProperty")
 		return
 	}
 
 	if !foundModelTypedProperty {
-		err = newDeserializationError(
-			"The required property 'modelTypedProperty' is missing",
-		)
+		err = missingProperty("modelTypedProperty")
 		return
 	}
 
 	if !foundListStructuralProperty {
-		err = newDeserializationError(
-			"The required property 'listStructuralProperty' is missing",
-		)
+		err = missingProperty("listStructuralProperty")
 		return
 	}
 
 	if !foundListMixedProperty {
-		err = newDeserializationError(
-			"The required property 'listMixedProperty' is missing",
-		)
+		err = missingProperty("listMixedProperty")
 		return
 	}
 
 	if !foundListModelTypedProperty {
-		err = newDeserializationError(
-			"The required property 'listModelTypedProperty' is missing",
-		)
+		err = missingProperty("listModelTypedProperty")
 		return
 	}
 
 	if !foundTupleProperty {
-		err = newDeserializationError(
-			"The required property 'tupleProperty' is missing",
-		)
+		err = missingProperty("tupleProperty")
 		return
 	}
 
@@ -3001,69 +1729,54 @@ func readSomethingAsSequence(
 		theListModelTypedProperty,
 		theTupleProperty,
 	)
-	instance.SetOptionalStructuralProperty(
-		theOptionalStructuralProperty,
-	)
-	instance.SetOptionalMixedProperty(
-		theOptionalMixedProperty,
-	)
-	instance.SetOptionalModelTypedProperty(
-		theOptionalModelTypedProperty,
-	)
+	instance.SetOptionalStructuralProperty(theOptionalStructuralProperty)
+	instance.SetOptionalMixedProperty(theOptionalMixedProperty)
+	instance.SetOptionalModelTypedProperty(theOptionalModelTypedProperty)
 	return
 }
 
-// De-serialize an instance of [aastypes.ISomething]
-// as an XML element where the start element is expected to have been already
-// read as `current` token.
+// De-serialize an instance of [aastypes.IClass] based on the `local` name
+// of its start element.
 //
-// The de-serialization stops by consuming the final end element. The next call to
-// the `decoder.Token()` will return the element just after the end element.
-func readSomethingWithLookahead(
+// The `current` token is expected to point to the content of that start element, and
+// the resulting `next` token points to its end element.
+func readClassDispatched(
 	decoder *xml.Decoder,
 	current xml.Token,
-) (instance aastypes.ISomething,
+	local string,
+) (instance aastypes.IClass,
+	next xml.Token,
 	err error,
 ) {
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
-	)
-	if err != nil {
-		return
-	}
-
-	expectedLocal := "something"
-	if local != expectedLocal {
+	switch local {
+	case "structuralFirst":
+		instance, next, err = readStructuralFirstAsSequence(decoder, current)
+	case "structuralSecond":
+		instance, next, err = readStructuralSecondAsSequence(decoder, current)
+	case "mixedAbstractDescendantOne":
+		instance, next, err = readMixedAbstractDescendantOneAsSequence(decoder, current)
+	case "mixedAbstractDescendantTwo":
+		instance, next, err = readMixedAbstractDescendantTwoAsSequence(decoder, current)
+	case "mixedConcreteWithDescendants":
+		instance, next, err = readMixedConcreteWithDescendantsAsSequence(decoder, current)
+	case "mixedConcreteWithDescendantsChild":
+		instance, next, err = readMixedConcreteWithDescendantsChildAsSequence(decoder, current)
+	case "mixedConcreteLeaf":
+		instance, next, err = readMixedConcreteLeafAsSequence(decoder, current)
+	case "modelTypedFirst":
+		instance, next, err = readModelTypedFirstAsSequence(decoder, current)
+	case "modelTypedSecond":
+		instance, next, err = readModelTypedSecondAsSequence(decoder, current)
+	case "something":
+		instance, next, err = readSomethingAsSequence(decoder, current)
+	default:
 		err = newDeserializationError(
 			fmt.Sprintf(
-				"Expected a start element with local name %s, "+
-					"but got a start element with local name %s",
-				expectedLocal, local,
+				"Unexpected XML element name %s as class discriminator",
+				local,
 			),
 		)
-		return
 	}
-
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	instance, current, err = readSomethingAsSequence(
-		decoder,
-		current,
-)
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
@@ -3079,79 +1792,9 @@ func Unmarshal(
 		return
 	}
 
-	current, err = skipEmptyTextWhitespaceAndComments(decoder, current)
-	if err != nil {
-		return
-	}
-
-	var local string
-	local, err = parseAsStartElementAndExtractLocalName(
-		current,
+	instance, _, err = readElementDispatched(
+		decoder, current, readClassDispatched,
 	)
-	if err != nil {
-		return
-	}
-
-	// Move the current to the properties of the instance
-	current, err = readNext(decoder, current)
-	if err != nil {
-		return
-	}
-
-	switch local {
-		case "structuralFirst":
-			instance, current, err = readStructuralFirstAsSequence(
-				decoder, current,
-			)
-		case "structuralSecond":
-			instance, current, err = readStructuralSecondAsSequence(
-				decoder, current,
-			)
-		case "mixedAbstractDescendantOne":
-			instance, current, err = readMixedAbstractDescendantOneAsSequence(
-				decoder, current,
-			)
-		case "mixedAbstractDescendantTwo":
-			instance, current, err = readMixedAbstractDescendantTwoAsSequence(
-				decoder, current,
-			)
-		case "mixedConcreteWithDescendants":
-			instance, current, err = readMixedConcreteWithDescendantsAsSequence(
-				decoder, current,
-			)
-		case "mixedConcreteWithDescendantsChild":
-			instance, current, err = readMixedConcreteWithDescendantsChildAsSequence(
-				decoder, current,
-			)
-		case "mixedConcreteLeaf":
-			instance, current, err = readMixedConcreteLeafAsSequence(
-				decoder, current,
-			)
-		case "modelTypedFirst":
-			instance, current, err = readModelTypedFirstAsSequence(
-				decoder, current,
-			)
-		case "modelTypedSecond":
-			instance, current, err = readModelTypedSecondAsSequence(
-				decoder, current,
-			)
-		case "something":
-			instance, current, err = readSomethingAsSequence(
-				decoder, current,
-			)
-		default:
-				err = newDeserializationError(
-					fmt.Sprintf(
-						"Unexpected XML element name %s as class discriminator",
-						local,
-					),
-				)
-	}
-	if err != nil {
-		return
-	}
-
-	err = checkEndElement(current, local)
 	return
 }
 
