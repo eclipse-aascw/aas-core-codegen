@@ -102,531 +102,184 @@ namespace dummy
             }
 
             /// <summary>
-            /// Consume a start element named <paramref name="expectedName" /> from
-            /// the reader and return whether it was a self-closing (empty) element.
+            /// Look ahead the name of the element at the current position of
+            /// <paramref name="reader" />, without consuming anything.
             /// </summary>
-            private static bool ReadVElement(
+            private static string PeekElementName(
                 Xml.XmlReader reader,
-                string expectedName,
-                out Reporting.Error? error
-                )
-            {
-                if (reader.EOF) {
-                    error = new Reporting.Error(
-                        $"Expected a <{expectedName}> element, but got an end-of-file.");
-                    return false;
-                }
-
-                if (reader.NodeType != Xml.XmlNodeType.Element)
-                {
-                    error = new Reporting.Error(
-                        $"Expected a <{expectedName}> start element, " +
-                        $"but got the node of type {reader.NodeType} " +
-                        $"with the value {reader.Value}");
-                    return false;
-                }
-
-                string elementName = TryElementName(
-                    reader, out error);
-                if (error != null)
-                {
-                    return false;
-                }
-                if (elementName != expectedName)
-                {
-                    error = new Reporting.Error(
-                        $"Expected a <{expectedName}> element, " +
-                        $"but got an element {elementName}");
-                    return false;
-                }
-
-                bool isEmpty = reader.IsEmptyElement;
-
-                // We can consume now the start element.
-                reader.Read();
-                return isEmpty;
-            }
-
-            /// <summary>
-            /// Consume an end element named <paramref name="expectedName" /> from
-            /// the reader.
-            /// </summary>
-            private static void ReadVEndElement(
-                Xml.XmlReader reader,
-                string expectedName,
-                out Reporting.Error? error
-                )
-            {
-                if (reader.EOF) {
-                    error = new Reporting.Error(
-                        $"Expected a </{expectedName}> element, but got an end-of-file.");
-                    return;
-                }
-
-                if (reader.NodeType != Xml.XmlNodeType.EndElement)
-                {
-                    error = new Reporting.Error(
-                        $"Expected a </{expectedName}> end element, " +
-                        $"but got the node of type {reader.NodeType} " +
-                        $"with the value {reader.Value}");
-                    return;
-                }
-
-                string elementName = TryElementName(
-                    reader, out error);
-                if (error != null)
-                {
-                    return;
-                }
-                if (elementName != expectedName)
-                {
-                    error = new Reporting.Error(
-                        $"Expected a </{expectedName}> element, " +
-                        $"but got an end element {elementName}");
-                    return;
-                }
-
-                // We can consume now the end element.
-                reader.Read();
-            }
-
-            /// <summary>
-            /// Read the content of a <c>&lt;v&gt;</c> element
-            /// and parse it as bool.
-            /// </summary>
-            private static bool? ReadVElementAsBoolean(
-                Xml.XmlReader reader,
-                string elementName,
-                out Reporting.Error? error
-                )
-            {
-                bool isEmptyVElement = ReadVElement(reader, elementName, out error);
-                if (error != null)
-                {
-                    return null;
-                }
-
-                bool? result = null;
-                if (!isEmptyVElement)
-                {
-                    if (reader.EOF)
-                    {
-                        error = new Reporting.Error(
-                            "Expected an XML content representing bool, " +
-                            "but reached the end-of-file");
-                        return null;
-                    }
-
-                    try
-                    {
-                        result = reader.ReadContentAsBoolean();
-                    }
-                    catch (System.Exception exception)
-                            when (exception is System.FormatException
-                                || exception is System.Xml.XmlException)
-                    {
-                        error = new Reporting.Error(
-                            $"The content could not be de-serialized as bool: {exception}");
-                        return null;
-                    }
-
-                    ReadVEndElement(reader, elementName, out error);
-                    if (error != null)
-                    {
-                        return null;
-                    }
-                }
-
-                if (result == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected result null when there is no error.");
-                }
-                return result;
-            }
-
-            /// <summary>
-            /// Read the content of a <c>&lt;v&gt;</c> element
-            /// and parse it as long.
-            /// </summary>
-            private static long? ReadVElementAsLong(
-                Xml.XmlReader reader,
-                string elementName,
-                out Reporting.Error? error
-                )
-            {
-                bool isEmptyVElement = ReadVElement(reader, elementName, out error);
-                if (error != null)
-                {
-                    return null;
-                }
-
-                long? result = null;
-                if (!isEmptyVElement)
-                {
-                    if (reader.EOF)
-                    {
-                        error = new Reporting.Error(
-                            "Expected an XML content representing long, " +
-                            "but reached the end-of-file");
-                        return null;
-                    }
-
-                    try
-                    {
-                        result = reader.ReadContentAsLong();
-                    }
-                    catch (System.Exception exception)
-                            when (exception is System.FormatException
-                                || exception is System.Xml.XmlException)
-                    {
-                        error = new Reporting.Error(
-                            $"The content could not be de-serialized as long: {exception}");
-                        return null;
-                    }
-
-                    ReadVEndElement(reader, elementName, out error);
-                    if (error != null)
-                    {
-                        return null;
-                    }
-                }
-
-                if (result == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected result null when there is no error.");
-                }
-                return result;
-            }
-
-            /// <summary>
-            /// Read the content of a <c>&lt;v&gt;</c> element
-            /// and parse it as double.
-            /// </summary>
-            private static double? ReadVElementAsDouble(
-                Xml.XmlReader reader,
-                string elementName,
-                out Reporting.Error? error
-                )
-            {
-                bool isEmptyVElement = ReadVElement(reader, elementName, out error);
-                if (error != null)
-                {
-                    return null;
-                }
-
-                double? result = null;
-                if (!isEmptyVElement)
-                {
-                    if (reader.EOF)
-                    {
-                        error = new Reporting.Error(
-                            "Expected an XML content representing double, " +
-                            "but reached the end-of-file");
-                        return null;
-                    }
-
-                    try
-                    {
-                        result = reader.ReadContentAsDouble();
-                    }
-                    catch (System.Exception exception)
-                            when (exception is System.FormatException
-                                || exception is System.Xml.XmlException)
-                    {
-                        error = new Reporting.Error(
-                            $"The content could not be de-serialized as double: {exception}");
-                        return null;
-                    }
-
-                    ReadVEndElement(reader, elementName, out error);
-                    if (error != null)
-                    {
-                        return null;
-                    }
-                }
-
-                if (result == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected result null when there is no error.");
-                }
-                return result;
-            }
-
-            /// <summary>
-            /// Read the content of a <c>&lt;v&gt;</c> element
-            /// and parse it as string.
-            /// </summary>
-            private static string? ReadVElementAsString(
-                Xml.XmlReader reader,
-                string elementName,
-                out Reporting.Error? error
-                )
-            {
-                bool isEmptyVElement = ReadVElement(reader, elementName, out error);
-                if (error != null)
-                {
-                    return null;
-                }
-
-                string result;
-                if (!isEmptyVElement)
-                {
-                    if (reader.EOF)
-                    {
-                        error = new Reporting.Error(
-                            "Expected an XML content representing string, " +
-                            "but reached the end-of-file");
-                        return null;
-                    }
-
-                    try
-                    {
-                        result = reader.ReadContentAsString();
-                    }
-                    catch (System.FormatException exception)
-                    {
-                        error = new Reporting.Error(
-                            $"The content could not be de-serialized as string: {exception}");
-                        return null;
-                    }
-
-                    ReadVEndElement(reader, elementName, out error);
-                    if (error != null)
-                    {
-                        return null;
-                    }
-                }
-                else
-                {
-                    result = "";
-                }
-
-                return result;
-            }
-
-            /// <summary>
-            /// Read a <c>&lt;v&gt;</c> element as base64-encoded bytes.
-            /// </summary>
-            private static byte[]? ReadVElementAsBytes(
-                Xml.XmlReader reader,
-                string elementName,
-                out Reporting.Error? error
-                )
-            {
-                bool isEmptyVElement = ReadVElement(reader, elementName, out error);
-                if (error != null)
-                {
-                    return null;
-                }
-
-                byte[]? result;
-                if (isEmptyVElement)
-                {
-                    result = new byte[0];
-                }
-                else
-                {
-                    if (reader.EOF)
-                    {
-                        error = new Reporting.Error(
-                            "Expected an XML content with base64-encoded bytes, " +
-                            "but reached the end-of-file");
-                        return null;
-                    }
-
-                    try
-                    {
-                        result = ReadWholeContentAsBase64(reader);
-                    }
-                    catch (System.FormatException exception)
-                    {
-                        error = new Reporting.Error(
-                            "The content could not be de-serialized as " +
-                            $"base64-encoded bytes: {exception}");
-                        return null;
-                    }
-
-                    ReadVEndElement(reader, elementName, out error);
-                    if (error != null)
-                    {
-                        return null;
-                    }
-                }
-
-                return result;
-            }
-
-            /// <summary>
-            /// Read a single list item, positioned at its start element.
-            /// </summary>
-            /// <typeparam name="T">Type of the parsed item</typeparam>
-            private delegate T? ClassItemDeserializer<T>(
-                Xml.XmlReader reader,
-                out Reporting.Error? error
-                ) where T : class;
-
-            /// <summary>
-            /// Parse a sequence of list items with <paramref name="deserializeItem" />,
-            /// stopping (without consuming) at the first non-element node.
-            /// </summary>
-            /// <remarks>
-            /// This is shared by all the list-typed properties whose items are
-            /// de-serialized into a reference type (<em>e.g.</em>, a string, a byte
-            /// array or a class instance).
-            /// </remarks>
-            /// <typeparam name="T">Type of a single list item</typeparam>
-            private static List<T> ParseListOfClass<T>(
-                Xml.XmlReader reader,
-                ClassItemDeserializer<T> deserializeItem,
-                out Reporting.Error? error
-                ) where T : class
-            {
-                error = null;
-                List<T> result = new List<T>();
-
-                SkipNoneWhitespaceAndComments(reader);
-
-                int index = 0;
-                while (reader.NodeType == Xml.XmlNodeType.Element)
-                {
-                    T? item = deserializeItem(reader, out error);
-                    if (error != null)
-                    {
-                        error.PrependSegment(
-                            new Reporting.IndexSegment(
-                                index));
-                        return result;
-                    }
-
-                    result.Add(
-                        item
-                            ?? throw new System.InvalidOperationException(
-                                "Unexpected item null when error null"));
-
-                    index++;
-                    SkipNoneWhitespaceAndComments(reader);
-                }
-
-                return result;
-            }
-
-            /// <summary>
-            /// Read a single list item, positioned at its start element.
-            /// </summary>
-            /// <typeparam name="T">Type of the parsed item</typeparam>
-            private delegate T? StructItemDeserializer<T>(
-                Xml.XmlReader reader,
-                out Reporting.Error? error
-                ) where T : struct;
-
-            /// <summary>
-            /// Parse a sequence of list items with <paramref name="deserializeItem" />,
-            /// stopping (without consuming) at the first non-element node.
-            /// </summary>
-            /// <remarks>
-            /// This is shared by all the list-typed properties whose items are
-            /// de-serialized into a value type (<em>e.g.</em>, a bool, a number or
-            /// an enumeration literal).
-            /// </remarks>
-            /// <typeparam name="T">Type of a single list item</typeparam>
-            private static List<T> ParseListOfStruct<T>(
-                Xml.XmlReader reader,
-                StructItemDeserializer<T> deserializeItem,
-                out Reporting.Error? error
-                ) where T : struct
-            {
-                error = null;
-                List<T> result = new List<T>();
-
-                SkipNoneWhitespaceAndComments(reader);
-
-                int index = 0;
-                while (reader.NodeType == Xml.XmlNodeType.Element)
-                {
-                    T? item = deserializeItem(reader, out error);
-                    if (error != null)
-                    {
-                        error.PrependSegment(
-                            new Reporting.IndexSegment(
-                                index));
-                        return result;
-                    }
-
-                    result.Add(
-                        item
-                            ?? throw new System.InvalidOperationException(
-                                "Unexpected item null when error null"));
-
-                    index++;
-                    SkipNoneWhitespaceAndComments(reader);
-                }
-
-                return result;
-            }
-
-            /// <summary>
-            /// Read the opening tag of an XML element representing an instance of
-            /// <paramref name="className" />, without consuming its content.
-            /// </summary>
-            /// <remarks>
-            /// This is shared by the de-serialization of every concrete class from
-            /// an XML element.
-            /// </remarks>
-            private static string ReadStartElementOfClass(
-                Xml.XmlReader reader,
-                string className,
-                out bool isEmptyElement,
                 out Reporting.Error? error
                 )
             {
                 error = null;
-                isEmptyElement = false;
 
                 SkipNoneWhitespaceAndComments(reader);
 
                 if (reader.EOF)
                 {
                     error = new Reporting.Error(
-                        $"Expected an XML element representing an instance of class {className}, " +
-                        "but reached the end-of-file");
+                        "Expected an XML element, but reached the end-of-file");
                     return "";
                 }
 
                 if (reader.NodeType != Xml.XmlNodeType.Element)
                 {
                     error = new Reporting.Error(
-                        $"Expected an XML element representing an instance of class {className}, " +
+                        "Expected an XML element, " +
                         $"but got a node of type {reader.NodeType} " +
                         $"with value {reader.Value}");
                     return "";
                 }
 
-                string elementName = TryElementName(
+                return TryElementName(
                     reader, out error);
-                if (error != null)
-                {
-                    return "";
-                }
-
-                isEmptyElement = reader.IsEmptyElement;
-                return elementName;
             }
 
             /// <summary>
-            /// Consume the closing tag matching <paramref name="expectedElementName" />,
-            /// unless <paramref name="isEmptyElement" /> indicates that the element was
-            /// self-closing and thus has no separate closing tag to consume.
+            /// Read a single element, tags included, positioned at its start tag.
             /// </summary>
             /// <remarks>
-            /// This is shared by the de-serialization of every concrete class from
-            /// an XML element.
+            /// Return the value; on failure it is meaningless and
+            /// <paramref name="error" /> says why. A plain <c>T</c> rather than
+            /// a <c>T?</c>, so that one unconstrained delegate serves both the value
+            /// and the reference types.
+            ///
+            /// <typeparamref name="T" /> is covariant, so that the reader of
+            /// a concrete class can be used as the reader of an item of a list of
+            /// its interface. It is <c>internal</c> only because the readers of
+            /// the classes are, and a field may not be more accessible than its type.
             /// </remarks>
-            private static void ConsumeCloseTag(
+            /// <typeparam name="T">Type of the parsed value</typeparam>
+            internal delegate T ElementReader<out T>(
                 Xml.XmlReader reader,
-                string expectedElementName,
+                out Reporting.Error? error);
+
+            /// <summary>
+            /// Read the content of an element, positioned after its start tag.
+            /// </summary>
+            /// <remarks>
+            /// Every value is read through this one shape, so that the reading can be
+            /// composed: an <c>As*</c> combinator turns a conversion, a literal parser,
+            /// an element reader or a list of them into one of these, and a class's own
+            /// <c>...FromSequence</c> already is one.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value</typeparam>
+            private delegate T ContentReader<T>(
+                Xml.XmlReader reader,
+                bool isEmpty,
+                out Reporting.Error? error);
+
+            /// <summary>
+            /// Convert the content at the current position of <paramref name="reader" />.
+            /// </summary>
+            /// <typeparam name="T">Type to convert the content to</typeparam>
+            private delegate T ContentConverter<T>(Xml.XmlReader reader);
+
+            /// <summary>
+            /// Read the content between a start and an end tag and convert it
+            /// with <paramref name="readContent" />.
+            /// </summary>
+            /// <remarks>
+            /// This is the one skeleton for reading any content whatsoever -- of
+            /// a property, or of a <c>&lt;v&gt;</c> element of a list or a tuple item
+            /// (see <see cref="AtElement{T}" />). Only the conversion differs, so
+            /// only the conversion is passed in.
+            ///
+            /// On failure the returned value is meaningless; the caller checks
+            /// <paramref name="error" /> and bails out before ever reading it. That is
+            /// what lets this return a plain <c>T</c> -- a <c>T?</c> would have to be
+            /// split into a variant for the value and one for the reference types.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value</typeparam>
+            private static ContentReader<T> AsText<T>(
+                ContentConverter<T> readContent
+                )
+            {
+                return (
+                    Xml.XmlReader reader,
+                    bool isEmpty,
+                    out Reporting.Error? error
+                ) =>
+                {
+                    error = null;
+
+                    if (isEmpty)
+                    {
+                        error = new Reporting.Error(
+                            $"Expected an XML content representing {typeof(T).Name}, " +
+                            "but the element was self-closing");
+                        return default!;
+                    }
+
+                    if (reader.EOF)
+                    {
+                        error = new Reporting.Error(
+                            $"Expected an XML content representing {typeof(T).Name}, " +
+                            "but reached the end-of-file");
+                        return default!;
+                    }
+
+                    try
+                    {
+                        return readContent(reader);
+                    }
+                    catch (System.Exception exception)
+                            when (exception is System.FormatException
+                                || exception is System.Xml.XmlException)
+                    {
+                        error = new Reporting.Error(
+                            $"The content could not be de-serialized as {typeof(T).Name}: " +
+                            exception.Message);
+                        return default!;
+                    }
+                };
+            }
+
+            /// <summary>
+            /// Read the content between a start and an end tag, or return
+            /// <paramref name="whenEmpty" /> if the element was self-closing.
+            /// </summary>
+            /// <typeparam name="T">Type of the value</typeparam>
+            [CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
+            private static ContentReader<T> AsText<T>(
+                ContentConverter<T> readContent,
+                T whenEmpty
+                )
+            {
+                ContentReader<T> readText = AsText<T>(readContent);
+
+                return (
+                    Xml.XmlReader reader,
+                    bool isEmpty,
+                    out Reporting.Error? error
+                ) =>
+                {
+                    if (isEmpty)
+                    {
+                        error = null;
+                        return whenEmpty;
+                    }
+
+                    return readText(reader, false, out error);
+                };
+            }
+
+            /// <summary>
+            /// Convert the content at the current position of <paramref name="reader" />
+            /// to string.
+            /// </summary>
+            private static string ReadContentAsString(Xml.XmlReader reader)
+            {
+                return reader.ReadContentAsString();
+            }
+
+            /// <summary>
+            /// Consume the end tag matching <paramref name="elementName" />, unless
+            /// <paramref name="isEmptyElement" /> tells that the element was
+            /// self-closing and thus has no end tag at all.
+            /// </summary>
+            private static void ConsumeEndElement(
+                Xml.XmlReader reader,
+                string elementName,
                 bool isEmptyElement,
                 out Reporting.Error? error
                 )
@@ -643,7 +296,7 @@ namespace dummy
                 if (reader.EOF)
                 {
                     error = new Reporting.Error(
-                        $"Expected a closing element </{expectedElementName}>, " +
+                        $"Expected a closing element </{elementName}>, " +
                         "but reached the end-of-file");
                     return;
                 }
@@ -651,7 +304,7 @@ namespace dummy
                 if (reader.NodeType != Xml.XmlNodeType.EndElement)
                 {
                     error = new Reporting.Error(
-                        $"Expected a closing element </{expectedElementName}>, " +
+                        $"Expected a closing element </{elementName}>, " +
                         $"but got a node of type {reader.NodeType} " +
                         $"with value {reader.Value}");
                     return;
@@ -664,53 +317,181 @@ namespace dummy
                     return;
                 }
 
-                if (endElementName != expectedElementName)
+                if (endElementName != elementName)
                 {
                     error = new Reporting.Error(
-                        $"Expected a closing element </{expectedElementName}>, " +
+                        $"Expected a closing element </{elementName}>, " +
                         $"but got a closing element </{endElementName}>");
                     return;
                 }
 
-                // Skip the end element
+                // Consume the end tag.
                 reader.Read();
             }
 
             /// <summary>
-            /// Read a <c>&lt;v&gt;</c> and parse its content as a literal of
-            /// <see cref="Aas.Result"/>.
+            /// Bind <paramref name="elementName" /> to <paramref name="readContent" />,
+            /// so that the result reads the whole element, tags included.
             /// </summary>
-            private static Aas.Result? ReadVElementAsResult(
+            /// <typeparam name="T">Type of the parsed value</typeparam>
+            private static ElementReader<T> AtElement<T>(
+                ContentReader<T> readContent,
+                string elementName
+                )
+            {
+                return (
+                    Xml.XmlReader reader,
+                    out Reporting.Error? error
+                ) =>
+                {
+                    string observedName = PeekElementName(
+                        reader, out error);
+                    if (error != null)
+                    {
+                        return default!;
+                    }
+
+                    if (observedName != elementName)
+                    {
+                        error = new Reporting.Error(
+                            $"Expected a <{elementName}> element, " +
+                            $"but got a <{observedName}> element");
+                        return default!;
+                    }
+
+                    bool isEmptyElement = reader.IsEmptyElement;
+
+                    // Consume the start tag and go to the content.
+                    reader.Read();
+
+                    T value = readContent(reader, isEmptyElement, out error);
+                    if (error != null)
+                    {
+                        return default!;
+                    }
+
+                    ConsumeEndElement(
+                        reader, elementName, isEmptyElement, out error);
+                    if (error != null)
+                    {
+                        return default!;
+                    }
+
+                    return value;
+                };
+            }
+
+            /// <summary>
+            /// Read the start tag of the next property of a sequence and return whether
+            /// there was one.
+            /// </summary>
+            /// <remarks>
+            /// A sequence ends at the end tag of the enclosing element or at the end of
+            /// the file, which is not a failure -- when this returns <c>false</c>,
+            /// <paramref name="error" /> tells the two apart.
+            ///
+            /// The start tag is consumed, so the reader is left at the content of
+            /// the property.
+            /// </remarks>
+            private static bool TryNextProperty(
                 Xml.XmlReader reader,
-                string elementName,
+                out string elementName,
+                out bool isEmptyProperty,
                 out Reporting.Error? error
                 )
             {
-                string? text = ReadVElementAsString(reader, elementName, out error);
-                if (error != null)
+                error = null;
+                elementName = "";
+                isEmptyProperty = false;
+
+                SkipNoneWhitespaceAndComments(reader);
+
+                if (reader.NodeType == Xml.XmlNodeType.EndElement || reader.EOF)
                 {
-                    return null;
+                    return false;
                 }
 
-                if (text == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Text must not be null if error is null.");
-                }
-
-                Aas.Result? result = Stringification.ResultFromString(
-                    text);
-
-                if (result == null)
+                if (reader.NodeType != Xml.XmlNodeType.Element)
                 {
                     error = new Reporting.Error(
-                        "The text could not be parsed as enumeration literal " +
-                        $"of Result: {result}");
-                    return null;
+                        "Expected an XML start element representing a property, " +
+                        $"but got the node of type {reader.NodeType} " +
+                        $"with the value {reader.Value}");
+                    return false;
                 }
 
-                return result;
+                elementName = TryElementName(
+                    reader, out error);
+                if (error != null)
+                {
+                    return false;
+                }
+
+                isEmptyProperty = reader.IsEmptyElement;
+
+                // Consume the start tag and go to the content.
+                reader.Read();
+
+                return true;
             }
+
+            /// <summary>
+            /// Parse the text of a literal of <typeparamref name="T" />.
+            /// </summary>
+            /// <remarks>
+            /// Every <c>Stringification.*FromString</c> has this shape, so it can be
+            /// passed on directly -- which is what lets an enumeration be read by one
+            /// generated combinator instead of one per enumeration.
+            /// </remarks>
+            /// <typeparam name="T">Enumeration to parse the text as</typeparam>
+            private delegate T? LiteralParser<T>(string text) where T : struct;
+
+            /// <summary>
+            /// Read a content and parse it as a literal of <typeparamref name="T" />
+            /// with <paramref name="parseLiteral" />.
+            /// </summary>
+            /// <typeparam name="T">Enumeration to parse the content as</typeparam>
+            private static ContentReader<T> AsEnum<T>(
+                LiteralParser<T> parseLiteral
+                ) where T : struct
+            {
+                ContentReader<string> readText = AsText<string>(ReadContentAsString, "");
+
+                return (
+                    Xml.XmlReader reader,
+                    bool isEmpty,
+                    out Reporting.Error? error
+                ) =>
+                {
+                    string text = readText(reader, isEmpty, out error);
+                    if (error != null)
+                    {
+                        return default;
+                    }
+
+                    T? result = parseLiteral(text);
+                    if (result == null)
+                    {
+                        error = new Reporting.Error(
+                            $"The content could not be de-serialized as a literal " +
+                            $"of {typeof(T).Name}: {text}");
+                        return default;
+                    }
+
+                    return result.Value;
+                };
+            }
+
+            /// <summary>
+            /// Read an instance of class Something from its XML element.
+            /// </summary>
+            internal static readonly ElementReader<Aas.Something> SomethingFromElement = (
+                AtElement<Aas.Something>(
+                    SomethingFromSequence, "something"));
+
+            private static readonly ContentReader<Result> ReadResult = (
+                AsEnum<Aas.Result>(
+                    Stringification.ResultFromString));
 
             /// <summary>
             /// Deserialize an instance of class Something from a sequence of XML elements.
@@ -720,7 +501,7 @@ namespace dummy
             /// the instance from an empty sequence. That is, the parent element
             /// was a self-closing element.
             /// </remarks>
-            internal static Aas.Something? SomethingFromSequence(
+            internal static Aas.Something SomethingFromSequence(
                 Xml.XmlReader reader,
                 bool isEmptySequence,
                 out Reporting.Error? error)
@@ -738,146 +519,54 @@ namespace dummy
                             "Expected an XML element representing " +
                             "a property of an instance of class Something, " +
                             "but reached the end-of-file");
-                        return null;
+                        return default!;
                     }
-                    while (true)
+                    while (TryNextProperty(
+                            reader,
+                            out string elementName,
+                            out bool isEmptyProperty,
+                            out error))
                     {
-                        SkipNoneWhitespaceAndComments(reader);
-
-                        if (reader.NodeType == Xml.XmlNodeType.EndElement || reader.EOF)
-                        {
-                            break;
-                        }
-
-                        if (reader.NodeType != Xml.XmlNodeType.Element)
-                        {
-                            error = new Reporting.Error(
-                                "Expected an XML start element representing " +
-                                "a property of an instance of class Something, " +
-                                $"but got the node of type {reader.NodeType} " +
-                                $"with the value {reader.Value}");
-                            return null;
-                        }
-
-                        string elementName = TryElementName(
-                            reader, out error);
-                        if (error != null)
-                        {
-                            return null;
-                        }
-
-                        bool isEmptyProperty = reader.IsEmptyElement;
-
-                        // Skip the expected element
-                        reader.Read();
-
                         switch (elementName)
                         {
                             case "someResult":
-                            {
-                                if (isEmptyProperty)
-                                {
-                                    error = new Reporting.Error(
-                                        "The property SomeResult of an instance of class Something " +
-                                        "can not be de-serialized from a self-closing element " +
-                                        "since it needs content");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "someResult"));
-                                    return null;
-                                }
-
-                                    if (reader.EOF)
-                                {
-                                        error = new Reporting.Error(
-                                            "Expected an XML content representing " +
-                                            "the property SomeResult of an instance of class Something, " +
-                                            "but reached the end-of-file");
-                                        return null;
-                                }
-
-                                string textSomeResult;
-                                try
-                                {
-                                    textSomeResult = reader.ReadContentAsString();
-                                }
-                                catch (System.FormatException exception)
-                                {
-                                    error = new Reporting.Error(
-                                        "The property SomeResult of an instance of class Something " +
-                                        $"could not be de-serialized as a string: {exception}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "someResult"));
-                                    return null;
-                                }
-
-                                theSomeResult = Stringification.ResultFromString(
-                                    textSomeResult);
-
-                                if (theSomeResult == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "The property SomeResult of an instance of class Something " +
-                                        "could not be de-serialized from an unexpected enumeration literal: " +
-                                        textSomeResult);
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "someResult"));
-                                    return null;
-                                }
+                                theSomeResult = ReadResult(
+                                    reader, isEmptyProperty, out error);
                                 break;
-                            }
                             default:
                                 error = new Reporting.Error(
                                     "We expected properties of the class Something, " +
                                     "but got an unexpected element " +
                                     $"with the name {elementName}");
-                                return null;
+                                return default!;
                         }
 
-                        SkipNoneWhitespaceAndComments(reader);
-
-                        if (!isEmptyProperty)
+                        // NOTE (mristin):
+                        // Every property is read in this very loop, so we mark the error with
+                        // the property's own element name here, once, instead of at every
+                        // single case above. For a matched case, elementName *is* that name.
+                        if (error != null)
                         {
-                            // Read the end element
-
-                            if (reader.EOF)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected an XML end element to conclude a property of class Something " +
-                                    $"with the element name {elementName}, " +
-                                    "but got the end-of-file.");
-                                return null;
-                            }
-                            if (reader.NodeType != Xml.XmlNodeType.EndElement)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected an XML end element to conclude a property of class Something " +
-                                    $"with the element name {elementName}, " +
-                                    $"but got the node of type {reader.NodeType} " +
-                                    $"with the value {reader.Value}");
-                                return null;
-                            }
-
-                            string endElementName = TryElementName(
-                                reader, out error);
-                            if (error != null)
-                            {
-                                return null;
-                            }
-
-                            if (endElementName != elementName)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected an XML end element to conclude a property of class Something " +
-                                    $"with the element name {elementName}, " +
-                                    $"but got the end element with the name {reader.Name}");
-                                return null;
-                            }
-                            // Skip the expected end element
-                            reader.Read();
+                            error.PrependSegment(
+                                new Reporting.NameSegment(
+                                    elementName));
+                            return default!;
                         }
+
+                        ConsumeEndElement(
+                            reader, elementName, isEmptyProperty, out error);
+                        if (error != null)
+                        {
+                            return default!;
+                        }
+                    }
+
+                    // NOTE (mristin):
+                    // The loop also ends when the next property could not be read at all,
+                    // which is the only way out of it that is a failure.
+                    if (error != null)
+                    {
+                        return default!;
                     }
                 }
 
@@ -886,7 +575,7 @@ namespace dummy
                     error = new Reporting.Error(
                         "The required property SomeResult has not been given " +
                         "in the XML representation of an instance of class Something");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.Something(
@@ -894,54 +583,6 @@ namespace dummy
                          ?? throw new System.InvalidOperationException(
                             "Unexpected null, had to be handled before"));
             }  // internal static Aas.Something? SomethingFromSequence
-
-            /// <summary>
-            /// Deserialize an instance of class Something from an XML element.
-            /// </summary>
-            internal static Aas.Something? SomethingFromElement(
-                Xml.XmlReader reader,
-                out Reporting.Error? error)
-            {
-                error = null;
-
-                string elementName = ReadStartElementOfClass(
-                    reader, "Something", out bool isEmptyElement, out error);
-                if (error != null)
-                {
-                    return null;
-                }
-
-                if (elementName != "something")
-                {
-                    error = new Reporting.Error(
-                        "Expected an element representing an instance of class Something " +
-                        $"with element name something, but got: {elementName}");
-                    return null;
-                }
-
-                // Skip the element node and go to the content
-                reader.Read();
-
-                Aas.Something? result = (
-                    SomethingFromSequence(
-                        reader, isEmptyElement, out error));
-                if (error != null)
-                {
-                    return null;
-                }
-
-                ConsumeCloseTag(
-                    reader,
-                    elementName,
-                    isEmptyElement,
-                    out error);
-                if (error != null)
-                {
-                    return null;
-                }
-
-                return result;
-            }  // internal static Aas.Something? SomethingFromElement
         }  // internal static class DeserializeImplementation
 
         /// <summary>
@@ -1004,19 +645,16 @@ namespace dummy
                         "to be set at content with MoveToContent");
                 }
 
-                Aas.Something? result = (
-                    DeserializeImplementation.SomethingFromElement(
-                        reader,
-                        out Reporting.Error? error));
+                Aas.Something result = DeserializeImplementation.SomethingFromElement(
+                    reader,
+                    out Reporting.Error? error);
                 if (error != null)
                 {
                     throw new Xmlization.Exception(
                         Reporting.GenerateRelativeXPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
         }  // public static class Deserialize
 

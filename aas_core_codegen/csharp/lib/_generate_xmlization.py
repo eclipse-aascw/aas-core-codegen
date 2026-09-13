@@ -1,8 +1,9 @@
 """Generate code for XML de/serialization."""
 
+import collections
 import io
 import textwrap
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Mapping, MutableMapping, Set, Final
 
 from icontract import ensure, require
 
@@ -24,6 +25,7 @@ from aas_core_codegen.csharp.common import (
     INDENT3 as III,
     INDENT4 as IIII,
     INDENT5 as IIIII,
+    INDENT6 as IIIIII,
 )
 
 
@@ -108,637 +110,125 @@ private static string TryElementName(
     )
 
 
-def _generate_read_v_element() -> Stripped:
+def _generate_element_reader_delegates() -> Stripped:
+    """
+    Generate the two delegates through which every value is read.
+
+    An :py:class:`ElementReader` reads a whole element, tags included;
+    a :py:class:`ContentReader` reads what is between the tags. ``AtElement``
+    converts the latter into the former and is the only thing that has to
+    know an element's name.
+
+    Both return a plain ``T``. A nullable return would have to be spelled
+    ``T?``, which is a value type for a ``struct`` but a nullable reference
+    for a ``class``, so it would have to be split in two (and, before C# 9,
+    can not be written for an unconstrained ``T`` at all).
+
+    ``ElementReader`` is declared covariant, so that a field holding
+    the reader of a concrete class can be passed where the reader of its
+    interface is expected -- with a method group that came for free, but
+    a field is a value and needs the variance spelled out.
+    """
     return Stripped(
         f"""\
 /// <summary>
-/// Consume a start element named <paramref name="expectedName" /> from
-/// the reader and return whether it was a self-closing (empty) element.
-/// </summary>
-private static bool ReadVElement(
-{I}Xml.XmlReader reader,
-{I}string expectedName,
-{I}out Reporting.Error? error
-{I})
-{{
-{I}if (reader.EOF) {{
-{II}error = new Reporting.Error(
-{III}$"Expected a <{{expectedName}}> element, but got an end-of-file.");
-{II}return false;
-{I}}}
-
-{I}if (reader.NodeType != Xml.XmlNodeType.Element)
-{I}{{
-{II}error = new Reporting.Error(
-{III}$"Expected a <{{expectedName}}> start element, " +
-{III}$"but got the node of type {{reader.NodeType}} " +
-{III}$"with the value {{reader.Value}}");
-{II}return false;
-{I}}}
-
-{I}string elementName = TryElementName(
-{II}reader, out error);
-{I}if (error != null)
-{I}{{
-{II}return false;
-{I}}}
-{I}if (elementName != expectedName)
-{I}{{
-{II}error = new Reporting.Error(
-{III}$"Expected a <{{expectedName}}> element, " +
-{III}$"but got an element {{elementName}}");
-{II}return false;
-{I}}}
-
-{I}bool isEmpty = reader.IsEmptyElement;
-
-{I}// We can consume now the start element.
-{I}reader.Read();
-{I}return isEmpty;
-}}"""
-    )
-
-
-def _generate_read_v_end_element() -> Stripped:
-    return Stripped(
-        f"""\
-/// <summary>
-/// Consume an end element named <paramref name="expectedName" /> from
-/// the reader.
-/// </summary>
-private static void ReadVEndElement(
-{I}Xml.XmlReader reader,
-{I}string expectedName,
-{I}out Reporting.Error? error
-{I})
-{{
-{I}if (reader.EOF) {{
-{II}error = new Reporting.Error(
-{III}$"Expected a </{{expectedName}}> element, but got an end-of-file.");
-{II}return;
-{I}}}
-
-{I}if (reader.NodeType != Xml.XmlNodeType.EndElement)
-{I}{{
-{II}error = new Reporting.Error(
-{III}$"Expected a </{{expectedName}}> end element, " +
-{III}$"but got the node of type {{reader.NodeType}} " +
-{III}$"with the value {{reader.Value}}");
-{II}return;
-{I}}}
-
-{I}string elementName = TryElementName(
-{II}reader, out error);
-{I}if (error != null)
-{I}{{
-{II}return;
-{I}}}
-{I}if (elementName != expectedName)
-{I}{{
-{II}error = new Reporting.Error(
-{III}$"Expected a </{{expectedName}}> element, " +
-{III}$"but got an end element {{elementName}}");
-{II}return;
-{I}}}
-
-{I}// We can consume now the end element.
-{I}reader.Read();
-}}"""
-    )
-
-
-def _generate_read_v_element_as_primitive_functions() -> List[Stripped]:
-    result = []  # type: List[Stripped]
-
-    for function_name, result_type, deserialization_expr in (
-        ("ReadVElementAsBoolean", "bool", "reader.ReadContentAsBoolean()"),
-        ("ReadVElementAsLong", "long", "reader.ReadContentAsLong()"),
-        ("ReadVElementAsDouble", "double", "reader.ReadContentAsDouble()"),
-    ):
-        result.append(
-            Stripped(
-                f"""\
-/// <summary>
-/// Read the content of a <c>&lt;v&gt;</c> element
-/// and parse it as {result_type}.
-/// </summary>
-private static {result_type}? {function_name}(
-{I}Xml.XmlReader reader,
-{I}string elementName,
-{I}out Reporting.Error? error
-{I})
-{{
-{I}bool isEmptyVElement = ReadVElement(reader, elementName, out error);
-{I}if (error != null)
-{I}{{
-{II}return null;
-{I}}}
-
-{I}{result_type}? result = null;
-{I}if (!isEmptyVElement)
-{I}{{
-{II}if (reader.EOF)
-{II}{{
-{III}error = new Reporting.Error(
-{IIII}"Expected an XML content representing {result_type}, " +
-{IIII}"but reached the end-of-file");
-{III}return null;
-{II}}}
-
-{II}try
-{II}{{
-{III}result = {deserialization_expr};
-{II}}}
-{II}catch (System.Exception exception)
-{IIII}when (exception is System.FormatException
-{IIIII}|| exception is System.Xml.XmlException)
-{II}{{
-{III}error = new Reporting.Error(
-{IIII}$"The content could not be de-serialized as {result_type}: {{exception}}");
-{III}return null;
-{II}}}
-
-{II}ReadVEndElement(reader, elementName, out error);
-{II}if (error != null)
-{II}{{
-{III}return null;
-{II}}}
-{I}}}
-
-{I}if (result == null)
-{I}{{
-{II}throw new System.InvalidOperationException(
-{III}"Unexpected result null when there is no error.");
-{I}}}
-{I}return result;
-}}"""
-            )
-        )
-
-    # A self-closing <v /> represents an empty string.
-    result.append(
-        Stripped(
-            f"""\
-/// <summary>
-/// Read the content of a <c>&lt;v&gt;</c> element
-/// and parse it as string.
-/// </summary>
-private static string? ReadVElementAsString(
-{I}Xml.XmlReader reader,
-{I}string elementName,
-{I}out Reporting.Error? error
-{I})
-{{
-{I}bool isEmptyVElement = ReadVElement(reader, elementName, out error);
-{I}if (error != null)
-{I}{{
-{II}return null;
-{I}}}
-
-{I}string result;
-{I}if (!isEmptyVElement)
-{I}{{
-{II}if (reader.EOF)
-{II}{{
-{III}error = new Reporting.Error(
-{IIII}"Expected an XML content representing string, " +
-{IIII}"but reached the end-of-file");
-{III}return null;
-{II}}}
-
-{II}try
-{II}{{
-{III}result = reader.ReadContentAsString();
-{II}}}
-{II}catch (System.FormatException exception)
-{II}{{
-{III}error = new Reporting.Error(
-{IIII}$"The content could not be de-serialized as string: {{exception}}");
-{III}return null;
-{II}}}
-
-{II}ReadVEndElement(reader, elementName, out error);
-{II}if (error != null)
-{II}{{
-{III}return null;
-{II}}}
-{I}}}
-{I}else
-{I}{{
-{II}result = "";
-{I}}}
-
-{I}return result;
-}}"""
-        )
-    )
-
-    result.append(
-        Stripped(
-            f"""\
-/// <summary>
-/// Read a <c>&lt;v&gt;</c> element as base64-encoded bytes.
-/// </summary>
-private static byte[]? ReadVElementAsBytes(
-{I}Xml.XmlReader reader,
-{I}string elementName,
-{I}out Reporting.Error? error
-{I})
-{{
-{I}bool isEmptyVElement = ReadVElement(reader, elementName, out error);
-{I}if (error != null)
-{I}{{
-{II}return null;
-{I}}}
-
-{I}byte[]? result;
-{I}if (isEmptyVElement)
-{I}{{
-{II}result = new byte[0];
-{I}}}
-{I}else
-{I}{{
-{II}if (reader.EOF)
-{II}{{
-{III}error = new Reporting.Error(
-{IIII}"Expected an XML content with base64-encoded bytes, " +
-{IIII}"but reached the end-of-file");
-{III}return null;
-{II}}}
-
-{II}try
-{II}{{
-{III}result = ReadWholeContentAsBase64(reader);
-{II}}}
-{II}catch (System.FormatException exception)
-{II}{{
-{III}error = new Reporting.Error(
-{IIII}"The content could not be de-serialized as " +
-{IIII}$"base64-encoded bytes: {{exception}}");
-{III}return null;
-{II}}}
-
-{II}ReadVEndElement(reader, elementName, out error);
-{II}if (error != null)
-{II}{{
-{III}return null;
-{II}}}
-{I}}}
-
-{I}return result;
-}}"""
-        )
-    )
-
-    return result
-
-
-def _generate_parse_list_of_class_helpers() -> Stripped:
-    """Generate the generic helper to de-serialize a list of reference-type items."""
-    return Stripped(
-        f"""\
-/// <summary>
-/// Read a single list item, positioned at its start element.
-/// </summary>
-/// <typeparam name="T">Type of the parsed item</typeparam>
-private delegate T? ClassItemDeserializer<T>(
-{I}Xml.XmlReader reader,
-{I}out Reporting.Error? error
-{I}) where T : class;
-
-/// <summary>
-/// Parse a sequence of list items with <paramref name="deserializeItem" />,
-/// stopping (without consuming) at the first non-element node.
+/// Read a single element, tags included, positioned at its start tag.
 /// </summary>
 /// <remarks>
-/// This is shared by all the list-typed properties whose items are
-/// de-serialized into a reference type (<em>e.g.</em>, a string, a byte
-/// array or a class instance).
-/// </remarks>
-/// <typeparam name="T">Type of a single list item</typeparam>
-private static List<T> ParseListOfClass<T>(
-{I}Xml.XmlReader reader,
-{I}ClassItemDeserializer<T> deserializeItem,
-{I}out Reporting.Error? error
-{I}) where T : class
-{{
-{I}error = null;
-{I}List<T> result = new List<T>();
-
-{I}SkipNoneWhitespaceAndComments(reader);
-
-{I}int index = 0;
-{I}while (reader.NodeType == Xml.XmlNodeType.Element)
-{I}{{
-{II}T? item = deserializeItem(reader, out error);
-{II}if (error != null)
-{II}{{
-{III}error.PrependSegment(
-{IIII}new Reporting.IndexSegment(
-{IIIII}index));
-{III}return result;
-{II}}}
-
-{II}result.Add(
-{III}item
-{IIII}?? throw new System.InvalidOperationException(
-{IIIII}"Unexpected item null when error null"));
-
-{II}index++;
-{II}SkipNoneWhitespaceAndComments(reader);
-{I}}}
-
-{I}return result;
-}}"""
-    )
-
-
-def _generate_parse_list_of_struct_helpers() -> Stripped:
-    """Generate the generic helper to de-serialize a list of value-type items."""
-    return Stripped(
-        f"""\
-/// <summary>
-/// Read a single list item, positioned at its start element.
-/// </summary>
-/// <typeparam name="T">Type of the parsed item</typeparam>
-private delegate T? StructItemDeserializer<T>(
-{I}Xml.XmlReader reader,
-{I}out Reporting.Error? error
-{I}) where T : struct;
-
-/// <summary>
-/// Parse a sequence of list items with <paramref name="deserializeItem" />,
-/// stopping (without consuming) at the first non-element node.
-/// </summary>
-/// <remarks>
-/// This is shared by all the list-typed properties whose items are
-/// de-serialized into a value type (<em>e.g.</em>, a bool, a number or
-/// an enumeration literal).
-/// </remarks>
-/// <typeparam name="T">Type of a single list item</typeparam>
-private static List<T> ParseListOfStruct<T>(
-{I}Xml.XmlReader reader,
-{I}StructItemDeserializer<T> deserializeItem,
-{I}out Reporting.Error? error
-{I}) where T : struct
-{{
-{I}error = null;
-{I}List<T> result = new List<T>();
-
-{I}SkipNoneWhitespaceAndComments(reader);
-
-{I}int index = 0;
-{I}while (reader.NodeType == Xml.XmlNodeType.Element)
-{I}{{
-{II}T? item = deserializeItem(reader, out error);
-{II}if (error != null)
-{II}{{
-{III}error.PrependSegment(
-{IIII}new Reporting.IndexSegment(
-{IIIII}index));
-{III}return result;
-{II}}}
-
-{II}result.Add(
-{III}item
-{IIII}?? throw new System.InvalidOperationException(
-{IIIII}"Unexpected item null when error null"));
-
-{II}index++;
-{II}SkipNoneWhitespaceAndComments(reader);
-{I}}}
-
-{I}return result;
-}}"""
-    )
-
-
-def _generate_tuple_item_reader_delegate() -> Stripped:
-    """Generate the delegate and adapters shared by all the generic tuple parsers."""
-    return Stripped(
-        f"""\
-/// <summary>
-/// Read a single tuple item from the current position of the reader.
-/// </summary>
-/// <remarks>
-/// A tuple-typed property is parsed by <c>ParseTupleN</c> (see
-/// <see cref="ParseTuple2{{T0, T1}}" /> for the arity-2 case, *etc.*), one
-/// function shared by *every* tuple-typed property of a given arity,
-/// regardless of which mix of reference and value types appears at each
-/// position. If <c>ParseTupleN</c> demanded the same
-/// <c>ClassItemDeserializer&lt;T&gt;</c>/<c>StructItemDeserializer&lt;T&gt;</c>
-/// shape already used for list items (a nullable return, constrained to
-/// <c>class</c> or <c>struct</c>), its own type parameters would need that
-/// constraint fixed once per position -- which breaks the moment two
-/// different tuple-typed properties of the same arity mix reference and
-/// value types differently at the same position (<em>e.g.</em>,
-/// <c>(string, long)</c> at one property and <c>(long, string)</c> at
-/// another could not share one <c>ParseTuple2</c>).
+/// Return the value; on failure it is meaningless and
+/// <paramref name="error" /> says why. A plain <c>T</c> rather than
+/// a <c>T?</c>, so that one unconstrained delegate serves both the value
+/// and the reference types.
 ///
-/// A single unconstrained <c>T? Method(Xml.XmlReader reader, out Reporting.Error? error)</c>
-/// shape shared by both reference and value types does not work around this
-/// either: for a value type, an unconstrained <c>T?</c> erases to plain
-/// <c>T</c> (not <c>System.Nullable&lt;T&gt;</c>), so a method returning
-/// <c>long?</c> can not even be assigned to it.
-///
-/// <c>TupleItemDeserializer&lt;T&gt;</c> sidesteps the class/struct split
-/// entirely by using an <c>out</c> parameter for the value instead of a
-/// nullable return, at the cost of needing an adapter --
-/// <see cref="AsTupleItemDeserializer{{T}}(ClassItemDeserializer{{T}})" /> --
-/// to convert an existing item reader (such as a <c>ReadVElementAsString</c>
-/// call or a class's own <c>...FromElement</c> method group) into one.
+/// <typeparamref name="T" /> is covariant, so that the reader of
+/// a concrete class can be used as the reader of an item of a list of
+/// its interface. It is <c>internal</c> only because the readers of
+/// the classes are, and a field may not be more accessible than its type.
 /// </remarks>
-/// <typeparam name="T">Type of the parsed item</typeparam>
-private delegate void TupleItemDeserializer<T>(
+/// <typeparam name="T">Type of the parsed value</typeparam>
+internal delegate T ElementReader<out T>(
 {I}Xml.XmlReader reader,
-{I}out T value,
 {I}out Reporting.Error? error);
 
 /// <summary>
-/// Adapt <paramref name="deserializeItem" /> -- a reference-type item reader
-/// as used for list-typed properties -- into a <see cref="TupleItemDeserializer{{T}}" />
-/// for use in a tuple-typed property.
+/// Read the content of an element, positioned after its start tag.
 /// </summary>
 /// <remarks>
-/// See the remarks on <see cref="TupleItemDeserializer{{T}}" /> for why this
-/// adapter -- rather than a shared constraint on <c>ParseTupleN</c> itself --
-/// is necessary. This overload and its <c>StructItemDeserializer&lt;T&gt;</c>
-/// counterpart are dispatched on the parameter's delegate type alone, so a
-/// caller never has to pick between them by name; each encapsulates the
-/// "unwrap the nullable result, or propagate the error" check exactly once,
-/// mirroring how <see cref="ParseListOfClass{{T}}" />/
-/// <see cref="ParseListOfStruct{{T}}" /> encapsulate the very same check
-/// once for lists instead of repeating it at every call site.
+/// Every value is read through this one shape, so that the reading can be
+/// composed: an <c>As*</c> combinator turns a conversion, a literal parser,
+/// an element reader or a list of them into one of these, and a class's own
+/// <c>...FromSequence</c> already is one.
 /// </remarks>
-/// <typeparam name="T">Type of the parsed item</typeparam>
-private static TupleItemDeserializer<T> AsTupleItemDeserializer<T>(
-{I}ClassItemDeserializer<T> deserializeItem
-{I}) where T : class
-{{
-{I}return (
-{II}Xml.XmlReader reader,
-{II}out T value,
-{II}out Reporting.Error? error) =>
-{II}{{
-{III}T? parsed = deserializeItem(reader, out error);
-{III}if (error != null)
-{III}{{
-{IIII}value = default!;
-{IIII}return;
-{III}}}
-{III}value = parsed
-{IIII}?? throw new System.InvalidOperationException(
-{IIIII}"Unexpected result null when error is null");
-{II}}};
-}}
-
-/// <summary>
-/// Adapt <paramref name="deserializeItem" /> -- a value-type item reader
-/// as used for list-typed properties -- into a <see cref="TupleItemDeserializer{{T}}" />
-/// for use in a tuple-typed property.
-/// </summary>
-/// <remarks>
-/// See <see cref="AsTupleItemDeserializer{{T}}(ClassItemDeserializer{{T}})" />
-/// for why this adapter is necessary.
-/// </remarks>
-/// <typeparam name="T">Type of the parsed item</typeparam>
-private static TupleItemDeserializer<T> AsTupleItemDeserializer<T>(
-{I}StructItemDeserializer<T> deserializeItem
-{I}) where T : struct
-{{
-{I}return (
-{II}Xml.XmlReader reader,
-{II}out T value,
-{II}out Reporting.Error? error) =>
-{II}{{
-{III}T? parsed = deserializeItem(reader, out error);
-{III}if (error != null)
-{III}{{
-{IIII}value = default;
-{IIII}return;
-{III}}}
-{III}value = parsed
-{IIII}?? throw new System.InvalidOperationException(
-{IIIII}"Unexpected result null when error is null");
-{II}}};
-}}
-
-/// <summary>
-/// Read a single tuple item wrapped in a reference-type-valued named
-/// element such as <c>&lt;v1&gt;</c>, <c>&lt;v2&gt;</c>, *etc.*
-/// </summary>
-/// <remarks>
-/// This is the counterpart of <see cref="ClassItemDeserializer{{T}}" /> for
-/// item readers that additionally need the expected element name passed in
-/// -- such as <see cref="ReadVElementAsString" /> -- since a tuple item, unlike
-/// a list item, is wrapped in a positional element name instead of always
-/// the fixed <c>&lt;v&gt;</c>.
-/// </remarks>
-/// <typeparam name="T">Type of the parsed item</typeparam>
-private delegate T? NamedClassItemDeserializer<T>(
+/// <typeparam name="T">Type of the value</typeparam>
+private delegate T ContentReader<T>(
 {I}Xml.XmlReader reader,
-{I}string elementName,
-{I}out Reporting.Error? error
-{I}) where T : class;
+{I}bool isEmpty,
+{I}out Reporting.Error? error);"""
+    )
 
+
+def _generate_read_list_helper() -> Stripped:
+    """Generate the single generic helper to read a sequence of list items."""
+    return Stripped(
+        f"""\
 /// <summary>
-/// Read a single tuple item wrapped in a value-type-valued named element
-/// such as <c>&lt;v1&gt;</c>, <c>&lt;v2&gt;</c>, *etc.*
+/// Read a sequence of list items with <paramref name="readItem" />,
+/// stopping (without consuming) at the first non-element node.
 /// </summary>
 /// <remarks>
-/// See the remarks on <see cref="NamedClassItemDeserializer{{T}}" />.
+/// This is shared by everything of a list type, whatever its items are and
+/// however deeply it is nested, since the items are read through
+/// an <see cref="ElementReader{{T}}" /> like any other element.
 /// </remarks>
-/// <typeparam name="T">Type of the parsed item</typeparam>
-private delegate T? NamedStructItemDeserializer<T>(
+/// <typeparam name="T">Type of a single list item</typeparam>
+private static List<T> ReadList<T>(
 {I}Xml.XmlReader reader,
-{I}string elementName,
+{I}ElementReader<T> readItem,
 {I}out Reporting.Error? error
-{I}) where T : struct;
-
-/// <summary>
-/// Adapt <paramref name="deserializeItem" /> -- a reference-type item reader
-/// which additionally expects the element name, such as
-/// <see cref="ReadVElementAsString" /> -- into a
-/// <see cref="TupleItemDeserializer{{T}}" /> bound to
-/// <paramref name="elementName" />, for use in a tuple-typed property.
-/// </summary>
-/// <remarks>
-/// See the remarks on <see cref="TupleItemDeserializer{{T}}" /> for why an
-/// adapter is necessary in the first place. This overload additionally
-/// closes over <paramref name="elementName" /> (<em>e.g.</em>, <c>"v1"</c>),
-/// so that the tuple-typed property itself does not need to spell out a
-/// lambda just to bind the positional element name.
-/// </remarks>
-/// <typeparam name="T">Type of the parsed item</typeparam>
-private static TupleItemDeserializer<T> AsTupleItemDeserializer<T>(
-{I}NamedClassItemDeserializer<T> deserializeItem,
-{I}string elementName
-{I}) where T : class
+{I})
 {{
-{I}return (
-{II}Xml.XmlReader reader,
-{II}out T value,
-{II}out Reporting.Error? error) =>
-{II}{{
-{III}T? parsed = deserializeItem(reader, elementName, out error);
-{III}if (error != null)
-{III}{{
-{IIII}value = default!;
-{IIII}return;
-{III}}}
-{III}value = parsed
-{IIII}?? throw new System.InvalidOperationException(
-{IIIII}"Unexpected result null when error is null");
-{II}}};
-}}
+{I}error = null;
+{I}var result = new List<T>();
 
-/// <summary>
-/// Adapt <paramref name="deserializeItem" /> -- a value-type item reader
-/// which additionally expects the element name, such as
-/// <see cref="ReadVElementAsLong" /> -- into a
-/// <see cref="TupleItemDeserializer{{T}}" /> bound to
-/// <paramref name="elementName" />, for use in a tuple-typed property.
-/// </summary>
-/// <remarks>
-/// See <see cref="AsTupleItemDeserializer{{T}}(NamedClassItemDeserializer{{T}}, string)" />
-/// for why this adapter is necessary.
-/// </remarks>
-/// <typeparam name="T">Type of the parsed item</typeparam>
-private static TupleItemDeserializer<T> AsTupleItemDeserializer<T>(
-{I}NamedStructItemDeserializer<T> deserializeItem,
-{I}string elementName
-{I}) where T : struct
-{{
-{I}return (
-{II}Xml.XmlReader reader,
-{II}out T value,
-{II}out Reporting.Error? error) =>
+{I}SkipNoneWhitespaceAndComments(reader);
+
+{I}int index = 0;
+{I}while (reader.NodeType == Xml.XmlNodeType.Element)
+{I}{{
+{II}T item = readItem(reader, out error);
+{II}if (error != null)
 {II}{{
-{III}T? parsed = deserializeItem(reader, elementName, out error);
-{III}if (error != null)
-{III}{{
-{IIII}value = default;
-{IIII}return;
-{III}}}
-{III}value = parsed
-{IIII}?? throw new System.InvalidOperationException(
-{IIIII}"Unexpected result null when error is null");
-{II}}};
+{III}error.PrependSegment(
+{IIII}new Reporting.IndexSegment(
+{IIIII}index));
+{III}return result;
+{II}}}
+
+{II}result.Add(item);
+
+{II}index++;
+{II}SkipNoneWhitespaceAndComments(reader);
+{I}}}
+
+{I}return result;
 }}"""
     )
 
 
 @require(lambda arity: arity > 0)
-def _generate_parse_tuple_helper(arity: int) -> Stripped:
+def _generate_as_tuple_combinator(arity: int) -> Stripped:
     """
-    Generate a generic function to parse a tuple of the given ``arity``.
+    Generate the combinator reading a content as a tuple of the given ``arity``.
 
-    Each positional item is read by its own ``deserializeItemI`` callback,
-    which is expected to have already consumed its own start and end tags (if
-    any). We can not reuse :py:func:`_generate_parse_list_of_class_helpers`/
-    :py:func:`_generate_parse_list_of_struct_helpers` here since a tuple is
-    heterogeneous -- see :py:func:`TupleItemDeserializer` for why the item
-    delegate uses an ``out`` parameter instead of a nullable return value.
+    Each positional item is read by its own ``readItemI`` callback, which is
+    expected to have already consumed its own start and end tags (if any).
+    We can not reuse :py:func:`_generate_read_list_helper` here, since
+    a tuple is heterogeneous -- but the very same, unconstrained
+    :py:class:`ElementReader` serves both.
+
+    The content is not necessarily a property's. The result is a plain
+    ``ContentReader``, so wrapping it in ``AtElement`` makes a tuple readable
+    as an item of a list or of another tuple, arbitrarily deep.
     """
     type_params = [f"T{i}" for i in range(arity)]
     type_params_joined = ", ".join(type_params)
@@ -748,15 +238,13 @@ def _generate_parse_tuple_helper(arity: int) -> Stripped:
     else:
         tuple_type = f"({type_params_joined})"
 
-    params_joined = ",\n".join(
-        f"TupleItemDeserializer<T{i}> deserializeItem{i}" for i in range(arity)
-    )
+    params_joined = ",\n".join(f"ElementReader<T{i}> readItem{i}" for i in range(arity))
 
     item_blocks = []  # type: List[Stripped]
     for i in range(arity):
         item_block = Stripped(
             f"""\
-deserializeItem{i}(reader, out T{i} item{i}, out error);
+T{i} item{i} = readItem{i}(reader, out error);
 if (error != null)
 {{
 {I}error.PrependSegment(
@@ -783,733 +271,1107 @@ if (error != null)
 {I}{indent_but_first_line(item_vars_joined, I)}
 )"""
 
-    function_name = f"ParseTuple{arity}"
-
     return Stripped(
         f"""\
 /// <summary>
-/// Parse a tuple of {arity} item(s) from the current position
-/// of <paramref name="reader" />.
+/// Read a content as a tuple of {arity} item(s).
 /// </summary>
 /// <remarks>
-/// This is shared by all the tuple-typed properties of arity {arity}.
+/// This is shared by everything of a tuple type of arity {arity} -- be it
+/// a property, or a value nested in a list or in another tuple.
 /// </remarks>
-private static {tuple_type} {function_name}<{type_params_joined}>(
-{I}Xml.XmlReader reader,
-{I}{indent_but_first_line(params_joined, I)},
-{I}out Reporting.Error? error)
+private static ContentReader<{tuple_type}> AsTuple{arity}<{type_params_joined}>(
+{I}{indent_but_first_line(params_joined, I)}
+{I})
 {{
-{I}error = null;
+{I}return (
+{II}Xml.XmlReader reader,
+{II}bool isEmptyProperty,
+{II}out Reporting.Error? error
+{I}) =>
+{I}{{
+{II}error = null;
 
-{I}{indent_but_first_line(item_blocks_joined, I)}
+{II}if (isEmptyProperty)
+{II}{{
+{III}error = new Reporting.Error(
+{IIII}"Expected an XML content representing a tuple of {arity} item(s), " +
+{IIII}"but the element was self-closing");
+{III}return default!;
+{II}}}
 
-{I}return {indent_but_first_line(return_expr, I)};
+{II}SkipNoneWhitespaceAndComments(reader);
+
+{II}{indent_but_first_line(item_blocks_joined, II)}
+
+{II}return {indent_but_first_line(return_expr, II)};
+{I}}};
 }}"""
     )
 
 
-def _generate_read_v_element_as_enumeration(
-    enumeration: intermediate.Enumeration,
-) -> Stripped:
-    """Generate the function to de-serialize a literal from a ``<v>``."""
-    enum_name = csharp_naming.enum_name(enumeration.name)
+_CONTENT_READER_BY_PRIMITIVE = {
+    intermediate.PrimitiveType.BOOL: (
+        "ReadContentAsBoolean",
+        "bool",
+        "reader.ReadContentAsBoolean()",
+    ),
+    intermediate.PrimitiveType.INT: (
+        "ReadContentAsLong",
+        "long",
+        "reader.ReadContentAsLong()",
+    ),
+    intermediate.PrimitiveType.FLOAT: (
+        "ReadContentAsDouble",
+        "double",
+        "reader.ReadContentAsDouble()",
+    ),
+    intermediate.PrimitiveType.STR: (
+        "ReadContentAsString",
+        "string",
+        "reader.ReadContentAsString()",
+    ),
+    intermediate.PrimitiveType.BYTEARRAY: (
+        "ReadContentAsBytes",
+        "byte[]",
+        f"ReadWholeContentAsBase64(\n{II}reader)",
+    ),
+}
+
+assert all(
+    literal in _CONTENT_READER_BY_PRIMITIVE for literal in intermediate.PrimitiveType
+)
+
+# NOTE (mristin):
+# A self-closing element stands for an empty string and for empty bytes,
+# whereas the other primitives have no content to convert at all and so it is
+# an error. Where a primitive has such an empty value, it is spelled out here
+# and the reading goes through the ``...OrEmpty`` variant of the skeleton.
+_EMPTY_VALUE_BY_PRIMITIVE = {
+    intermediate.PrimitiveType.STR: '""',
+    intermediate.PrimitiveType.BYTEARRAY: "new byte[0]",
+}
+
+
+class _NeededContentReaders:
+    """Capture which of the shared content readers a model actually needs."""
+
+    def __init__(
+        self,
+        primitive_types: Set[intermediate.PrimitiveType],
+        enumerations: bool,
+        polymorphic: bool,
+        lists: bool,
+        v_elements: bool,
+    ) -> None:
+        """Initialize with the given values."""
+        self.primitive_types = primitive_types
+        self.enumerations = enumerations
+        self.polymorphic = polymorphic
+        self.lists = lists
+        self.v_elements = v_elements
+
+    @property
+    def text(self) -> bool:
+        """Check whether the skeleton reading a content as text is needed."""
+        return any(
+            a_type in self.primitive_types for a_type in _CONTENT_READER_BY_PRIMITIVE
+        )
+
+
+def _needed_content_readers(
+    symbol_table: intermediate.SymbolTable,
+) -> _NeededContentReaders:
+    """
+    Determine which shared content readers need to be generated.
+
+    Only the properties of the concrete classes matter, as they are the only
+    ones de-serialized from a sequence of XML elements. A list or a tuple
+    contributes through its *items* as well, as they are read by the very
+    same combinators, only one nesting level deeper.
+
+    This mirrors how the tuple helpers are already emitted only for
+    the arities which actually occur (see
+    :py:func:`aas_core_codegen.intermediate.tuple_arities`) -- without it,
+    a model would pay for the readers it never calls.
+    """
+    primitive_types = set()  # type: Set[intermediate.PrimitiveType]
+    enumerations = False
+    polymorphic = False
+    lists = False
+    v_elements = False
+
+    for cls in symbol_table.concrete_classes:
+        for prop in cls.properties:
+            type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+            if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
+                primitive_types.add(type_anno.a_type)
+
+            elif isinstance(type_anno, intermediate.OurTypeAnnotation):
+                our_type = type_anno.our_type
+
+                if isinstance(our_type, intermediate.Enumeration):
+                    enumerations = True
+                    primitive_types.add(intermediate.PrimitiveType.STR)
+
+                elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+                    primitive_types.add(our_type.constrainee)
+
+                elif isinstance(
+                    our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+                ):
+                    if (
+                        isinstance(our_type, intermediate.AbstractClass)
+                        or len(our_type.concrete_descendants) > 0
+                    ):
+                        polymorphic = True
+
+                elif isinstance(our_type, intermediate.NamedUnion):
+                    polymorphic = True
+
+                else:
+                    assert_never(our_type)
+
+            elif isinstance(
+                type_anno,
+                (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
+            ):
+                # NOTE (mristin):
+                # A primitive or an enumeration item of a list or of a tuple
+                # is wrapped in a ``<v>`` element of its own.
+                if isinstance(type_anno, intermediate.ListTypeAnnotation):
+                    lists = True
+                    item_type_annotations = [
+                        type_anno.items
+                    ]  # type: List[intermediate.TypeAnnotationUnion]
+                else:
+                    item_type_annotations = list(type_anno.items)
+
+                for item_type_anno in item_type_annotations:
+                    item_primitive_type = intermediate.try_primitive_type(
+                        item_type_anno
+                    )
+
+                    if item_primitive_type is not None:
+                        primitive_types.add(item_primitive_type)
+                        v_elements = True
+
+                    elif isinstance(
+                        item_type_anno, intermediate.OurTypeAnnotation
+                    ) and isinstance(item_type_anno.our_type, intermediate.Enumeration):
+                        primitive_types.add(intermediate.PrimitiveType.STR)
+                        enumerations = True
+                        v_elements = True
+
+            else:
+                pass
+
+    return _NeededContentReaders(
+        primitive_types=primitive_types,
+        enumerations=enumerations,
+        polymorphic=polymorphic,
+        lists=lists,
+        v_elements=v_elements,
+    )
+
+
+def _generate_as_text_combinators(
+    needed: _NeededContentReaders,
+) -> List[Stripped]:
+    """
+    Generate the shared skeletons for reading a content as text.
+
+    The self-closing-element check, the end-of-file check and the ``try``/
+    ``catch`` around the conversion are the same for every type, so they are
+    generated here exactly once -- the type-specific part is passed in as
+    a :py:class:`ContentConverter`. The content is that of *any* element --
+    a property's, or a ``<v>`` element's of a list item or of a tuple item --
+    so nothing here may speak of a property.
+
+    There are two skeletons rather than one because a self-closing element is
+    an error for most of the types, but the empty value for a couple of them
+    (an empty string, no bytes).
+
+    The type name in the messages comes from ``typeof(T).Name`` instead of
+    being baked in by the generator, so that a call site costs no more than
+    it did when there was one hand-rolled reader per type.
+    """
+    result = []  # type: List[Stripped]
+
+    if not needed.text:
+        return result
+
+    result.append(
+        Stripped(
+            """\
+/// <summary>
+/// Convert the content at the current position of <paramref name="reader" />.
+/// </summary>
+/// <typeparam name="T">Type to convert the content to</typeparam>
+private delegate T ContentConverter<T>(Xml.XmlReader reader);"""
+        )
+    )
+
+    result.append(
+        Stripped(
+            f"""\
+/// <summary>
+/// Read the content between a start and an end tag and convert it
+/// with <paramref name="readContent" />.
+/// </summary>
+/// <remarks>
+/// This is the one skeleton for reading any content whatsoever -- of
+/// a property, or of a <c>&lt;v&gt;</c> element of a list or a tuple item
+/// (see <see cref="AtElement{{T}}" />). Only the conversion differs, so
+/// only the conversion is passed in.
+///
+/// On failure the returned value is meaningless; the caller checks
+/// <paramref name="error" /> and bails out before ever reading it. That is
+/// what lets this return a plain <c>T</c> -- a <c>T?</c> would have to be
+/// split into a variant for the value and one for the reference types.
+/// </remarks>
+/// <typeparam name="T">Type of the value</typeparam>
+private static ContentReader<T> AsText<T>(
+{I}ContentConverter<T> readContent
+{I})
+{{
+{I}return (
+{II}Xml.XmlReader reader,
+{II}bool isEmpty,
+{II}out Reporting.Error? error
+{I}) =>
+{I}{{
+{II}error = null;
+
+{II}if (isEmpty)
+{II}{{
+{III}error = new Reporting.Error(
+{IIII}$"Expected an XML content representing {{typeof(T).Name}}, " +
+{IIII}"but the element was self-closing");
+{III}return default!;
+{II}}}
+
+{II}if (reader.EOF)
+{II}{{
+{III}error = new Reporting.Error(
+{IIII}$"Expected an XML content representing {{typeof(T).Name}}, " +
+{IIII}"but reached the end-of-file");
+{III}return default!;
+{II}}}
+
+{II}try
+{II}{{
+{III}return readContent(reader);
+{II}}}
+{II}catch (System.Exception exception)
+{IIII}when (exception is System.FormatException
+{IIIII}|| exception is System.Xml.XmlException)
+{II}{{
+{III}error = new Reporting.Error(
+{IIII}$"The content could not be de-serialized as {{typeof(T).Name}}: " +
+{IIII}exception.Message);
+{III}return default!;
+{II}}}
+{I}}};
+}}"""
+        )
+    )
+
+    result.append(
+        Stripped(
+            f"""\
+/// <summary>
+/// Read the content between a start and an end tag, or return
+/// <paramref name="whenEmpty" /> if the element was self-closing.
+/// </summary>
+/// <typeparam name="T">Type of the value</typeparam>
+[CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
+private static ContentReader<T> AsText<T>(
+{I}ContentConverter<T> readContent,
+{I}T whenEmpty
+{I})
+{{
+{I}ContentReader<T> readText = AsText<T>(readContent);
+
+{I}return (
+{II}Xml.XmlReader reader,
+{II}bool isEmpty,
+{II}out Reporting.Error? error
+{I}) =>
+{I}{{
+{II}if (isEmpty)
+{II}{{
+{III}error = null;
+{III}return whenEmpty;
+{II}}}
+
+{II}return readText(reader, false, out error);
+{I}}};
+}}"""
+        )
+    )
+
+    return result
+
+
+def _generate_consume_end_element() -> Stripped:
+    """
+    Generate the shared helper consuming the end tag of an element.
+
+    Reading a whole element and reading a property of a sequence conclude
+    in exactly the same way, so this is shared by ``AtElement`` and by
+    the property loop of every ``...FromSequence``.
+    """
     return Stripped(
         f"""\
 /// <summary>
-/// Read a <c>&lt;v&gt;</c> and parse its content as a literal of
-/// <see cref="Aas.{enum_name}"/>.
+/// Consume the end tag matching <paramref name="elementName" />, unless
+/// <paramref name="isEmptyElement" /> tells that the element was
+/// self-closing and thus has no end tag at all.
 /// </summary>
-private static Aas.{enum_name}? ReadVElementAs{enum_name}(
+private static void ConsumeEndElement(
 {I}Xml.XmlReader reader,
 {I}string elementName,
+{I}bool isEmptyElement,
 {I}out Reporting.Error? error
 {I})
 {{
-{I}string? text = ReadVElementAsString(reader, elementName, out error);
+{I}error = null;
+
+{I}if (isEmptyElement)
+{I}{{
+{II}return;
+{I}}}
+
+{I}SkipNoneWhitespaceAndComments(reader);
+
+{I}if (reader.EOF)
+{I}{{
+{II}error = new Reporting.Error(
+{III}$"Expected a closing element </{{elementName}}>, " +
+{III}"but reached the end-of-file");
+{II}return;
+{I}}}
+
+{I}if (reader.NodeType != Xml.XmlNodeType.EndElement)
+{I}{{
+{II}error = new Reporting.Error(
+{III}$"Expected a closing element </{{elementName}}>, " +
+{III}$"but got a node of type {{reader.NodeType}} " +
+{III}$"with value {{reader.Value}}");
+{II}return;
+{I}}}
+
+{I}string endElementName = TryElementName(
+{II}reader, out error);
 {I}if (error != null)
 {I}{{
-{II}return null;
+{II}return;
 {I}}}
 
-{I}if (text == null)
-{I}{{
-{II}throw new System.InvalidOperationException(
-{III}"Text must not be null if error is null.");
-{I}}}
-
-{I}Aas.{enum_name}? result = Stringification.{enum_name}FromString(
-{II}text);
-
-{I}if (result == null)
+{I}if (endElementName != elementName)
 {I}{{
 {II}error = new Reporting.Error(
-{III}"The text could not be parsed as enumeration literal " +
-{III}$"of {enum_name}: {{result}}");
-{II}return null;
+{III}$"Expected a closing element </{{elementName}}>, " +
+{III}$"but got a closing element </{{endElementName}}>");
+{II}return;
 {I}}}
 
-{I}return result;
+{I}// Consume the end tag.
+{I}reader.Read();
 }}"""
     )
 
 
-def _generate_deserialize_primitive_property(
-    prop: intermediate.Property, cls: intermediate.ConcreteClass
-) -> Stripped:
-    """Generate the snippet to deserialize a property ``prop`` of primitive type."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
+def _generate_try_next_property() -> Stripped:
+    """
+    Generate the shared helper reading the start tag of the next property.
 
-    a_type = intermediate.try_primitive_type(type_anno)
-    assert a_type is not None, f"Unexpected type annotation: {prop.type_annotation}"
+    The framing of the property loop -- where the sequence ends, what is not
+    an element at all, what the property is called and whether it is
+    self-closing -- says nothing about the class being read, so it is
+    generated once here instead of once per class.
 
-    deserialization_expr: str
-    if a_type is intermediate.PrimitiveType.BOOL:
-        deserialization_expr = "reader.ReadContentAsBoolean()"
-    elif a_type is intermediate.PrimitiveType.INT:
-        deserialization_expr = "reader.ReadContentAsLong()"
-    elif a_type is intermediate.PrimitiveType.FLOAT:
-        deserialization_expr = "reader.ReadContentAsDouble()"
-    elif a_type is intermediate.PrimitiveType.STR:
-        deserialization_expr = "reader.ReadContentAsString()"
-    elif a_type is intermediate.PrimitiveType.BYTEARRAY:
-        deserialization_expr = f"""\
-DeserializeImplementation.ReadWholeContentAsBase64(
-{I}reader)"""
-    else:
-        assert_never(a_type)
+    Only the ``switch`` over the property names is left inline, because its
+    branches assign the local variables which the constructor is called with
+    afterwards.
+    """
+    return Stripped(
+        f"""\
+/// <summary>
+/// Read the start tag of the next property of a sequence and return whether
+/// there was one.
+/// </summary>
+/// <remarks>
+/// A sequence ends at the end tag of the enclosing element or at the end of
+/// the file, which is not a failure -- when this returns <c>false</c>,
+/// <paramref name="error" /> tells the two apart.
+///
+/// The start tag is consumed, so the reader is left at the content of
+/// the property.
+/// </remarks>
+private static bool TryNextProperty(
+{I}Xml.XmlReader reader,
+{I}out string elementName,
+{I}out bool isEmptyProperty,
+{I}out Reporting.Error? error
+{I})
+{{
+{I}error = null;
+{I}elementName = "";
+{I}isEmptyProperty = false;
 
-    target_var = csharp_naming.variable_name(Identifier(f"the_{prop.name}"))
+{I}SkipNoneWhitespaceAndComments(reader);
 
-    prop_name = csharp_naming.property_name(prop.name)
-    cls_name = csharp_naming.class_name(cls.name)
-    xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
+{I}if (reader.NodeType == Xml.XmlNodeType.EndElement || reader.EOF)
+{I}{{
+{II}return false;
+{I}}}
 
-    if a_type is intermediate.PrimitiveType.STR:
-        empty_handling_body = Stripped(f'{target_var} = "";')
-    else:
-        empty_handling_body = Stripped(
-            f"""\
-error = new Reporting.Error(
-{I}"The property {prop_name} of an instance of class {cls_name} " +
-{I}"can not be de-serialized from a self-closing element " +
-{I}"since it needs content");
-error.PrependSegment(
-{I}new Reporting.NameSegment(
-{II}{xml_prop_name_literal}));
-return null;"""
+{I}if (reader.NodeType != Xml.XmlNodeType.Element)
+{I}{{
+{II}error = new Reporting.Error(
+{III}"Expected an XML start element representing a property, " +
+{III}$"but got the node of type {{reader.NodeType}} " +
+{III}$"with the value {{reader.Value}}");
+{II}return false;
+{I}}}
+
+{I}elementName = TryElementName(
+{II}reader, out error);
+{I}if (error != null)
+{I}{{
+{II}return false;
+{I}}}
+
+{I}isEmptyProperty = reader.IsEmptyElement;
+
+{I}// Consume the start tag and go to the content.
+{I}reader.Read();
+
+{I}return true;
+}}"""
+    )
+
+
+def _generate_at_element_combinator() -> Stripped:
+    """
+    Generate the combinator reading a whole element of an expected name.
+
+    An element is only its start and end tag around a content, so the content
+    is read by the very same :py:class:`ContentReader` as everything else --
+    there is no separate reader per primitive, per enumeration or per class.
+
+    The name is data, not a type: ``v`` for a list item, ``v1``, ``v2``,
+    *etc.* by position in a tuple, and its own XML name for a class. So it is
+    bound here rather than being spelled as a type argument, and the error
+    messages are phrased in terms of it -- which is why the combinator needs
+    nothing else to say what it expected.
+
+    This is the hinge of the whole composition: it turns
+    a :py:class:`ContentReader` back into an :py:class:`ElementReader`, which
+    is what a list and a tuple take for their items, and what a class is read
+    as. Any content reader can therefore be nested as deeply as the model
+    needs.
+    """
+    return Stripped(
+        f"""\
+/// <summary>
+/// Bind <paramref name="elementName" /> to <paramref name="readContent" />,
+/// so that the result reads the whole element, tags included.
+/// </summary>
+/// <typeparam name="T">Type of the parsed value</typeparam>
+private static ElementReader<T> AtElement<T>(
+{I}ContentReader<T> readContent,
+{I}string elementName
+{I})
+{{
+{I}return (
+{II}Xml.XmlReader reader,
+{II}out Reporting.Error? error
+{I}) =>
+{I}{{
+{II}string observedName = PeekElementName(
+{III}reader, out error);
+{II}if (error != null)
+{II}{{
+{III}return default!;
+{II}}}
+
+{II}if (observedName != elementName)
+{II}{{
+{III}error = new Reporting.Error(
+{IIII}$"Expected a <{{elementName}}> element, " +
+{IIII}$"but got a <{{observedName}}> element");
+{III}return default!;
+{II}}}
+
+{II}bool isEmptyElement = reader.IsEmptyElement;
+
+{II}// Consume the start tag and go to the content.
+{II}reader.Read();
+
+{II}T value = readContent(reader, isEmptyElement, out error);
+{II}if (error != null)
+{II}{{
+{III}return default!;
+{II}}}
+
+{II}ConsumeEndElement(
+{III}reader, elementName, isEmptyElement, out error);
+{II}if (error != null)
+{II}{{
+{III}return default!;
+{II}}}
+
+{II}return value;
+{I}}};
+}}"""
+    )
+
+
+def _generate_content_converters(
+    primitive_types: Set[intermediate.PrimitiveType],
+) -> List[Stripped]:
+    """Generate the conversions passed to the skeletons, one per primitive."""
+    result = []  # type: List[Stripped]
+
+    for a_type, (
+        function_name,
+        csharp_type,
+        conversion_expr,
+    ) in _CONTENT_READER_BY_PRIMITIVE.items():
+        if a_type not in primitive_types:
+            continue
+
+        result.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Convert the content at the current position of <paramref name="reader" />
+/// to {csharp_type}.
+/// </summary>
+private static {csharp_type} {function_name}(Xml.XmlReader reader)
+{{
+{I}return {conversion_expr};
+}}"""
+            )
         )
 
+    return result
+
+
+def _generate_literal_parser_delegate() -> Stripped:
+    """Generate the delegate which parses the text of an enumeration literal."""
+    return Stripped(
+        """\
+/// <summary>
+/// Parse the text of a literal of <typeparamref name="T" />.
+/// </summary>
+/// <remarks>
+/// Every <c>Stringification.*FromString</c> has this shape, so it can be
+/// passed on directly -- which is what lets an enumeration be read by one
+/// generated combinator instead of one per enumeration.
+/// </remarks>
+/// <typeparam name="T">Enumeration to parse the text as</typeparam>
+private delegate T? LiteralParser<T>(string text) where T : struct;"""
+    )
+
+
+def _generate_as_enum_combinator() -> Stripped:
+    """
+    Generate the single combinator to read a content as an enumeration literal.
+
+    The parsing of the literal is passed in as a
+    ``Stringification.*FromString`` method group, so that this is generated
+    once instead of once per enumeration.
+
+    The content is not necessarily a property's -- an enumeration nested as
+    an item of a list or of a tuple is read by this very combinator, wrapped
+    in ``AtElement``.
+    """
     return Stripped(
         f"""\
-if (isEmptyProperty)
+/// <summary>
+/// Read a content and parse it as a literal of <typeparamref name="T" />
+/// with <paramref name="parseLiteral" />.
+/// </summary>
+/// <typeparam name="T">Enumeration to parse the content as</typeparam>
+private static ContentReader<T> AsEnum<T>(
+{I}LiteralParser<T> parseLiteral
+{I}) where T : struct
 {{
-{I}{indent_but_first_line(empty_handling_body, I)}
-}}
-else
-{{
-{I}if (reader.EOF)
-{I}{{
-{II}error = new Reporting.Error(
-{III}"Expected an XML content representing " +
-{III}"the property {prop_name} of an instance of class {cls_name}, " +
-{III}"but reached the end-of-file");
-{II}return null;
-{I}}}
+{I}ContentReader<string> readText = AsText<string>(ReadContentAsString, "");
 
-{I}try
+{I}return (
+{II}Xml.XmlReader reader,
+{II}bool isEmpty,
+{II}out Reporting.Error? error
+{I}) =>
 {I}{{
-{II}{target_var} = {indent_but_first_line(deserialization_expr, I)};
-{I}}}
-{I}catch (System.Exception exception)
-{III}when (exception is System.FormatException
-{IIII}|| exception is System.Xml.XmlException)
-{I}{{
-{II}error = new Reporting.Error(
-{III}"The property {prop_name} of an instance of class {cls_name} " +
-{III}$"could not be de-serialized: {{exception.Message}}");
-{II}error.PrependSegment(
-{III}new Reporting.NameSegment(
-{IIII}{xml_prop_name_literal}));
-{II}return null;
-{I}}}
+{II}string text = readText(reader, isEmpty, out error);
+{II}if (error != null)
+{II}{{
+{III}return default;
+{II}}}
+
+{II}T? result = parseLiteral(text);
+{II}if (result == null)
+{II}{{
+{III}error = new Reporting.Error(
+{IIII}$"The content could not be de-serialized as a literal " +
+{IIII}$"of {{typeof(T).Name}}: {{text}}");
+{III}return default;
+{II}}}
+
+{II}return result.Value;
+{I}}};
 }}"""
     )
 
 
-def _generate_deserialize_enumeration_property(
-    prop: intermediate.Property, cls: intermediate.ConcreteClass
-) -> Stripped:
-    """Generate the snippet to deserialize a property ``prop`` as an enum."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
+def _generate_as_list_combinator() -> Stripped:
+    """
+    Generate the combinator to read a content as a list.
 
-    assert isinstance(type_anno, intermediate.OurTypeAnnotation)
+    This only adds the handling of a self-closing element (an empty list) on
+    top of :py:func:`_generate_read_list_helper`, so that a list reads exactly
+    like every other type -- a single call.
 
-    our_type = type_anno.our_type
-    assert isinstance(our_type, intermediate.Enumeration)
-
-    target_var = csharp_naming.variable_name(Identifier(f"the_{prop.name}"))
-    text_var = csharp_naming.variable_name(Identifier(f"text_{prop.name}"))
-
-    prop_name = csharp_naming.property_name(prop.name)
-    cls_name = csharp_naming.class_name(cls.name)
-    enum_name = csharp_naming.enum_name(our_type.name)
-    xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
-
+    The items are read by an :py:class:`ElementReader`, which is what
+    ``AtElement`` produces, so a list of anything -- a list of lists
+    included -- composes without any further combinator.
+    """
     return Stripped(
         f"""\
-if (isEmptyProperty)
+/// <summary>
+/// Read a content as a list of items, each read with
+/// <paramref name="readItem" />.
+/// </summary>
+/// <remarks>
+/// A self-closing element represents an empty list.
+/// </remarks>
+/// <typeparam name="T">Type of a single list item</typeparam>
+private static ContentReader<List<T>> AsList<T>(
+{I}ElementReader<T> readItem
+{I})
 {{
-{I}error = new Reporting.Error(
-{II}"The property {prop_name} of an instance of class {cls_name} " +
-{II}"can not be de-serialized from a self-closing element " +
-{II}"since it needs content");
-{I}error.PrependSegment(
-{II}new Reporting.NameSegment(
-{III}{xml_prop_name_literal}));
-{I}return null;
-}}
+{I}return (
+{II}Xml.XmlReader reader,
+{II}bool isEmpty,
+{II}out Reporting.Error? error
+{I}) =>
+{I}{{
+{II}error = null;
 
-{I}if (reader.EOF)
-{{
-{II}error = new Reporting.Error(
-{III}"Expected an XML content representing " +
-{III}"the property {prop_name} of an instance of class {cls_name}, " +
-{III}"but reached the end-of-file");
-{II}return null;
-}}
+{II}if (isEmpty)
+{II}{{
+{III}return new List<T>();
+{II}}}
 
-string {text_var};
-try
-{{
-{I}{text_var} = reader.ReadContentAsString();
-}}
-catch (System.FormatException exception)
-{{
-{I}error = new Reporting.Error(
-{II}"The property {prop_name} of an instance of class {cls_name} " +
-{II}$"could not be de-serialized as a string: {{exception}}");
-{I}error.PrependSegment(
-{II}new Reporting.NameSegment(
-{III}{xml_prop_name_literal}));
-{I}return null;
-}}
-
-{target_var} = Stringification.{enum_name}FromString(
-{I}{text_var});
-
-if ({target_var} == null)
-{{
-{I}error = new Reporting.Error(
-{II}"The property {prop_name} of an instance of class {cls_name} " +
-{II}"could not be de-serialized from an unexpected enumeration literal: " +
-{II}{text_var});
-{I}error.PrependSegment(
-{II}new Reporting.NameSegment(
-{III}{xml_prop_name_literal}));
-{I}return null;
+{II}return ReadList<T>(
+{III}reader, readItem, out error);
+{I}}};
 }}"""
     )
 
 
-def _generate_deserialize_interface_property(
-    prop: intermediate.Property,
-    cls: intermediate.ConcreteClass,
-) -> Stripped:
-    """Generate the snippet to deserialize a property ``prop`` as an interface."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
+def _generate_as_element_combinator() -> Stripped:
+    """
+    Generate the combinator to read a content which is a self-describing element.
 
-    assert isinstance(type_anno, intermediate.OurTypeAnnotation)
+    A value typed as an interface or as a named union is dispatched at
+    run-time by its own discriminator element, so reading it is identical in
+    both cases apart from *which* ``...FromElement`` does the dispatching --
+    which is why this takes that function as a parameter instead of being
+    generated once per interface and once per named union.
 
-    our_type = type_anno.our_type
+    The value is not necessarily a property's -- the same combinator reads
+    the items of a list of an interface, one nesting level deeper.
+    """
+    return Stripped(
+        f"""\
+/// <summary>
+/// Read a content whose value is dispatched by its own discriminator
+/// element, such as an interface or a named union.
+/// </summary>
+/// <typeparam name="T">Type of the value</typeparam>
+private static ContentReader<T> AsElement<T>(
+{I}ElementReader<T> readFromElement
+{I})
+{{
+{I}return (
+{II}Xml.XmlReader reader,
+{II}bool isEmpty,
+{II}out Reporting.Error? error
+{I}) =>
+{I}{{
+{II}error = null;
+
+{II}if (isEmpty)
+{II}{{
+{III}error = new Reporting.Error(
+{IIII}"Expected an XML element representing the value, " +
+{IIII}"but the element was self-closing");
+{III}return default!;
+{II}}}
+
+{II}// We need to skip the whitespace here in order to be able to look ahead
+{II}// the discriminator element shortly.
+{II}SkipNoneWhitespaceAndComments(reader);
+
+{II}if (reader.EOF)
+{II}{{
+{III}error = new Reporting.Error(
+{IIII}"Expected an XML element representing the value, " +
+{IIII}"but reached the end-of-file");
+{III}return default!;
+{II}}}
+
+{II}// Try to look ahead the discriminator name;
+{II}// we need this name only for the error reporting below.
+{II}// The de-serialization function will perform more sophisticated checks.
+{II}string? discriminatorElementName = null;
+{II}if (reader.NodeType == Xml.XmlNodeType.Element)
+{II}{{
+{III}discriminatorElementName = reader.LocalName;
+{II}}}
+
+{II}T result = readFromElement(reader, out error);
+{II}if (error != null)
+{II}{{
+{III}if (discriminatorElementName != null)
+{III}{{
+{IIII}error.PrependSegment(
+{IIIII}new Reporting.NameSegment(
+{IIIIII}discriminatorElementName));
+{III}}}
+{III}return default!;
+{II}}}
+
+{II}return result;
+{I}}};
+}}"""
+    )
+
+
+# NOTE (mristin):
+# A C# primitive is not a valid part of an identifier as it is spelled
+# (``byte[]``, and the lower-case names read badly), so the primitives are
+# the only types which have to be renamed. They are keyed by the meta-model
+# primitive rather than by the C# spelling, so that the mapping is total by
+# construction.
+_PRIMITIVE_TYPE_TO_MONIKER: Final[Mapping[intermediate.PrimitiveType, str]] = {
+    intermediate.PrimitiveType.BOOL: "Bool",
+    intermediate.PrimitiveType.INT: "Long",
+    intermediate.PrimitiveType.FLOAT: "Double",
+    intermediate.PrimitiveType.STR: "String",
+    intermediate.PrimitiveType.BYTEARRAY: "Bytes",
+}
+assert all(
+    primitive_type in _PRIMITIVE_TYPE_TO_MONIKER
+    for primitive_type in intermediate.PrimitiveType
+)
+
+
+def _type_moniker(type_anno: intermediate.TypeAnnotationUnion) -> str:
+    """
+    Name the type in a way usable as a part of a C# identifier.
+
+    Everything which is not a primitive is named by
+    ``csharp_common.generate_type``, so that the name of a reader can not
+    drift apart from the type of that very reader -- spelling the names out
+    here once caused exactly that.
+    """
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        return f"ListOf{_type_moniker(type_anno.items)}"
+
+    if isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        joined = "".join(_type_moniker(item) for item in type_anno.items)
+        return f"TupleOf{joined}"
+
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        return _PRIMITIVE_TYPE_TO_MONIKER[primitive_type]
+
+    return csharp_common.generate_type(type_anno)
+
+
+def _from_element_name(our_type: intermediate.OurType) -> str:
+    """
+    Name the function reading a whole element of ``our_type``.
+
+    Mind that this is *not* the moniker of the type: a concrete class
+    without any descendant is referred to by its interface, but reads
+    through a function named after the class itself.
+    """
+    if isinstance(our_type, intermediate.NamedUnion):
+        return f"{csharp_naming.class_name(our_type.name)}FromElement"
+
     assert isinstance(
         our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
     )
-    assert our_type.interface is not None
 
-    prop_name = csharp_naming.property_name(prop.name)
-    cls_name = csharp_naming.class_name(cls.name)
+    if (
+        isinstance(our_type, intermediate.AbstractClass)
+        or len(our_type.concrete_descendants) > 0
+    ):
+        return f"{csharp_naming.interface_name(our_type.name)}FromElement"
 
-    interface_name = csharp_naming.interface_name(our_type.interface.name)
-
-    target_var = csharp_naming.variable_name(Identifier(f"the_{prop.name}"))
-    xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
-
-    return Stripped(
-        f"""\
-if (isEmptyProperty)
-{{
-{I}error = new Reporting.Error(
-{II}$"Expected an XML element within the element {{elementName}} representing " +
-{II}"the property {prop_name} of an instance of class {cls_name}, " +
-{II}"but encountered a self-closing element {{elementName}}");
-{I}return null;
-}}
-
-// We need to skip the whitespace here in order to be able to look ahead
-// the discriminator element shortly.
-SkipNoneWhitespaceAndComments(reader);
-
-if (reader.EOF)
-{{
-{I}error = new Reporting.Error(
-{II}$"Expected an XML element within the element {{elementName}} representing " +
-{II}"the property {prop_name} of an instance of class {cls_name}, " +
-{II}"but reached the end-of-file");
-{I}return null;
-}}
-
-// Try to look ahead the discriminator name;
-// we need this name only for the error reporting below.
-// {interface_name}FromElement will perform more sophisticated
-// checks.
-string? discriminatorElementName = null;
-if (reader.NodeType == Xml.XmlNodeType.Element)
-{{
-{I}discriminatorElementName = reader.LocalName;
-}}
-
-{target_var} = {interface_name}FromElement(
-{I}reader, out error);
-
-if (error != null)
-{{
-{I}if (discriminatorElementName != null)
-{I}{{
-{II}error.PrependSegment(
-{III}new Reporting.NameSegment(
-{IIII}discriminatorElementName));
-{I}}}
-
-{I}error.PrependSegment(
-{II}new Reporting.NameSegment(
-{III}{xml_prop_name_literal}));
-{I}return null;
-}}"""
-    )
+    return f"{csharp_naming.class_name(our_type.name)}FromElement"
 
 
-def _generate_deserialize_named_union_property(
-    prop: intermediate.Property,
-    cls: intermediate.ConcreteClass,
+def _content_reader_name(type_anno: intermediate.TypeAnnotationUnion) -> Identifier:
+    """Name the field holding the reader of the content of ``type_anno``."""
+    return Identifier(f"Read{_type_moniker(type_anno)}")
+
+
+def _element_reader_expr(
+    type_anno: intermediate.TypeAnnotationUnion, v_name_literal: str
 ) -> Stripped:
-    """Generate the snippet to deserialize a property ``prop`` as a named union."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
+    """
+    Generate the expression reading a single element of ``type_anno``.
 
-    assert isinstance(type_anno, intermediate.OurTypeAnnotation)
-
-    our_type = type_anno.our_type
-    assert isinstance(our_type, intermediate.NamedUnion)
-
-    prop_name = csharp_naming.property_name(prop.name)
-    cls_name = csharp_naming.class_name(cls.name)
-
-    union_name = csharp_naming.class_name(our_type.name)
-
-    target_var = csharp_naming.variable_name(Identifier(f"the_{prop.name}"))
-    xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
+    This is what a list item and a tuple item are read with. A class, an
+    interface or a named union reads its own, self-describing element,
+    whereas everything else is wrapped in a ``<v>`` element whose content is
+    read by the very same reader as a property of that type.
+    """
+    if isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+        type_anno.our_type,
+        (
+            intermediate.AbstractClass,
+            intermediate.ConcreteClass,
+            intermediate.NamedUnion,
+        ),
+    ):
+        return Stripped(_from_element_name(type_anno.our_type))
 
     return Stripped(
         f"""\
-if (isEmptyProperty)
-{{
-{I}error = new Reporting.Error(
-{II}$"Expected an XML element within the element {{elementName}} representing " +
-{II}"the property {prop_name} of an instance of class {cls_name}, " +
-{II}"but encountered a self-closing element {{elementName}}");
-{I}return null;
-}}
-
-// We need to skip the whitespace here in order to be able to look ahead
-// the discriminator element shortly.
-SkipNoneWhitespaceAndComments(reader);
-
-if (reader.EOF)
-{{
-{I}error = new Reporting.Error(
-{II}$"Expected an XML element within the element {{elementName}} representing " +
-{II}"the property {prop_name} of an instance of class {cls_name}, " +
-{II}"but reached the end-of-file");
-{I}return null;
-}}
-
-// Try to look ahead the discriminator name;
-// we need this name only for the error reporting below.
-// {union_name}FromElement will perform more sophisticated
-// checks.
-string? discriminatorElementName = null;
-if (reader.NodeType == Xml.XmlNodeType.Element)
-{{
-{I}discriminatorElementName = reader.LocalName;
-}}
-
-{target_var} = {union_name}FromElement(
-{I}reader, out error);
-
-if (error != null)
-{{
-{I}if (discriminatorElementName != null)
-{I}{{
-{II}error.PrependSegment(
-{III}new Reporting.NameSegment(
-{IIII}discriminatorElementName));
-{I}}}
-
-{I}error.PrependSegment(
-{II}new Reporting.NameSegment(
-{III}{xml_prop_name_literal}));
-{I}return null;
-}}"""
+AtElement(
+{I}{_content_reader_name(type_anno)}, {v_name_literal})"""
     )
 
 
-def _generate_deserialize_cls_property(prop: intermediate.Property) -> Stripped:
-    """Generate the snippet to deserialize a property ``prop`` as a concrete class."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
+def _content_reader_initializer(
+    type_anno: intermediate.TypeAnnotationUnion,
+) -> Stripped:
+    """Generate the expression initializing the reader of ``type_anno``."""
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        content_reader, csharp_type, _ = _CONTENT_READER_BY_PRIMITIVE[primitive_type]
+        empty_value = _EMPTY_VALUE_BY_PRIMITIVE.get(primitive_type, None)
+        arguments = content_reader
+        if empty_value is not None:
+            arguments = f"{arguments}, {empty_value}"
+        return Stripped(f"AsText<{csharp_type}>({arguments})")
 
-    assert isinstance(type_anno, intermediate.OurTypeAnnotation)
+    if isinstance(type_anno, intermediate.OurTypeAnnotation):
+        our_type = type_anno.our_type
 
-    our_type = type_anno.our_type
-    assert isinstance(our_type, intermediate.ConcreteClass)
+        if isinstance(our_type, intermediate.Enumeration):
+            enum_name = csharp_naming.enum_name(our_type.name)
+            return Stripped(
+                f"""\
+AsEnum<Aas.{enum_name}>(
+{I}Stringification.{enum_name}FromString)"""
+            )
 
-    target_cls_name = csharp_naming.class_name(our_type.name)
-
-    target_var = csharp_naming.variable_name(Identifier(f"the_{prop.name}"))
-    xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
-
-    return Stripped(
-        f"""\
-{target_var} = {target_cls_name}FromSequence(
-{I}reader, isEmptyProperty, out error);
-
-if (error != null)
-{{
-{I}error.PrependSegment(
-{II}new Reporting.NameSegment(
-{III}{xml_prop_name_literal}));
-{I}return null;
-}}"""
-    )
-
-
-def _generate_deserialize_list_property(prop: intermediate.Property) -> Stripped:
-    """Generate the code to de-serialize a property ``prop`` as a list."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-    assert isinstance(type_anno, intermediate.ListTypeAnnotation), "Pre-condition"
-
-    deserialize_method: Stripped
-    is_v_element: bool
-    is_value_type: bool
-
-    primitive_type = intermediate.try_primitive_type(type_anno.items)
-
-    if primitive_type is not None or (
-        isinstance(type_anno.items, intermediate.OurTypeAnnotation)
-        and isinstance(type_anno.items.our_type, intermediate.Enumeration)
-    ):
-        is_v_element = True
-
-        if primitive_type is not None:
-            if primitive_type is intermediate.PrimitiveType.BOOL:
-                deserialize_method = Stripped("ReadVElementAsBoolean")
-                is_value_type = True
-            elif primitive_type is intermediate.PrimitiveType.INT:
-                deserialize_method = Stripped("ReadVElementAsLong")
-                is_value_type = True
-            elif primitive_type is intermediate.PrimitiveType.FLOAT:
-                deserialize_method = Stripped("ReadVElementAsDouble")
-                is_value_type = True
-            elif primitive_type is intermediate.PrimitiveType.STR:
-                deserialize_method = Stripped("ReadVElementAsString")
-                is_value_type = False
-            elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
-                deserialize_method = Stripped("ReadVElementAsBytes")
-                is_value_type = False
-            else:
-                assert_never(primitive_type)
-        else:
-            assert isinstance(
-                type_anno.items, intermediate.OurTypeAnnotation
-            ) and isinstance(type_anno.items.our_type, intermediate.Enumeration)
-
-            enum_name = csharp_naming.enum_name(type_anno.items.our_type.name)
-            deserialize_method = Stripped(f"ReadVElementAs{enum_name}")
-            is_value_type = True
-
-    elif isinstance(type_anno.items, intermediate.OurTypeAnnotation) and isinstance(
-        type_anno.items.our_type,
-        (intermediate.AbstractClass, intermediate.ConcreteClass),
-    ):
-        is_v_element = False
-        is_value_type = False
-
-        if (
-            isinstance(type_anno.items.our_type, intermediate.AbstractClass)
-            or len(type_anno.items.our_type.concrete_descendants) > 0
+        if isinstance(our_type, intermediate.NamedUnion) or (
+            isinstance(our_type, intermediate.AbstractClass)
+            or (
+                isinstance(our_type, intermediate.ConcreteClass)
+                and len(our_type.concrete_descendants) > 0
+            )
         ):
-            deserialize_method = Stripped(
-                f"{csharp_naming.interface_name(type_anno.items.our_type.name)}FromElement"
-            )
-        else:
-            deserialize_method = Stripped(
-                f"{csharp_naming.class_name(type_anno.items.our_type.name)}FromElement"
+            return Stripped(
+                f"""\
+AsElement<Aas.{_type_moniker(type_anno)}>(
+{I}{_from_element_name(our_type)})"""
             )
 
-    elif isinstance(type_anno.items, intermediate.OurTypeAnnotation) and isinstance(
-        type_anno.items.our_type, intermediate.NamedUnion
-    ):
         # NOTE (mristin):
-        # A named union is always dispatched by its own discriminator element,
-        # so we treat it the same as a polymorphic class item here -- kept
-        # as its own branch, separate from the class branch above, so that
-        # it can diverge independently, *e.g.* if primitive alternatives are
-        # ever allowed into a named union.
-        is_v_element = False
-        is_value_type = False
+        # A concrete class without any descendant reads its own sequence,
+        # which is already a ``ContentReader``.
+        return Stripped(f"{csharp_naming.class_name(our_type.name)}FromSequence")
 
-        deserialize_method = Stripped(
-            f"{csharp_naming.class_name(type_anno.items.our_type.name)}FromElement"
-        )
-    else:
-        raise NotImplementedError(
-            f"(mristin) We only handle XML de/serialization of lists containing atomic "
-            f"values, but you want to generate the code for a list of type {type_anno}. "
-            f"Please contact the developers if you need this feature."
-        )
-
-    xml_prop_name = prop.xml_name
-    xml_prop_name_literal = csharp_common.string_literal(xml_prop_name)
-
-    target_var = csharp_naming.variable_name(Identifier(f"the_{prop.name}"))
-
-    item_type = csharp_common.generate_type(type_anno.items)
-
-    parse_list_function = "ParseListOfStruct" if is_value_type else "ParseListOfClass"
-
-    # NOTE (mristin):
-    # A method group such as ``FooFromElement`` already matches the expected
-    # ``(Xml.XmlReader, out Reporting.Error?) -> T?`` signature of the item
-    # deserializer, so we can pass it on directly. A ``<v>`` element, on the
-    # other hand, needs its fixed local name "v" bound in a lambda.
-    item_deserializer = (
-        Stripped(
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        item_type = csharp_common.generate_type(type_anno.items)
+        item_reader = _element_reader_expr(type_anno.items, '"v"')
+        return Stripped(
             f"""\
-(Xml.XmlReader itemReader, out Reporting.Error? itemError) => {deserialize_method}(
-{I}itemReader, "v", out itemError)"""
+AsList<{item_type}>(
+{I}{indent_but_first_line(item_reader, I)})"""
         )
-        if is_v_element
-        else deserialize_method
+
+    assert isinstance(type_anno, intermediate.TupleTypeAnnotation)
+
+    item_types = ", ".join(
+        csharp_common.generate_type(item) for item in type_anno.items
     )
-
-    body_for_non_empty_property = Stripped(
-        f"""\
-{target_var} = {parse_list_function}<{item_type}>(
-{I}reader,
-{I}{indent_but_first_line(item_deserializer, I)},
-{I}out error);
-
-if (error != null)
-{{
-{I}error.PrependSegment(
-{II}new Reporting.NameSegment(
-{III}{xml_prop_name_literal}));
-{I}return null;
-}}"""
+    item_readers = ",\n".join(
+        _element_reader_expr(item, csharp_common.string_literal(f"v{i + 1}"))
+        for i, item in enumerate(type_anno.items)
     )
-
     return Stripped(
         f"""\
-{target_var} = new List<{item_type}>();
-
-if (!isEmptyProperty)
-{{
-{I}{indent_but_first_line(body_for_non_empty_property, I)}
-}}"""
+AsTuple{len(type_anno.items)}<{item_types}>(
+{I}{indent_but_first_line(item_readers, I)})"""
     )
 
 
-def _generate_deserialize_tuple_property(prop: intermediate.Property) -> Stripped:
-    """Generate the code to de-serialize a property ``prop`` as a tuple."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
+def _generate_from_element_fields(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the readers of a whole element of every concrete class.
 
-    assert isinstance(type_anno, intermediate.TupleTypeAnnotation), "Pre-condition"
+    Reading a class's element is nothing but binding its XML name to its own
+    ``...FromSequence``, which already is a :py:class:`ContentReader`. There
+    is therefore nothing to generate per class beyond that binding, and it is
+    bound once here instead of at every read.
 
-    prop_name = csharp_naming.property_name(prop.name)
-    xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
-    target_var = csharp_naming.variable_name(Identifier(f"the_{prop.name}"))
+    A class whose de-serialization is implementation-specific brings its own
+    function, so it is skipped.
+    """
+    result = []  # type: List[Stripped]
 
-    item_deserializer_exprs = []  # type: List[Stripped]
+    for cls in symbol_table.concrete_classes:
+        if cls.is_implementation_specific:
+            continue
 
-    for i, item_type_anno in enumerate(type_anno.items):
-        primitive_type = intermediate.try_primitive_type(item_type_anno)
+        name = csharp_naming.class_name(cls.name)
+        xml_name_literal = csharp_common.string_literal(naming.xml_class_name(cls.name))
 
-        if primitive_type is not None:
-            v_name_literal = csharp_common.string_literal(f"v{i + 1}")
-
-            method: str
-            if primitive_type is intermediate.PrimitiveType.BOOL:
-                method = "ReadVElementAsBoolean"
-            elif primitive_type is intermediate.PrimitiveType.INT:
-                method = "ReadVElementAsLong"
-            elif primitive_type is intermediate.PrimitiveType.FLOAT:
-                method = "ReadVElementAsDouble"
-            elif primitive_type is intermediate.PrimitiveType.STR:
-                method = "ReadVElementAsString"
-            elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
-                method = "ReadVElementAsBytes"
-            else:
-                assert_never(primitive_type)
-
-            item_deserializer_exprs.append(
-                Stripped(f"AsTupleItemDeserializer({method}, {v_name_literal})")
+        result.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Read an instance of class {name} from its XML element.
+/// </summary>
+internal static readonly ElementReader<Aas.{name}> {name}FromElement = (
+{I}AtElement<Aas.{name}>(
+{II}{name}FromSequence, {xml_name_literal}));"""
             )
-        elif isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
-            item_type_anno.our_type, intermediate.Enumeration
-        ):
-            enum_name = csharp_naming.enum_name(item_type_anno.our_type.name)
-            v_name_literal = csharp_common.string_literal(f"v{i + 1}")
+        )
 
-            item_deserializer_exprs.append(
-                Stripped(
-                    f"AsTupleItemDeserializer(ReadVElementAs{enum_name}, {v_name_literal})"
-                )
-            )
-        elif isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
-            item_type_anno.our_type,
-            (intermediate.AbstractClass, intermediate.ConcreteClass),
-        ):
-            our_type = item_type_anno.our_type
-            if (
-                isinstance(our_type, intermediate.AbstractClass)
-                or len(our_type.concrete_descendants) > 0
-            ):
-                deserialize_method_name = (
-                    f"{csharp_naming.interface_name(our_type.name)}FromElement"
-                )
-            else:
-                deserialize_method_name = (
-                    f"{csharp_naming.class_name(our_type.name)}FromElement"
-                )
+    return result
 
-            item_deserializer_exprs.append(
-                Stripped(f"AsTupleItemDeserializer({deserialize_method_name})")
-            )
 
-        elif isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
-            item_type_anno.our_type, intermediate.NamedUnion
-        ):
-            # NOTE (mristin):
-            # A named union is always dispatched by its own discriminator
-            # element, so we treat it the same as a polymorphic class item
-            # here -- kept as its own branch, separate from the class branch
-            # above, so that it can diverge independently, *e.g.* if
-            # primitive alternatives are ever allowed into a named union.
-            deserialize_method_name = (
-                f"{csharp_naming.class_name(item_type_anno.our_type.name)}FromElement"
-            )
+def _generate_content_reader_fields(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the fields holding one reader per distinct property type.
 
-            item_deserializer_exprs.append(
-                Stripped(f"AsTupleItemDeserializer({deserialize_method_name})")
-            )
+    The readers are composed once, at the initialization of the class,
+    instead of at every property of every instance -- composing them at
+    the call site would allocate a delegate on every single read.
+    """
+    initializer_by_name = (
+        collections.OrderedDict()
+    )  # type: MutableMapping[Identifier, Tuple[Stripped, Stripped]]
 
+    def register(type_anno: intermediate.TypeAnnotationUnion) -> None:
+        """Register the reader of ``type_anno``, its items' readers first."""
+        # NOTE (mristin):
+        # A field initializer reads the fields it composes, so a reader has
+        # to be declared after the readers it is composed of.
+        if isinstance(type_anno, intermediate.ListTypeAnnotation):
+            item_type_annotations = [
+                type_anno.items
+            ]  # type: List[intermediate.TypeAnnotationUnion]
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            item_type_annotations = list(type_anno.items)
         else:
+            item_type_annotations = []
+
+        for item_type_anno in item_type_annotations:
             # NOTE (mristin):
-            # A tuple item can only be a primitive value, a constrained primitive,
-            # an enumeration literal, a class instance or a named union; see
-            # intermediate._translate._verify_only_simple_type_patterns.
-            raise AssertionError(
-                f"Unexpected tuple item type {item_type_anno} at index {i} "
-                f"for the property {prop.name!r}"
+            # A class reads its own element, so it needs no reader of its own.
+            if isinstance(
+                item_type_anno, intermediate.OurTypeAnnotation
+            ) and isinstance(
+                item_type_anno.our_type,
+                (
+                    intermediate.AbstractClass,
+                    intermediate.ConcreteClass,
+                    intermediate.NamedUnion,
+                ),
+            ):
+                continue
+
+            register(item_type_anno)
+
+        name = _content_reader_name(type_anno)
+        if name in initializer_by_name:
+            return
+
+        initializer_by_name[name] = (
+            csharp_common.generate_type(type_anno),
+            _content_reader_initializer(type_anno),
+        )
+
+    for cls in symbol_table.concrete_classes:
+        for prop in cls.properties:
+            register(intermediate.beneath_optional(prop.type_annotation))
+
+    result = []  # type: List[Stripped]
+    for name, (csharp_type, initializer) in initializer_by_name.items():
+        result.append(
+            Stripped(
+                f"""\
+private static readonly ContentReader<{csharp_type}> {name} = (
+{I}{indent_but_first_line(initializer, I)});"""
             )
+        )
 
-    item_deserializer_exprs_joined = ",\n".join(item_deserializer_exprs)
-
-    arity = len(type_anno.items)
-
-    return Stripped(
-        f"""\
-if (isEmptyProperty)
-{{
-{I}error = new Reporting.Error(
-{II}"The property {prop_name} can not be de-serialized " +
-{II}"from a self-closing element since it needs content");
-{I}error.PrependSegment(
-{II}new Reporting.NameSegment(
-{III}{xml_prop_name_literal}));
-{I}return null;
-}}
-
-SkipNoneWhitespaceAndComments(reader);
-
-{target_var} = ParseTuple{arity}(
-{I}reader,
-{I}{indent_but_first_line(item_deserializer_exprs_joined, I)},
-{I}out error);
-if (error != null)
-{{
-{I}error.PrependSegment(
-{II}new Reporting.NameSegment(
-{III}{xml_prop_name_literal}));
-{I}return null;
-}}"""
-    )
+    return result
 
 
 @require(lambda prop, cls: id(prop) in cls.property_id_set)
 def _generate_deserialize_property(
     prop: intermediate.Property, cls: intermediate.ConcreteClass
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
-    """Generate the snippet to deserialize the property ``prop`` from the content."""
-    blocks = []  # type: List[Stripped]
+    """
+    Generate the snippet to deserialize the property ``prop``.
 
+    Every property kind reads through the very same call -- only the reader
+    differs, and it has been composed once into a field (see
+    :py:func:`_generate_property_reader_fields`). The failure is not handled
+    here: the error is marked with the property's own element name once,
+    right after the ``switch``, see
+    :py:func:`_generate_deserialize_impl_cls_from_sequence`.
+    """
     type_anno = intermediate.beneath_optional(prop.type_annotation)
 
-    if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
-        blocks.append(_generate_deserialize_primitive_property(prop=prop, cls=cls))
-    elif isinstance(type_anno, intermediate.OurTypeAnnotation):
-        our_type = type_anno.our_type
-        if isinstance(our_type, intermediate.Enumeration):
-            blocks.append(
-                _generate_deserialize_enumeration_property(prop=prop, cls=cls)
-            )
-        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-            # NOTE (mristin, 2022-04-13):
-            # The constrained primitives are only verified, but not represented as
-            # separate classes in the XSD.
-            blocks.append(_generate_deserialize_primitive_property(prop=prop, cls=cls))
-        elif isinstance(
-            our_type, (intermediate.ConcreteClass, intermediate.AbstractClass)
-        ):
-            if (
-                isinstance(our_type, intermediate.AbstractClass)
-                or len(our_type.concrete_descendants) > 0
-            ):
-                blocks.append(
-                    _generate_deserialize_interface_property(prop=prop, cls=cls)
-                )
-            else:
-                blocks.append(_generate_deserialize_cls_property(prop=prop))
+    if isinstance(type_anno, intermediate.ListTypeAnnotation) and not isinstance(
+        type_anno.items, intermediate.AtomicTypeAnnotationAsTuple
+    ):
+        return None, Error(
+            prop.parsed.node,
+            f"(mristin) We only handle the XML de-serialization of lists of "
+            f"atomic values, but you want to generate the code for a list of "
+            f"type {type_anno}. Please contact the developers if you need "
+            f"this feature.",
+        )
 
-        elif isinstance(our_type, intermediate.NamedUnion):
-            blocks.append(
-                _generate_deserialize_named_union_property(prop=prop, cls=cls)
-            )
+    target_var = csharp_naming.variable_name(Identifier(f"the_{prop.name}"))
+    reader_name = _content_reader_name(type_anno)
 
-        else:
-            assert_never(our_type)
-
-    elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        blocks.append(_generate_deserialize_list_property(prop=prop))
-
-    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        blocks.append(_generate_deserialize_tuple_property(prop=prop))
-
-    else:
-        assert_never(type_anno)
-
-    return Stripped("\n\n".join(blocks)), None
+    return (
+        Stripped(
+            f"""\
+{target_var} = {reader_name}(
+{I}reader, isEmptyProperty, out error);"""
+        ),
+        None,
+    )
 
 
+@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_deserialize_impl_cls_from_sequence(
     cls: intermediate.ConcreteClass,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
@@ -1542,7 +1404,7 @@ internal static Aas.{name} {name}FromSequence(
 {{
 {I}error = null;
 {I}return new Aas.{name}();
-}}  // internal static Aas.{name}? {name}FromSequence"""
+}}  // internal static Aas.{name} {name}FromSequence"""
             ),
             None,
         )
@@ -1583,7 +1445,7 @@ if (reader.EOF)
 {II}"Expected an XML element representing " +
 {II}"a property of an instance of class {name}, " +
 {II}"but reached the end-of-file");
-{I}return null;
+{I}return default!;
 }}"""
         )
     )
@@ -1599,14 +1461,16 @@ if (reader.EOF)
 
         xml_prop_name = prop.xml_name
         xml_prop_name_literal = csharp_common.string_literal(xml_prop_name)
+
+        # NOTE (mristin):
+        # No braces are necessary, as no case declares a local of its own --
+        # every one of them is a single assignment.
         case_blocks.append(
             Stripped(
                 f"""\
 case {xml_prop_name_literal}:
-{{
 {I}{indent_but_first_line(case_body, I)}
-{I}break;
-}}"""
+{I}break;"""
             )
         )
 
@@ -1621,7 +1485,7 @@ default:
 {II}"We expected properties of the class {name}, " +
 {II}"but got an unexpected element " +
 {II}$"with the name {{elementName}}");
-{I}return null;"""
+{I}return default!;"""
         )
     )
 
@@ -1630,84 +1494,43 @@ default:
     blocks_for_non_empty.append(
         Stripped(
             f"""\
-while (true)
+while (TryNextProperty(
+{II}reader,
+{II}out string elementName,
+{II}out bool isEmptyProperty,
+{II}out error))
 {{
-{I}SkipNoneWhitespaceAndComments(reader);
-
-{I}if (reader.NodeType == Xml.XmlNodeType.EndElement || reader.EOF)
-{I}{{
-{II}break;
-{I}}}
-
-{I}if (reader.NodeType != Xml.XmlNodeType.Element)
-{I}{{
-{II}error = new Reporting.Error(
-{III}"Expected an XML start element representing " +
-{III}"a property of an instance of class {name}, " +
-{III}$"but got the node of type {{reader.NodeType}} " +
-{III}$"with the value {{reader.Value}}");
-{II}return null;
-{I}}}
-
-{I}string elementName = TryElementName(
-{II}reader, out error);
-{I}if (error != null)
-{I}{{
-{II}return null;
-{I}}}
-
-{I}bool isEmptyProperty = reader.IsEmptyElement;
-
-{I}// Skip the expected element
-{I}reader.Read();
-
 {I}switch (elementName)
 {I}{{
 {II}{indent_but_first_line(switch_body, II)}
 {I}}}
 
-{I}SkipNoneWhitespaceAndComments(reader);
-
-{I}if (!isEmptyProperty)
+{I}// NOTE (mristin):
+{I}// Every property is read in this very loop, so we mark the error with
+{I}// the property's own element name here, once, instead of at every
+{I}// single case above. For a matched case, elementName *is* that name.
+{I}if (error != null)
 {I}{{
-{II}// Read the end element
-
-{II}if (reader.EOF)
-{II}{{
-{III}error = new Reporting.Error(
-{IIII}"Expected an XML end element to conclude a property of class {name} " +
-{IIII}$"with the element name {{elementName}}, " +
-{IIII}"but got the end-of-file.");
-{III}return null;
-{II}}}
-{II}if (reader.NodeType != Xml.XmlNodeType.EndElement)
-{II}{{
-{III}error = new Reporting.Error(
-{IIII}"Expected an XML end element to conclude a property of class {name} " +
-{IIII}$"with the element name {{elementName}}, " +
-{IIII}$"but got the node of type {{reader.NodeType}} " +
-{IIII}$"with the value {{reader.Value}}");
-{III}return null;
-{II}}}
-
-{II}string endElementName = TryElementName(
-{III}reader, out error);
-{II}if (error != null)
-{II}{{
-{III}return null;
-{II}}}
-
-{II}if (endElementName != elementName)
-{II}{{
-{III}error = new Reporting.Error(
-{IIII}"Expected an XML end element to conclude a property of class {name} " +
-{IIII}$"with the element name {{elementName}}, " +
-{IIII}$"but got the end element with the name {{reader.Name}}");
-{III}return null;
-{II}}}
-{II}// Skip the expected end element
-{II}reader.Read();
+{II}error.PrependSegment(
+{III}new Reporting.NameSegment(
+{IIII}elementName));
+{II}return default!;
 {I}}}
+
+{I}ConsumeEndElement(
+{II}reader, elementName, isEmptyProperty, out error);
+{I}if (error != null)
+{I}{{
+{II}return default!;
+{I}}}
+}}
+
+// NOTE (mristin):
+// The loop also ends when the next property could not be read at all,
+// which is the only way out of it that is a failure.
+if (error != null)
+{{
+{I}return default!;
 }}"""
         )
     )
@@ -1738,7 +1561,7 @@ if ({target_var} == null)
 {I}error = new Reporting.Error(
 {II}"The required property {prop_csharp} has not been given " +
 {II}"in the XML representation of an instance of class {name}");
-{I}return null;
+{I}return default!;
 }}"""
                 )
             )
@@ -1827,7 +1650,7 @@ if ({target_var} == null)
     writer.write(
         f"""\
 {description}
-internal static Aas.{name}? {name}FromSequence(
+internal static Aas.{name} {name}FromSequence(
 {I}Xml.XmlReader reader,
 {I}bool isEmptySequence,
 {I}out Reporting.Error? error)
@@ -1845,193 +1668,49 @@ internal static Aas.{name}? {name}FromSequence(
     return Stripped(writer.getvalue()), None
 
 
-def _generate_read_start_element_of_class() -> Stripped:
-    """Generate the shared helper to read the opening tag of a class instance."""
+def _generate_peek_element_name() -> Stripped:
+    """
+    Generate the shared helper looking ahead the name of the current element.
+
+    Nothing is consumed, so the caller can still decide what to do with
+    the element: ``AtElement`` checks the name against the one it expects,
+    while a de-serialization dispatching on a discriminator element uses
+    the name to pick the reader.
+    """
     return Stripped(
         f"""\
 /// <summary>
-/// Read the opening tag of an XML element representing an instance of
-/// <paramref name="className" />, without consuming its content.
+/// Look ahead the name of the element at the current position of
+/// <paramref name="reader" />, without consuming anything.
 /// </summary>
-/// <remarks>
-/// This is shared by the de-serialization of every concrete class from
-/// an XML element.
-/// </remarks>
-private static string ReadStartElementOfClass(
+private static string PeekElementName(
 {I}Xml.XmlReader reader,
-{I}string className,
-{I}out bool isEmptyElement,
 {I}out Reporting.Error? error
 {I})
 {{
 {I}error = null;
-{I}isEmptyElement = false;
 
 {I}SkipNoneWhitespaceAndComments(reader);
 
 {I}if (reader.EOF)
 {I}{{
 {II}error = new Reporting.Error(
-{III}$"Expected an XML element representing an instance of class {{className}}, " +
-{III}"but reached the end-of-file");
+{III}"Expected an XML element, but reached the end-of-file");
 {II}return "";
 {I}}}
 
 {I}if (reader.NodeType != Xml.XmlNodeType.Element)
 {I}{{
 {II}error = new Reporting.Error(
-{III}$"Expected an XML element representing an instance of class {{className}}, " +
+{III}"Expected an XML element, " +
 {III}$"but got a node of type {{reader.NodeType}} " +
 {III}$"with value {{reader.Value}}");
 {II}return "";
 {I}}}
 
-{I}string elementName = TryElementName(
+{I}return TryElementName(
 {II}reader, out error);
-{I}if (error != null)
-{I}{{
-{II}return "";
-{I}}}
-
-{I}isEmptyElement = reader.IsEmptyElement;
-{I}return elementName;
 }}"""
-    )
-
-
-def _generate_consume_close_tag() -> Stripped:
-    """Generate the shared helper to consume the closing tag of an XML element."""
-    return Stripped(
-        f"""\
-/// <summary>
-/// Consume the closing tag matching <paramref name="expectedElementName" />,
-/// unless <paramref name="isEmptyElement" /> indicates that the element was
-/// self-closing and thus has no separate closing tag to consume.
-/// </summary>
-/// <remarks>
-/// This is shared by the de-serialization of every concrete class from
-/// an XML element.
-/// </remarks>
-private static void ConsumeCloseTag(
-{I}Xml.XmlReader reader,
-{I}string expectedElementName,
-{I}bool isEmptyElement,
-{I}out Reporting.Error? error
-{I})
-{{
-{I}error = null;
-
-{I}if (isEmptyElement)
-{I}{{
-{II}return;
-{I}}}
-
-{I}SkipNoneWhitespaceAndComments(reader);
-
-{I}if (reader.EOF)
-{I}{{
-{II}error = new Reporting.Error(
-{III}$"Expected a closing element </{{expectedElementName}}>, " +
-{III}"but reached the end-of-file");
-{II}return;
-{I}}}
-
-{I}if (reader.NodeType != Xml.XmlNodeType.EndElement)
-{I}{{
-{II}error = new Reporting.Error(
-{III}$"Expected a closing element </{{expectedElementName}}>, " +
-{III}$"but got a node of type {{reader.NodeType}} " +
-{III}$"with value {{reader.Value}}");
-{II}return;
-{I}}}
-
-{I}string endElementName = TryElementName(
-{II}reader, out error);
-{I}if (error != null)
-{I}{{
-{II}return;
-{I}}}
-
-{I}if (endElementName != expectedElementName)
-{I}{{
-{II}error = new Reporting.Error(
-{III}$"Expected a closing element </{{expectedElementName}}>, " +
-{III}$"but got a closing element </{{endElementName}}>");
-{II}return;
-{I}}}
-
-{I}// Skip the end element
-{I}reader.Read();
-}}"""
-    )
-
-
-def _generate_deserialize_impl_concrete_cls_from_element(
-    cls: intermediate.ConcreteClass,
-) -> Stripped:
-    """Generate the function to de-serialize a concrete ``cls`` from an XML element."""
-    name = csharp_naming.class_name(cls.name)
-    xml_name = naming.xml_class_name(cls.name)
-    xml_name_literal = csharp_common.string_literal(xml_name)
-
-    # NOTE (mristin, 2022-06-21):
-    # We need to propagate nullability. Otherwise, InspectCode complains.
-    result_nullability = "?" if len(cls.constructor.arguments) > 0 else ""
-
-    body = Stripped(
-        f"""\
-error = null;
-
-string elementName = ReadStartElementOfClass(
-{I}reader, {csharp_common.string_literal(name)}, out bool isEmptyElement, out error);
-if (error != null)
-{{
-{I}return null;
-}}
-
-if (elementName != {xml_name_literal})
-{{
-{I}error = new Reporting.Error(
-{II}"Expected an element representing an instance of class {name} " +
-{II}$"with element name {xml_name}, but got: {{elementName}}");
-{I}return null;
-}}
-
-// Skip the element node and go to the content
-reader.Read();
-
-Aas.{name}{result_nullability} result = (
-{I}{name}FromSequence(
-{II}reader, isEmptyElement, out error));
-if (error != null)
-{{
-{I}return null;
-}}
-
-ConsumeCloseTag(
-{I}reader,
-{I}elementName,
-{I}isEmptyElement,
-{I}out error);
-if (error != null)
-{{
-{I}return null;
-}}
-
-return result;"""
-    )
-
-    return Stripped(
-        f"""\
-/// <summary>
-/// Deserialize an instance of class {name} from an XML element.
-/// </summary>
-internal static Aas.{name}? {name}FromElement(
-{I}Xml.XmlReader reader,
-{I}out Reporting.Error? error)
-{{
-{I}{indent_but_first_line(body, I)}
-}}  // internal static Aas.{name}? {name}FromElement"""
     )
 
 
@@ -2041,30 +1720,7 @@ def _generate_deserialize_impl_interface_from_element(
     """Generate the function to de-serialize an ``interface`` from an XML element."""
     name = csharp_naming.interface_name(interface.name)
 
-    blocks = [
-        Stripped(
-            f"""\
-error = null;
-
-SkipNoneWhitespaceAndComments(reader);
-
-if (reader.EOF)
-{{
-{I}error = new Reporting.Error(
-{II}"Expected an XML element, but reached end-of-file");
-{I}return null;
-}}
-
-if (reader.NodeType != Xml.XmlNodeType.Element)
-{{
-{I}error = new Reporting.Error(
-{II}"Expected an XML element, " +
-{II}$"but got a node of type {{reader.NodeType}} " +
-{II}$"with value {{reader.Value}}");
-{I}return null;
-}}"""
-        )
-    ]  # type: List[Stripped]
+    blocks = []  # type: List[Stripped]
 
     case_stmts = []  # type: List[Stripped]
     for implementer in interface.implementers:
@@ -2089,18 +1745,18 @@ case {implementer_xml_name_literal}:
 default:
 {I}error = new Reporting.Error(
 {II}$"Unexpected element with the name {{elementName}}");
-{I}return null;"""
+{I}return default!;"""
         )
     )
 
     switch_writer = io.StringIO()
     switch_writer.write(
         f"""\
-string elementName = TryElementName(
+string elementName = PeekElementName(
 {I}reader, out error);
 if (error != null)
 {{
-{I}return null;
+{I}return default!;
 }}
 
 switch (elementName)
@@ -2123,7 +1779,7 @@ switch (elementName)
 /// Deserialize an instance of {name} from an XML element.
 /// </summary>
 [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-internal static Aas.{name}? {name}FromElement(
+internal static Aas.{name} {name}FromElement(
 {I}Xml.XmlReader reader,
 {I}out Reporting.Error? error)
 {{
@@ -2146,30 +1802,7 @@ def _generate_deserialize_impl_named_union_from_element(
     """Generate the function to de-serialize a ``named_union`` from an XML element."""
     name = csharp_naming.class_name(named_union.name)
 
-    blocks = [
-        Stripped(
-            f"""\
-error = null;
-
-SkipNoneWhitespaceAndComments(reader);
-
-if (reader.EOF)
-{{
-{I}error = new Reporting.Error(
-{II}"Expected an XML element, but reached end-of-file");
-{I}return null;
-}}
-
-if (reader.NodeType != Xml.XmlNodeType.Element)
-{{
-{I}error = new Reporting.Error(
-{II}"Expected an XML element, " +
-{II}$"but got a node of type {{reader.NodeType}} " +
-{II}$"with value {{reader.Value}}");
-{I}return null;
-}}"""
-        )
-    ]  # type: List[Stripped]
+    blocks = []  # type: List[Stripped]
 
     case_stmts = []  # type: List[Stripped]
     for implementer in named_union.implementers:
@@ -2187,16 +1820,11 @@ if (reader.NodeType != Xml.XmlNodeType.Element)
                 f"""\
 case {implementer_xml_name_literal}:
 {{
-{I}Aas.{implementer_name}? instance = {implementer_name}FromElement(
+{I}Aas.{implementer_name} instance = {implementer_name}FromElement(
 {II}reader, out error);
 {I}if (error != null)
 {I}{{
-{II}return null;
-{I}}}
-{I}if (instance == null)
-{I}{{
-{II}throw new System.InvalidOperationException(
-{III}"Unexpected instance null when error null");
+{II}return default!;
 {I}}}
 {I}return Aas.{name}.{from_method_name}(instance);
 }}"""
@@ -2209,18 +1837,18 @@ case {implementer_xml_name_literal}:
 default:
 {I}error = new Reporting.Error(
 {II}$"Unexpected element with the name {{elementName}}");
-{I}return null;"""
+{I}return default!;"""
         )
     )
 
     switch_writer = io.StringIO()
     switch_writer.write(
         f"""\
-string elementName = TryElementName(
+string elementName = PeekElementName(
 {I}reader, out error);
 if (error != null)
 {{
-{I}return null;
+{I}return default!;
 }}
 
 switch (elementName)
@@ -2242,7 +1870,7 @@ switch (elementName)
 /// <summary>
 /// Deserialize an instance of {name} from an XML element.
 /// </summary>
-internal static Aas.{name}? {name}FromElement(
+internal static Aas.{name} {name}FromElement(
 {I}Xml.XmlReader reader,
 {I}out Reporting.Error? error)
 {{
@@ -2268,23 +1896,58 @@ def _generate_deserialize_impl(
         _generate_skip_whitespace_and_comments(),
         _generate_read_whole_content_as_base_64(),
         _generate_extract_element_name(),
-        _generate_read_v_element(),
-        _generate_read_v_end_element(),
-        *_generate_read_v_element_as_primitive_functions(),
-        _generate_parse_list_of_class_helpers(),
-        _generate_parse_list_of_struct_helpers(),
-        _generate_read_start_element_of_class(),
-        _generate_consume_close_tag(),
+        _generate_peek_element_name(),
+        _generate_element_reader_delegates(),
     ]  # type: List[Stripped]
+
+    needed_readers = _needed_content_readers(symbol_table)
+    from_element_fields = _generate_from_element_fields(symbol_table)
+
+    blocks.extend(_generate_as_text_combinators(needed=needed_readers))
+    blocks.extend(
+        _generate_content_converters(primitive_types=needed_readers.primitive_types)
+    )
+
+    # NOTE (mristin):
+    # A class reads its own element through ``AtElement`` as well, so this is
+    # needed as soon as there is anything at all to read.
+    if needed_readers.v_elements or len(from_element_fields) > 0:
+        blocks.append(_generate_consume_end_element())
+        blocks.append(_generate_at_element_combinator())
+
+    if any(
+        len(cls.constructor.arguments) > 0
+        for cls in symbol_table.concrete_classes
+        if not cls.is_implementation_specific
+    ):
+        blocks.append(_generate_try_next_property())
+
+    if needed_readers.enumerations:
+        blocks.append(_generate_literal_parser_delegate())
+        blocks.append(_generate_as_enum_combinator())
+
+    if needed_readers.lists:
+        blocks.append(_generate_read_list_helper())
+        blocks.append(_generate_as_list_combinator())
+
+    if needed_readers.polymorphic:
+        blocks.append(_generate_as_element_combinator())
 
     tuple_arities = intermediate.tuple_arities(symbol_table)
     if len(tuple_arities) > 0:
-        blocks.append(_generate_tuple_item_reader_delegate())
         for arity in tuple_arities:
-            blocks.append(_generate_parse_tuple_helper(arity))
+            blocks.append(_generate_as_tuple_combinator(arity))
 
-    for enumeration in symbol_table.enumerations:
-        blocks.append(_generate_read_v_element_as_enumeration(enumeration))
+    # NOTE (mristin):
+    # The readers are composed once, here, rather than at every property of
+    # every instance -- composing them at the call site would allocate
+    # a delegate on every single read.
+    #
+    # A field initializer reads the fields it composes, and a reader of
+    # a list or of a tuple of a class composes that class's reader, so
+    # the classes have to come first.
+    blocks.extend(from_element_fields)
+    blocks.extend(_generate_content_reader_fields(symbol_table))
 
     errors = []  # type: List[Error]
 
@@ -2346,11 +2009,6 @@ def _generate_deserialize_impl(
                     _generate_deserialize_impl_interface_from_element(
                         interface=cls.interface
                     )
-                )
-
-            if isinstance(cls, intermediate.ConcreteClass):
-                blocks.append(
-                    _generate_deserialize_impl_concrete_cls_from_element(cls=cls)
                 )
 
     for named_union in symbol_table.named_unions:
@@ -2434,19 +2092,16 @@ public static Aas.{name} {name}From(
 {III}"to be set at content with MoveToContent");
 {I}}}
 
-{I}Aas.{name}? result = (
-{II}DeserializeImplementation.{name}FromElement(
-{III}reader,
-{III}out Reporting.Error? error));
+{I}Aas.{name} result = DeserializeImplementation.{name}FromElement(
+{II}reader,
+{II}out Reporting.Error? error);
 {I}if (error != null)
 {I}{{
 {II}throw new Xmlization.Exception(
 {III}Reporting.GenerateRelativeXPath(error.PathSegments),
 {III}error.Cause);
 {I}}}
-{I}return result
-{II}?? throw new System.InvalidOperationException(
-{III}"Unexpected output null when error is null");
+{I}return result;
 }}"""
     )
 
@@ -2583,7 +2238,7 @@ def _generate_write_v_element_as_primitive_functions() -> List[Stripped]:
     """
     Generate the functions to write a primitive value as a named element.
 
-    These mirror :py:func:`_generate_read_v_element_as_primitive_functions`
+    These mirror the read-side content readers
     on the write side: a tuple item, unlike a list item, is wrapped in a
     positional element name (<c>v1</c>, <c>v2</c>, *etc.*) instead of always
     the fixed <c>v</c>, so we generate one write function per primitive type,
@@ -2669,9 +2324,7 @@ def _generate_tuple_item_serializer_helpers() -> Stripped:
 /// first needs to be wrapped in its own positional <c>v1</c>, <c>v2</c>,
 /// *etc.* element -- this adapter closes over the element name so that
 /// a tuple-typed property does not need to spell out that wrapping (start
-/// element/write value/end element) at every item, mirroring how
-/// <see cref="AsTupleItemDeserializer{{T}}(NamedClassItemDeserializer{{T}}, string)" />
-/// avoids the equivalent on the read side.
+/// element/write value/end element) at every item.
 /// </remarks>
 /// <typeparam name="T">Type of the item to be written</typeparam>
 private delegate void NamedElementSerializer<T>(
