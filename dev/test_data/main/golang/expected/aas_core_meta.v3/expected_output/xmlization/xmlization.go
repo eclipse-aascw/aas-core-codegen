@@ -594,15 +594,6 @@ func unexpectedItemElement(local string, expectedLocal string) error {
 	)
 }
 
-type Scalar interface {
-	~bool |
-	~int |
-	~int64 |
-	~float64 |
-	~string |
-	~[]byte
-}
-
 // Read a value wrapped in a single XML element, dispatching on the local name of
 // that element.
 //
@@ -5777,224 +5768,440 @@ func writeBytesAsText(
 	return
 }
 
-// Write the scalar `value` of a property enclosed in an XML element.
+// Write `that` as an XML element with the `local` name, its content written by
+// `writeContent`.
 //
 // Do not flush.
+//
+// This is the one place which frames an XML element around a *value*: a property,
+// a list item and a tuple item all go through it, and differ only in the given
+// `writeContent`. A list frames its own element in [writeList], and an instance
+// the element naming its model type in [writeClassElement], as neither of the two
+// can be reduced to a content writer without allocating a closure.
 //
 // The XML namespace is expected to have been defined outside of the resulting XML
 // element.
-func writeScalarProperty[T Scalar](
+func writeElement[T any](
 	encoder *xml.Encoder,
 	local string,
-	value T,
-	writeTAsText func(anEncoder *xml.Encoder, aValue T) (anErr error),
+	that T,
+	writeContent func(anEncoder *xml.Encoder, aValue T) (anErr error),
 ) (err error) {
-	err = writeStartElement(
-		encoder,
-		local,
-		false,
-	)
+	err = writeStartElement(encoder, local, false)
 	if err != nil {
 		return
 	}
 
-	err = writeTAsText(encoder, value)
+	err = writeContent(encoder, that)
 	if err != nil {
 		return
 	}
 
-	err = writeEndElement(
-		encoder,
-		local,
-		false,
-	)
-	if err != nil {
-		return
-	}
-
+	err = writeEndElement(encoder, local, false)
 	return
 }
 
-// Serialize the `instance` as a sequence of elements directly embedded
-// in an XML element with `local` name representing the property.
+// Write the optional `that` as an XML element with the `local` name, or write
+// nothing at all if it is not set.
 //
 // Do not flush.
-func writeEmbeddedInstanceProperty[T aastypes.IClass](
+//
+// A scalar and a tuple are not nilable in Golang, so an optional one is represented
+// as a pointer. The pointer is dereferenced here, so that `writeContent` sees only
+// the value. See also [writeOptionalInstance] and [writeOptionalSlice], which differ
+// from this function only in how the presence is decided.
+func writeOptionalPointer[T any](
 	encoder *xml.Encoder,
 	local string,
-	instance T,
-	writeTAsSequence func(anEncoder *xml.Encoder, that T) (anErr error),
+	that *T,
+	writeContent func(anEncoder *xml.Encoder, aValue T) (anErr error),
 ) (err error) {
-	err = writeStartElement(
-		encoder,
-		local,
-		false,
-	)
-	if err != nil {
+	if that == nil {
 		return
 	}
 
-	err = writeTAsSequence(
-		encoder,
-		instance,
-	)
-	if err != nil {
-		return
-	}
-
-	err = writeEndElement(
-		encoder,
-		local,
-		false,
-	)
-	return
+	return writeElement(encoder, local, *that, writeContent)
 }
 
-// Serialize the `instance` as a sequence of elements within a discriminator
-// element which is then embedded in an XML element with `local` name
-// representing the property.
+// Write the optional instance `that` as an XML element with the `local` name, or
+// write nothing at all if it is not set.
 //
 // Do not flush.
-func writeDiscriminatedInstanceProperty(
+//
+// An instance is represented as an interface and a named union as a pointer to
+// a struct, both of which are nil on their own, so -- unlike in [writeOptionalPointer] --
+// there is no pointer to dereference.
+//
+// Golang does not allow a value of a type parameter to be compared against `nil`,
+// and `any(that) == nil` would not do either: a nil *pointer* converted to `any` is
+// a non-nil `any` which carries the type of that pointer. Comparing against
+// the zero value of `T` covers both, as it compares nil against nil for
+// an interface, and a nil pointer against a nil pointer of the same type for
+// a named union.
+func writeOptionalInstance[T any](
 	encoder *xml.Encoder,
 	local string,
-	instance aastypes.IClass,
+	that T,
+	writeContent func(anEncoder *xml.Encoder, aValue T) (anErr error),
 ) (err error) {
-	err = writeStartElement(
-		encoder,
-		local,
-		false,
-	)
-	if err != nil {
+	var unset T
+	if any(that) == any(unset) {
 		return
 	}
 
-	err = Marshal(
-		encoder,
-		instance,
-		false,
-	)
-	if err != nil {
-		return
-	}
-
-	err = writeEndElement(
-		encoder,
-		local,
-		false,
-	)
-	if err != nil {
-		return
-	}
-
-	return
+	return writeElement(encoder, local, that, writeContent)
 }
 
-// Serialize the list of instances as a sequence of XML elements enclosed in a parent
-// XML element with the `local` name.
-func writeListOfInstancesProperty[T aastypes.IClass](
+// Write the optional `that` as an XML element with the `local` name, or write
+// nothing at all if it is not set.
+//
+// Do not flush.
+//
+// A list and the bytes are represented as a slice, which is nil on its own, but --
+// unlike an instance in [writeOptionalInstance] -- can not be compared against
+// the zero value, as a slice is not comparable at all. Mind that a nil slice and
+// an empty slice differ here: only the former is considered absent, while
+// the latter is written as an empty XML element.
+func writeOptionalSlice[T any](
 	encoder *xml.Encoder,
 	local string,
+	that []T,
+	writeContent func(anEncoder *xml.Encoder, aValue []T) (anErr error),
+) (err error) {
+	if that == nil {
+		return
+	}
+
+	return writeElement(encoder, local, that, writeContent)
+}
+
+// Write the items of the `list`, each as an XML element of its own.
+//
+// Do not flush.
+//
+// The element *around* the list is framed by whoever writes the list, see
+// the generated `writeListOf*` functions. Every item frames its own element
+// through `writeItem`: an instance is written as an element named after its model
+// type, while a scalar is wrapped in the element `v`. A list of instances and
+// a list of scalars therefore share this one function.
+func writeList[T any](
+	encoder *xml.Encoder,
 	list []T,
+	writeItem func(anEncoder *xml.Encoder, aValue T) (anErr error),
 ) (err error) {
-	err = writeStartElement(
-		encoder,
-		local,
-		false,
-	)
-	if err != nil {
-		return
-	}
-
 	for i, item := range list {
-		err = Marshal(
-			encoder,
-			item,
-			false,
-		)
+		err = writeItem(encoder, item)
 		if err != nil {
 			if seriaErr, ok := err.(*SerializationError); ok {
 				seriaErr.Path.PrependIndex(
-					&aasreporting.IndexSegment{
-						Index: i,
-					},
+					&aasreporting.IndexSegment{Index: i},
 				)
 			}
 			return
 		}
 	}
 
-	err = writeEndElement(
-		encoder,
-		local,
-		false,
-	)
-	if err != nil {
-		return
-	}
-
 	return
 }
 
-// Serialize the list of scalars as a sequence of XML `<v>` elements
-// enclosed in a parent XML element with the `local` name.
-func writeListOfScalarsProperty[T Scalar](
+// Conclude the writing of the property read by `getter` by attributing the error,
+// if any, to that property.
+//
+// Do not flush.
+//
+// `getter` is the getter of the property *as it is spelled in Golang*, `Value()`
+// and not `value`, since it is prepended to the path of a serialization error,
+// which [SerializationError.PathString] renders as a Golang expression through
+// [aasreporting.ToGolangPath]. (Golang has no way to name a member at compile time,
+// so the getter has to be spelled out; mind that the de-serialization reports
+// an XPath instead, and hence prepends the XML name there.)
+//
+// The write itself is given as its *result*, not as a function to be called, so that
+// this one function concludes every property, no matter which of the `write*`
+// functions wrote it, and no matter how many arguments that function took. Golang
+// evaluates the argument, hence performs the write, before this call.
+func finishProperty(
+	getter string,
+	err error,
+) error {
+	if err != nil {
+		if seriaErr, ok := err.(*SerializationError); ok {
+			seriaErr.Path.PrependName(
+				&aasreporting.NameSegment{Name: getter},
+			)
+		}
+		return err
+	}
+
+	return nil
+}
+
+// Write the instance `that` as an XML element named after its model type.
+//
+// Do not flush.
+//
+// This is the content writer of every instance which is not embedded in the element
+// of its property, be it a property, a list item or a tuple item: [Marshal] picks
+// the element name from the runtime model type.
+//
+// Golang function values are invariant in their parameter type, so [Marshal], which
+// takes the wide [aastypes.IClass], can not be used where a writer of a more
+// specific interface is expected -- this generic function exists solely to narrow
+// the parameter type to `T`. Golang can not infer `T` from the context here, so
+// every call site instantiates it explicitly, *e.g.*,
+// `writeInstance[aastypes.IReference]`, and passes it on as that instantiated
+// function value, without a closure.
+func writeInstance[T aastypes.IClass](
+	encoder *xml.Encoder,
+	that T,
+) error {
+	return writeClass(encoder, that, false)
+}
+
+// Write `that` as an XML element with the `local` name representing its model type.
+//
+// Do not flush.
+//
+// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
+//
+// Unlike [writeElement], which frames a *property*, this function frames an instance
+// in the element which discriminates its model type, and is therefore the one place
+// where the XML namespace can be set.
+func writeClassElement[T any](
 	encoder *xml.Encoder,
 	local string,
-	list []T,
-	writeTAsText func(anEncoder *xml.Encoder, aValue T) (anErr error),
+	withNamespace bool,
+	that T,
+	writeTAsSequence func(anEncoder *xml.Encoder, aValue T) (anErr error),
 ) (err error) {
-	err = writeStartElement(
-		encoder,
-		local,
-		false,
-	)
+	err = writeStartElement(encoder, local, withNamespace)
 	if err != nil {
 		return
 	}
 
-	for i, item := range list {
-		err = writeStartElement(
-			encoder,
-			"v",
-			false,
-		)
-		if err != nil {
-			return
-		}
-
-		err = writeTAsText(encoder, item)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependIndex(
-					&aasreporting.IndexSegment{
-						Index: i,
-					},
-				)
-			}
-			return
-		}
-
-		err = writeEndElement(
-			encoder,
-			"v",
-			false,
-		)
-		if err != nil {
-			return
-		}
-	}
-
-	err = writeEndElement(
-		encoder,
-		local,
-		false,
-	)
+	err = writeTAsSequence(encoder, that)
 	if err != nil {
 		return
 	}
 
+	err = writeEndElement(encoder, local, withNamespace)
 	return
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOfIReference(
+	encoder *xml.Encoder,
+	list []aastypes.IReference,
+) error {
+	return writeList(
+		encoder, list, writeInstance[aastypes.IReference],
+	)
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOfIEmbeddedDataSpecification(
+	encoder *xml.Encoder,
+	list []aastypes.IEmbeddedDataSpecification,
+) error {
+	return writeList(
+		encoder, list, writeInstance[aastypes.IEmbeddedDataSpecification],
+	)
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOfIExtension(
+	encoder *xml.Encoder,
+	list []aastypes.IExtension,
+) error {
+	return writeList(
+		encoder, list, writeInstance[aastypes.IExtension],
+	)
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOfILangStringNameType(
+	encoder *xml.Encoder,
+	list []aastypes.ILangStringNameType,
+) error {
+	return writeList(
+		encoder, list, writeInstance[aastypes.ILangStringNameType],
+	)
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOfILangStringTextType(
+	encoder *xml.Encoder,
+	list []aastypes.ILangStringTextType,
+) error {
+	return writeList(
+		encoder, list, writeInstance[aastypes.ILangStringTextType],
+	)
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOfISpecificAssetID(
+	encoder *xml.Encoder,
+	list []aastypes.ISpecificAssetID,
+) error {
+	return writeList(
+		encoder, list, writeInstance[aastypes.ISpecificAssetID],
+	)
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOfIQualifier(
+	encoder *xml.Encoder,
+	list []aastypes.IQualifier,
+) error {
+	return writeList(
+		encoder, list, writeInstance[aastypes.IQualifier],
+	)
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOfISubmodelElement(
+	encoder *xml.Encoder,
+	list []aastypes.ISubmodelElement,
+) error {
+	return writeList(
+		encoder, list, writeInstance[aastypes.ISubmodelElement],
+	)
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOfIDataElement(
+	encoder *xml.Encoder,
+	list []aastypes.IDataElement,
+) error {
+	return writeList(
+		encoder, list, writeInstance[aastypes.IDataElement],
+	)
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOfIOperationVariable(
+	encoder *xml.Encoder,
+	list []aastypes.IOperationVariable,
+) error {
+	return writeList(
+		encoder, list, writeInstance[aastypes.IOperationVariable],
+	)
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOfIKey(
+	encoder *xml.Encoder,
+	list []aastypes.IKey,
+) error {
+	return writeList(
+		encoder, list, writeInstance[aastypes.IKey],
+	)
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOfIAssetAdministrationShell(
+	encoder *xml.Encoder,
+	list []aastypes.IAssetAdministrationShell,
+) error {
+	return writeList(
+		encoder, list, writeInstance[aastypes.IAssetAdministrationShell],
+	)
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOfISubmodel(
+	encoder *xml.Encoder,
+	list []aastypes.ISubmodel,
+) error {
+	return writeList(
+		encoder, list, writeInstance[aastypes.ISubmodel],
+	)
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOfIConceptDescription(
+	encoder *xml.Encoder,
+	list []aastypes.IConceptDescription,
+) error {
+	return writeList(
+		encoder, list, writeInstance[aastypes.IConceptDescription],
+	)
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOfIValueReferencePair(
+	encoder *xml.Encoder,
+	list []aastypes.IValueReferencePair,
+) error {
+	return writeList(
+		encoder, list, writeInstance[aastypes.IValueReferencePair],
+	)
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOfILangStringPreferredNameTypeIEC61360(
+	encoder *xml.Encoder,
+	list []aastypes.ILangStringPreferredNameTypeIEC61360,
+) error {
+	return writeList(
+		encoder, list, writeInstance[aastypes.ILangStringPreferredNameTypeIEC61360],
+	)
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOfILangStringShortNameTypeIEC61360(
+	encoder *xml.Encoder,
+	list []aastypes.ILangStringShortNameTypeIEC61360,
+) error {
+	return writeList(
+		encoder, list, writeInstance[aastypes.ILangStringShortNameTypeIEC61360],
+	)
+}
+
+// Write the items of the `list` as a sequence of XML elements.
+//
+// Do not flush.
+func writeListOfILangStringDefinitionTypeIEC61360(
+	encoder *xml.Encoder,
+	list []aastypes.ILangStringDefinitionTypeIEC61360,
+) error {
+	return writeList(
+		encoder, list, writeInstance[aastypes.ILangStringDefinitionTypeIEC61360],
+	)
 }
 
 // Serialize the instance
@@ -6004,228 +6211,74 @@ func writeListOfScalarsProperty[T Scalar](
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeExtensionAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IExtension,
 ) (err error) {
-	// region SemanticID
-
-	theSemanticID := that.SemanticID()
-
-	if theSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"semanticId",
-			theSemanticID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"SemanticID()",
+		writeOptionalInstance(
+			encoder, "semanticId", that.SemanticID(), writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SupplementalSemanticIDs
-
-	theSupplementalSemanticIDs := that.SupplementalSemanticIDs()
-
-	if theSupplementalSemanticIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SupplementalSemanticIDs()",
+		writeOptionalSlice(
 			encoder,
 			"supplementalSemanticIds",
-			theSupplementalSemanticIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SupplementalSemanticIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Name
-
-	err = writeScalarProperty(
-		encoder,
-		"name",
-		that.Name(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Name()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region ValueType
-
-	theValueType := that.ValueType()
-
-	if theValueType != nil {
-		err = writeScalarProperty(
-			encoder,
-			"valueType",
-			*theValueType,
-			writeDataTypeDefXSDAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "ValueType()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Value
-
-	theValue := that.Value()
-
-	if theValue != nil {
-		err = writeScalarProperty(
-			encoder,
-			"value",
-			*theValue,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Value()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region RefersTo
-
-	theRefersTo := that.RefersTo()
-
-	if theRefersTo != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"refersTo",
-			theRefersTo,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "RefersTo()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IExtension]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeExtension(
-	encoder *xml.Encoder,
-	that aastypes.IExtension,
-	withNamespace bool,
-) (err error) {
-	local := "extension"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			that.SupplementalSemanticIDs(),
+			writeListOfIReference,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeExtensionAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Name()",
+		writeElement(
+			encoder, "name", that.Name(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"ValueType()",
+		writeOptionalPointer(
+			encoder, "valueType", that.ValueType(), writeDataTypeDefXSDAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"Value()",
+		writeOptionalPointer(
+			encoder, "value", that.Value(), writeStringAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"RefersTo()",
+		writeOptionalSlice(
+			encoder, "refersTo", that.RefersTo(), writeListOfIReference,
+		),
+	)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -6262,203 +6315,64 @@ func writeModellingKindAsText(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeAdministrativeInformationAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IAdministrativeInformation,
 ) (err error) {
-	// region EmbeddedDataSpecifications
-
-	theEmbeddedDataSpecifications := that.EmbeddedDataSpecifications()
-
-	if theEmbeddedDataSpecifications != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"EmbeddedDataSpecifications()",
+		writeOptionalSlice(
 			encoder,
 			"embeddedDataSpecifications",
-			theEmbeddedDataSpecifications,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "EmbeddedDataSpecifications()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Version
-
-	theVersion := that.Version()
-
-	if theVersion != nil {
-		err = writeScalarProperty(
-			encoder,
-			"version",
-			*theVersion,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Version()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Revision
-
-	theRevision := that.Revision()
-
-	if theRevision != nil {
-		err = writeScalarProperty(
-			encoder,
-			"revision",
-			*theRevision,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Revision()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Creator
-
-	theCreator := that.Creator()
-
-	if theCreator != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"creator",
-			theCreator,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Creator()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region TemplateID
-
-	theTemplateID := that.TemplateID()
-
-	if theTemplateID != nil {
-		err = writeScalarProperty(
-			encoder,
-			"templateId",
-			*theTemplateID,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "TemplateID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IAdministrativeInformation]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeAdministrativeInformation(
-	encoder *xml.Encoder,
-	that aastypes.IAdministrativeInformation,
-	withNamespace bool,
-) (err error) {
-	local := "administrativeInformation"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			that.EmbeddedDataSpecifications(),
+			writeListOfIEmbeddedDataSpecification,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeAdministrativeInformationAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Version()",
+		writeOptionalPointer(
+			encoder, "version", that.Version(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"Revision()",
+		writeOptionalPointer(
+			encoder, "revision", that.Revision(), writeStringAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"Creator()",
+		writeOptionalInstance(
+			encoder, "creator", that.Creator(), writeReferenceAsSequence,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"TemplateID()",
+		writeOptionalPointer(
+			encoder, "templateId", that.TemplateID(), writeStringAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -6495,255 +6409,84 @@ func writeQualifierKindAsText(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeQualifierAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IQualifier,
 ) (err error) {
-	// region SemanticID
-
-	theSemanticID := that.SemanticID()
-
-	if theSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"semanticId",
-			theSemanticID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"SemanticID()",
+		writeOptionalInstance(
+			encoder, "semanticId", that.SemanticID(), writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SupplementalSemanticIDs
-
-	theSupplementalSemanticIDs := that.SupplementalSemanticIDs()
-
-	if theSupplementalSemanticIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SupplementalSemanticIDs()",
+		writeOptionalSlice(
 			encoder,
 			"supplementalSemanticIds",
-			theSupplementalSemanticIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SupplementalSemanticIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Kind
-
-	theKind := that.Kind()
-
-	if theKind != nil {
-		err = writeScalarProperty(
-			encoder,
-			"kind",
-			*theKind,
-			writeQualifierKindAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Kind()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Type
-
-	err = writeScalarProperty(
-		encoder,
-		"type",
-		that.Type(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Type()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region ValueType
-
-	err = writeScalarProperty(
-		encoder,
-		"valueType",
-		that.ValueType(),
-		writeDataTypeDefXSDAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "ValueType()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Value
-
-	theValue := that.Value()
-
-	if theValue != nil {
-		err = writeScalarProperty(
-			encoder,
-			"value",
-			*theValue,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Value()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region ValueID
-
-	theValueID := that.ValueID()
-
-	if theValueID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"valueId",
-			theValueID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "ValueID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IQualifier]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeQualifier(
-	encoder *xml.Encoder,
-	that aastypes.IQualifier,
-	withNamespace bool,
-) (err error) {
-	local := "qualifier"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			that.SupplementalSemanticIDs(),
+			writeListOfIReference,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeQualifierAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Kind()",
+		writeOptionalPointer(
+			encoder, "kind", that.Kind(), writeQualifierKindAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"Type()",
+		writeElement(
+			encoder, "type", that.Type(), writeStringAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"ValueType()",
+		writeElement(
+			encoder, "valueType", that.ValueType(), writeDataTypeDefXSDAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"Value()",
+		writeOptionalPointer(
+			encoder, "value", that.Value(), writeStringAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"ValueID()",
+		writeOptionalInstance(
+			encoder, "valueId", that.ValueID(), writeReferenceAsSequence,
+		),
+	)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -6754,371 +6497,130 @@ func writeQualifier(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeAssetAdministrationShellAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IAssetAdministrationShell,
 ) (err error) {
-	// region Extensions
-
-	theExtensions := that.Extensions()
-
-	if theExtensions != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"extensions",
-			theExtensions,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Extensions()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Extensions()",
+		writeOptionalSlice(
+			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Category
-
-	theCategory := that.Category()
-
-	if theCategory != nil {
-		err = writeScalarProperty(
-			encoder,
-			"category",
-			*theCategory,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Category()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Category()",
+		writeOptionalPointer(
+			encoder, "category", that.Category(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region IDShort
-
-	theIDShort := that.IDShort()
-
-	if theIDShort != nil {
-		err = writeScalarProperty(
-			encoder,
-			"idShort",
-			*theIDShort,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "IDShort()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"IDShort()",
+		writeOptionalPointer(
+			encoder, "idShort", that.IDShort(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region DisplayName
-
-	theDisplayName := that.DisplayName()
-
-	if theDisplayName != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"displayName",
-			theDisplayName,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DisplayName()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"DisplayName()",
+		writeOptionalSlice(
+			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Description
-
-	theDescription := that.Description()
-
-	if theDescription != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"description",
-			theDescription,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Description()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Description()",
+		writeOptionalSlice(
+			encoder, "description", that.Description(), writeListOfILangStringTextType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Administration
-
-	theAdministration := that.Administration()
-
-	if theAdministration != nil {
-		err = writeEmbeddedInstanceProperty(
+	err = finishProperty(
+		"Administration()",
+		writeOptionalInstance(
 			encoder,
 			"administration",
-			theAdministration,
+			that.Administration(),
 			writeAdministrativeInformationAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Administration()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region ID
-
-	err = writeScalarProperty(
-		encoder,
-		"id",
-		that.ID(),
-		writeStringAsText,
+		),
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "ID()",
-				},
-			)
-		}
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"ID()",
+		writeElement(
+			encoder, "id", that.ID(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region EmbeddedDataSpecifications
-
-	theEmbeddedDataSpecifications := that.EmbeddedDataSpecifications()
-
-	if theEmbeddedDataSpecifications != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"EmbeddedDataSpecifications()",
+		writeOptionalSlice(
 			encoder,
 			"embeddedDataSpecifications",
-			theEmbeddedDataSpecifications,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "EmbeddedDataSpecifications()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.EmbeddedDataSpecifications(),
+			writeListOfIEmbeddedDataSpecification,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
+	err = finishProperty(
+		"DerivedFrom()",
+		writeOptionalInstance(
+			encoder, "derivedFrom", that.DerivedFrom(), writeReferenceAsSequence,
+		),
+	)
+	if err != nil {
+		return
+	}
 
-	// region DerivedFrom
-
-	theDerivedFrom := that.DerivedFrom()
-
-	if theDerivedFrom != nil {
-		err = writeEmbeddedInstanceProperty(
+	err = finishProperty(
+		"AssetInformation()",
+		writeElement(
 			encoder,
-			"derivedFrom",
-			theDerivedFrom,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DerivedFrom()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region AssetInformation
-
-	err = writeEmbeddedInstanceProperty(
-		encoder,
-		"assetInformation",
-		that.AssetInformation(),
-		writeAssetInformationAsSequence,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "AssetInformation()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Submodels
-
-	theSubmodels := that.Submodels()
-
-	if theSubmodels != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"submodels",
-			theSubmodels,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Submodels()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IAssetAdministrationShell]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeAssetAdministrationShell(
-	encoder *xml.Encoder,
-	that aastypes.IAssetAdministrationShell,
-	withNamespace bool,
-) (err error) {
-	local := "assetAdministrationShell"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			"assetInformation",
+			that.AssetInformation(),
+			writeAssetInformationAsSequence,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeAssetAdministrationShellAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Submodels()",
+		writeOptionalSlice(
+			encoder, "submodels", that.Submodels(), writeListOfIReference,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
 	return
 }
 
@@ -7129,199 +6631,67 @@ func writeAssetAdministrationShell(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeAssetInformationAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IAssetInformation,
 ) (err error) {
-	// region AssetKind
-
-	err = writeScalarProperty(
-		encoder,
-		"assetKind",
-		that.AssetKind(),
-		writeAssetKindAsText,
+	err = finishProperty(
+		"AssetKind()",
+		writeElement(
+			encoder, "assetKind", that.AssetKind(), writeAssetKindAsText,
+		),
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "AssetKind()",
-				},
-			)
-		}
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"GlobalAssetID()",
+		writeOptionalPointer(
+			encoder, "globalAssetId", that.GlobalAssetID(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region GlobalAssetID
-
-	theGlobalAssetID := that.GlobalAssetID()
-
-	if theGlobalAssetID != nil {
-		err = writeScalarProperty(
-			encoder,
-			"globalAssetId",
-			*theGlobalAssetID,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "GlobalAssetID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region SpecificAssetIDs
-
-	theSpecificAssetIDs := that.SpecificAssetIDs()
-
-	if theSpecificAssetIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SpecificAssetIDs()",
+		writeOptionalSlice(
 			encoder,
 			"specificAssetIds",
-			theSpecificAssetIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SpecificAssetIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.SpecificAssetIDs(),
+			writeListOfISpecificAssetID,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region AssetType
-
-	theAssetType := that.AssetType()
-
-	if theAssetType != nil {
-		err = writeScalarProperty(
-			encoder,
-			"assetType",
-			*theAssetType,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "AssetType()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"AssetType()",
+		writeOptionalPointer(
+			encoder, "assetType", that.AssetType(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region DefaultThumbnail
-
-	theDefaultThumbnail := that.DefaultThumbnail()
-
-	if theDefaultThumbnail != nil {
-		err = writeEmbeddedInstanceProperty(
+	err = finishProperty(
+		"DefaultThumbnail()",
+		writeOptionalInstance(
 			encoder,
 			"defaultThumbnail",
-			theDefaultThumbnail,
+			that.DefaultThumbnail(),
 			writeResourceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DefaultThumbnail()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IAssetInformation]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeAssetInformation(
-	encoder *xml.Encoder,
-	that aastypes.IAssetInformation,
-	withNamespace bool,
-) (err error) {
-	local := "assetInformation"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeAssetInformationAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
-	)
-	if err != nil {
-		return
-	}
-
-	err = encoder.Flush()
 	return
 }
 
@@ -7332,110 +6702,31 @@ func writeAssetInformation(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeResourceAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IResource,
 ) (err error) {
-	// region Path
-
-	err = writeScalarProperty(
-		encoder,
-		"path",
-		that.Path(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Path()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region ContentType
-
-	theContentType := that.ContentType()
-
-	if theContentType != nil {
-		err = writeScalarProperty(
-			encoder,
-			"contentType",
-			*theContentType,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "ContentType()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IResource]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeResource(
-	encoder *xml.Encoder,
-	that aastypes.IResource,
-	withNamespace bool,
-) (err error) {
-	local := "resource"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Path()",
+		writeElement(
+			encoder, "path", that.Path(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeResourceAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"ContentType()",
+		writeOptionalPointer(
+			encoder, "contentType", that.ContentType(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
 	return
 }
 
@@ -7472,195 +6763,67 @@ func writeAssetKindAsText(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeSpecificAssetIDAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.ISpecificAssetID,
 ) (err error) {
-	// region SemanticID
-
-	theSemanticID := that.SemanticID()
-
-	if theSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"semanticId",
-			theSemanticID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"SemanticID()",
+		writeOptionalInstance(
+			encoder, "semanticId", that.SemanticID(), writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SupplementalSemanticIDs
-
-	theSupplementalSemanticIDs := that.SupplementalSemanticIDs()
-
-	if theSupplementalSemanticIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SupplementalSemanticIDs()",
+		writeOptionalSlice(
 			encoder,
 			"supplementalSemanticIds",
-			theSupplementalSemanticIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SupplementalSemanticIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Name
-
-	err = writeScalarProperty(
-		encoder,
-		"name",
-		that.Name(),
-		writeStringAsText,
+			that.SupplementalSemanticIDs(),
+			writeListOfIReference,
+		),
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Name()",
-				},
-			)
-		}
 		return
 	}
 
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Value
-
-	err = writeScalarProperty(
-		encoder,
-		"value",
-		that.Value(),
-		writeStringAsText,
+	err = finishProperty(
+		"Name()",
+		writeElement(
+			encoder, "name", that.Name(), writeStringAsText,
+		),
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Value()",
-				},
-			)
-		}
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"Value()",
+		writeElement(
+			encoder, "value", that.Value(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region ExternalSubjectID
-
-	theExternalSubjectID := that.ExternalSubjectID()
-
-	if theExternalSubjectID != nil {
-		err = writeEmbeddedInstanceProperty(
+	err = finishProperty(
+		"ExternalSubjectID()",
+		writeOptionalInstance(
 			encoder,
 			"externalSubjectId",
-			theExternalSubjectID,
+			that.ExternalSubjectID(),
 			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "ExternalSubjectID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.ISpecificAssetID]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeSpecificAssetID(
-	encoder *xml.Encoder,
-	that aastypes.ISpecificAssetID,
-	withNamespace bool,
-) (err error) {
-	local := "specificAssetId"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeSpecificAssetIDAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
-	)
-	if err != nil {
-		return
-	}
-
-	err = encoder.Flush()
 	return
 }
 
@@ -7671,433 +6834,153 @@ func writeSpecificAssetID(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeSubmodelAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.ISubmodel,
 ) (err error) {
-	// region Extensions
-
-	theExtensions := that.Extensions()
-
-	if theExtensions != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"extensions",
-			theExtensions,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Extensions()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Extensions()",
+		writeOptionalSlice(
+			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Category
-
-	theCategory := that.Category()
-
-	if theCategory != nil {
-		err = writeScalarProperty(
-			encoder,
-			"category",
-			*theCategory,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Category()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Category()",
+		writeOptionalPointer(
+			encoder, "category", that.Category(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region IDShort
-
-	theIDShort := that.IDShort()
-
-	if theIDShort != nil {
-		err = writeScalarProperty(
-			encoder,
-			"idShort",
-			*theIDShort,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "IDShort()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"IDShort()",
+		writeOptionalPointer(
+			encoder, "idShort", that.IDShort(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region DisplayName
-
-	theDisplayName := that.DisplayName()
-
-	if theDisplayName != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"displayName",
-			theDisplayName,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DisplayName()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"DisplayName()",
+		writeOptionalSlice(
+			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Description
-
-	theDescription := that.Description()
-
-	if theDescription != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"description",
-			theDescription,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Description()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Description()",
+		writeOptionalSlice(
+			encoder, "description", that.Description(), writeListOfILangStringTextType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Administration
-
-	theAdministration := that.Administration()
-
-	if theAdministration != nil {
-		err = writeEmbeddedInstanceProperty(
+	err = finishProperty(
+		"Administration()",
+		writeOptionalInstance(
 			encoder,
 			"administration",
-			theAdministration,
+			that.Administration(),
 			writeAdministrativeInformationAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Administration()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region ID
-
-	err = writeScalarProperty(
-		encoder,
-		"id",
-		that.ID(),
-		writeStringAsText,
+		),
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "ID()",
-				},
-			)
-		}
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"ID()",
+		writeElement(
+			encoder, "id", that.ID(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Kind
-
-	theKind := that.Kind()
-
-	if theKind != nil {
-		err = writeScalarProperty(
-			encoder,
-			"kind",
-			*theKind,
-			writeModellingKindAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Kind()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Kind()",
+		writeOptionalPointer(
+			encoder, "kind", that.Kind(), writeModellingKindAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SemanticID
-
-	theSemanticID := that.SemanticID()
-
-	if theSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"semanticId",
-			theSemanticID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"SemanticID()",
+		writeOptionalInstance(
+			encoder, "semanticId", that.SemanticID(), writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SupplementalSemanticIDs
-
-	theSupplementalSemanticIDs := that.SupplementalSemanticIDs()
-
-	if theSupplementalSemanticIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SupplementalSemanticIDs()",
+		writeOptionalSlice(
 			encoder,
 			"supplementalSemanticIds",
-			theSupplementalSemanticIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SupplementalSemanticIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.SupplementalSemanticIDs(),
+			writeListOfIReference,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Qualifiers
-
-	theQualifiers := that.Qualifiers()
-
-	if theQualifiers != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"qualifiers",
-			theQualifiers,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Qualifiers()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Qualifiers()",
+		writeOptionalSlice(
+			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region EmbeddedDataSpecifications
-
-	theEmbeddedDataSpecifications := that.EmbeddedDataSpecifications()
-
-	if theEmbeddedDataSpecifications != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"EmbeddedDataSpecifications()",
+		writeOptionalSlice(
 			encoder,
 			"embeddedDataSpecifications",
-			theEmbeddedDataSpecifications,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "EmbeddedDataSpecifications()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.EmbeddedDataSpecifications(),
+			writeListOfIEmbeddedDataSpecification,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SubmodelElements
-
-	theSubmodelElements := that.SubmodelElements()
-
-	if theSubmodelElements != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SubmodelElements()",
+		writeOptionalSlice(
 			encoder,
 			"submodelElements",
-			theSubmodelElements,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SubmodelElements()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.ISubmodel]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeSubmodel(
-	encoder *xml.Encoder,
-	that aastypes.ISubmodel,
-	withNamespace bool,
-) (err error) {
-	local := "submodel"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			that.SubmodelElements(),
+			writeListOfISubmodelElement,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeSubmodelAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
-	)
-	if err != nil {
-		return
-	}
-
-	err = encoder.Flush()
 	return
 }
 
@@ -8108,374 +6991,127 @@ func writeSubmodel(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeRelationshipElementAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IRelationshipElement,
 ) (err error) {
-	// region Extensions
-
-	theExtensions := that.Extensions()
-
-	if theExtensions != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"extensions",
-			theExtensions,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Extensions()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Extensions()",
+		writeOptionalSlice(
+			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Category
-
-	theCategory := that.Category()
-
-	if theCategory != nil {
-		err = writeScalarProperty(
-			encoder,
-			"category",
-			*theCategory,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Category()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Category()",
+		writeOptionalPointer(
+			encoder, "category", that.Category(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region IDShort
-
-	theIDShort := that.IDShort()
-
-	if theIDShort != nil {
-		err = writeScalarProperty(
-			encoder,
-			"idShort",
-			*theIDShort,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "IDShort()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"IDShort()",
+		writeOptionalPointer(
+			encoder, "idShort", that.IDShort(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region DisplayName
-
-	theDisplayName := that.DisplayName()
-
-	if theDisplayName != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"displayName",
-			theDisplayName,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DisplayName()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"DisplayName()",
+		writeOptionalSlice(
+			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Description
-
-	theDescription := that.Description()
-
-	if theDescription != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"description",
-			theDescription,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Description()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Description()",
+		writeOptionalSlice(
+			encoder, "description", that.Description(), writeListOfILangStringTextType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SemanticID
-
-	theSemanticID := that.SemanticID()
-
-	if theSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"semanticId",
-			theSemanticID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"SemanticID()",
+		writeOptionalInstance(
+			encoder, "semanticId", that.SemanticID(), writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SupplementalSemanticIDs
-
-	theSupplementalSemanticIDs := that.SupplementalSemanticIDs()
-
-	if theSupplementalSemanticIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SupplementalSemanticIDs()",
+		writeOptionalSlice(
 			encoder,
 			"supplementalSemanticIds",
-			theSupplementalSemanticIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SupplementalSemanticIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.SupplementalSemanticIDs(),
+			writeListOfIReference,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Qualifiers
-
-	theQualifiers := that.Qualifiers()
-
-	if theQualifiers != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"qualifiers",
-			theQualifiers,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Qualifiers()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Qualifiers()",
+		writeOptionalSlice(
+			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region EmbeddedDataSpecifications
-
-	theEmbeddedDataSpecifications := that.EmbeddedDataSpecifications()
-
-	if theEmbeddedDataSpecifications != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"EmbeddedDataSpecifications()",
+		writeOptionalSlice(
 			encoder,
 			"embeddedDataSpecifications",
-			theEmbeddedDataSpecifications,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "EmbeddedDataSpecifications()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region First
-
-	err = writeEmbeddedInstanceProperty(
-		encoder,
-		"first",
-		that.First(),
-		writeReferenceAsSequence,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "First()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Second
-
-	err = writeEmbeddedInstanceProperty(
-		encoder,
-		"second",
-		that.Second(),
-		writeReferenceAsSequence,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Second()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IRelationshipElement]
-// enclosed in an XML element which represents the model type.
-//
-// Do not dispatch on the runtime model type, *i.e.*, assume that the runtime model type
-// is exactly [aastypes.ModelTypeRelationshipElement]. If you need dispatch,
-// call [Marshal].
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeRelationshipElementWithoutDispatch(
-	encoder *xml.Encoder,
-	that aastypes.IRelationshipElement,
-	withNamespace bool,
-) (err error) {
-	local := "relationshipElement"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			that.EmbeddedDataSpecifications(),
+			writeListOfIEmbeddedDataSpecification,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeRelationshipElementAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"First()",
+		writeElement(
+			encoder, "first", that.First(), writeReferenceAsSequence,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"Second()",
+		writeElement(
+			encoder, "second", that.Second(), writeReferenceAsSequence,
+		),
+	)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -8512,463 +7148,166 @@ func writeAASSubmodelElementsAsText(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeSubmodelElementListAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.ISubmodelElementList,
 ) (err error) {
-	// region Extensions
-
-	theExtensions := that.Extensions()
-
-	if theExtensions != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"extensions",
-			theExtensions,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Extensions()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Extensions()",
+		writeOptionalSlice(
+			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Category
-
-	theCategory := that.Category()
-
-	if theCategory != nil {
-		err = writeScalarProperty(
-			encoder,
-			"category",
-			*theCategory,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Category()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Category()",
+		writeOptionalPointer(
+			encoder, "category", that.Category(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region IDShort
-
-	theIDShort := that.IDShort()
-
-	if theIDShort != nil {
-		err = writeScalarProperty(
-			encoder,
-			"idShort",
-			*theIDShort,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "IDShort()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"IDShort()",
+		writeOptionalPointer(
+			encoder, "idShort", that.IDShort(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region DisplayName
-
-	theDisplayName := that.DisplayName()
-
-	if theDisplayName != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"displayName",
-			theDisplayName,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DisplayName()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"DisplayName()",
+		writeOptionalSlice(
+			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Description
-
-	theDescription := that.Description()
-
-	if theDescription != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"description",
-			theDescription,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Description()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Description()",
+		writeOptionalSlice(
+			encoder, "description", that.Description(), writeListOfILangStringTextType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SemanticID
-
-	theSemanticID := that.SemanticID()
-
-	if theSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"semanticId",
-			theSemanticID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"SemanticID()",
+		writeOptionalInstance(
+			encoder, "semanticId", that.SemanticID(), writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SupplementalSemanticIDs
-
-	theSupplementalSemanticIDs := that.SupplementalSemanticIDs()
-
-	if theSupplementalSemanticIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SupplementalSemanticIDs()",
+		writeOptionalSlice(
 			encoder,
 			"supplementalSemanticIds",
-			theSupplementalSemanticIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SupplementalSemanticIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.SupplementalSemanticIDs(),
+			writeListOfIReference,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Qualifiers
-
-	theQualifiers := that.Qualifiers()
-
-	if theQualifiers != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"qualifiers",
-			theQualifiers,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Qualifiers()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Qualifiers()",
+		writeOptionalSlice(
+			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region EmbeddedDataSpecifications
-
-	theEmbeddedDataSpecifications := that.EmbeddedDataSpecifications()
-
-	if theEmbeddedDataSpecifications != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"EmbeddedDataSpecifications()",
+		writeOptionalSlice(
 			encoder,
 			"embeddedDataSpecifications",
-			theEmbeddedDataSpecifications,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "EmbeddedDataSpecifications()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.EmbeddedDataSpecifications(),
+			writeListOfIEmbeddedDataSpecification,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region OrderRelevant
-
-	theOrderRelevant := that.OrderRelevant()
-
-	if theOrderRelevant != nil {
-		err = writeScalarProperty(
-			encoder,
-			"orderRelevant",
-			*theOrderRelevant,
-			writeBooleanAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "OrderRelevant()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"OrderRelevant()",
+		writeOptionalPointer(
+			encoder, "orderRelevant", that.OrderRelevant(), writeBooleanAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SemanticIDListElement
-
-	theSemanticIDListElement := that.SemanticIDListElement()
-
-	if theSemanticIDListElement != nil {
-		err = writeEmbeddedInstanceProperty(
+	err = finishProperty(
+		"SemanticIDListElement()",
+		writeOptionalInstance(
 			encoder,
 			"semanticIdListElement",
-			theSemanticIDListElement,
+			that.SemanticIDListElement(),
 			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SemanticIDListElement()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region TypeValueListElement
-
-	err = writeScalarProperty(
-		encoder,
-		"typeValueListElement",
-		that.TypeValueListElement(),
-		writeAASSubmodelElementsAsText,
+		),
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "TypeValueListElement()",
-				},
-			)
-		}
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"TypeValueListElement()",
+		writeElement(
+			encoder,
+			"typeValueListElement",
+			that.TypeValueListElement(),
+			writeAASSubmodelElementsAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region ValueTypeListElement
-
-	theValueTypeListElement := that.ValueTypeListElement()
-
-	if theValueTypeListElement != nil {
-		err = writeScalarProperty(
+	err = finishProperty(
+		"ValueTypeListElement()",
+		writeOptionalPointer(
 			encoder,
 			"valueTypeListElement",
-			*theValueTypeListElement,
+			that.ValueTypeListElement(),
 			writeDataTypeDefXSDAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "ValueTypeListElement()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Value
-
-	theValue := that.Value()
-
-	if theValue != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"value",
-			theValue,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Value()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.ISubmodelElementList]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeSubmodelElementList(
-	encoder *xml.Encoder,
-	that aastypes.ISubmodelElementList,
-	withNamespace bool,
-) (err error) {
-	local := "submodelElementList"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeSubmodelElementListAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Value()",
+		writeOptionalSlice(
+			encoder, "value", that.Value(), writeListOfISubmodelElement,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
 	return
 }
 
@@ -8979,347 +7318,117 @@ func writeSubmodelElementList(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeSubmodelElementCollectionAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.ISubmodelElementCollection,
 ) (err error) {
-	// region Extensions
-
-	theExtensions := that.Extensions()
-
-	if theExtensions != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"extensions",
-			theExtensions,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Extensions()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Extensions()",
+		writeOptionalSlice(
+			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Category
-
-	theCategory := that.Category()
-
-	if theCategory != nil {
-		err = writeScalarProperty(
-			encoder,
-			"category",
-			*theCategory,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Category()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Category()",
+		writeOptionalPointer(
+			encoder, "category", that.Category(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region IDShort
-
-	theIDShort := that.IDShort()
-
-	if theIDShort != nil {
-		err = writeScalarProperty(
-			encoder,
-			"idShort",
-			*theIDShort,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "IDShort()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"IDShort()",
+		writeOptionalPointer(
+			encoder, "idShort", that.IDShort(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region DisplayName
-
-	theDisplayName := that.DisplayName()
-
-	if theDisplayName != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"displayName",
-			theDisplayName,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DisplayName()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"DisplayName()",
+		writeOptionalSlice(
+			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Description
-
-	theDescription := that.Description()
-
-	if theDescription != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"description",
-			theDescription,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Description()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Description()",
+		writeOptionalSlice(
+			encoder, "description", that.Description(), writeListOfILangStringTextType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SemanticID
-
-	theSemanticID := that.SemanticID()
-
-	if theSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"semanticId",
-			theSemanticID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"SemanticID()",
+		writeOptionalInstance(
+			encoder, "semanticId", that.SemanticID(), writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SupplementalSemanticIDs
-
-	theSupplementalSemanticIDs := that.SupplementalSemanticIDs()
-
-	if theSupplementalSemanticIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SupplementalSemanticIDs()",
+		writeOptionalSlice(
 			encoder,
 			"supplementalSemanticIds",
-			theSupplementalSemanticIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SupplementalSemanticIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.SupplementalSemanticIDs(),
+			writeListOfIReference,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Qualifiers
-
-	theQualifiers := that.Qualifiers()
-
-	if theQualifiers != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"qualifiers",
-			theQualifiers,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Qualifiers()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Qualifiers()",
+		writeOptionalSlice(
+			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region EmbeddedDataSpecifications
-
-	theEmbeddedDataSpecifications := that.EmbeddedDataSpecifications()
-
-	if theEmbeddedDataSpecifications != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"EmbeddedDataSpecifications()",
+		writeOptionalSlice(
 			encoder,
 			"embeddedDataSpecifications",
-			theEmbeddedDataSpecifications,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "EmbeddedDataSpecifications()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Value
-
-	theValue := that.Value()
-
-	if theValue != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"value",
-			theValue,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Value()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.ISubmodelElementCollection]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeSubmodelElementCollection(
-	encoder *xml.Encoder,
-	that aastypes.ISubmodelElementCollection,
-	withNamespace bool,
-) (err error) {
-	local := "submodelElementCollection"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			that.EmbeddedDataSpecifications(),
+			writeListOfIEmbeddedDataSpecification,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeSubmodelElementCollectionAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Value()",
+		writeOptionalSlice(
+			encoder, "value", that.Value(), writeListOfISubmodelElement,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
 	return
 }
 
@@ -9330,404 +7439,137 @@ func writeSubmodelElementCollection(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writePropertyAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IProperty,
 ) (err error) {
-	// region Extensions
-
-	theExtensions := that.Extensions()
-
-	if theExtensions != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"extensions",
-			theExtensions,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Extensions()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Extensions()",
+		writeOptionalSlice(
+			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Category
-
-	theCategory := that.Category()
-
-	if theCategory != nil {
-		err = writeScalarProperty(
-			encoder,
-			"category",
-			*theCategory,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Category()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Category()",
+		writeOptionalPointer(
+			encoder, "category", that.Category(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region IDShort
-
-	theIDShort := that.IDShort()
-
-	if theIDShort != nil {
-		err = writeScalarProperty(
-			encoder,
-			"idShort",
-			*theIDShort,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "IDShort()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"IDShort()",
+		writeOptionalPointer(
+			encoder, "idShort", that.IDShort(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region DisplayName
-
-	theDisplayName := that.DisplayName()
-
-	if theDisplayName != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"displayName",
-			theDisplayName,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DisplayName()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"DisplayName()",
+		writeOptionalSlice(
+			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Description
-
-	theDescription := that.Description()
-
-	if theDescription != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"description",
-			theDescription,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Description()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Description()",
+		writeOptionalSlice(
+			encoder, "description", that.Description(), writeListOfILangStringTextType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SemanticID
-
-	theSemanticID := that.SemanticID()
-
-	if theSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"semanticId",
-			theSemanticID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"SemanticID()",
+		writeOptionalInstance(
+			encoder, "semanticId", that.SemanticID(), writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SupplementalSemanticIDs
-
-	theSupplementalSemanticIDs := that.SupplementalSemanticIDs()
-
-	if theSupplementalSemanticIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SupplementalSemanticIDs()",
+		writeOptionalSlice(
 			encoder,
 			"supplementalSemanticIds",
-			theSupplementalSemanticIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SupplementalSemanticIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.SupplementalSemanticIDs(),
+			writeListOfIReference,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Qualifiers
-
-	theQualifiers := that.Qualifiers()
-
-	if theQualifiers != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"qualifiers",
-			theQualifiers,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Qualifiers()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Qualifiers()",
+		writeOptionalSlice(
+			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region EmbeddedDataSpecifications
-
-	theEmbeddedDataSpecifications := that.EmbeddedDataSpecifications()
-
-	if theEmbeddedDataSpecifications != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"EmbeddedDataSpecifications()",
+		writeOptionalSlice(
 			encoder,
 			"embeddedDataSpecifications",
-			theEmbeddedDataSpecifications,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "EmbeddedDataSpecifications()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region ValueType
-
-	err = writeScalarProperty(
-		encoder,
-		"valueType",
-		that.ValueType(),
-		writeDataTypeDefXSDAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "ValueType()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Value
-
-	theValue := that.Value()
-
-	if theValue != nil {
-		err = writeScalarProperty(
-			encoder,
-			"value",
-			*theValue,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Value()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region ValueID
-
-	theValueID := that.ValueID()
-
-	if theValueID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"valueId",
-			theValueID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "ValueID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IProperty]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeProperty(
-	encoder *xml.Encoder,
-	that aastypes.IProperty,
-	withNamespace bool,
-) (err error) {
-	local := "property"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			that.EmbeddedDataSpecifications(),
+			writeListOfIEmbeddedDataSpecification,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writePropertyAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"ValueType()",
+		writeElement(
+			encoder, "valueType", that.ValueType(), writeDataTypeDefXSDAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"Value()",
+		writeOptionalPointer(
+			encoder, "value", that.Value(), writeStringAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"ValueID()",
+		writeOptionalInstance(
+			encoder, "valueId", that.ValueID(), writeReferenceAsSequence,
+		),
+	)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -9738,377 +7580,127 @@ func writeProperty(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeMultiLanguagePropertyAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IMultiLanguageProperty,
 ) (err error) {
-	// region Extensions
-
-	theExtensions := that.Extensions()
-
-	if theExtensions != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"extensions",
-			theExtensions,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Extensions()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Extensions()",
+		writeOptionalSlice(
+			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Category
-
-	theCategory := that.Category()
-
-	if theCategory != nil {
-		err = writeScalarProperty(
-			encoder,
-			"category",
-			*theCategory,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Category()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Category()",
+		writeOptionalPointer(
+			encoder, "category", that.Category(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region IDShort
-
-	theIDShort := that.IDShort()
-
-	if theIDShort != nil {
-		err = writeScalarProperty(
-			encoder,
-			"idShort",
-			*theIDShort,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "IDShort()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"IDShort()",
+		writeOptionalPointer(
+			encoder, "idShort", that.IDShort(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region DisplayName
-
-	theDisplayName := that.DisplayName()
-
-	if theDisplayName != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"displayName",
-			theDisplayName,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DisplayName()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"DisplayName()",
+		writeOptionalSlice(
+			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Description
-
-	theDescription := that.Description()
-
-	if theDescription != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"description",
-			theDescription,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Description()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Description()",
+		writeOptionalSlice(
+			encoder, "description", that.Description(), writeListOfILangStringTextType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SemanticID
-
-	theSemanticID := that.SemanticID()
-
-	if theSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"semanticId",
-			theSemanticID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"SemanticID()",
+		writeOptionalInstance(
+			encoder, "semanticId", that.SemanticID(), writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SupplementalSemanticIDs
-
-	theSupplementalSemanticIDs := that.SupplementalSemanticIDs()
-
-	if theSupplementalSemanticIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SupplementalSemanticIDs()",
+		writeOptionalSlice(
 			encoder,
 			"supplementalSemanticIds",
-			theSupplementalSemanticIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SupplementalSemanticIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.SupplementalSemanticIDs(),
+			writeListOfIReference,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Qualifiers
-
-	theQualifiers := that.Qualifiers()
-
-	if theQualifiers != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"qualifiers",
-			theQualifiers,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Qualifiers()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Qualifiers()",
+		writeOptionalSlice(
+			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region EmbeddedDataSpecifications
-
-	theEmbeddedDataSpecifications := that.EmbeddedDataSpecifications()
-
-	if theEmbeddedDataSpecifications != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"EmbeddedDataSpecifications()",
+		writeOptionalSlice(
 			encoder,
 			"embeddedDataSpecifications",
-			theEmbeddedDataSpecifications,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "EmbeddedDataSpecifications()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Value
-
-	theValue := that.Value()
-
-	if theValue != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"value",
-			theValue,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Value()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region ValueID
-
-	theValueID := that.ValueID()
-
-	if theValueID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"valueId",
-			theValueID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "ValueID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IMultiLanguageProperty]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeMultiLanguageProperty(
-	encoder *xml.Encoder,
-	that aastypes.IMultiLanguageProperty,
-	withNamespace bool,
-) (err error) {
-	local := "multiLanguageProperty"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			that.EmbeddedDataSpecifications(),
+			writeListOfIEmbeddedDataSpecification,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeMultiLanguagePropertyAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Value()",
+		writeOptionalSlice(
+			encoder, "value", that.Value(), writeListOfILangStringTextType,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"ValueID()",
+		writeOptionalInstance(
+			encoder, "valueId", that.ValueID(), writeReferenceAsSequence,
+		),
+	)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -10119,404 +7711,137 @@ func writeMultiLanguageProperty(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeRangeAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IRange,
 ) (err error) {
-	// region Extensions
-
-	theExtensions := that.Extensions()
-
-	if theExtensions != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"extensions",
-			theExtensions,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Extensions()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Extensions()",
+		writeOptionalSlice(
+			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Category
-
-	theCategory := that.Category()
-
-	if theCategory != nil {
-		err = writeScalarProperty(
-			encoder,
-			"category",
-			*theCategory,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Category()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Category()",
+		writeOptionalPointer(
+			encoder, "category", that.Category(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region IDShort
-
-	theIDShort := that.IDShort()
-
-	if theIDShort != nil {
-		err = writeScalarProperty(
-			encoder,
-			"idShort",
-			*theIDShort,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "IDShort()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"IDShort()",
+		writeOptionalPointer(
+			encoder, "idShort", that.IDShort(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region DisplayName
-
-	theDisplayName := that.DisplayName()
-
-	if theDisplayName != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"displayName",
-			theDisplayName,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DisplayName()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"DisplayName()",
+		writeOptionalSlice(
+			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Description
-
-	theDescription := that.Description()
-
-	if theDescription != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"description",
-			theDescription,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Description()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Description()",
+		writeOptionalSlice(
+			encoder, "description", that.Description(), writeListOfILangStringTextType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SemanticID
-
-	theSemanticID := that.SemanticID()
-
-	if theSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"semanticId",
-			theSemanticID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"SemanticID()",
+		writeOptionalInstance(
+			encoder, "semanticId", that.SemanticID(), writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SupplementalSemanticIDs
-
-	theSupplementalSemanticIDs := that.SupplementalSemanticIDs()
-
-	if theSupplementalSemanticIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SupplementalSemanticIDs()",
+		writeOptionalSlice(
 			encoder,
 			"supplementalSemanticIds",
-			theSupplementalSemanticIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SupplementalSemanticIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.SupplementalSemanticIDs(),
+			writeListOfIReference,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Qualifiers
-
-	theQualifiers := that.Qualifiers()
-
-	if theQualifiers != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"qualifiers",
-			theQualifiers,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Qualifiers()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Qualifiers()",
+		writeOptionalSlice(
+			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region EmbeddedDataSpecifications
-
-	theEmbeddedDataSpecifications := that.EmbeddedDataSpecifications()
-
-	if theEmbeddedDataSpecifications != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"EmbeddedDataSpecifications()",
+		writeOptionalSlice(
 			encoder,
 			"embeddedDataSpecifications",
-			theEmbeddedDataSpecifications,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "EmbeddedDataSpecifications()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region ValueType
-
-	err = writeScalarProperty(
-		encoder,
-		"valueType",
-		that.ValueType(),
-		writeDataTypeDefXSDAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "ValueType()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Min
-
-	theMin := that.Min()
-
-	if theMin != nil {
-		err = writeScalarProperty(
-			encoder,
-			"min",
-			*theMin,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Min()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Max
-
-	theMax := that.Max()
-
-	if theMax != nil {
-		err = writeScalarProperty(
-			encoder,
-			"max",
-			*theMax,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Max()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IRange]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeRange(
-	encoder *xml.Encoder,
-	that aastypes.IRange,
-	withNamespace bool,
-) (err error) {
-	local := "range"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			that.EmbeddedDataSpecifications(),
+			writeListOfIEmbeddedDataSpecification,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeRangeAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"ValueType()",
+		writeElement(
+			encoder, "valueType", that.ValueType(), writeDataTypeDefXSDAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"Min()",
+		writeOptionalPointer(
+			encoder, "min", that.Min(), writeStringAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"Max()",
+		writeOptionalPointer(
+			encoder, "max", that.Max(), writeStringAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -10527,348 +7852,117 @@ func writeRange(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeReferenceElementAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IReferenceElement,
 ) (err error) {
-	// region Extensions
-
-	theExtensions := that.Extensions()
-
-	if theExtensions != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"extensions",
-			theExtensions,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Extensions()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Extensions()",
+		writeOptionalSlice(
+			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Category
-
-	theCategory := that.Category()
-
-	if theCategory != nil {
-		err = writeScalarProperty(
-			encoder,
-			"category",
-			*theCategory,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Category()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Category()",
+		writeOptionalPointer(
+			encoder, "category", that.Category(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region IDShort
-
-	theIDShort := that.IDShort()
-
-	if theIDShort != nil {
-		err = writeScalarProperty(
-			encoder,
-			"idShort",
-			*theIDShort,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "IDShort()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"IDShort()",
+		writeOptionalPointer(
+			encoder, "idShort", that.IDShort(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region DisplayName
-
-	theDisplayName := that.DisplayName()
-
-	if theDisplayName != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"displayName",
-			theDisplayName,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DisplayName()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"DisplayName()",
+		writeOptionalSlice(
+			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Description
-
-	theDescription := that.Description()
-
-	if theDescription != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"description",
-			theDescription,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Description()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Description()",
+		writeOptionalSlice(
+			encoder, "description", that.Description(), writeListOfILangStringTextType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SemanticID
-
-	theSemanticID := that.SemanticID()
-
-	if theSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"semanticId",
-			theSemanticID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"SemanticID()",
+		writeOptionalInstance(
+			encoder, "semanticId", that.SemanticID(), writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SupplementalSemanticIDs
-
-	theSupplementalSemanticIDs := that.SupplementalSemanticIDs()
-
-	if theSupplementalSemanticIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SupplementalSemanticIDs()",
+		writeOptionalSlice(
 			encoder,
 			"supplementalSemanticIds",
-			theSupplementalSemanticIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SupplementalSemanticIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.SupplementalSemanticIDs(),
+			writeListOfIReference,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Qualifiers
-
-	theQualifiers := that.Qualifiers()
-
-	if theQualifiers != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"qualifiers",
-			theQualifiers,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Qualifiers()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Qualifiers()",
+		writeOptionalSlice(
+			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region EmbeddedDataSpecifications
-
-	theEmbeddedDataSpecifications := that.EmbeddedDataSpecifications()
-
-	if theEmbeddedDataSpecifications != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"EmbeddedDataSpecifications()",
+		writeOptionalSlice(
 			encoder,
 			"embeddedDataSpecifications",
-			theEmbeddedDataSpecifications,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "EmbeddedDataSpecifications()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Value
-
-	theValue := that.Value()
-
-	if theValue != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"value",
-			theValue,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Value()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IReferenceElement]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeReferenceElement(
-	encoder *xml.Encoder,
-	that aastypes.IReferenceElement,
-	withNamespace bool,
-) (err error) {
-	local := "referenceElement"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			that.EmbeddedDataSpecifications(),
+			writeListOfIEmbeddedDataSpecification,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeReferenceElementAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Value()",
+		writeOptionalInstance(
+			encoder, "value", that.Value(), writeReferenceAsSequence,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
 	return
 }
 
@@ -10879,374 +7973,127 @@ func writeReferenceElement(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeBlobAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IBlob,
 ) (err error) {
-	// region Extensions
-
-	theExtensions := that.Extensions()
-
-	if theExtensions != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"extensions",
-			theExtensions,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Extensions()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Extensions()",
+		writeOptionalSlice(
+			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Category
-
-	theCategory := that.Category()
-
-	if theCategory != nil {
-		err = writeScalarProperty(
-			encoder,
-			"category",
-			*theCategory,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Category()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Category()",
+		writeOptionalPointer(
+			encoder, "category", that.Category(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region IDShort
-
-	theIDShort := that.IDShort()
-
-	if theIDShort != nil {
-		err = writeScalarProperty(
-			encoder,
-			"idShort",
-			*theIDShort,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "IDShort()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"IDShort()",
+		writeOptionalPointer(
+			encoder, "idShort", that.IDShort(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region DisplayName
-
-	theDisplayName := that.DisplayName()
-
-	if theDisplayName != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"displayName",
-			theDisplayName,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DisplayName()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"DisplayName()",
+		writeOptionalSlice(
+			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Description
-
-	theDescription := that.Description()
-
-	if theDescription != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"description",
-			theDescription,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Description()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Description()",
+		writeOptionalSlice(
+			encoder, "description", that.Description(), writeListOfILangStringTextType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SemanticID
-
-	theSemanticID := that.SemanticID()
-
-	if theSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"semanticId",
-			theSemanticID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"SemanticID()",
+		writeOptionalInstance(
+			encoder, "semanticId", that.SemanticID(), writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SupplementalSemanticIDs
-
-	theSupplementalSemanticIDs := that.SupplementalSemanticIDs()
-
-	if theSupplementalSemanticIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SupplementalSemanticIDs()",
+		writeOptionalSlice(
 			encoder,
 			"supplementalSemanticIds",
-			theSupplementalSemanticIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SupplementalSemanticIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.SupplementalSemanticIDs(),
+			writeListOfIReference,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Qualifiers
-
-	theQualifiers := that.Qualifiers()
-
-	if theQualifiers != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"qualifiers",
-			theQualifiers,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Qualifiers()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Qualifiers()",
+		writeOptionalSlice(
+			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region EmbeddedDataSpecifications
-
-	theEmbeddedDataSpecifications := that.EmbeddedDataSpecifications()
-
-	if theEmbeddedDataSpecifications != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"EmbeddedDataSpecifications()",
+		writeOptionalSlice(
 			encoder,
 			"embeddedDataSpecifications",
-			theEmbeddedDataSpecifications,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "EmbeddedDataSpecifications()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Value
-
-	theValue := that.Value()
-
-	if theValue != nil {
-		err = writeScalarProperty(
-			encoder,
-			"value",
-			theValue,
-			writeBytesAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Value()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region ContentType
-
-	err = writeScalarProperty(
-		encoder,
-		"contentType",
-		that.ContentType(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "ContentType()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IBlob]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeBlob(
-	encoder *xml.Encoder,
-	that aastypes.IBlob,
-	withNamespace bool,
-) (err error) {
-	local := "blob"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			that.EmbeddedDataSpecifications(),
+			writeListOfIEmbeddedDataSpecification,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeBlobAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Value()",
+		writeOptionalSlice(
+			encoder, "value", that.Value(), writeBytesAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"ContentType()",
+		writeElement(
+			encoder, "contentType", that.ContentType(), writeStringAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -11257,374 +8104,127 @@ func writeBlob(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeFileAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IFile,
 ) (err error) {
-	// region Extensions
-
-	theExtensions := that.Extensions()
-
-	if theExtensions != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"extensions",
-			theExtensions,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Extensions()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Extensions()",
+		writeOptionalSlice(
+			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Category
-
-	theCategory := that.Category()
-
-	if theCategory != nil {
-		err = writeScalarProperty(
-			encoder,
-			"category",
-			*theCategory,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Category()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Category()",
+		writeOptionalPointer(
+			encoder, "category", that.Category(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region IDShort
-
-	theIDShort := that.IDShort()
-
-	if theIDShort != nil {
-		err = writeScalarProperty(
-			encoder,
-			"idShort",
-			*theIDShort,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "IDShort()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"IDShort()",
+		writeOptionalPointer(
+			encoder, "idShort", that.IDShort(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region DisplayName
-
-	theDisplayName := that.DisplayName()
-
-	if theDisplayName != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"displayName",
-			theDisplayName,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DisplayName()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"DisplayName()",
+		writeOptionalSlice(
+			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Description
-
-	theDescription := that.Description()
-
-	if theDescription != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"description",
-			theDescription,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Description()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Description()",
+		writeOptionalSlice(
+			encoder, "description", that.Description(), writeListOfILangStringTextType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SemanticID
-
-	theSemanticID := that.SemanticID()
-
-	if theSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"semanticId",
-			theSemanticID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"SemanticID()",
+		writeOptionalInstance(
+			encoder, "semanticId", that.SemanticID(), writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SupplementalSemanticIDs
-
-	theSupplementalSemanticIDs := that.SupplementalSemanticIDs()
-
-	if theSupplementalSemanticIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SupplementalSemanticIDs()",
+		writeOptionalSlice(
 			encoder,
 			"supplementalSemanticIds",
-			theSupplementalSemanticIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SupplementalSemanticIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.SupplementalSemanticIDs(),
+			writeListOfIReference,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Qualifiers
-
-	theQualifiers := that.Qualifiers()
-
-	if theQualifiers != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"qualifiers",
-			theQualifiers,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Qualifiers()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Qualifiers()",
+		writeOptionalSlice(
+			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region EmbeddedDataSpecifications
-
-	theEmbeddedDataSpecifications := that.EmbeddedDataSpecifications()
-
-	if theEmbeddedDataSpecifications != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"EmbeddedDataSpecifications()",
+		writeOptionalSlice(
 			encoder,
 			"embeddedDataSpecifications",
-			theEmbeddedDataSpecifications,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "EmbeddedDataSpecifications()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Value
-
-	theValue := that.Value()
-
-	if theValue != nil {
-		err = writeScalarProperty(
-			encoder,
-			"value",
-			*theValue,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Value()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region ContentType
-
-	err = writeScalarProperty(
-		encoder,
-		"contentType",
-		that.ContentType(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "ContentType()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IFile]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeFile(
-	encoder *xml.Encoder,
-	that aastypes.IFile,
-	withNamespace bool,
-) (err error) {
-	local := "file"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			that.EmbeddedDataSpecifications(),
+			writeListOfIEmbeddedDataSpecification,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeFileAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Value()",
+		writeOptionalPointer(
+			encoder, "value", that.Value(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"ContentType()",
+		writeElement(
+			encoder, "contentType", that.ContentType(), writeStringAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -11635,399 +8235,137 @@ func writeFile(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeAnnotatedRelationshipElementAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IAnnotatedRelationshipElement,
 ) (err error) {
-	// region Extensions
-
-	theExtensions := that.Extensions()
-
-	if theExtensions != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"extensions",
-			theExtensions,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Extensions()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Extensions()",
+		writeOptionalSlice(
+			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Category
-
-	theCategory := that.Category()
-
-	if theCategory != nil {
-		err = writeScalarProperty(
-			encoder,
-			"category",
-			*theCategory,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Category()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Category()",
+		writeOptionalPointer(
+			encoder, "category", that.Category(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region IDShort
-
-	theIDShort := that.IDShort()
-
-	if theIDShort != nil {
-		err = writeScalarProperty(
-			encoder,
-			"idShort",
-			*theIDShort,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "IDShort()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"IDShort()",
+		writeOptionalPointer(
+			encoder, "idShort", that.IDShort(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region DisplayName
-
-	theDisplayName := that.DisplayName()
-
-	if theDisplayName != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"displayName",
-			theDisplayName,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DisplayName()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"DisplayName()",
+		writeOptionalSlice(
+			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Description
-
-	theDescription := that.Description()
-
-	if theDescription != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"description",
-			theDescription,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Description()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Description()",
+		writeOptionalSlice(
+			encoder, "description", that.Description(), writeListOfILangStringTextType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SemanticID
-
-	theSemanticID := that.SemanticID()
-
-	if theSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"semanticId",
-			theSemanticID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"SemanticID()",
+		writeOptionalInstance(
+			encoder, "semanticId", that.SemanticID(), writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SupplementalSemanticIDs
-
-	theSupplementalSemanticIDs := that.SupplementalSemanticIDs()
-
-	if theSupplementalSemanticIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SupplementalSemanticIDs()",
+		writeOptionalSlice(
 			encoder,
 			"supplementalSemanticIds",
-			theSupplementalSemanticIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SupplementalSemanticIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.SupplementalSemanticIDs(),
+			writeListOfIReference,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Qualifiers
-
-	theQualifiers := that.Qualifiers()
-
-	if theQualifiers != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"qualifiers",
-			theQualifiers,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Qualifiers()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Qualifiers()",
+		writeOptionalSlice(
+			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region EmbeddedDataSpecifications
-
-	theEmbeddedDataSpecifications := that.EmbeddedDataSpecifications()
-
-	if theEmbeddedDataSpecifications != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"EmbeddedDataSpecifications()",
+		writeOptionalSlice(
 			encoder,
 			"embeddedDataSpecifications",
-			theEmbeddedDataSpecifications,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "EmbeddedDataSpecifications()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region First
-
-	err = writeEmbeddedInstanceProperty(
-		encoder,
-		"first",
-		that.First(),
-		writeReferenceAsSequence,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "First()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Second
-
-	err = writeEmbeddedInstanceProperty(
-		encoder,
-		"second",
-		that.Second(),
-		writeReferenceAsSequence,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Second()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Annotations
-
-	theAnnotations := that.Annotations()
-
-	if theAnnotations != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"annotations",
-			theAnnotations,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Annotations()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IAnnotatedRelationshipElement]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeAnnotatedRelationshipElement(
-	encoder *xml.Encoder,
-	that aastypes.IAnnotatedRelationshipElement,
-	withNamespace bool,
-) (err error) {
-	local := "annotatedRelationshipElement"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			that.EmbeddedDataSpecifications(),
+			writeListOfIEmbeddedDataSpecification,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeAnnotatedRelationshipElementAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"First()",
+		writeElement(
+			encoder, "first", that.First(), writeReferenceAsSequence,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"Second()",
+		writeElement(
+			encoder, "second", that.Second(), writeReferenceAsSequence,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"Annotations()",
+		writeOptionalSlice(
+			encoder, "annotations", that.Annotations(), writeListOfIDataElement,
+		),
+	)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -12038,432 +8376,150 @@ func writeAnnotatedRelationshipElement(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeEntityAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IEntity,
 ) (err error) {
-	// region Extensions
-
-	theExtensions := that.Extensions()
-
-	if theExtensions != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"extensions",
-			theExtensions,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Extensions()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Extensions()",
+		writeOptionalSlice(
+			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Category
-
-	theCategory := that.Category()
-
-	if theCategory != nil {
-		err = writeScalarProperty(
-			encoder,
-			"category",
-			*theCategory,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Category()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Category()",
+		writeOptionalPointer(
+			encoder, "category", that.Category(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region IDShort
-
-	theIDShort := that.IDShort()
-
-	if theIDShort != nil {
-		err = writeScalarProperty(
-			encoder,
-			"idShort",
-			*theIDShort,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "IDShort()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"IDShort()",
+		writeOptionalPointer(
+			encoder, "idShort", that.IDShort(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region DisplayName
-
-	theDisplayName := that.DisplayName()
-
-	if theDisplayName != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"displayName",
-			theDisplayName,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DisplayName()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"DisplayName()",
+		writeOptionalSlice(
+			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Description
-
-	theDescription := that.Description()
-
-	if theDescription != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"description",
-			theDescription,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Description()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Description()",
+		writeOptionalSlice(
+			encoder, "description", that.Description(), writeListOfILangStringTextType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SemanticID
-
-	theSemanticID := that.SemanticID()
-
-	if theSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"semanticId",
-			theSemanticID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"SemanticID()",
+		writeOptionalInstance(
+			encoder, "semanticId", that.SemanticID(), writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SupplementalSemanticIDs
-
-	theSupplementalSemanticIDs := that.SupplementalSemanticIDs()
-
-	if theSupplementalSemanticIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SupplementalSemanticIDs()",
+		writeOptionalSlice(
 			encoder,
 			"supplementalSemanticIds",
-			theSupplementalSemanticIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SupplementalSemanticIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.SupplementalSemanticIDs(),
+			writeListOfIReference,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Qualifiers
-
-	theQualifiers := that.Qualifiers()
-
-	if theQualifiers != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"qualifiers",
-			theQualifiers,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Qualifiers()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Qualifiers()",
+		writeOptionalSlice(
+			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region EmbeddedDataSpecifications
-
-	theEmbeddedDataSpecifications := that.EmbeddedDataSpecifications()
-
-	if theEmbeddedDataSpecifications != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"EmbeddedDataSpecifications()",
+		writeOptionalSlice(
 			encoder,
 			"embeddedDataSpecifications",
-			theEmbeddedDataSpecifications,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "EmbeddedDataSpecifications()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Statements
-
-	theStatements := that.Statements()
-
-	if theStatements != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"statements",
-			theStatements,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Statements()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region EntityType
-
-	err = writeScalarProperty(
-		encoder,
-		"entityType",
-		that.EntityType(),
-		writeEntityTypeAsText,
+			that.EmbeddedDataSpecifications(),
+			writeListOfIEmbeddedDataSpecification,
+		),
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "EntityType()",
-				},
-			)
-		}
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"Statements()",
+		writeOptionalSlice(
+			encoder, "statements", that.Statements(), writeListOfISubmodelElement,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region GlobalAssetID
-
-	theGlobalAssetID := that.GlobalAssetID()
-
-	if theGlobalAssetID != nil {
-		err = writeScalarProperty(
-			encoder,
-			"globalAssetId",
-			*theGlobalAssetID,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "GlobalAssetID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"EntityType()",
+		writeElement(
+			encoder, "entityType", that.EntityType(), writeEntityTypeAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
+	err = finishProperty(
+		"GlobalAssetID()",
+		writeOptionalPointer(
+			encoder, "globalAssetId", that.GlobalAssetID(), writeStringAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
 
-	// region SpecificAssetIDs
-
-	theSpecificAssetIDs := that.SpecificAssetIDs()
-
-	if theSpecificAssetIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SpecificAssetIDs()",
+		writeOptionalSlice(
 			encoder,
 			"specificAssetIds",
-			theSpecificAssetIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SpecificAssetIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IEntity]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeEntity(
-	encoder *xml.Encoder,
-	that aastypes.IEntity,
-	withNamespace bool,
-) (err error) {
-	local := "entity"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			that.SpecificAssetIDs(),
+			writeListOfISpecificAssetID,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeEntityAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
-	)
-	if err != nil {
-		return
-	}
-
-	err = encoder.Flush()
 	return
 }
 
@@ -12552,282 +8608,100 @@ func writeStateOfEventAsText(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeEventPayloadAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IEventPayload,
 ) (err error) {
-	// region Source
-
-	err = writeEmbeddedInstanceProperty(
-		encoder,
-		"source",
-		that.Source(),
-		writeReferenceAsSequence,
+	err = finishProperty(
+		"Source()",
+		writeElement(
+			encoder, "source", that.Source(), writeReferenceAsSequence,
+		),
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Source()",
-				},
-			)
-		}
 		return
 	}
 
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region SourceSemanticID
-
-	theSourceSemanticID := that.SourceSemanticID()
-
-	if theSourceSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
+	err = finishProperty(
+		"SourceSemanticID()",
+		writeOptionalInstance(
 			encoder,
 			"sourceSemanticId",
-			theSourceSemanticID,
+			that.SourceSemanticID(),
 			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SourceSemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region ObservableReference
-
-	err = writeEmbeddedInstanceProperty(
-		encoder,
-		"observableReference",
-		that.ObservableReference(),
-		writeReferenceAsSequence,
+		),
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "ObservableReference()",
-				},
-			)
-		}
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"ObservableReference()",
+		writeElement(
+			encoder,
+			"observableReference",
+			that.ObservableReference(),
+			writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region ObservableSemanticID
-
-	theObservableSemanticID := that.ObservableSemanticID()
-
-	if theObservableSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
+	err = finishProperty(
+		"ObservableSemanticID()",
+		writeOptionalInstance(
 			encoder,
 			"observableSemanticId",
-			theObservableSemanticID,
+			that.ObservableSemanticID(),
 			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "ObservableSemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Topic
-
-	theTopic := that.Topic()
-
-	if theTopic != nil {
-		err = writeScalarProperty(
-			encoder,
-			"topic",
-			*theTopic,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Topic()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region SubjectID
-
-	theSubjectID := that.SubjectID()
-
-	if theSubjectID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"subjectId",
-			theSubjectID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SubjectID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region TimeStamp
-
-	err = writeScalarProperty(
-		encoder,
-		"timeStamp",
-		that.TimeStamp(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "TimeStamp()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Payload
-
-	thePayload := that.Payload()
-
-	if thePayload != nil {
-		err = writeScalarProperty(
-			encoder,
-			"payload",
-			thePayload,
-			writeBytesAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Payload()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IEventPayload]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeEventPayload(
-	encoder *xml.Encoder,
-	that aastypes.IEventPayload,
-	withNamespace bool,
-) (err error) {
-	local := "eventPayload"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeEventPayloadAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Topic()",
+		writeOptionalPointer(
+			encoder, "topic", that.Topic(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"SubjectID()",
+		writeOptionalInstance(
+			encoder, "subjectId", that.SubjectID(), writeReferenceAsSequence,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"TimeStamp()",
+		writeElement(
+			encoder, "timeStamp", that.TimeStamp(), writeStringAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"Payload()",
+		writeOptionalSlice(
+			encoder, "payload", that.Payload(), writeBytesAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -12838,546 +8712,187 @@ func writeEventPayload(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeBasicEventElementAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IBasicEventElement,
 ) (err error) {
-	// region Extensions
-
-	theExtensions := that.Extensions()
-
-	if theExtensions != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"extensions",
-			theExtensions,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Extensions()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Extensions()",
+		writeOptionalSlice(
+			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Category
-
-	theCategory := that.Category()
-
-	if theCategory != nil {
-		err = writeScalarProperty(
-			encoder,
-			"category",
-			*theCategory,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Category()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Category()",
+		writeOptionalPointer(
+			encoder, "category", that.Category(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region IDShort
-
-	theIDShort := that.IDShort()
-
-	if theIDShort != nil {
-		err = writeScalarProperty(
-			encoder,
-			"idShort",
-			*theIDShort,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "IDShort()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"IDShort()",
+		writeOptionalPointer(
+			encoder, "idShort", that.IDShort(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region DisplayName
-
-	theDisplayName := that.DisplayName()
-
-	if theDisplayName != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"displayName",
-			theDisplayName,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DisplayName()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"DisplayName()",
+		writeOptionalSlice(
+			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Description
-
-	theDescription := that.Description()
-
-	if theDescription != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"description",
-			theDescription,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Description()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Description()",
+		writeOptionalSlice(
+			encoder, "description", that.Description(), writeListOfILangStringTextType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SemanticID
-
-	theSemanticID := that.SemanticID()
-
-	if theSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"semanticId",
-			theSemanticID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"SemanticID()",
+		writeOptionalInstance(
+			encoder, "semanticId", that.SemanticID(), writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SupplementalSemanticIDs
-
-	theSupplementalSemanticIDs := that.SupplementalSemanticIDs()
-
-	if theSupplementalSemanticIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SupplementalSemanticIDs()",
+		writeOptionalSlice(
 			encoder,
 			"supplementalSemanticIds",
-			theSupplementalSemanticIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SupplementalSemanticIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.SupplementalSemanticIDs(),
+			writeListOfIReference,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Qualifiers
-
-	theQualifiers := that.Qualifiers()
-
-	if theQualifiers != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"qualifiers",
-			theQualifiers,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Qualifiers()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Qualifiers()",
+		writeOptionalSlice(
+			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region EmbeddedDataSpecifications
-
-	theEmbeddedDataSpecifications := that.EmbeddedDataSpecifications()
-
-	if theEmbeddedDataSpecifications != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"EmbeddedDataSpecifications()",
+		writeOptionalSlice(
 			encoder,
 			"embeddedDataSpecifications",
-			theEmbeddedDataSpecifications,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "EmbeddedDataSpecifications()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Observed
-
-	err = writeEmbeddedInstanceProperty(
-		encoder,
-		"observed",
-		that.Observed(),
-		writeReferenceAsSequence,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Observed()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Direction
-
-	err = writeScalarProperty(
-		encoder,
-		"direction",
-		that.Direction(),
-		writeDirectionAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Direction()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region State
-
-	err = writeScalarProperty(
-		encoder,
-		"state",
-		that.State(),
-		writeStateOfEventAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "State()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region MessageTopic
-
-	theMessageTopic := that.MessageTopic()
-
-	if theMessageTopic != nil {
-		err = writeScalarProperty(
-			encoder,
-			"messageTopic",
-			*theMessageTopic,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "MessageTopic()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region MessageBroker
-
-	theMessageBroker := that.MessageBroker()
-
-	if theMessageBroker != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"messageBroker",
-			theMessageBroker,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "MessageBroker()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region LastUpdate
-
-	theLastUpdate := that.LastUpdate()
-
-	if theLastUpdate != nil {
-		err = writeScalarProperty(
-			encoder,
-			"lastUpdate",
-			*theLastUpdate,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "LastUpdate()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region MinInterval
-
-	theMinInterval := that.MinInterval()
-
-	if theMinInterval != nil {
-		err = writeScalarProperty(
-			encoder,
-			"minInterval",
-			*theMinInterval,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "MinInterval()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region MaxInterval
-
-	theMaxInterval := that.MaxInterval()
-
-	if theMaxInterval != nil {
-		err = writeScalarProperty(
-			encoder,
-			"maxInterval",
-			*theMaxInterval,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "MaxInterval()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IBasicEventElement]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeBasicEventElement(
-	encoder *xml.Encoder,
-	that aastypes.IBasicEventElement,
-	withNamespace bool,
-) (err error) {
-	local := "basicEventElement"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			that.EmbeddedDataSpecifications(),
+			writeListOfIEmbeddedDataSpecification,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeBasicEventElementAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Observed()",
+		writeElement(
+			encoder, "observed", that.Observed(), writeReferenceAsSequence,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"Direction()",
+		writeElement(
+			encoder, "direction", that.Direction(), writeDirectionAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"State()",
+		writeElement(
+			encoder, "state", that.State(), writeStateOfEventAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"MessageTopic()",
+		writeOptionalPointer(
+			encoder, "messageTopic", that.MessageTopic(), writeStringAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"MessageBroker()",
+		writeOptionalInstance(
+			encoder, "messageBroker", that.MessageBroker(), writeReferenceAsSequence,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"LastUpdate()",
+		writeOptionalPointer(
+			encoder, "lastUpdate", that.LastUpdate(), writeStringAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"MinInterval()",
+		writeOptionalPointer(
+			encoder, "minInterval", that.MinInterval(), writeStringAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"MaxInterval()",
+		writeOptionalPointer(
+			encoder, "maxInterval", that.MaxInterval(), writeStringAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -13388,405 +8903,146 @@ func writeBasicEventElement(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeOperationAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IOperation,
 ) (err error) {
-	// region Extensions
-
-	theExtensions := that.Extensions()
-
-	if theExtensions != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"extensions",
-			theExtensions,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Extensions()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Extensions()",
+		writeOptionalSlice(
+			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Category
-
-	theCategory := that.Category()
-
-	if theCategory != nil {
-		err = writeScalarProperty(
-			encoder,
-			"category",
-			*theCategory,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Category()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Category()",
+		writeOptionalPointer(
+			encoder, "category", that.Category(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region IDShort
-
-	theIDShort := that.IDShort()
-
-	if theIDShort != nil {
-		err = writeScalarProperty(
-			encoder,
-			"idShort",
-			*theIDShort,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "IDShort()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"IDShort()",
+		writeOptionalPointer(
+			encoder, "idShort", that.IDShort(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region DisplayName
-
-	theDisplayName := that.DisplayName()
-
-	if theDisplayName != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"displayName",
-			theDisplayName,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DisplayName()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"DisplayName()",
+		writeOptionalSlice(
+			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Description
-
-	theDescription := that.Description()
-
-	if theDescription != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"description",
-			theDescription,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Description()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Description()",
+		writeOptionalSlice(
+			encoder, "description", that.Description(), writeListOfILangStringTextType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SemanticID
-
-	theSemanticID := that.SemanticID()
-
-	if theSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"semanticId",
-			theSemanticID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"SemanticID()",
+		writeOptionalInstance(
+			encoder, "semanticId", that.SemanticID(), writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SupplementalSemanticIDs
-
-	theSupplementalSemanticIDs := that.SupplementalSemanticIDs()
-
-	if theSupplementalSemanticIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SupplementalSemanticIDs()",
+		writeOptionalSlice(
 			encoder,
 			"supplementalSemanticIds",
-			theSupplementalSemanticIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SupplementalSemanticIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.SupplementalSemanticIDs(),
+			writeListOfIReference,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Qualifiers
-
-	theQualifiers := that.Qualifiers()
-
-	if theQualifiers != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"qualifiers",
-			theQualifiers,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Qualifiers()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Qualifiers()",
+		writeOptionalSlice(
+			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region EmbeddedDataSpecifications
-
-	theEmbeddedDataSpecifications := that.EmbeddedDataSpecifications()
-
-	if theEmbeddedDataSpecifications != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"EmbeddedDataSpecifications()",
+		writeOptionalSlice(
 			encoder,
 			"embeddedDataSpecifications",
-			theEmbeddedDataSpecifications,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "EmbeddedDataSpecifications()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.EmbeddedDataSpecifications(),
+			writeListOfIEmbeddedDataSpecification,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region InputVariables
-
-	theInputVariables := that.InputVariables()
-
-	if theInputVariables != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"InputVariables()",
+		writeOptionalSlice(
 			encoder,
 			"inputVariables",
-			theInputVariables,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "InputVariables()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.InputVariables(),
+			writeListOfIOperationVariable,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region OutputVariables
-
-	theOutputVariables := that.OutputVariables()
-
-	if theOutputVariables != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"OutputVariables()",
+		writeOptionalSlice(
 			encoder,
 			"outputVariables",
-			theOutputVariables,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "OutputVariables()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.OutputVariables(),
+			writeListOfIOperationVariable,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region InoutputVariables
-
-	theInoutputVariables := that.InoutputVariables()
-
-	if theInoutputVariables != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"InoutputVariables()",
+		writeOptionalSlice(
 			encoder,
 			"inoutputVariables",
-			theInoutputVariables,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "InoutputVariables()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IOperation]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeOperation(
-	encoder *xml.Encoder,
-	that aastypes.IOperation,
-	withNamespace bool,
-) (err error) {
-	local := "operation"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			that.InoutputVariables(),
+			writeListOfIOperationVariable,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeOperationAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
-	)
-	if err != nil {
-		return
-	}
-
-	err = encoder.Flush()
 	return
 }
 
@@ -13797,79 +9053,21 @@ func writeOperation(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeOperationVariableAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IOperationVariable,
 ) (err error) {
-	// region Value
-
-	err = writeDiscriminatedInstanceProperty(
-		encoder,
-		"value",
-		that.Value(),
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Value()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IOperationVariable]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeOperationVariable(
-	encoder *xml.Encoder,
-	that aastypes.IOperationVariable,
-	withNamespace bool,
-) (err error) {
-	local := "operationVariable"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Value()",
+		writeElement(
+			encoder, "value", that.Value(), writeInstance[aastypes.ISubmodelElement],
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeOperationVariableAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
-	)
-	if err != nil {
-		return
-	}
-
-	err = encoder.Flush()
 	return
 }
 
@@ -13880,318 +9078,107 @@ func writeOperationVariable(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeCapabilityAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.ICapability,
 ) (err error) {
-	// region Extensions
-
-	theExtensions := that.Extensions()
-
-	if theExtensions != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"extensions",
-			theExtensions,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Extensions()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Extensions()",
+		writeOptionalSlice(
+			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Category
-
-	theCategory := that.Category()
-
-	if theCategory != nil {
-		err = writeScalarProperty(
-			encoder,
-			"category",
-			*theCategory,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Category()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Category()",
+		writeOptionalPointer(
+			encoder, "category", that.Category(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region IDShort
-
-	theIDShort := that.IDShort()
-
-	if theIDShort != nil {
-		err = writeScalarProperty(
-			encoder,
-			"idShort",
-			*theIDShort,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "IDShort()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"IDShort()",
+		writeOptionalPointer(
+			encoder, "idShort", that.IDShort(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region DisplayName
-
-	theDisplayName := that.DisplayName()
-
-	if theDisplayName != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"displayName",
-			theDisplayName,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DisplayName()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"DisplayName()",
+		writeOptionalSlice(
+			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Description
-
-	theDescription := that.Description()
-
-	if theDescription != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"description",
-			theDescription,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Description()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Description()",
+		writeOptionalSlice(
+			encoder, "description", that.Description(), writeListOfILangStringTextType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SemanticID
-
-	theSemanticID := that.SemanticID()
-
-	if theSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"semanticId",
-			theSemanticID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"SemanticID()",
+		writeOptionalInstance(
+			encoder, "semanticId", that.SemanticID(), writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SupplementalSemanticIDs
-
-	theSupplementalSemanticIDs := that.SupplementalSemanticIDs()
-
-	if theSupplementalSemanticIDs != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"SupplementalSemanticIDs()",
+		writeOptionalSlice(
 			encoder,
 			"supplementalSemanticIds",
-			theSupplementalSemanticIDs,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SupplementalSemanticIDs()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.SupplementalSemanticIDs(),
+			writeListOfIReference,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Qualifiers
-
-	theQualifiers := that.Qualifiers()
-
-	if theQualifiers != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"qualifiers",
-			theQualifiers,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Qualifiers()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Qualifiers()",
+		writeOptionalSlice(
+			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region EmbeddedDataSpecifications
-
-	theEmbeddedDataSpecifications := that.EmbeddedDataSpecifications()
-
-	if theEmbeddedDataSpecifications != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"EmbeddedDataSpecifications()",
+		writeOptionalSlice(
 			encoder,
 			"embeddedDataSpecifications",
-			theEmbeddedDataSpecifications,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "EmbeddedDataSpecifications()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.ICapability]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeCapability(
-	encoder *xml.Encoder,
-	that aastypes.ICapability,
-	withNamespace bool,
-) (err error) {
-	local := "capability"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			that.EmbeddedDataSpecifications(),
+			writeListOfIEmbeddedDataSpecification,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeCapabilityAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
-	)
-	if err != nil {
-		return
-	}
-
-	err = encoder.Flush()
 	return
 }
 
@@ -14202,315 +9189,107 @@ func writeCapability(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeConceptDescriptionAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IConceptDescription,
 ) (err error) {
-	// region Extensions
-
-	theExtensions := that.Extensions()
-
-	if theExtensions != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"extensions",
-			theExtensions,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Extensions()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Extensions()",
+		writeOptionalSlice(
+			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Category
-
-	theCategory := that.Category()
-
-	if theCategory != nil {
-		err = writeScalarProperty(
-			encoder,
-			"category",
-			*theCategory,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Category()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Category()",
+		writeOptionalPointer(
+			encoder, "category", that.Category(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region IDShort
-
-	theIDShort := that.IDShort()
-
-	if theIDShort != nil {
-		err = writeScalarProperty(
-			encoder,
-			"idShort",
-			*theIDShort,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "IDShort()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"IDShort()",
+		writeOptionalPointer(
+			encoder, "idShort", that.IDShort(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region DisplayName
-
-	theDisplayName := that.DisplayName()
-
-	if theDisplayName != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"displayName",
-			theDisplayName,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DisplayName()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"DisplayName()",
+		writeOptionalSlice(
+			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Description
-
-	theDescription := that.Description()
-
-	if theDescription != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"description",
-			theDescription,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Description()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Description()",
+		writeOptionalSlice(
+			encoder, "description", that.Description(), writeListOfILangStringTextType,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Administration
-
-	theAdministration := that.Administration()
-
-	if theAdministration != nil {
-		err = writeEmbeddedInstanceProperty(
+	err = finishProperty(
+		"Administration()",
+		writeOptionalInstance(
 			encoder,
 			"administration",
-			theAdministration,
+			that.Administration(),
 			writeAdministrativeInformationAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Administration()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region ID
-
-	err = writeScalarProperty(
-		encoder,
-		"id",
-		that.ID(),
-		writeStringAsText,
+		),
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "ID()",
-				},
-			)
-		}
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"ID()",
+		writeElement(
+			encoder, "id", that.ID(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region EmbeddedDataSpecifications
-
-	theEmbeddedDataSpecifications := that.EmbeddedDataSpecifications()
-
-	if theEmbeddedDataSpecifications != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"EmbeddedDataSpecifications()",
+		writeOptionalSlice(
 			encoder,
 			"embeddedDataSpecifications",
-			theEmbeddedDataSpecifications,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "EmbeddedDataSpecifications()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region IsCaseOf
-
-	theIsCaseOf := that.IsCaseOf()
-
-	if theIsCaseOf != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"isCaseOf",
-			theIsCaseOf,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "IsCaseOf()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IConceptDescription]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeConceptDescription(
-	encoder *xml.Encoder,
-	that aastypes.IConceptDescription,
-	withNamespace bool,
-) (err error) {
-	local := "conceptDescription"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			that.EmbeddedDataSpecifications(),
+			writeListOfIEmbeddedDataSpecification,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeConceptDescriptionAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"IsCaseOf()",
+		writeOptionalSlice(
+			encoder, "isCaseOf", that.IsCaseOf(), writeListOfIReference,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
 	return
 }
 
@@ -14547,135 +9326,44 @@ func writeReferenceTypesAsText(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeReferenceAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IReference,
 ) (err error) {
-	// region Type
-
-	err = writeScalarProperty(
-		encoder,
-		"type",
-		that.Type(),
-		writeReferenceTypesAsText,
+	err = finishProperty(
+		"Type()",
+		writeElement(
+			encoder, "type", that.Type(), writeReferenceTypesAsText,
+		),
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Type()",
-				},
-			)
-		}
 		return
 	}
 
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region ReferredSemanticID
-
-	theReferredSemanticID := that.ReferredSemanticID()
-
-	if theReferredSemanticID != nil {
-		err = writeEmbeddedInstanceProperty(
+	err = finishProperty(
+		"ReferredSemanticID()",
+		writeOptionalInstance(
 			encoder,
 			"referredSemanticId",
-			theReferredSemanticID,
+			that.ReferredSemanticID(),
 			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "ReferredSemanticID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Keys
-
-	err = writeListOfInstancesProperty(
-		encoder,
-		"keys",
-		that.Keys(),
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Keys()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IReference]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeReference(
-	encoder *xml.Encoder,
-	that aastypes.IReference,
-	withNamespace bool,
-) (err error) {
-	local := "reference"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeReferenceAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Keys()",
+		writeElement(
+			encoder, "keys", that.Keys(), writeListOfIKey,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
 	return
 }
 
@@ -14686,106 +9374,31 @@ func writeReference(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeKeyAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IKey,
 ) (err error) {
-	// region Type
-
-	err = writeScalarProperty(
-		encoder,
-		"type",
-		that.Type(),
-		writeKeyTypesAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Type()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Value
-
-	err = writeScalarProperty(
-		encoder,
-		"value",
-		that.Value(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Value()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IKey]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeKey(
-	encoder *xml.Encoder,
-	that aastypes.IKey,
-	withNamespace bool,
-) (err error) {
-	local := "key"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Type()",
+		writeElement(
+			encoder, "type", that.Type(), writeKeyTypesAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeKeyAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Value()",
+		writeElement(
+			encoder, "value", that.Value(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
 	return
 }
 
@@ -14848,106 +9461,31 @@ func writeDataTypeDefXSDAsText(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeLangStringNameTypeAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.ILangStringNameType,
 ) (err error) {
-	// region Language
-
-	err = writeScalarProperty(
-		encoder,
-		"language",
-		that.Language(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Language()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Text
-
-	err = writeScalarProperty(
-		encoder,
-		"text",
-		that.Text(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Text()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.ILangStringNameType]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeLangStringNameType(
-	encoder *xml.Encoder,
-	that aastypes.ILangStringNameType,
-	withNamespace bool,
-) (err error) {
-	local := "langStringNameType"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Language()",
+		writeElement(
+			encoder, "language", that.Language(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeLangStringNameTypeAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Text()",
+		writeElement(
+			encoder, "text", that.Text(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
 	return
 }
 
@@ -14958,106 +9496,31 @@ func writeLangStringNameType(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeLangStringTextTypeAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.ILangStringTextType,
 ) (err error) {
-	// region Language
-
-	err = writeScalarProperty(
-		encoder,
-		"language",
-		that.Language(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Language()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Text
-
-	err = writeScalarProperty(
-		encoder,
-		"text",
-		that.Text(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Text()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.ILangStringTextType]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeLangStringTextType(
-	encoder *xml.Encoder,
-	that aastypes.ILangStringTextType,
-	withNamespace bool,
-) (err error) {
-	local := "langStringTextType"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Language()",
+		writeElement(
+			encoder, "language", that.Language(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeLangStringTextTypeAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Text()",
+		writeElement(
+			encoder, "text", that.Text(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
 	return
 }
 
@@ -15068,141 +9531,47 @@ func writeLangStringTextType(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeEnvironmentAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IEnvironment,
 ) (err error) {
-	// region AssetAdministrationShells
-
-	theAssetAdministrationShells := that.AssetAdministrationShells()
-
-	if theAssetAdministrationShells != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"AssetAdministrationShells()",
+		writeOptionalSlice(
 			encoder,
 			"assetAdministrationShells",
-			theAssetAdministrationShells,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "AssetAdministrationShells()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.AssetAdministrationShells(),
+			writeListOfIAssetAdministrationShell,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Submodels
-
-	theSubmodels := that.Submodels()
-
-	if theSubmodels != nil {
-		err = writeListOfInstancesProperty(
-			encoder,
-			"submodels",
-			theSubmodels,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Submodels()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Submodels()",
+		writeOptionalSlice(
+			encoder, "submodels", that.Submodels(), writeListOfISubmodel,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region ConceptDescriptions
-
-	theConceptDescriptions := that.ConceptDescriptions()
-
-	if theConceptDescriptions != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"ConceptDescriptions()",
+		writeOptionalSlice(
 			encoder,
 			"conceptDescriptions",
-			theConceptDescriptions,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "ConceptDescriptions()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IEnvironment]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeEnvironment(
-	encoder *xml.Encoder,
-	that aastypes.IEnvironment,
-	withNamespace bool,
-) (err error) {
-	local := "environment"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+			that.ConceptDescriptions(),
+			writeListOfIConceptDescription,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeEnvironmentAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
-	)
-	if err != nil {
-		return
-	}
-
-	err = encoder.Flush()
 	return
 }
 
@@ -15213,105 +9582,37 @@ func writeEnvironment(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeEmbeddedDataSpecificationAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IEmbeddedDataSpecification,
 ) (err error) {
-	// region DataSpecification
-
-	err = writeEmbeddedInstanceProperty(
-		encoder,
-		"dataSpecification",
-		that.DataSpecification(),
-		writeReferenceAsSequence,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "DataSpecification()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region DataSpecificationContent
-
-	err = writeDiscriminatedInstanceProperty(
-		encoder,
-		"dataSpecificationContent",
-		that.DataSpecificationContent(),
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "DataSpecificationContent()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IEmbeddedDataSpecification]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeEmbeddedDataSpecification(
-	encoder *xml.Encoder,
-	that aastypes.IEmbeddedDataSpecification,
-	withNamespace bool,
-) (err error) {
-	local := "embeddedDataSpecification"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"DataSpecification()",
+		writeElement(
+			encoder,
+			"dataSpecification",
+			that.DataSpecification(),
+			writeReferenceAsSequence,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeEmbeddedDataSpecificationAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"DataSpecificationContent()",
+		writeElement(
+			encoder,
+			"dataSpecificationContent",
+			that.DataSpecificationContent(),
+			writeInstance[aastypes.IDataSpecificationContent],
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
 	return
 }
 
@@ -15348,158 +9649,51 @@ func writeDataTypeIEC61360AsText(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeLevelTypeAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.ILevelType,
 ) (err error) {
-	// region Min
-
-	err = writeScalarProperty(
-		encoder,
-		"min",
-		that.Min(),
-		writeBooleanAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Min()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Nom
-
-	err = writeScalarProperty(
-		encoder,
-		"nom",
-		that.Nom(),
-		writeBooleanAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Nom()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Typ
-
-	err = writeScalarProperty(
-		encoder,
-		"typ",
-		that.Typ(),
-		writeBooleanAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Typ()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Max
-
-	err = writeScalarProperty(
-		encoder,
-		"max",
-		that.Max(),
-		writeBooleanAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Max()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.ILevelType]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeLevelType(
-	encoder *xml.Encoder,
-	that aastypes.ILevelType,
-	withNamespace bool,
-) (err error) {
-	local := "levelType"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Min()",
+		writeElement(
+			encoder, "min", that.Min(), writeBooleanAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeLevelTypeAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Nom()",
+		writeElement(
+			encoder, "nom", that.Nom(), writeBooleanAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
+	err = finishProperty(
+		"Typ()",
+		writeElement(
+			encoder, "typ", that.Typ(), writeBooleanAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
+	err = finishProperty(
+		"Max()",
+		writeElement(
+			encoder, "max", that.Max(), writeBooleanAsText,
+		),
+	)
+	if err != nil {
+		return
+	}
+
 	return
 }
 
@@ -15510,106 +9704,31 @@ func writeLevelType(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeValueReferencePairAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IValueReferencePair,
 ) (err error) {
-	// region Value
-
-	err = writeScalarProperty(
-		encoder,
-		"value",
-		that.Value(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Value()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region ValueID
-
-	err = writeEmbeddedInstanceProperty(
-		encoder,
-		"valueId",
-		that.ValueID(),
-		writeReferenceAsSequence,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "ValueID()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IValueReferencePair]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeValueReferencePair(
-	encoder *xml.Encoder,
-	that aastypes.IValueReferencePair,
-	withNamespace bool,
-) (err error) {
-	local := "valueReferencePair"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Value()",
+		writeElement(
+			encoder, "value", that.Value(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeValueReferencePairAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"ValueID()",
+		writeElement(
+			encoder, "valueId", that.ValueID(), writeReferenceAsSequence,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
 	return
 }
 
@@ -15620,79 +9739,24 @@ func writeValueReferencePair(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeValueListAsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IValueList,
 ) (err error) {
-	// region ValueReferencePairs
-
-	err = writeListOfInstancesProperty(
-		encoder,
-		"valueReferencePairs",
-		that.ValueReferencePairs(),
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "ValueReferencePairs()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.IValueList]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeValueList(
-	encoder *xml.Encoder,
-	that aastypes.IValueList,
-	withNamespace bool,
-) (err error) {
-	local := "valueList"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"ValueReferencePairs()",
+		writeElement(
+			encoder,
+			"valueReferencePairs",
+			that.ValueReferencePairs(),
+			writeListOfIValueReferencePair,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeValueListAsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
-	)
-	if err != nil {
-		return
-	}
-
-	err = encoder.Flush()
 	return
 }
 
@@ -15703,106 +9767,31 @@ func writeValueList(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeLangStringPreferredNameTypeIEC61360AsSequence(
 	encoder *xml.Encoder,
 	that aastypes.ILangStringPreferredNameTypeIEC61360,
 ) (err error) {
-	// region Language
-
-	err = writeScalarProperty(
-		encoder,
-		"language",
-		that.Language(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Language()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Text
-
-	err = writeScalarProperty(
-		encoder,
-		"text",
-		that.Text(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Text()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.ILangStringPreferredNameTypeIEC61360]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeLangStringPreferredNameTypeIEC61360(
-	encoder *xml.Encoder,
-	that aastypes.ILangStringPreferredNameTypeIEC61360,
-	withNamespace bool,
-) (err error) {
-	local := "langStringPreferredNameTypeIec61360"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Language()",
+		writeElement(
+			encoder, "language", that.Language(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeLangStringPreferredNameTypeIEC61360AsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Text()",
+		writeElement(
+			encoder, "text", that.Text(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
 	return
 }
 
@@ -15813,106 +9802,31 @@ func writeLangStringPreferredNameTypeIEC61360(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeLangStringShortNameTypeIEC61360AsSequence(
 	encoder *xml.Encoder,
 	that aastypes.ILangStringShortNameTypeIEC61360,
 ) (err error) {
-	// region Language
-
-	err = writeScalarProperty(
-		encoder,
-		"language",
-		that.Language(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Language()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Text
-
-	err = writeScalarProperty(
-		encoder,
-		"text",
-		that.Text(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Text()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.ILangStringShortNameTypeIEC61360]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeLangStringShortNameTypeIEC61360(
-	encoder *xml.Encoder,
-	that aastypes.ILangStringShortNameTypeIEC61360,
-	withNamespace bool,
-) (err error) {
-	local := "langStringShortNameTypeIec61360"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Language()",
+		writeElement(
+			encoder, "language", that.Language(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeLangStringShortNameTypeIEC61360AsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Text()",
+		writeElement(
+			encoder, "text", that.Text(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
 	return
 }
 
@@ -15923,106 +9837,31 @@ func writeLangStringShortNameTypeIEC61360(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeLangStringDefinitionTypeIEC61360AsSequence(
 	encoder *xml.Encoder,
 	that aastypes.ILangStringDefinitionTypeIEC61360,
 ) (err error) {
-	// region Language
-
-	err = writeScalarProperty(
-		encoder,
-		"language",
-		that.Language(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Language()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region Text
-
-	err = writeScalarProperty(
-		encoder,
-		"text",
-		that.Text(),
-		writeStringAsText,
-	)
-	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Text()",
-				},
-			)
-		}
-		return
-	}
-
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	return
-}
-
-// Serialize the instance of [aastypes.ILangStringDefinitionTypeIEC61360]
-// enclosed in an XML element which represents the model type.
-//
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeLangStringDefinitionTypeIEC61360(
-	encoder *xml.Encoder,
-	that aastypes.ILangStringDefinitionTypeIEC61360,
-	withNamespace bool,
-) (err error) {
-	local := "langStringDefinitionTypeIec61360"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Language()",
+		writeElement(
+			encoder, "language", that.Language(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = writeLangStringDefinitionTypeIEC61360AsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
+	err = finishProperty(
+		"Text()",
+		writeElement(
+			encoder, "text", that.Text(), writeStringAsText,
+		),
 	)
 	if err != nil {
 		return
 	}
 
-	err = encoder.Flush()
 	return
 }
 
@@ -16033,647 +9872,446 @@ func writeLangStringDefinitionTypeIEC61360(
 // The XML namespace is expected to be set in the one of the parent elements
 // enclosing the sequence.
 //
-// Flush at the end element of each property.
+// Do not flush.
 func writeDataSpecificationIEC61360AsSequence(
 	encoder *xml.Encoder,
 	that aastypes.IDataSpecificationIEC61360,
 ) (err error) {
-	// region PreferredName
-
-	err = writeListOfInstancesProperty(
-		encoder,
-		"preferredName",
-		that.PreferredName(),
+	err = finishProperty(
+		"PreferredName()",
+		writeElement(
+			encoder,
+			"preferredName",
+			that.PreferredName(),
+			writeListOfILangStringPreferredNameTypeIEC61360,
+		),
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "PreferredName()",
-				},
-			)
-		}
 		return
 	}
 
-	err = encoder.Flush()
-	if err != nil {
-		return err
-	}
-
-	// endregion
-
-	// region ShortName
-
-	theShortName := that.ShortName()
-
-	if theShortName != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"ShortName()",
+		writeOptionalSlice(
 			encoder,
 			"shortName",
-			theShortName,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "ShortName()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.ShortName(),
+			writeListOfILangStringShortNameTypeIEC61360,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Unit
-
-	theUnit := that.Unit()
-
-	if theUnit != nil {
-		err = writeScalarProperty(
-			encoder,
-			"unit",
-			*theUnit,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Unit()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Unit()",
+		writeOptionalPointer(
+			encoder, "unit", that.Unit(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region UnitID
-
-	theUnitID := that.UnitID()
-
-	if theUnitID != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"unitId",
-			theUnitID,
-			writeReferenceAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "UnitID()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"UnitID()",
+		writeOptionalInstance(
+			encoder, "unitId", that.UnitID(), writeReferenceAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region SourceOfDefinition
-
-	theSourceOfDefinition := that.SourceOfDefinition()
-
-	if theSourceOfDefinition != nil {
-		err = writeScalarProperty(
-			encoder,
-			"sourceOfDefinition",
-			*theSourceOfDefinition,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "SourceOfDefinition()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"SourceOfDefinition()",
+		writeOptionalPointer(
+			encoder, "sourceOfDefinition", that.SourceOfDefinition(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Symbol
-
-	theSymbol := that.Symbol()
-
-	if theSymbol != nil {
-		err = writeScalarProperty(
-			encoder,
-			"symbol",
-			*theSymbol,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Symbol()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Symbol()",
+		writeOptionalPointer(
+			encoder, "symbol", that.Symbol(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region DataType
-
-	theDataType := that.DataType()
-
-	if theDataType != nil {
-		err = writeScalarProperty(
-			encoder,
-			"dataType",
-			*theDataType,
-			writeDataTypeIEC61360AsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "DataType()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"DataType()",
+		writeOptionalPointer(
+			encoder, "dataType", that.DataType(), writeDataTypeIEC61360AsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Definition
-
-	theDefinition := that.Definition()
-
-	if theDefinition != nil {
-		err = writeListOfInstancesProperty(
+	err = finishProperty(
+		"Definition()",
+		writeOptionalSlice(
 			encoder,
 			"definition",
-			theDefinition,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Definition()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+			that.Definition(),
+			writeListOfILangStringDefinitionTypeIEC61360,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region ValueFormat
-
-	theValueFormat := that.ValueFormat()
-
-	if theValueFormat != nil {
-		err = writeScalarProperty(
-			encoder,
-			"valueFormat",
-			*theValueFormat,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "ValueFormat()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"ValueFormat()",
+		writeOptionalPointer(
+			encoder, "valueFormat", that.ValueFormat(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region ValueList
-
-	theValueList := that.ValueList()
-
-	if theValueList != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"valueList",
-			theValueList,
-			writeValueListAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "ValueList()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"ValueList()",
+		writeOptionalInstance(
+			encoder, "valueList", that.ValueList(), writeValueListAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region Value
-
-	theValue := that.Value()
-
-	if theValue != nil {
-		err = writeScalarProperty(
-			encoder,
-			"value",
-			*theValue,
-			writeStringAsText,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "Value()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"Value()",
+		writeOptionalPointer(
+			encoder, "value", that.Value(), writeStringAsText,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
 
-	// endregion
-
-	// region LevelType
-
-	theLevelType := that.LevelType()
-
-	if theLevelType != nil {
-		err = writeEmbeddedInstanceProperty(
-			encoder,
-			"levelType",
-			theLevelType,
-			writeLevelTypeAsSequence,
-		)
-		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "LevelType()",
-					},
-				)
-			}
-			return
-		}
-	}
-
-	err = encoder.Flush()
+	err = finishProperty(
+		"LevelType()",
+		writeOptionalInstance(
+			encoder, "levelType", that.LevelType(), writeLevelTypeAsSequence,
+		),
+	)
 	if err != nil {
-		return err
+		return
 	}
-
-	// endregion
 
 	return
 }
 
-// Serialize the instance of [aastypes.IDataSpecificationIEC61360]
-// enclosed in an XML element which represents the model type.
+// Serialize `that` instance as an XML element named after its model type.
 //
-// If `withNamespace` is set, the `xmlns` attribute is set in the outer XML element.
-//
-// Flush once the closing end element has been written.
-func writeDataSpecificationIEC61360(
-	encoder *xml.Encoder,
-	that aastypes.IDataSpecificationIEC61360,
-	withNamespace bool,
-) (err error) {
-	local := "dataSpecificationIec61360"
-	
-	err = writeStartElement(
-		encoder,
-		local,
-		withNamespace,
-	)
-	if err != nil {
-		return
-	}
-
-	err = writeDataSpecificationIEC61360AsSequence(
-		encoder,
-		that,
-	)
-	if err != nil {
-		return
-	}
-	
-	err = writeEndElement(
-		encoder,
-		local,
-		withNamespace,
-	)
-	if err != nil {
-		return
-	}
-
-	err = encoder.Flush()
-	return
-}
-
-// Serialize `that` instance as an XML element.
+// Do not flush.
 //
 // If `withNamespace` is set, the `xmlns` attribute is set in the XML element
 // to [Namespace].
-func Marshal(
+func writeClass(
 	encoder *xml.Encoder,
 	that aastypes.IClass,
 	withNamespace bool,
 ) (err error) {
 	switch that.ModelType() {
 	case aastypes.ModelTypeExtension:
-		err = writeExtension(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IExtension),
+			"extension",
 			withNamespace,
+			that.(aastypes.IExtension),
+			writeExtensionAsSequence,
 		)
 	case aastypes.ModelTypeAdministrativeInformation:
-		err = writeAdministrativeInformation(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IAdministrativeInformation),
+			"administrativeInformation",
 			withNamespace,
+			that.(aastypes.IAdministrativeInformation),
+			writeAdministrativeInformationAsSequence,
 		)
 	case aastypes.ModelTypeQualifier:
-		err = writeQualifier(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IQualifier),
+			"qualifier",
 			withNamespace,
+			that.(aastypes.IQualifier),
+			writeQualifierAsSequence,
 		)
 	case aastypes.ModelTypeAssetAdministrationShell:
-		err = writeAssetAdministrationShell(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IAssetAdministrationShell),
+			"assetAdministrationShell",
 			withNamespace,
+			that.(aastypes.IAssetAdministrationShell),
+			writeAssetAdministrationShellAsSequence,
 		)
 	case aastypes.ModelTypeAssetInformation:
-		err = writeAssetInformation(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IAssetInformation),
+			"assetInformation",
 			withNamespace,
+			that.(aastypes.IAssetInformation),
+			writeAssetInformationAsSequence,
 		)
 	case aastypes.ModelTypeResource:
-		err = writeResource(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IResource),
+			"resource",
 			withNamespace,
+			that.(aastypes.IResource),
+			writeResourceAsSequence,
 		)
 	case aastypes.ModelTypeSpecificAssetID:
-		err = writeSpecificAssetID(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.ISpecificAssetID),
+			"specificAssetId",
 			withNamespace,
+			that.(aastypes.ISpecificAssetID),
+			writeSpecificAssetIDAsSequence,
 		)
 	case aastypes.ModelTypeSubmodel:
-		err = writeSubmodel(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.ISubmodel),
+			"submodel",
 			withNamespace,
+			that.(aastypes.ISubmodel),
+			writeSubmodelAsSequence,
 		)
 	case aastypes.ModelTypeRelationshipElement:
-		err = writeRelationshipElementWithoutDispatch(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IRelationshipElement),
+			"relationshipElement",
 			withNamespace,
+			that.(aastypes.IRelationshipElement),
+			writeRelationshipElementAsSequence,
 		)
 	case aastypes.ModelTypeSubmodelElementList:
-		err = writeSubmodelElementList(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.ISubmodelElementList),
+			"submodelElementList",
 			withNamespace,
+			that.(aastypes.ISubmodelElementList),
+			writeSubmodelElementListAsSequence,
 		)
 	case aastypes.ModelTypeSubmodelElementCollection:
-		err = writeSubmodelElementCollection(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.ISubmodelElementCollection),
+			"submodelElementCollection",
 			withNamespace,
+			that.(aastypes.ISubmodelElementCollection),
+			writeSubmodelElementCollectionAsSequence,
 		)
 	case aastypes.ModelTypeProperty:
-		err = writeProperty(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IProperty),
+			"property",
 			withNamespace,
+			that.(aastypes.IProperty),
+			writePropertyAsSequence,
 		)
 	case aastypes.ModelTypeMultiLanguageProperty:
-		err = writeMultiLanguageProperty(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IMultiLanguageProperty),
+			"multiLanguageProperty",
 			withNamespace,
+			that.(aastypes.IMultiLanguageProperty),
+			writeMultiLanguagePropertyAsSequence,
 		)
 	case aastypes.ModelTypeRange:
-		err = writeRange(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IRange),
+			"range",
 			withNamespace,
+			that.(aastypes.IRange),
+			writeRangeAsSequence,
 		)
 	case aastypes.ModelTypeReferenceElement:
-		err = writeReferenceElement(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IReferenceElement),
+			"referenceElement",
 			withNamespace,
+			that.(aastypes.IReferenceElement),
+			writeReferenceElementAsSequence,
 		)
 	case aastypes.ModelTypeBlob:
-		err = writeBlob(
-			encoder,
-			that.(aastypes.IBlob),
-			withNamespace,
+		err = writeClassElement(
+			encoder, "blob", withNamespace, that.(aastypes.IBlob), writeBlobAsSequence,
 		)
 	case aastypes.ModelTypeFile:
-		err = writeFile(
-			encoder,
-			that.(aastypes.IFile),
-			withNamespace,
+		err = writeClassElement(
+			encoder, "file", withNamespace, that.(aastypes.IFile), writeFileAsSequence,
 		)
 	case aastypes.ModelTypeAnnotatedRelationshipElement:
-		err = writeAnnotatedRelationshipElement(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IAnnotatedRelationshipElement),
+			"annotatedRelationshipElement",
 			withNamespace,
+			that.(aastypes.IAnnotatedRelationshipElement),
+			writeAnnotatedRelationshipElementAsSequence,
 		)
 	case aastypes.ModelTypeEntity:
-		err = writeEntity(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IEntity),
+			"entity",
 			withNamespace,
+			that.(aastypes.IEntity),
+			writeEntityAsSequence,
 		)
 	case aastypes.ModelTypeEventPayload:
-		err = writeEventPayload(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IEventPayload),
+			"eventPayload",
 			withNamespace,
+			that.(aastypes.IEventPayload),
+			writeEventPayloadAsSequence,
 		)
 	case aastypes.ModelTypeBasicEventElement:
-		err = writeBasicEventElement(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IBasicEventElement),
+			"basicEventElement",
 			withNamespace,
+			that.(aastypes.IBasicEventElement),
+			writeBasicEventElementAsSequence,
 		)
 	case aastypes.ModelTypeOperation:
-		err = writeOperation(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IOperation),
+			"operation",
 			withNamespace,
+			that.(aastypes.IOperation),
+			writeOperationAsSequence,
 		)
 	case aastypes.ModelTypeOperationVariable:
-		err = writeOperationVariable(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IOperationVariable),
+			"operationVariable",
 			withNamespace,
+			that.(aastypes.IOperationVariable),
+			writeOperationVariableAsSequence,
 		)
 	case aastypes.ModelTypeCapability:
-		err = writeCapability(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.ICapability),
+			"capability",
 			withNamespace,
+			that.(aastypes.ICapability),
+			writeCapabilityAsSequence,
 		)
 	case aastypes.ModelTypeConceptDescription:
-		err = writeConceptDescription(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IConceptDescription),
+			"conceptDescription",
 			withNamespace,
+			that.(aastypes.IConceptDescription),
+			writeConceptDescriptionAsSequence,
 		)
 	case aastypes.ModelTypeReference:
-		err = writeReference(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IReference),
+			"reference",
 			withNamespace,
+			that.(aastypes.IReference),
+			writeReferenceAsSequence,
 		)
 	case aastypes.ModelTypeKey:
-		err = writeKey(
-			encoder,
-			that.(aastypes.IKey),
-			withNamespace,
+		err = writeClassElement(
+			encoder, "key", withNamespace, that.(aastypes.IKey), writeKeyAsSequence,
 		)
 	case aastypes.ModelTypeLangStringNameType:
-		err = writeLangStringNameType(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.ILangStringNameType),
+			"langStringNameType",
 			withNamespace,
+			that.(aastypes.ILangStringNameType),
+			writeLangStringNameTypeAsSequence,
 		)
 	case aastypes.ModelTypeLangStringTextType:
-		err = writeLangStringTextType(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.ILangStringTextType),
+			"langStringTextType",
 			withNamespace,
+			that.(aastypes.ILangStringTextType),
+			writeLangStringTextTypeAsSequence,
 		)
 	case aastypes.ModelTypeEnvironment:
-		err = writeEnvironment(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IEnvironment),
+			"environment",
 			withNamespace,
+			that.(aastypes.IEnvironment),
+			writeEnvironmentAsSequence,
 		)
 	case aastypes.ModelTypeEmbeddedDataSpecification:
-		err = writeEmbeddedDataSpecification(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IEmbeddedDataSpecification),
+			"embeddedDataSpecification",
 			withNamespace,
+			that.(aastypes.IEmbeddedDataSpecification),
+			writeEmbeddedDataSpecificationAsSequence,
 		)
 	case aastypes.ModelTypeLevelType:
-		err = writeLevelType(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.ILevelType),
+			"levelType",
 			withNamespace,
+			that.(aastypes.ILevelType),
+			writeLevelTypeAsSequence,
 		)
 	case aastypes.ModelTypeValueReferencePair:
-		err = writeValueReferencePair(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IValueReferencePair),
+			"valueReferencePair",
 			withNamespace,
+			that.(aastypes.IValueReferencePair),
+			writeValueReferencePairAsSequence,
 		)
 	case aastypes.ModelTypeValueList:
-		err = writeValueList(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IValueList),
+			"valueList",
 			withNamespace,
+			that.(aastypes.IValueList),
+			writeValueListAsSequence,
 		)
 	case aastypes.ModelTypeLangStringPreferredNameTypeIEC61360:
-		err = writeLangStringPreferredNameTypeIEC61360(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.ILangStringPreferredNameTypeIEC61360),
+			"langStringPreferredNameTypeIec61360",
 			withNamespace,
+			that.(aastypes.ILangStringPreferredNameTypeIEC61360),
+			writeLangStringPreferredNameTypeIEC61360AsSequence,
 		)
 	case aastypes.ModelTypeLangStringShortNameTypeIEC61360:
-		err = writeLangStringShortNameTypeIEC61360(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.ILangStringShortNameTypeIEC61360),
+			"langStringShortNameTypeIec61360",
 			withNamespace,
+			that.(aastypes.ILangStringShortNameTypeIEC61360),
+			writeLangStringShortNameTypeIEC61360AsSequence,
 		)
 	case aastypes.ModelTypeLangStringDefinitionTypeIEC61360:
-		err = writeLangStringDefinitionTypeIEC61360(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.ILangStringDefinitionTypeIEC61360),
+			"langStringDefinitionTypeIec61360",
 			withNamespace,
+			that.(aastypes.ILangStringDefinitionTypeIEC61360),
+			writeLangStringDefinitionTypeIEC61360AsSequence,
 		)
 	case aastypes.ModelTypeDataSpecificationIEC61360:
-		err = writeDataSpecificationIEC61360(
+		err = writeClassElement(
 			encoder,
-			that.(aastypes.IDataSpecificationIEC61360),
+			"dataSpecificationIec61360",
 			withNamespace,
+			that.(aastypes.IDataSpecificationIEC61360),
+			writeDataSpecificationIEC61360AsSequence,
 		)
 	default:
 		err = newSerializationError(
@@ -16684,6 +10322,23 @@ func Marshal(
 		)
 	}
 	return
+}
+
+// Serialize `that` instance as an XML element, and flush the encoder.
+//
+// If `withNamespace` is set, the `xmlns` attribute is set in the XML element
+// to [Namespace].
+func Marshal(
+	encoder *xml.Encoder,
+	that aastypes.IClass,
+	withNamespace bool,
+) (err error) {
+	err = writeClass(encoder, that, withNamespace)
+	if err != nil {
+		return
+	}
+
+	return encoder.Flush()
 }
 
 // endregion
