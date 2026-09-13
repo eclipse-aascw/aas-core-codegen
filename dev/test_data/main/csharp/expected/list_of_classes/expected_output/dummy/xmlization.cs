@@ -1185,44 +1185,121 @@ namespace dummy
             : Visitation.AbstractVisitorWithContext<Xml.XmlWriter>
         {
             /// <summary>
-            /// Write the content of a property, positioned between its start and end tag.
-            /// </summary>
-            /// <typeparam name="T">Type of the property value</typeparam>
-            private delegate void ElementContentSerializer<T>(
-                T that, Xml.XmlWriter writer);
-
-            /// <summary>
-            /// Serialize <paramref name="that" /> as an XML element with
-            /// the given <paramref name="name" />, delegating the content in-between the
-            /// start and the end tag to <paramref name="serializeContent" />.
+            /// Write <paramref name="that" /> where <paramref name="writer" /> already
+            /// is.
             /// </summary>
             /// <remarks>
-            /// This is shared by all the property kinds (primitive, enumeration, class,
-            /// interface, named union, list) as they all wrap their content in exactly
-            /// the same way.
+            /// Every value is written through this one shape, so that the writing can
+            /// be composed: a <c>Write*</c> combinator turns a stringification, a list
+            /// or a tuple of them into one of these, and a class's own
+            /// <c>...ToSequence</c> already is one.
+            ///
+            /// There is deliberately no second delegate for a whole element: an element
+            /// differs from a content only in what it writes, never in its shape, and
+            /// <c>WrapInElement</c> converts between the two.
+            ///
+            /// <typeparamref name="T" /> is contravariant, so that
+            /// <see cref="WriteIClass" /> can be used wherever the writer of a more
+            /// specific interface is expected.
             /// </remarks>
-            /// <typeparam name="T">Type of the property value</typeparam>
-            private static void SerializeElement<T>(
-                string name,
+            /// <typeparam name="T">Type of the value to write</typeparam>
+            private delegate void ContentWriter<in T>(
+                T that,
+                Xml.XmlWriter writer);
+
+            /// <summary>
+            /// Write <paramref name="that" /> as an XML element named
+            /// <paramref name="elementName" />, its content written by
+            /// <paramref name="writeContent" />.
+            /// </summary>
+            /// <remarks>
+            /// An element is nothing but a start and an end tag around a content, so
+            /// there is no writer per property kind -- only the content differs, and it
+            /// has been composed once into a field.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to write</typeparam>
+            private static void WriteElement<T>(
+                string elementName,
                 T that,
                 Xml.XmlWriter writer,
-                ElementContentSerializer<T> serializeContent)
+                ContentWriter<T> writeContent)
             {
-                writer.WriteStartElement(name, NS);
-                serializeContent(that, writer);
+                writer.WriteStartElement(elementName, NS);
+                writeContent(that, writer);
                 writer.WriteEndElement();
             }
 
-            private void SomeItemToSequence(
+            /// <summary>
+            /// Write the items of a list, each with <paramref name="writeItem" />.
+            /// </summary>
+            /// <remarks>
+            /// An empty list writes no items at all, which the reading sees as
+            /// a self-closing element.
+            /// </remarks>
+            /// <typeparam name="T">Type of a single list item</typeparam>
+            private static ContentWriter<List<T>> WriteList<T>(
+                ContentWriter<T> writeItem
+                )
+            {
+                return (that, writer) =>
+                {
+                    foreach (var item in that)
+                    {
+                        writeItem(item, writer);
+                    }
+                };
+            }
+
+            /// <summary>
+            /// The one instance through which the writing is dispatched.
+            /// </summary>
+            /// <remarks>
+            /// The visitor carries no state -- the writer is passed in as the context --
+            /// so a single instance serves the whole program. No field initializer reads
+            /// it, only <see cref="WriteIClass" /> does, so it does not matter where
+            /// among the writers it is initialized.
+            /// </remarks>
+            [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
+            private static readonly VisitorWithWriter _instance = (
+                new VisitorWithWriter());
+
+            /// <summary>
+            /// Write <paramref name="that" /> as its own XML element.
+            /// </summary>
+            /// <remarks>
+            /// Which element that is, is decided by the run-time type of
+            /// <paramref name="that" />, so this one writer serves every abstract class
+            /// and every concrete class with descendants, as well as the item of a list
+            /// or of a tuple of any of them.
+            /// </remarks>
+            internal static void WriteIClass(
+                Aas.IClass that,
+                Xml.XmlWriter writer)
+            {
+                that.Accept(_instance, writer);
+            }
+
+            private static readonly ContentWriter<string> WriteString = (
+                (that, writer) => writer.WriteValue(that));
+
+            private static readonly ContentWriter<long> WriteLong = (
+                (that, writer) => writer.WriteValue(that));
+
+            private static readonly ContentWriter<List<IAbstractItem>> WriteListOfIAbstractItem = (
+                WriteList<IAbstractItem>(
+                    WriteIClass));
+
+            private static readonly ContentWriter<List<ISimple>> WriteListOfISimple = (
+                WriteList<ISimple>(
+                    WriteIClass));
+
+            private static void SomeItemToSequence(
                 Aas.ISomeItem that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "name",
-                    that.Name,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void SomeItemToSequence
+                WriteElement(
+                    "name", that.Name, writer, WriteString);
+            }  // private static void SomeItemToSequence
 
             public override void VisitSomeItem(
                 Aas.ISomeItem that,
@@ -1231,22 +1308,19 @@ namespace dummy
                 writer.WriteStartElement(
                     "someItem",
                     NS);
-                this.SomeItemToSequence(
+                SomeItemToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void AnotherItemToSequence(
+            private static void AnotherItemToSequence(
                 Aas.IAnotherItem that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "serialNumber",
-                    that.SerialNumber,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void AnotherItemToSequence
+                WriteElement(
+                    "serialNumber", that.SerialNumber, writer, WriteLong);
+            }  // private static void AnotherItemToSequence
 
             public override void VisitAnotherItem(
                 Aas.IAnotherItem that,
@@ -1255,22 +1329,19 @@ namespace dummy
                 writer.WriteStartElement(
                     "anotherItem",
                     NS);
-                this.AnotherItemToSequence(
+                AnotherItemToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void SimpleToSequence(
+            private static void SimpleToSequence(
                 Aas.ISimple that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "name",
-                    that.Name,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void SimpleToSequence
+                WriteElement(
+                    "name", that.Name, writer, WriteString);
+            }  // private static void SimpleToSequence
 
             public override void VisitSimple(
                 Aas.ISimple that,
@@ -1279,40 +1350,22 @@ namespace dummy
                 writer.WriteStartElement(
                     "simple",
                     NS);
-                this.SimpleToSequence(
+                SimpleToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void SomethingToSequence(
+            private static void SomethingToSequence(
                 Aas.ISomething that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "someItems",
-                    that.SomeItems,
-                    writer,
-                    (value, w) =>
-                    {
-                        foreach (var item in value)
-                        {
-                            this.Visit(item, w);
-                        }
-                    });
+                WriteElement(
+                    "someItems", that.SomeItems, writer, WriteListOfIAbstractItem);
 
-                SerializeElement(
-                    "someSimples",
-                    that.SomeSimples,
-                    writer,
-                    (value, w) =>
-                    {
-                        foreach (var item in value)
-                        {
-                            this.Visit(item, w);
-                        }
-                    });
-            }  // private void SomethingToSequence
+                WriteElement(
+                    "someSimples", that.SomeSimples, writer, WriteListOfISimple);
+            }  // private static void SomethingToSequence
 
             public override void VisitSomething(
                 Aas.ISomething that,
@@ -1321,7 +1374,7 @@ namespace dummy
                 writer.WriteStartElement(
                     "something",
                     NS);
-                this.SomethingToSequence(
+                SomethingToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
@@ -1345,10 +1398,6 @@ namespace dummy
         /// </example>
         public static class Serialize
         {
-            [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            private static readonly VisitorWithWriter _visitorWithWriter = (
-                new VisitorWithWriter());
-
             /// <summary>
             /// Serialize an instance of the meta-model to XML.
             /// </summary>
@@ -1356,7 +1405,7 @@ namespace dummy
                 Aas.IClass that,
                 Xml.XmlWriter writer)
             {
-                Serialize._visitorWithWriter.Visit(
+                VisitorWithWriter.WriteIClass(
                     that, writer);
             }
         }  // public static class Serialize

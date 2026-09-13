@@ -645,7 +645,9 @@ namespace AasCore.Aas3_0
             /// <summary>
             /// Read an instance of class AdministrativeInformation from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.AdministrativeInformation> AdministrativeInformationFromElement = (
+            internal static readonly ElementReader<
+                Aas.AdministrativeInformation
+            > AdministrativeInformationFromElement = (
                 AtElement<Aas.AdministrativeInformation>(
                     AdministrativeInformationFromSequence, "administrativeInformation"));
 
@@ -659,14 +661,18 @@ namespace AasCore.Aas3_0
             /// <summary>
             /// Read an instance of class AssetAdministrationShell from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.AssetAdministrationShell> AssetAdministrationShellFromElement = (
+            internal static readonly ElementReader<
+                Aas.AssetAdministrationShell
+            > AssetAdministrationShellFromElement = (
                 AtElement<Aas.AssetAdministrationShell>(
                     AssetAdministrationShellFromSequence, "assetAdministrationShell"));
 
             /// <summary>
             /// Read an instance of class AssetInformation from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.AssetInformation> AssetInformationFromElement = (
+            internal static readonly ElementReader<
+                Aas.AssetInformation
+            > AssetInformationFromElement = (
                 AtElement<Aas.AssetInformation>(
                     AssetInformationFromSequence, "assetInformation"));
 
@@ -680,7 +686,9 @@ namespace AasCore.Aas3_0
             /// <summary>
             /// Read an instance of class SpecificAssetId from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.SpecificAssetId> SpecificAssetIdFromElement = (
+            internal static readonly ElementReader<
+                Aas.SpecificAssetId
+            > SpecificAssetIdFromElement = (
                 AtElement<Aas.SpecificAssetId>(
                     SpecificAssetIdFromSequence, "specificAssetId"));
 
@@ -694,21 +702,27 @@ namespace AasCore.Aas3_0
             /// <summary>
             /// Read an instance of class RelationshipElement from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.RelationshipElement> RelationshipElementFromElement = (
+            internal static readonly ElementReader<
+                Aas.RelationshipElement
+            > RelationshipElementFromElement = (
                 AtElement<Aas.RelationshipElement>(
                     RelationshipElementFromSequence, "relationshipElement"));
 
             /// <summary>
             /// Read an instance of class SubmodelElementList from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.SubmodelElementList> SubmodelElementListFromElement = (
+            internal static readonly ElementReader<
+                Aas.SubmodelElementList
+            > SubmodelElementListFromElement = (
                 AtElement<Aas.SubmodelElementList>(
                     SubmodelElementListFromSequence, "submodelElementList"));
 
             /// <summary>
             /// Read an instance of class SubmodelElementCollection from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.SubmodelElementCollection> SubmodelElementCollectionFromElement = (
+            internal static readonly ElementReader<
+                Aas.SubmodelElementCollection
+            > SubmodelElementCollectionFromElement = (
                 AtElement<Aas.SubmodelElementCollection>(
                     SubmodelElementCollectionFromSequence, "submodelElementCollection"));
 
@@ -722,7 +736,9 @@ namespace AasCore.Aas3_0
             /// <summary>
             /// Read an instance of class MultiLanguageProperty from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.MultiLanguageProperty> MultiLanguagePropertyFromElement = (
+            internal static readonly ElementReader<
+                Aas.MultiLanguageProperty
+            > MultiLanguagePropertyFromElement = (
                 AtElement<Aas.MultiLanguageProperty>(
                     MultiLanguagePropertyFromSequence, "multiLanguageProperty"));
 
@@ -736,7 +752,9 @@ namespace AasCore.Aas3_0
             /// <summary>
             /// Read an instance of class ReferenceElement from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.ReferenceElement> ReferenceElementFromElement = (
+            internal static readonly ElementReader<
+                Aas.ReferenceElement
+            > ReferenceElementFromElement = (
                 AtElement<Aas.ReferenceElement>(
                     ReferenceElementFromSequence, "referenceElement"));
 
@@ -757,7 +775,9 @@ namespace AasCore.Aas3_0
             /// <summary>
             /// Read an instance of class AnnotatedRelationshipElement from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.AnnotatedRelationshipElement> AnnotatedRelationshipElementFromElement = (
+            internal static readonly ElementReader<
+                Aas.AnnotatedRelationshipElement
+            > AnnotatedRelationshipElementFromElement = (
                 AtElement<Aas.AnnotatedRelationshipElement>(
                     AnnotatedRelationshipElementFromSequence, "annotatedRelationshipElement"));
 
@@ -778,7 +798,9 @@ namespace AasCore.Aas3_0
             /// <summary>
             /// Read an instance of class BasicEventElement from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.BasicEventElement> BasicEventElementFromElement = (
+            internal static readonly ElementReader<
+                Aas.BasicEventElement
+            > BasicEventElementFromElement = (
                 AtElement<Aas.BasicEventElement>(
                     BasicEventElementFromSequence, "basicEventElement"));
 
@@ -792,7 +814,9 @@ namespace AasCore.Aas3_0
             /// <summary>
             /// Read an instance of class OperationVariable from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.OperationVariable> OperationVariableFromElement = (
+            internal static readonly ElementReader<
+                Aas.OperationVariable
+            > OperationVariableFromElement = (
                 AtElement<Aas.OperationVariable>(
                     OperationVariableFromSequence, "operationVariable"));
 
@@ -806,7 +830,9 @@ namespace AasCore.Aas3_0
             /// <summary>
             /// Read an instance of class ConceptDescription from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.ConceptDescription> ConceptDescriptionFromElement = (
+            internal static readonly ElementReader<
+                Aas.ConceptDescription
+            > ConceptDescriptionFromElement = (
                 AtElement<Aas.ConceptDescription>(
                     ConceptDescriptionFromSequence, "conceptDescription"));
 
@@ -827,14 +853,18 @@ namespace AasCore.Aas3_0
             /// <summary>
             /// Read an instance of class LangStringNameType from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.LangStringNameType> LangStringNameTypeFromElement = (
+            internal static readonly ElementReader<
+                Aas.LangStringNameType
+            > LangStringNameTypeFromElement = (
                 AtElement<Aas.LangStringNameType>(
                     LangStringNameTypeFromSequence, "langStringNameType"));
 
             /// <summary>
             /// Read an instance of class LangStringTextType from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.LangStringTextType> LangStringTextTypeFromElement = (
+            internal static readonly ElementReader<
+                Aas.LangStringTextType
+            > LangStringTextTypeFromElement = (
                 AtElement<Aas.LangStringTextType>(
                     LangStringTextTypeFromSequence, "langStringTextType"));
 
@@ -848,7 +878,9 @@ namespace AasCore.Aas3_0
             /// <summary>
             /// Read an instance of class EmbeddedDataSpecification from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.EmbeddedDataSpecification> EmbeddedDataSpecificationFromElement = (
+            internal static readonly ElementReader<
+                Aas.EmbeddedDataSpecification
+            > EmbeddedDataSpecificationFromElement = (
                 AtElement<Aas.EmbeddedDataSpecification>(
                     EmbeddedDataSpecificationFromSequence, "embeddedDataSpecification"));
 
@@ -862,7 +894,9 @@ namespace AasCore.Aas3_0
             /// <summary>
             /// Read an instance of class ValueReferencePair from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.ValueReferencePair> ValueReferencePairFromElement = (
+            internal static readonly ElementReader<
+                Aas.ValueReferencePair
+            > ValueReferencePairFromElement = (
                 AtElement<Aas.ValueReferencePair>(
                     ValueReferencePairFromSequence, "valueReferencePair"));
 
@@ -876,28 +910,36 @@ namespace AasCore.Aas3_0
             /// <summary>
             /// Read an instance of class LangStringPreferredNameTypeIec61360 from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.LangStringPreferredNameTypeIec61360> LangStringPreferredNameTypeIec61360FromElement = (
+            internal static readonly ElementReader<
+                Aas.LangStringPreferredNameTypeIec61360
+            > LangStringPreferredNameTypeIec61360FromElement = (
                 AtElement<Aas.LangStringPreferredNameTypeIec61360>(
                     LangStringPreferredNameTypeIec61360FromSequence, "langStringPreferredNameTypeIec61360"));
 
             /// <summary>
             /// Read an instance of class LangStringShortNameTypeIec61360 from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.LangStringShortNameTypeIec61360> LangStringShortNameTypeIec61360FromElement = (
+            internal static readonly ElementReader<
+                Aas.LangStringShortNameTypeIec61360
+            > LangStringShortNameTypeIec61360FromElement = (
                 AtElement<Aas.LangStringShortNameTypeIec61360>(
                     LangStringShortNameTypeIec61360FromSequence, "langStringShortNameTypeIec61360"));
 
             /// <summary>
             /// Read an instance of class LangStringDefinitionTypeIec61360 from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.LangStringDefinitionTypeIec61360> LangStringDefinitionTypeIec61360FromElement = (
+            internal static readonly ElementReader<
+                Aas.LangStringDefinitionTypeIec61360
+            > LangStringDefinitionTypeIec61360FromElement = (
                 AtElement<Aas.LangStringDefinitionTypeIec61360>(
                     LangStringDefinitionTypeIec61360FromSequence, "langStringDefinitionTypeIec61360"));
 
             /// <summary>
             /// Read an instance of class DataSpecificationIec61360 from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.DataSpecificationIec61360> DataSpecificationIec61360FromElement = (
+            internal static readonly ElementReader<
+                Aas.DataSpecificationIec61360
+            > DataSpecificationIec61360FromElement = (
                 AtElement<Aas.DataSpecificationIec61360>(
                     DataSpecificationIec61360FromSequence, "dataSpecificationIec61360"));
 
@@ -915,7 +957,9 @@ namespace AasCore.Aas3_0
                 AsEnum<Aas.DataTypeDefXsd>(
                     Stringification.DataTypeDefXsdFromString));
 
-            private static readonly ContentReader<List<IEmbeddedDataSpecification>> ReadListOfIEmbeddedDataSpecification = (
+            private static readonly ContentReader<
+                List<IEmbeddedDataSpecification>
+            > ReadListOfIEmbeddedDataSpecification = (
                 AsList<IEmbeddedDataSpecification>(
                     EmbeddedDataSpecificationFromElement));
 
@@ -927,15 +971,21 @@ namespace AasCore.Aas3_0
                 AsList<IExtension>(
                     ExtensionFromElement));
 
-            private static readonly ContentReader<List<ILangStringNameType>> ReadListOfILangStringNameType = (
+            private static readonly ContentReader<
+                List<ILangStringNameType>
+            > ReadListOfILangStringNameType = (
                 AsList<ILangStringNameType>(
                     LangStringNameTypeFromElement));
 
-            private static readonly ContentReader<List<ILangStringTextType>> ReadListOfILangStringTextType = (
+            private static readonly ContentReader<
+                List<ILangStringTextType>
+            > ReadListOfILangStringTextType = (
                 AsList<ILangStringTextType>(
                     LangStringTextTypeFromElement));
 
-            private static readonly ContentReader<IAdministrativeInformation> ReadIAdministrativeInformation = (
+            private static readonly ContentReader<
+                IAdministrativeInformation
+            > ReadIAdministrativeInformation = (
                 AdministrativeInformationFromSequence);
 
             private static readonly ContentReader<IAssetInformation> ReadIAssetInformation = (
@@ -945,7 +995,9 @@ namespace AasCore.Aas3_0
                 AsEnum<Aas.AssetKind>(
                     Stringification.AssetKindFromString));
 
-            private static readonly ContentReader<List<ISpecificAssetId>> ReadListOfISpecificAssetId = (
+            private static readonly ContentReader<
+                List<ISpecificAssetId>
+            > ReadListOfISpecificAssetId = (
                 AsList<ISpecificAssetId>(
                     SpecificAssetIdFromElement));
 
@@ -960,7 +1012,9 @@ namespace AasCore.Aas3_0
                 AsList<IQualifier>(
                     QualifierFromElement));
 
-            private static readonly ContentReader<List<ISubmodelElement>> ReadListOfISubmodelElement = (
+            private static readonly ContentReader<
+                List<ISubmodelElement>
+            > ReadListOfISubmodelElement = (
                 AsList<ISubmodelElement>(
                     ISubmodelElementFromElement));
 
@@ -990,7 +1044,9 @@ namespace AasCore.Aas3_0
                 AsEnum<Aas.StateOfEvent>(
                     Stringification.StateOfEventFromString));
 
-            private static readonly ContentReader<List<IOperationVariable>> ReadListOfIOperationVariable = (
+            private static readonly ContentReader<
+                List<IOperationVariable>
+            > ReadListOfIOperationVariable = (
                 AsList<IOperationVariable>(
                     OperationVariableFromElement));
 
@@ -1010,7 +1066,9 @@ namespace AasCore.Aas3_0
                 AsEnum<Aas.KeyTypes>(
                     Stringification.KeyTypesFromString));
 
-            private static readonly ContentReader<List<IAssetAdministrationShell>> ReadListOfIAssetAdministrationShell = (
+            private static readonly ContentReader<
+                List<IAssetAdministrationShell>
+            > ReadListOfIAssetAdministrationShell = (
                 AsList<IAssetAdministrationShell>(
                     AssetAdministrationShellFromElement));
 
@@ -1018,23 +1076,33 @@ namespace AasCore.Aas3_0
                 AsList<ISubmodel>(
                     SubmodelFromElement));
 
-            private static readonly ContentReader<List<IConceptDescription>> ReadListOfIConceptDescription = (
+            private static readonly ContentReader<
+                List<IConceptDescription>
+            > ReadListOfIConceptDescription = (
                 AsList<IConceptDescription>(
                     ConceptDescriptionFromElement));
 
-            private static readonly ContentReader<IDataSpecificationContent> ReadIDataSpecificationContent = (
+            private static readonly ContentReader<
+                IDataSpecificationContent
+            > ReadIDataSpecificationContent = (
                 AsElement<Aas.IDataSpecificationContent>(
                     IDataSpecificationContentFromElement));
 
-            private static readonly ContentReader<List<IValueReferencePair>> ReadListOfIValueReferencePair = (
+            private static readonly ContentReader<
+                List<IValueReferencePair>
+            > ReadListOfIValueReferencePair = (
                 AsList<IValueReferencePair>(
                     ValueReferencePairFromElement));
 
-            private static readonly ContentReader<List<ILangStringPreferredNameTypeIec61360>> ReadListOfILangStringPreferredNameTypeIec61360 = (
+            private static readonly ContentReader<
+                List<ILangStringPreferredNameTypeIec61360>
+            > ReadListOfILangStringPreferredNameTypeIec61360 = (
                 AsList<ILangStringPreferredNameTypeIec61360>(
                     LangStringPreferredNameTypeIec61360FromElement));
 
-            private static readonly ContentReader<List<ILangStringShortNameTypeIec61360>> ReadListOfILangStringShortNameTypeIec61360 = (
+            private static readonly ContentReader<
+                List<ILangStringShortNameTypeIec61360>
+            > ReadListOfILangStringShortNameTypeIec61360 = (
                 AsList<ILangStringShortNameTypeIec61360>(
                     LangStringShortNameTypeIec61360FromElement));
 
@@ -1042,7 +1110,9 @@ namespace AasCore.Aas3_0
                 AsEnum<Aas.DataTypeIec61360>(
                     Stringification.DataTypeIec61360FromString));
 
-            private static readonly ContentReader<List<ILangStringDefinitionTypeIec61360>> ReadListOfILangStringDefinitionTypeIec61360 = (
+            private static readonly ContentReader<
+                List<ILangStringDefinitionTypeIec61360>
+            > ReadListOfILangStringDefinitionTypeIec61360 = (
                 AsList<ILangStringDefinitionTypeIec61360>(
                     LangStringDefinitionTypeIec61360FromElement));
 
@@ -8525,109 +8595,350 @@ namespace AasCore.Aas3_0
             : Visitation.AbstractVisitorWithContext<Xml.XmlWriter>
         {
             /// <summary>
-            /// Write the content of a property, positioned between its start and end tag.
-            /// </summary>
-            /// <typeparam name="T">Type of the property value</typeparam>
-            private delegate void ElementContentSerializer<T>(
-                T that, Xml.XmlWriter writer);
-
-            /// <summary>
-            /// Serialize <paramref name="that" /> as an XML element with
-            /// the given <paramref name="name" />, delegating the content in-between the
-            /// start and the end tag to <paramref name="serializeContent" />.
+            /// Write <paramref name="that" /> where <paramref name="writer" /> already
+            /// is.
             /// </summary>
             /// <remarks>
-            /// This is shared by all the property kinds (primitive, enumeration, class,
-            /// interface, named union, list) as they all wrap their content in exactly
-            /// the same way.
+            /// Every value is written through this one shape, so that the writing can
+            /// be composed: a <c>Write*</c> combinator turns a stringification, a list
+            /// or a tuple of them into one of these, and a class's own
+            /// <c>...ToSequence</c> already is one.
+            ///
+            /// There is deliberately no second delegate for a whole element: an element
+            /// differs from a content only in what it writes, never in its shape, and
+            /// <c>WrapInElement</c> converts between the two.
+            ///
+            /// <typeparamref name="T" /> is contravariant, so that
+            /// <see cref="WriteIClass" /> can be used wherever the writer of a more
+            /// specific interface is expected.
             /// </remarks>
-            /// <typeparam name="T">Type of the property value</typeparam>
-            private static void SerializeElement<T>(
-                string name,
+            /// <typeparam name="T">Type of the value to write</typeparam>
+            private delegate void ContentWriter<in T>(
+                T that,
+                Xml.XmlWriter writer);
+
+            /// <summary>
+            /// Write <paramref name="that" /> as an XML element named
+            /// <paramref name="elementName" />, its content written by
+            /// <paramref name="writeContent" />.
+            /// </summary>
+            /// <remarks>
+            /// An element is nothing but a start and an end tag around a content, so
+            /// there is no writer per property kind -- only the content differs, and it
+            /// has been composed once into a field.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to write</typeparam>
+            private static void WriteElement<T>(
+                string elementName,
                 T that,
                 Xml.XmlWriter writer,
-                ElementContentSerializer<T> serializeContent)
+                ContentWriter<T> writeContent)
             {
-                writer.WriteStartElement(name, NS);
-                serializeContent(that, writer);
+                writer.WriteStartElement(elementName, NS);
+                writeContent(that, writer);
                 writer.WriteEndElement();
             }
 
-            private void ExtensionToSequence(
+            /// <summary>
+            /// Render the literal <paramref name="that" /> of <typeparamref name="T" />
+            /// as text.
+            /// </summary>
+            /// <remarks>
+            /// Every <c>Stringification.ToString</c> overload has this shape, so it can
+            /// be passed on directly -- which is what lets an enumeration be written by
+            /// one generated combinator instead of one per enumeration. The parameter is
+            /// nullable because the overloads are generated that way; a literal converts
+            /// to it implicitly.
+            /// </remarks>
+            /// <typeparam name="T">Enumeration whose literal is rendered</typeparam>
+            private delegate string? LiteralStringifier<T>(T? that) where T : struct;
+
+            /// <summary>
+            /// Write a literal of <typeparamref name="T" />, rendered with
+            /// <paramref name="stringifyLiteral" />.
+            /// </summary>
+            /// <typeparam name="T">Enumeration to write the literal of</typeparam>
+            private static ContentWriter<T> WriteEnum<T>(
+                LiteralStringifier<T> stringifyLiteral
+                ) where T : struct
+            {
+                return (that, writer) =>
+                {
+                    writer.WriteValue(
+                        stringifyLiteral(that)
+                            ?? throw new System.ArgumentException(
+                                $"Invalid literal for the enumeration {typeof(T).Name}: " +
+                                that.ToString()));
+                };
+            }
+
+            /// <summary>
+            /// Write the items of a list, each with <paramref name="writeItem" />.
+            /// </summary>
+            /// <remarks>
+            /// An empty list writes no items at all, which the reading sees as
+            /// a self-closing element.
+            /// </remarks>
+            /// <typeparam name="T">Type of a single list item</typeparam>
+            private static ContentWriter<List<T>> WriteList<T>(
+                ContentWriter<T> writeItem
+                )
+            {
+                return (that, writer) =>
+                {
+                    foreach (var item in that)
+                    {
+                        writeItem(item, writer);
+                    }
+                };
+            }
+
+            /// <summary>
+            /// The one instance through which the writing is dispatched.
+            /// </summary>
+            /// <remarks>
+            /// The visitor carries no state -- the writer is passed in as the context --
+            /// so a single instance serves the whole program. No field initializer reads
+            /// it, only <see cref="WriteIClass" /> does, so it does not matter where
+            /// among the writers it is initialized.
+            /// </remarks>
+            [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
+            private static readonly VisitorWithWriter _instance = (
+                new VisitorWithWriter());
+
+            /// <summary>
+            /// Write <paramref name="that" /> as its own XML element.
+            /// </summary>
+            /// <remarks>
+            /// Which element that is, is decided by the run-time type of
+            /// <paramref name="that" />, so this one writer serves every abstract class
+            /// and every concrete class with descendants, as well as the item of a list
+            /// or of a tuple of any of them.
+            /// </remarks>
+            internal static void WriteIClass(
+                Aas.IClass that,
+                Xml.XmlWriter writer)
+            {
+                that.Accept(_instance, writer);
+            }
+
+            private static readonly ContentWriter<IReference> WriteIReference = (
+                ReferenceToSequence);
+
+            private static readonly ContentWriter<List<IReference>> WriteListOfIReference = (
+                WriteList<IReference>(
+                    WriteIClass));
+
+            private static readonly ContentWriter<string> WriteString = (
+                (that, writer) => writer.WriteValue(that));
+
+            private static readonly ContentWriter<DataTypeDefXsd> WriteDataTypeDefXsd = (
+                WriteEnum<Aas.DataTypeDefXsd>(
+                    Stringification.ToString));
+
+            private static readonly ContentWriter<
+                List<IEmbeddedDataSpecification>
+            > WriteListOfIEmbeddedDataSpecification = (
+                WriteList<IEmbeddedDataSpecification>(
+                    WriteIClass));
+
+            private static readonly ContentWriter<QualifierKind> WriteQualifierKind = (
+                WriteEnum<Aas.QualifierKind>(
+                    Stringification.ToString));
+
+            private static readonly ContentWriter<List<IExtension>> WriteListOfIExtension = (
+                WriteList<IExtension>(
+                    WriteIClass));
+
+            private static readonly ContentWriter<
+                List<ILangStringNameType>
+            > WriteListOfILangStringNameType = (
+                WriteList<ILangStringNameType>(
+                    WriteIClass));
+
+            private static readonly ContentWriter<
+                List<ILangStringTextType>
+            > WriteListOfILangStringTextType = (
+                WriteList<ILangStringTextType>(
+                    WriteIClass));
+
+            private static readonly ContentWriter<
+                IAdministrativeInformation
+            > WriteIAdministrativeInformation = (
+                AdministrativeInformationToSequence);
+
+            private static readonly ContentWriter<IAssetInformation> WriteIAssetInformation = (
+                AssetInformationToSequence);
+
+            private static readonly ContentWriter<AssetKind> WriteAssetKind = (
+                WriteEnum<Aas.AssetKind>(
+                    Stringification.ToString));
+
+            private static readonly ContentWriter<
+                List<ISpecificAssetId>
+            > WriteListOfISpecificAssetId = (
+                WriteList<ISpecificAssetId>(
+                    WriteIClass));
+
+            private static readonly ContentWriter<IResource> WriteIResource = (
+                ResourceToSequence);
+
+            private static readonly ContentWriter<ModellingKind> WriteModellingKind = (
+                WriteEnum<Aas.ModellingKind>(
+                    Stringification.ToString));
+
+            private static readonly ContentWriter<List<IQualifier>> WriteListOfIQualifier = (
+                WriteList<IQualifier>(
+                    WriteIClass));
+
+            private static readonly ContentWriter<
+                List<ISubmodelElement>
+            > WriteListOfISubmodelElement = (
+                WriteList<ISubmodelElement>(
+                    WriteIClass));
+
+            private static readonly ContentWriter<bool> WriteBool = (
+                (that, writer) => writer.WriteValue(that));
+
+            private static readonly ContentWriter<AasSubmodelElements> WriteAasSubmodelElements = (
+                WriteEnum<Aas.AasSubmodelElements>(
+                    Stringification.ToString));
+
+            private static readonly ContentWriter<byte[]> WriteBytes = (
+                (that, writer) => writer.WriteBase64(that, 0, that.Length));
+
+            private static readonly ContentWriter<List<IDataElement>> WriteListOfIDataElement = (
+                WriteList<IDataElement>(
+                    WriteIClass));
+
+            private static readonly ContentWriter<EntityType> WriteEntityType = (
+                WriteEnum<Aas.EntityType>(
+                    Stringification.ToString));
+
+            private static readonly ContentWriter<Direction> WriteDirection = (
+                WriteEnum<Aas.Direction>(
+                    Stringification.ToString));
+
+            private static readonly ContentWriter<StateOfEvent> WriteStateOfEvent = (
+                WriteEnum<Aas.StateOfEvent>(
+                    Stringification.ToString));
+
+            private static readonly ContentWriter<
+                List<IOperationVariable>
+            > WriteListOfIOperationVariable = (
+                WriteList<IOperationVariable>(
+                    WriteIClass));
+
+            private static readonly ContentWriter<ISubmodelElement> WriteISubmodelElement = (
+                WriteIClass);
+
+            private static readonly ContentWriter<ReferenceTypes> WriteReferenceTypes = (
+                WriteEnum<Aas.ReferenceTypes>(
+                    Stringification.ToString));
+
+            private static readonly ContentWriter<List<IKey>> WriteListOfIKey = (
+                WriteList<IKey>(
+                    WriteIClass));
+
+            private static readonly ContentWriter<KeyTypes> WriteKeyTypes = (
+                WriteEnum<Aas.KeyTypes>(
+                    Stringification.ToString));
+
+            private static readonly ContentWriter<
+                List<IAssetAdministrationShell>
+            > WriteListOfIAssetAdministrationShell = (
+                WriteList<IAssetAdministrationShell>(
+                    WriteIClass));
+
+            private static readonly ContentWriter<List<ISubmodel>> WriteListOfISubmodel = (
+                WriteList<ISubmodel>(
+                    WriteIClass));
+
+            private static readonly ContentWriter<
+                List<IConceptDescription>
+            > WriteListOfIConceptDescription = (
+                WriteList<IConceptDescription>(
+                    WriteIClass));
+
+            private static readonly ContentWriter<
+                IDataSpecificationContent
+            > WriteIDataSpecificationContent = (
+                WriteIClass);
+
+            private static readonly ContentWriter<
+                List<IValueReferencePair>
+            > WriteListOfIValueReferencePair = (
+                WriteList<IValueReferencePair>(
+                    WriteIClass));
+
+            private static readonly ContentWriter<
+                List<ILangStringPreferredNameTypeIec61360>
+            > WriteListOfILangStringPreferredNameTypeIec61360 = (
+                WriteList<ILangStringPreferredNameTypeIec61360>(
+                    WriteIClass));
+
+            private static readonly ContentWriter<
+                List<ILangStringShortNameTypeIec61360>
+            > WriteListOfILangStringShortNameTypeIec61360 = (
+                WriteList<ILangStringShortNameTypeIec61360>(
+                    WriteIClass));
+
+            private static readonly ContentWriter<DataTypeIec61360> WriteDataTypeIec61360 = (
+                WriteEnum<Aas.DataTypeIec61360>(
+                    Stringification.ToString));
+
+            private static readonly ContentWriter<
+                List<ILangStringDefinitionTypeIec61360>
+            > WriteListOfILangStringDefinitionTypeIec61360 = (
+                WriteList<ILangStringDefinitionTypeIec61360>(
+                    WriteIClass));
+
+            private static readonly ContentWriter<IValueList> WriteIValueList = (
+                ValueListToSequence);
+
+            private static readonly ContentWriter<ILevelType> WriteILevelType = (
+                LevelTypeToSequence);
+
+            private static void ExtensionToSequence(
                 Aas.IExtension that,
                 Xml.XmlWriter writer)
             {
                 if (that.SemanticId != null)
                 {
-                    SerializeElement(
-                        "semanticId",
-                        that.SemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "semanticId", that.SemanticId, writer, WriteIReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIReference);
                 }
 
-                SerializeElement(
-                    "name",
-                    that.Name,
-                    writer,
-                    (value, w) => w.WriteValue(value));
+                WriteElement(
+                    "name", that.Name, writer, WriteString);
 
-                if (that.ValueType != null)
+                if (that.ValueType.HasValue)
                 {
-                    SerializeElement(
-                        "valueType",
-                        that.ValueType,
-                        writer,
-                        (value, w) =>
-                        {
-                            string? text = Stringification.ToString(value);
-                            w.WriteValue(
-                                text
-                                    ?? throw new System.ArgumentException(
-                                        "Invalid literal for the enumeration DataTypeDefXsd: " +
-                                        value.ToString()));
-                        });
+                    WriteElement(
+                        "valueType", that.ValueType.Value, writer, WriteDataTypeDefXsd);
                 }
 
                 if (that.Value != null)
                 {
-                    SerializeElement(
-                        "value",
-                        that.Value,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "value", that.Value, writer, WriteString);
                 }
 
                 if (that.RefersTo != null)
                 {
-                    SerializeElement(
-                        "refersTo",
-                        that.RefersTo,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "refersTo", that.RefersTo, writer, WriteListOfIReference);
                 }
-            }  // private void ExtensionToSequence
+            }  // private static void ExtensionToSequence
 
             public override void VisitExtension(
                 Aas.IExtension that,
@@ -8636,67 +8947,49 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "extension",
                     NS);
-                this.ExtensionToSequence(
+                ExtensionToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void AdministrativeInformationToSequence(
+            private static void AdministrativeInformationToSequence(
                 Aas.IAdministrativeInformation that,
                 Xml.XmlWriter writer)
             {
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIEmbeddedDataSpecification);
                 }
 
                 if (that.Version != null)
                 {
-                    SerializeElement(
-                        "version",
-                        that.Version,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "version", that.Version, writer, WriteString);
                 }
 
                 if (that.Revision != null)
                 {
-                    SerializeElement(
-                        "revision",
-                        that.Revision,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "revision", that.Revision, writer, WriteString);
                 }
 
                 if (that.Creator != null)
                 {
-                    SerializeElement(
-                        "creator",
-                        that.Creator,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "creator", that.Creator, writer, WriteIReference);
                 }
 
                 if (that.TemplateId != null)
                 {
-                    SerializeElement(
-                        "templateId",
-                        that.TemplateId,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "templateId", that.TemplateId, writer, WriteString);
                 }
-            }  // private void AdministrativeInformationToSequence
+            }  // private static void AdministrativeInformationToSequence
 
             public override void VisitAdministrativeInformation(
                 Aas.IAdministrativeInformation that,
@@ -8705,95 +8998,55 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "administrativeInformation",
                     NS);
-                this.AdministrativeInformationToSequence(
+                AdministrativeInformationToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void QualifierToSequence(
+            private static void QualifierToSequence(
                 Aas.IQualifier that,
                 Xml.XmlWriter writer)
             {
                 if (that.SemanticId != null)
                 {
-                    SerializeElement(
-                        "semanticId",
-                        that.SemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "semanticId", that.SemanticId, writer, WriteIReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIReference);
                 }
 
-                if (that.Kind != null)
+                if (that.Kind.HasValue)
                 {
-                    SerializeElement(
-                        "kind",
-                        that.Kind,
-                        writer,
-                        (value, w) =>
-                        {
-                            string? text = Stringification.ToString(value);
-                            w.WriteValue(
-                                text
-                                    ?? throw new System.ArgumentException(
-                                        "Invalid literal for the enumeration QualifierKind: " +
-                                        value.ToString()));
-                        });
+                    WriteElement(
+                        "kind", that.Kind.Value, writer, WriteQualifierKind);
                 }
 
-                SerializeElement(
-                    "type",
-                    that.Type,
-                    writer,
-                    (value, w) => w.WriteValue(value));
+                WriteElement(
+                    "type", that.Type, writer, WriteString);
 
-                SerializeElement(
-                    "valueType",
-                    that.ValueType,
-                    writer,
-                    (value, w) =>
-                    {
-                        string? text = Stringification.ToString(value);
-                        w.WriteValue(
-                            text
-                                ?? throw new System.ArgumentException(
-                                    "Invalid literal for the enumeration DataTypeDefXsd: " +
-                                    value.ToString()));
-                    });
+                WriteElement(
+                    "valueType", that.ValueType, writer, WriteDataTypeDefXsd);
 
                 if (that.Value != null)
                 {
-                    SerializeElement(
-                        "value",
-                        that.Value,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "value", that.Value, writer, WriteString);
                 }
 
                 if (that.ValueId != null)
                 {
-                    SerializeElement(
-                        "valueId",
-                        that.ValueId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "valueId", that.ValueId, writer, WriteIReference);
                 }
-            }  // private void QualifierToSequence
+            }  // private static void QualifierToSequence
 
             public override void VisitQualifier(
                 Aas.IQualifier that,
@@ -8802,139 +9055,82 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "qualifier",
                     NS);
-                this.QualifierToSequence(
+                QualifierToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void AssetAdministrationShellToSequence(
+            private static void AssetAdministrationShellToSequence(
                 Aas.IAssetAdministrationShell that,
                 Xml.XmlWriter writer)
             {
                 if (that.Extensions != null)
                 {
-                    SerializeElement(
-                        "extensions",
-                        that.Extensions,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "extensions", that.Extensions, writer, WriteListOfIExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    SerializeElement(
-                        "category",
-                        that.Category,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "category", that.Category, writer, WriteString);
                 }
 
                 if (that.IdShort != null)
                 {
-                    SerializeElement(
-                        "idShort",
-                        that.IdShort,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "idShort", that.IdShort, writer, WriteString);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    SerializeElement(
-                        "displayName",
-                        that.DisplayName,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    SerializeElement(
-                        "description",
-                        that.Description,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "description", that.Description, writer, WriteListOfILangStringTextType);
                 }
 
                 if (that.Administration != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "administration",
                         that.Administration,
                         writer,
-                        (value, w) => this.AdministrativeInformationToSequence(value, w));
+                        WriteIAdministrativeInformation);
                 }
 
-                SerializeElement(
-                    "id",
-                    that.Id,
-                    writer,
-                    (value, w) => w.WriteValue(value));
+                WriteElement(
+                    "id", that.Id, writer, WriteString);
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIEmbeddedDataSpecification);
                 }
 
                 if (that.DerivedFrom != null)
                 {
-                    SerializeElement(
-                        "derivedFrom",
-                        that.DerivedFrom,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "derivedFrom", that.DerivedFrom, writer, WriteIReference);
                 }
 
-                SerializeElement(
-                    "assetInformation",
-                    that.AssetInformation,
-                    writer,
-                    (value, w) => this.AssetInformationToSequence(value, w));
+                WriteElement(
+                    "assetInformation", that.AssetInformation, writer, WriteIAssetInformation);
 
                 if (that.Submodels != null)
                 {
-                    SerializeElement(
-                        "submodels",
-                        that.Submodels,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "submodels", that.Submodels, writer, WriteListOfIReference);
                 }
-            }  // private void AssetAdministrationShellToSequence
+            }  // private static void AssetAdministrationShellToSequence
 
             public override void VisitAssetAdministrationShell(
                 Aas.IAssetAdministrationShell that,
@@ -8943,72 +9139,46 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "assetAdministrationShell",
                     NS);
-                this.AssetAdministrationShellToSequence(
+                AssetAdministrationShellToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void AssetInformationToSequence(
+            private static void AssetInformationToSequence(
                 Aas.IAssetInformation that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "assetKind",
-                    that.AssetKind,
-                    writer,
-                    (value, w) =>
-                    {
-                        string? text = Stringification.ToString(value);
-                        w.WriteValue(
-                            text
-                                ?? throw new System.ArgumentException(
-                                    "Invalid literal for the enumeration AssetKind: " +
-                                    value.ToString()));
-                    });
+                WriteElement(
+                    "assetKind", that.AssetKind, writer, WriteAssetKind);
 
                 if (that.GlobalAssetId != null)
                 {
-                    SerializeElement(
-                        "globalAssetId",
-                        that.GlobalAssetId,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "globalAssetId", that.GlobalAssetId, writer, WriteString);
                 }
 
                 if (that.SpecificAssetIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "specificAssetIds",
                         that.SpecificAssetIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfISpecificAssetId);
                 }
 
                 if (that.AssetType != null)
                 {
-                    SerializeElement(
-                        "assetType",
-                        that.AssetType,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "assetType", that.AssetType, writer, WriteString);
                 }
 
                 if (that.DefaultThumbnail != null)
                 {
-                    SerializeElement(
-                        "defaultThumbnail",
-                        that.DefaultThumbnail,
-                        writer,
-                        (value, w) => this.ResourceToSequence(value, w));
+                    WriteElement(
+                        "defaultThumbnail", that.DefaultThumbnail, writer, WriteIResource);
                 }
-            }  // private void AssetInformationToSequence
+            }  // private static void AssetInformationToSequence
 
             public override void VisitAssetInformation(
                 Aas.IAssetInformation that,
@@ -9017,31 +9187,25 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "assetInformation",
                     NS);
-                this.AssetInformationToSequence(
+                AssetInformationToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void ResourceToSequence(
+            private static void ResourceToSequence(
                 Aas.IResource that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "path",
-                    that.Path,
-                    writer,
-                    (value, w) => w.WriteValue(value));
+                WriteElement(
+                    "path", that.Path, writer, WriteString);
 
                 if (that.ContentType != null)
                 {
-                    SerializeElement(
-                        "contentType",
-                        that.ContentType,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "contentType", that.ContentType, writer, WriteString);
                 }
-            }  // private void ResourceToSequence
+            }  // private static void ResourceToSequence
 
             public override void VisitResource(
                 Aas.IResource that,
@@ -9050,61 +9214,43 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "resource",
                     NS);
-                this.ResourceToSequence(
+                ResourceToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void SpecificAssetIdToSequence(
+            private static void SpecificAssetIdToSequence(
                 Aas.ISpecificAssetId that,
                 Xml.XmlWriter writer)
             {
                 if (that.SemanticId != null)
                 {
-                    SerializeElement(
-                        "semanticId",
-                        that.SemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "semanticId", that.SemanticId, writer, WriteIReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIReference);
                 }
 
-                SerializeElement(
-                    "name",
-                    that.Name,
-                    writer,
-                    (value, w) => w.WriteValue(value));
+                WriteElement(
+                    "name", that.Name, writer, WriteString);
 
-                SerializeElement(
-                    "value",
-                    that.Value,
-                    writer,
-                    (value, w) => w.WriteValue(value));
+                WriteElement(
+                    "value", that.Value, writer, WriteString);
 
                 if (that.ExternalSubjectId != null)
                 {
-                    SerializeElement(
-                        "externalSubjectId",
-                        that.ExternalSubjectId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "externalSubjectId", that.ExternalSubjectId, writer, WriteIReference);
                 }
-            }  // private void SpecificAssetIdToSequence
+            }  // private static void SpecificAssetIdToSequence
 
             public override void VisitSpecificAssetId(
                 Aas.ISpecificAssetId that,
@@ -9113,180 +9259,103 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "specificAssetId",
                     NS);
-                this.SpecificAssetIdToSequence(
+                SpecificAssetIdToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void SubmodelToSequence(
+            private static void SubmodelToSequence(
                 Aas.ISubmodel that,
                 Xml.XmlWriter writer)
             {
                 if (that.Extensions != null)
                 {
-                    SerializeElement(
-                        "extensions",
-                        that.Extensions,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "extensions", that.Extensions, writer, WriteListOfIExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    SerializeElement(
-                        "category",
-                        that.Category,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "category", that.Category, writer, WriteString);
                 }
 
                 if (that.IdShort != null)
                 {
-                    SerializeElement(
-                        "idShort",
-                        that.IdShort,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "idShort", that.IdShort, writer, WriteString);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    SerializeElement(
-                        "displayName",
-                        that.DisplayName,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    SerializeElement(
-                        "description",
-                        that.Description,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "description", that.Description, writer, WriteListOfILangStringTextType);
                 }
 
                 if (that.Administration != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "administration",
                         that.Administration,
                         writer,
-                        (value, w) => this.AdministrativeInformationToSequence(value, w));
+                        WriteIAdministrativeInformation);
                 }
 
-                SerializeElement(
-                    "id",
-                    that.Id,
-                    writer,
-                    (value, w) => w.WriteValue(value));
+                WriteElement(
+                    "id", that.Id, writer, WriteString);
 
-                if (that.Kind != null)
+                if (that.Kind.HasValue)
                 {
-                    SerializeElement(
-                        "kind",
-                        that.Kind,
-                        writer,
-                        (value, w) =>
-                        {
-                            string? text = Stringification.ToString(value);
-                            w.WriteValue(
-                                text
-                                    ?? throw new System.ArgumentException(
-                                        "Invalid literal for the enumeration ModellingKind: " +
-                                        value.ToString()));
-                        });
+                    WriteElement(
+                        "kind", that.Kind.Value, writer, WriteModellingKind);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    SerializeElement(
-                        "semanticId",
-                        that.SemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "semanticId", that.SemanticId, writer, WriteIReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    SerializeElement(
-                        "qualifiers",
-                        that.Qualifiers,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIEmbeddedDataSpecification);
                 }
 
                 if (that.SubmodelElements != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "submodelElements",
                         that.SubmodelElements,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfISubmodelElement);
                 }
-            }  // private void SubmodelToSequence
+            }  // private static void SubmodelToSequence
 
             public override void VisitSubmodel(
                 Aas.ISubmodel that,
@@ -9295,145 +9364,82 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "submodel",
                     NS);
-                this.SubmodelToSequence(
+                SubmodelToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void RelationshipElementToSequence(
+            private static void RelationshipElementToSequence(
                 Aas.IRelationshipElement that,
                 Xml.XmlWriter writer)
             {
                 if (that.Extensions != null)
                 {
-                    SerializeElement(
-                        "extensions",
-                        that.Extensions,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "extensions", that.Extensions, writer, WriteListOfIExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    SerializeElement(
-                        "category",
-                        that.Category,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "category", that.Category, writer, WriteString);
                 }
 
                 if (that.IdShort != null)
                 {
-                    SerializeElement(
-                        "idShort",
-                        that.IdShort,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "idShort", that.IdShort, writer, WriteString);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    SerializeElement(
-                        "displayName",
-                        that.DisplayName,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    SerializeElement(
-                        "description",
-                        that.Description,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "description", that.Description, writer, WriteListOfILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    SerializeElement(
-                        "semanticId",
-                        that.SemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "semanticId", that.SemanticId, writer, WriteIReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    SerializeElement(
-                        "qualifiers",
-                        that.Qualifiers,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIEmbeddedDataSpecification);
                 }
 
-                SerializeElement(
-                    "first",
-                    that.First,
-                    writer,
-                    (value, w) => this.ReferenceToSequence(value, w));
+                WriteElement(
+                    "first", that.First, writer, WriteIReference);
 
-                SerializeElement(
-                    "second",
-                    that.Second,
-                    writer,
-                    (value, w) => this.ReferenceToSequence(value, w));
-            }  // private void RelationshipElementToSequence
+                WriteElement(
+                    "second", that.Second, writer, WriteIReference);
+            }  // private static void RelationshipElementToSequence
 
             public override void VisitRelationshipElement(
                 Aas.IRelationshipElement that,
@@ -9442,197 +9448,112 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "relationshipElement",
                     NS);
-                this.RelationshipElementToSequence(
+                RelationshipElementToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void SubmodelElementListToSequence(
+            private static void SubmodelElementListToSequence(
                 Aas.ISubmodelElementList that,
                 Xml.XmlWriter writer)
             {
                 if (that.Extensions != null)
                 {
-                    SerializeElement(
-                        "extensions",
-                        that.Extensions,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "extensions", that.Extensions, writer, WriteListOfIExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    SerializeElement(
-                        "category",
-                        that.Category,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "category", that.Category, writer, WriteString);
                 }
 
                 if (that.IdShort != null)
                 {
-                    SerializeElement(
-                        "idShort",
-                        that.IdShort,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "idShort", that.IdShort, writer, WriteString);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    SerializeElement(
-                        "displayName",
-                        that.DisplayName,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    SerializeElement(
-                        "description",
-                        that.Description,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "description", that.Description, writer, WriteListOfILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    SerializeElement(
-                        "semanticId",
-                        that.SemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "semanticId", that.SemanticId, writer, WriteIReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    SerializeElement(
-                        "qualifiers",
-                        that.Qualifiers,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIEmbeddedDataSpecification);
                 }
 
                 if (that.OrderRelevant.HasValue)
                 {
-                    SerializeElement(
-                        "orderRelevant",
-                        that.OrderRelevant.Value,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "orderRelevant", that.OrderRelevant.Value, writer, WriteBool);
                 }
 
                 if (that.SemanticIdListElement != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "semanticIdListElement",
                         that.SemanticIdListElement,
                         writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                        WriteIReference);
                 }
 
-                SerializeElement(
+                WriteElement(
                     "typeValueListElement",
                     that.TypeValueListElement,
                     writer,
-                    (value, w) =>
-                    {
-                        string? text = Stringification.ToString(value);
-                        w.WriteValue(
-                            text
-                                ?? throw new System.ArgumentException(
-                                    "Invalid literal for the enumeration AasSubmodelElements: " +
-                                    value.ToString()));
-                    });
+                    WriteAasSubmodelElements);
 
-                if (that.ValueTypeListElement != null)
+                if (that.ValueTypeListElement.HasValue)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "valueTypeListElement",
-                        that.ValueTypeListElement,
+                        that.ValueTypeListElement.Value,
                         writer,
-                        (value, w) =>
-                        {
-                            string? text = Stringification.ToString(value);
-                            w.WriteValue(
-                                text
-                                    ?? throw new System.ArgumentException(
-                                        "Invalid literal for the enumeration DataTypeDefXsd: " +
-                                        value.ToString()));
-                        });
+                        WriteDataTypeDefXsd);
                 }
 
                 if (that.Value != null)
                 {
-                    SerializeElement(
-                        "value",
-                        that.Value,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "value", that.Value, writer, WriteListOfISubmodelElement);
                 }
-            }  // private void SubmodelElementListToSequence
+            }  // private static void SubmodelElementListToSequence
 
             public override void VisitSubmodelElementList(
                 Aas.ISubmodelElementList that,
@@ -9641,148 +9562,82 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "submodelElementList",
                     NS);
-                this.SubmodelElementListToSequence(
+                SubmodelElementListToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void SubmodelElementCollectionToSequence(
+            private static void SubmodelElementCollectionToSequence(
                 Aas.ISubmodelElementCollection that,
                 Xml.XmlWriter writer)
             {
                 if (that.Extensions != null)
                 {
-                    SerializeElement(
-                        "extensions",
-                        that.Extensions,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "extensions", that.Extensions, writer, WriteListOfIExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    SerializeElement(
-                        "category",
-                        that.Category,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "category", that.Category, writer, WriteString);
                 }
 
                 if (that.IdShort != null)
                 {
-                    SerializeElement(
-                        "idShort",
-                        that.IdShort,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "idShort", that.IdShort, writer, WriteString);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    SerializeElement(
-                        "displayName",
-                        that.DisplayName,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    SerializeElement(
-                        "description",
-                        that.Description,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "description", that.Description, writer, WriteListOfILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    SerializeElement(
-                        "semanticId",
-                        that.SemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "semanticId", that.SemanticId, writer, WriteIReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    SerializeElement(
-                        "qualifiers",
-                        that.Qualifiers,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIEmbeddedDataSpecification);
                 }
 
                 if (that.Value != null)
                 {
-                    SerializeElement(
-                        "value",
-                        that.Value,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "value", that.Value, writer, WriteListOfISubmodelElement);
                 }
-            }  // private void SubmodelElementCollectionToSequence
+            }  // private static void SubmodelElementCollectionToSequence
 
             public override void VisitSubmodelElementCollection(
                 Aas.ISubmodelElementCollection that,
@@ -9791,165 +9646,91 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "submodelElementCollection",
                     NS);
-                this.SubmodelElementCollectionToSequence(
+                SubmodelElementCollectionToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void PropertyToSequence(
+            private static void PropertyToSequence(
                 Aas.IProperty that,
                 Xml.XmlWriter writer)
             {
                 if (that.Extensions != null)
                 {
-                    SerializeElement(
-                        "extensions",
-                        that.Extensions,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "extensions", that.Extensions, writer, WriteListOfIExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    SerializeElement(
-                        "category",
-                        that.Category,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "category", that.Category, writer, WriteString);
                 }
 
                 if (that.IdShort != null)
                 {
-                    SerializeElement(
-                        "idShort",
-                        that.IdShort,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "idShort", that.IdShort, writer, WriteString);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    SerializeElement(
-                        "displayName",
-                        that.DisplayName,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    SerializeElement(
-                        "description",
-                        that.Description,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "description", that.Description, writer, WriteListOfILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    SerializeElement(
-                        "semanticId",
-                        that.SemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "semanticId", that.SemanticId, writer, WriteIReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    SerializeElement(
-                        "qualifiers",
-                        that.Qualifiers,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIEmbeddedDataSpecification);
                 }
 
-                SerializeElement(
-                    "valueType",
-                    that.ValueType,
-                    writer,
-                    (value, w) =>
-                    {
-                        string? text = Stringification.ToString(value);
-                        w.WriteValue(
-                            text
-                                ?? throw new System.ArgumentException(
-                                    "Invalid literal for the enumeration DataTypeDefXsd: " +
-                                    value.ToString()));
-                    });
+                WriteElement(
+                    "valueType", that.ValueType, writer, WriteDataTypeDefXsd);
 
                 if (that.Value != null)
                 {
-                    SerializeElement(
-                        "value",
-                        that.Value,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "value", that.Value, writer, WriteString);
                 }
 
                 if (that.ValueId != null)
                 {
-                    SerializeElement(
-                        "valueId",
-                        that.ValueId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "valueId", that.ValueId, writer, WriteIReference);
                 }
-            }  // private void PropertyToSequence
+            }  // private static void PropertyToSequence
 
             public override void VisitProperty(
                 Aas.IProperty that,
@@ -9958,157 +9739,88 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "property",
                     NS);
-                this.PropertyToSequence(
+                PropertyToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void MultiLanguagePropertyToSequence(
+            private static void MultiLanguagePropertyToSequence(
                 Aas.IMultiLanguageProperty that,
                 Xml.XmlWriter writer)
             {
                 if (that.Extensions != null)
                 {
-                    SerializeElement(
-                        "extensions",
-                        that.Extensions,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "extensions", that.Extensions, writer, WriteListOfIExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    SerializeElement(
-                        "category",
-                        that.Category,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "category", that.Category, writer, WriteString);
                 }
 
                 if (that.IdShort != null)
                 {
-                    SerializeElement(
-                        "idShort",
-                        that.IdShort,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "idShort", that.IdShort, writer, WriteString);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    SerializeElement(
-                        "displayName",
-                        that.DisplayName,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    SerializeElement(
-                        "description",
-                        that.Description,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "description", that.Description, writer, WriteListOfILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    SerializeElement(
-                        "semanticId",
-                        that.SemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "semanticId", that.SemanticId, writer, WriteIReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    SerializeElement(
-                        "qualifiers",
-                        that.Qualifiers,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIEmbeddedDataSpecification);
                 }
 
                 if (that.Value != null)
                 {
-                    SerializeElement(
-                        "value",
-                        that.Value,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "value", that.Value, writer, WriteListOfILangStringTextType);
                 }
 
                 if (that.ValueId != null)
                 {
-                    SerializeElement(
-                        "valueId",
-                        that.ValueId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "valueId", that.ValueId, writer, WriteIReference);
                 }
-            }  // private void MultiLanguagePropertyToSequence
+            }  // private static void MultiLanguagePropertyToSequence
 
             public override void VisitMultiLanguageProperty(
                 Aas.IMultiLanguageProperty that,
@@ -10117,165 +9829,91 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "multiLanguageProperty",
                     NS);
-                this.MultiLanguagePropertyToSequence(
+                MultiLanguagePropertyToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void RangeToSequence(
+            private static void RangeToSequence(
                 Aas.IRange that,
                 Xml.XmlWriter writer)
             {
                 if (that.Extensions != null)
                 {
-                    SerializeElement(
-                        "extensions",
-                        that.Extensions,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "extensions", that.Extensions, writer, WriteListOfIExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    SerializeElement(
-                        "category",
-                        that.Category,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "category", that.Category, writer, WriteString);
                 }
 
                 if (that.IdShort != null)
                 {
-                    SerializeElement(
-                        "idShort",
-                        that.IdShort,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "idShort", that.IdShort, writer, WriteString);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    SerializeElement(
-                        "displayName",
-                        that.DisplayName,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    SerializeElement(
-                        "description",
-                        that.Description,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "description", that.Description, writer, WriteListOfILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    SerializeElement(
-                        "semanticId",
-                        that.SemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "semanticId", that.SemanticId, writer, WriteIReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    SerializeElement(
-                        "qualifiers",
-                        that.Qualifiers,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIEmbeddedDataSpecification);
                 }
 
-                SerializeElement(
-                    "valueType",
-                    that.ValueType,
-                    writer,
-                    (value, w) =>
-                    {
-                        string? text = Stringification.ToString(value);
-                        w.WriteValue(
-                            text
-                                ?? throw new System.ArgumentException(
-                                    "Invalid literal for the enumeration DataTypeDefXsd: " +
-                                    value.ToString()));
-                    });
+                WriteElement(
+                    "valueType", that.ValueType, writer, WriteDataTypeDefXsd);
 
                 if (that.Min != null)
                 {
-                    SerializeElement(
-                        "min",
-                        that.Min,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "min", that.Min, writer, WriteString);
                 }
 
                 if (that.Max != null)
                 {
-                    SerializeElement(
-                        "max",
-                        that.Max,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "max", that.Max, writer, WriteString);
                 }
-            }  // private void RangeToSequence
+            }  // private static void RangeToSequence
 
             public override void VisitRange(
                 Aas.IRange that,
@@ -10284,142 +9922,82 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "range",
                     NS);
-                this.RangeToSequence(
+                RangeToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void ReferenceElementToSequence(
+            private static void ReferenceElementToSequence(
                 Aas.IReferenceElement that,
                 Xml.XmlWriter writer)
             {
                 if (that.Extensions != null)
                 {
-                    SerializeElement(
-                        "extensions",
-                        that.Extensions,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "extensions", that.Extensions, writer, WriteListOfIExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    SerializeElement(
-                        "category",
-                        that.Category,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "category", that.Category, writer, WriteString);
                 }
 
                 if (that.IdShort != null)
                 {
-                    SerializeElement(
-                        "idShort",
-                        that.IdShort,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "idShort", that.IdShort, writer, WriteString);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    SerializeElement(
-                        "displayName",
-                        that.DisplayName,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    SerializeElement(
-                        "description",
-                        that.Description,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "description", that.Description, writer, WriteListOfILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    SerializeElement(
-                        "semanticId",
-                        that.SemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "semanticId", that.SemanticId, writer, WriteIReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    SerializeElement(
-                        "qualifiers",
-                        that.Qualifiers,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIEmbeddedDataSpecification);
                 }
 
                 if (that.Value != null)
                 {
-                    SerializeElement(
-                        "value",
-                        that.Value,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "value", that.Value, writer, WriteIReference);
                 }
-            }  // private void ReferenceElementToSequence
+            }  // private static void ReferenceElementToSequence
 
             public override void VisitReferenceElement(
                 Aas.IReferenceElement that,
@@ -10428,148 +10006,85 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "referenceElement",
                     NS);
-                this.ReferenceElementToSequence(
+                ReferenceElementToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void BlobToSequence(
+            private static void BlobToSequence(
                 Aas.IBlob that,
                 Xml.XmlWriter writer)
             {
                 if (that.Extensions != null)
                 {
-                    SerializeElement(
-                        "extensions",
-                        that.Extensions,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "extensions", that.Extensions, writer, WriteListOfIExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    SerializeElement(
-                        "category",
-                        that.Category,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "category", that.Category, writer, WriteString);
                 }
 
                 if (that.IdShort != null)
                 {
-                    SerializeElement(
-                        "idShort",
-                        that.IdShort,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "idShort", that.IdShort, writer, WriteString);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    SerializeElement(
-                        "displayName",
-                        that.DisplayName,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    SerializeElement(
-                        "description",
-                        that.Description,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "description", that.Description, writer, WriteListOfILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    SerializeElement(
-                        "semanticId",
-                        that.SemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "semanticId", that.SemanticId, writer, WriteIReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    SerializeElement(
-                        "qualifiers",
-                        that.Qualifiers,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIEmbeddedDataSpecification);
                 }
 
                 if (that.Value != null)
                 {
-                    SerializeElement(
-                        "value",
-                        that.Value,
-                        writer,
-                        (value, w) => w.WriteBase64(value, 0, value.Length));
+                    WriteElement(
+                        "value", that.Value, writer, WriteBytes);
                 }
 
-                SerializeElement(
-                    "contentType",
-                    that.ContentType,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void BlobToSequence
+                WriteElement(
+                    "contentType", that.ContentType, writer, WriteString);
+            }  // private static void BlobToSequence
 
             public override void VisitBlob(
                 Aas.IBlob that,
@@ -10578,148 +10093,85 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "blob",
                     NS);
-                this.BlobToSequence(
+                BlobToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void FileToSequence(
+            private static void FileToSequence(
                 Aas.IFile that,
                 Xml.XmlWriter writer)
             {
                 if (that.Extensions != null)
                 {
-                    SerializeElement(
-                        "extensions",
-                        that.Extensions,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "extensions", that.Extensions, writer, WriteListOfIExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    SerializeElement(
-                        "category",
-                        that.Category,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "category", that.Category, writer, WriteString);
                 }
 
                 if (that.IdShort != null)
                 {
-                    SerializeElement(
-                        "idShort",
-                        that.IdShort,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "idShort", that.IdShort, writer, WriteString);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    SerializeElement(
-                        "displayName",
-                        that.DisplayName,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    SerializeElement(
-                        "description",
-                        that.Description,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "description", that.Description, writer, WriteListOfILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    SerializeElement(
-                        "semanticId",
-                        that.SemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "semanticId", that.SemanticId, writer, WriteIReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    SerializeElement(
-                        "qualifiers",
-                        that.Qualifiers,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIEmbeddedDataSpecification);
                 }
 
                 if (that.Value != null)
                 {
-                    SerializeElement(
-                        "value",
-                        that.Value,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "value", that.Value, writer, WriteString);
                 }
 
-                SerializeElement(
-                    "contentType",
-                    that.ContentType,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void FileToSequence
+                WriteElement(
+                    "contentType", that.ContentType, writer, WriteString);
+            }  // private static void FileToSequence
 
             public override void VisitFile(
                 Aas.IFile that,
@@ -10728,160 +10180,88 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "file",
                     NS);
-                this.FileToSequence(
+                FileToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void AnnotatedRelationshipElementToSequence(
+            private static void AnnotatedRelationshipElementToSequence(
                 Aas.IAnnotatedRelationshipElement that,
                 Xml.XmlWriter writer)
             {
                 if (that.Extensions != null)
                 {
-                    SerializeElement(
-                        "extensions",
-                        that.Extensions,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "extensions", that.Extensions, writer, WriteListOfIExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    SerializeElement(
-                        "category",
-                        that.Category,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "category", that.Category, writer, WriteString);
                 }
 
                 if (that.IdShort != null)
                 {
-                    SerializeElement(
-                        "idShort",
-                        that.IdShort,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "idShort", that.IdShort, writer, WriteString);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    SerializeElement(
-                        "displayName",
-                        that.DisplayName,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    SerializeElement(
-                        "description",
-                        that.Description,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "description", that.Description, writer, WriteListOfILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    SerializeElement(
-                        "semanticId",
-                        that.SemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "semanticId", that.SemanticId, writer, WriteIReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    SerializeElement(
-                        "qualifiers",
-                        that.Qualifiers,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIEmbeddedDataSpecification);
                 }
 
-                SerializeElement(
-                    "first",
-                    that.First,
-                    writer,
-                    (value, w) => this.ReferenceToSequence(value, w));
+                WriteElement(
+                    "first", that.First, writer, WriteIReference);
 
-                SerializeElement(
-                    "second",
-                    that.Second,
-                    writer,
-                    (value, w) => this.ReferenceToSequence(value, w));
+                WriteElement(
+                    "second", that.Second, writer, WriteIReference);
 
                 if (that.Annotations != null)
                 {
-                    SerializeElement(
-                        "annotations",
-                        that.Annotations,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "annotations", that.Annotations, writer, WriteListOfIDataElement);
                 }
-            }  // private void AnnotatedRelationshipElementToSequence
+            }  // private static void AnnotatedRelationshipElementToSequence
 
             public override void VisitAnnotatedRelationshipElement(
                 Aas.IAnnotatedRelationshipElement that,
@@ -10890,186 +10270,100 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "annotatedRelationshipElement",
                     NS);
-                this.AnnotatedRelationshipElementToSequence(
+                AnnotatedRelationshipElementToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void EntityToSequence(
+            private static void EntityToSequence(
                 Aas.IEntity that,
                 Xml.XmlWriter writer)
             {
                 if (that.Extensions != null)
                 {
-                    SerializeElement(
-                        "extensions",
-                        that.Extensions,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "extensions", that.Extensions, writer, WriteListOfIExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    SerializeElement(
-                        "category",
-                        that.Category,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "category", that.Category, writer, WriteString);
                 }
 
                 if (that.IdShort != null)
                 {
-                    SerializeElement(
-                        "idShort",
-                        that.IdShort,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "idShort", that.IdShort, writer, WriteString);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    SerializeElement(
-                        "displayName",
-                        that.DisplayName,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    SerializeElement(
-                        "description",
-                        that.Description,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "description", that.Description, writer, WriteListOfILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    SerializeElement(
-                        "semanticId",
-                        that.SemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "semanticId", that.SemanticId, writer, WriteIReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    SerializeElement(
-                        "qualifiers",
-                        that.Qualifiers,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIEmbeddedDataSpecification);
                 }
 
                 if (that.Statements != null)
                 {
-                    SerializeElement(
-                        "statements",
-                        that.Statements,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "statements", that.Statements, writer, WriteListOfISubmodelElement);
                 }
 
-                SerializeElement(
-                    "entityType",
-                    that.EntityType,
-                    writer,
-                    (value, w) =>
-                    {
-                        string? text = Stringification.ToString(value);
-                        w.WriteValue(
-                            text
-                                ?? throw new System.ArgumentException(
-                                    "Invalid literal for the enumeration EntityType: " +
-                                    value.ToString()));
-                    });
+                WriteElement(
+                    "entityType", that.EntityType, writer, WriteEntityType);
 
                 if (that.GlobalAssetId != null)
                 {
-                    SerializeElement(
-                        "globalAssetId",
-                        that.GlobalAssetId,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "globalAssetId", that.GlobalAssetId, writer, WriteString);
                 }
 
                 if (that.SpecificAssetIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "specificAssetIds",
                         that.SpecificAssetIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfISpecificAssetId);
                 }
-            }  // private void EntityToSequence
+            }  // private static void EntityToSequence
 
             public override void VisitEntity(
                 Aas.IEntity that,
@@ -11078,79 +10372,55 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "entity",
                     NS);
-                this.EntityToSequence(
+                EntityToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void EventPayloadToSequence(
+            private static void EventPayloadToSequence(
                 Aas.IEventPayload that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "source",
-                    that.Source,
-                    writer,
-                    (value, w) => this.ReferenceToSequence(value, w));
+                WriteElement(
+                    "source", that.Source, writer, WriteIReference);
 
                 if (that.SourceSemanticId != null)
                 {
-                    SerializeElement(
-                        "sourceSemanticId",
-                        that.SourceSemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "sourceSemanticId", that.SourceSemanticId, writer, WriteIReference);
                 }
 
-                SerializeElement(
-                    "observableReference",
-                    that.ObservableReference,
-                    writer,
-                    (value, w) => this.ReferenceToSequence(value, w));
+                WriteElement(
+                    "observableReference", that.ObservableReference, writer, WriteIReference);
 
                 if (that.ObservableSemanticId != null)
                 {
-                    SerializeElement(
-                        "observableSemanticId",
-                        that.ObservableSemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "observableSemanticId", that.ObservableSemanticId, writer, WriteIReference);
                 }
 
                 if (that.Topic != null)
                 {
-                    SerializeElement(
-                        "topic",
-                        that.Topic,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "topic", that.Topic, writer, WriteString);
                 }
 
                 if (that.SubjectId != null)
                 {
-                    SerializeElement(
-                        "subjectId",
-                        that.SubjectId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "subjectId", that.SubjectId, writer, WriteIReference);
                 }
 
-                SerializeElement(
-                    "timeStamp",
-                    that.TimeStamp,
-                    writer,
-                    (value, w) => w.WriteValue(value));
+                WriteElement(
+                    "timeStamp", that.TimeStamp, writer, WriteString);
 
                 if (that.Payload != null)
                 {
-                    SerializeElement(
-                        "payload",
-                        that.Payload,
-                        writer,
-                        (value, w) => w.WriteBase64(value, 0, value.Length));
+                    WriteElement(
+                        "payload", that.Payload, writer, WriteBytes);
                 }
-            }  // private void EventPayloadToSequence
+            }  // private static void EventPayloadToSequence
 
             public override void VisitEventPayload(
                 Aas.IEventPayload that,
@@ -11159,212 +10429,115 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "eventPayload",
                     NS);
-                this.EventPayloadToSequence(
+                EventPayloadToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void BasicEventElementToSequence(
+            private static void BasicEventElementToSequence(
                 Aas.IBasicEventElement that,
                 Xml.XmlWriter writer)
             {
                 if (that.Extensions != null)
                 {
-                    SerializeElement(
-                        "extensions",
-                        that.Extensions,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "extensions", that.Extensions, writer, WriteListOfIExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    SerializeElement(
-                        "category",
-                        that.Category,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "category", that.Category, writer, WriteString);
                 }
 
                 if (that.IdShort != null)
                 {
-                    SerializeElement(
-                        "idShort",
-                        that.IdShort,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "idShort", that.IdShort, writer, WriteString);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    SerializeElement(
-                        "displayName",
-                        that.DisplayName,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    SerializeElement(
-                        "description",
-                        that.Description,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "description", that.Description, writer, WriteListOfILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    SerializeElement(
-                        "semanticId",
-                        that.SemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "semanticId", that.SemanticId, writer, WriteIReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    SerializeElement(
-                        "qualifiers",
-                        that.Qualifiers,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIEmbeddedDataSpecification);
                 }
 
-                SerializeElement(
-                    "observed",
-                    that.Observed,
-                    writer,
-                    (value, w) => this.ReferenceToSequence(value, w));
+                WriteElement(
+                    "observed", that.Observed, writer, WriteIReference);
 
-                SerializeElement(
-                    "direction",
-                    that.Direction,
-                    writer,
-                    (value, w) =>
-                    {
-                        string? text = Stringification.ToString(value);
-                        w.WriteValue(
-                            text
-                                ?? throw new System.ArgumentException(
-                                    "Invalid literal for the enumeration Direction: " +
-                                    value.ToString()));
-                    });
+                WriteElement(
+                    "direction", that.Direction, writer, WriteDirection);
 
-                SerializeElement(
-                    "state",
-                    that.State,
-                    writer,
-                    (value, w) =>
-                    {
-                        string? text = Stringification.ToString(value);
-                        w.WriteValue(
-                            text
-                                ?? throw new System.ArgumentException(
-                                    "Invalid literal for the enumeration StateOfEvent: " +
-                                    value.ToString()));
-                    });
+                WriteElement(
+                    "state", that.State, writer, WriteStateOfEvent);
 
                 if (that.MessageTopic != null)
                 {
-                    SerializeElement(
-                        "messageTopic",
-                        that.MessageTopic,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "messageTopic", that.MessageTopic, writer, WriteString);
                 }
 
                 if (that.MessageBroker != null)
                 {
-                    SerializeElement(
-                        "messageBroker",
-                        that.MessageBroker,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "messageBroker", that.MessageBroker, writer, WriteIReference);
                 }
 
                 if (that.LastUpdate != null)
                 {
-                    SerializeElement(
-                        "lastUpdate",
-                        that.LastUpdate,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "lastUpdate", that.LastUpdate, writer, WriteString);
                 }
 
                 if (that.MinInterval != null)
                 {
-                    SerializeElement(
-                        "minInterval",
-                        that.MinInterval,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "minInterval", that.MinInterval, writer, WriteString);
                 }
 
                 if (that.MaxInterval != null)
                 {
-                    SerializeElement(
-                        "maxInterval",
-                        that.MaxInterval,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "maxInterval", that.MaxInterval, writer, WriteString);
                 }
-            }  // private void BasicEventElementToSequence
+            }  // private static void BasicEventElementToSequence
 
             public override void VisitBasicEventElement(
                 Aas.IBasicEventElement that,
@@ -11373,178 +10546,103 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "basicEventElement",
                     NS);
-                this.BasicEventElementToSequence(
+                BasicEventElementToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void OperationToSequence(
+            private static void OperationToSequence(
                 Aas.IOperation that,
                 Xml.XmlWriter writer)
             {
                 if (that.Extensions != null)
                 {
-                    SerializeElement(
-                        "extensions",
-                        that.Extensions,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "extensions", that.Extensions, writer, WriteListOfIExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    SerializeElement(
-                        "category",
-                        that.Category,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "category", that.Category, writer, WriteString);
                 }
 
                 if (that.IdShort != null)
                 {
-                    SerializeElement(
-                        "idShort",
-                        that.IdShort,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "idShort", that.IdShort, writer, WriteString);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    SerializeElement(
-                        "displayName",
-                        that.DisplayName,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    SerializeElement(
-                        "description",
-                        that.Description,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "description", that.Description, writer, WriteListOfILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    SerializeElement(
-                        "semanticId",
-                        that.SemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "semanticId", that.SemanticId, writer, WriteIReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    SerializeElement(
-                        "qualifiers",
-                        that.Qualifiers,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIEmbeddedDataSpecification);
                 }
 
                 if (that.InputVariables != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "inputVariables",
                         that.InputVariables,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIOperationVariable);
                 }
 
                 if (that.OutputVariables != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "outputVariables",
                         that.OutputVariables,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIOperationVariable);
                 }
 
                 if (that.InoutputVariables != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "inoutputVariables",
                         that.InoutputVariables,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIOperationVariable);
                 }
-            }  // private void OperationToSequence
+            }  // private static void OperationToSequence
 
             public override void VisitOperation(
                 Aas.IOperation that,
@@ -11553,22 +10651,19 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "operation",
                     NS);
-                this.OperationToSequence(
+                OperationToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void OperationVariableToSequence(
+            private static void OperationVariableToSequence(
                 Aas.IOperationVariable that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "value",
-                    that.Value,
-                    writer,
-                    (value, w) => this.Visit(value, w));
-            }  // private void OperationVariableToSequence
+                WriteElement(
+                    "value", that.Value, writer, WriteISubmodelElement);
+            }  // private static void OperationVariableToSequence
 
             public override void VisitOperationVariable(
                 Aas.IOperationVariable that,
@@ -11577,133 +10672,76 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "operationVariable",
                     NS);
-                this.OperationVariableToSequence(
+                OperationVariableToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void CapabilityToSequence(
+            private static void CapabilityToSequence(
                 Aas.ICapability that,
                 Xml.XmlWriter writer)
             {
                 if (that.Extensions != null)
                 {
-                    SerializeElement(
-                        "extensions",
-                        that.Extensions,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "extensions", that.Extensions, writer, WriteListOfIExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    SerializeElement(
-                        "category",
-                        that.Category,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "category", that.Category, writer, WriteString);
                 }
 
                 if (that.IdShort != null)
                 {
-                    SerializeElement(
-                        "idShort",
-                        that.IdShort,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "idShort", that.IdShort, writer, WriteString);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    SerializeElement(
-                        "displayName",
-                        that.DisplayName,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    SerializeElement(
-                        "description",
-                        that.Description,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "description", that.Description, writer, WriteListOfILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
-                    SerializeElement(
-                        "semanticId",
-                        that.SemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "semanticId", that.SemanticId, writer, WriteIReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
-                    SerializeElement(
-                        "qualifiers",
-                        that.Qualifiers,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIEmbeddedDataSpecification);
                 }
-            }  // private void CapabilityToSequence
+            }  // private static void CapabilityToSequence
 
             public override void VisitCapability(
                 Aas.ICapability that,
@@ -11712,124 +10750,73 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "capability",
                     NS);
-                this.CapabilityToSequence(
+                CapabilityToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void ConceptDescriptionToSequence(
+            private static void ConceptDescriptionToSequence(
                 Aas.IConceptDescription that,
                 Xml.XmlWriter writer)
             {
                 if (that.Extensions != null)
                 {
-                    SerializeElement(
-                        "extensions",
-                        that.Extensions,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "extensions", that.Extensions, writer, WriteListOfIExtension);
                 }
 
                 if (that.Category != null)
                 {
-                    SerializeElement(
-                        "category",
-                        that.Category,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "category", that.Category, writer, WriteString);
                 }
 
                 if (that.IdShort != null)
                 {
-                    SerializeElement(
-                        "idShort",
-                        that.IdShort,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "idShort", that.IdShort, writer, WriteString);
                 }
 
                 if (that.DisplayName != null)
                 {
-                    SerializeElement(
-                        "displayName",
-                        that.DisplayName,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
-                    SerializeElement(
-                        "description",
-                        that.Description,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "description", that.Description, writer, WriteListOfILangStringTextType);
                 }
 
                 if (that.Administration != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "administration",
                         that.Administration,
                         writer,
-                        (value, w) => this.AdministrativeInformationToSequence(value, w));
+                        WriteIAdministrativeInformation);
                 }
 
-                SerializeElement(
-                    "id",
-                    that.Id,
-                    writer,
-                    (value, w) => w.WriteValue(value));
+                WriteElement(
+                    "id", that.Id, writer, WriteString);
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIEmbeddedDataSpecification);
                 }
 
                 if (that.IsCaseOf != null)
                 {
-                    SerializeElement(
-                        "isCaseOf",
-                        that.IsCaseOf,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "isCaseOf", that.IsCaseOf, writer, WriteListOfIReference);
                 }
-            }  // private void ConceptDescriptionToSequence
+            }  // private static void ConceptDescriptionToSequence
 
             public override void VisitConceptDescription(
                 Aas.IConceptDescription that,
@@ -11838,51 +10825,28 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "conceptDescription",
                     NS);
-                this.ConceptDescriptionToSequence(
+                ConceptDescriptionToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void ReferenceToSequence(
+            private static void ReferenceToSequence(
                 Aas.IReference that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "type",
-                    that.Type,
-                    writer,
-                    (value, w) =>
-                    {
-                        string? text = Stringification.ToString(value);
-                        w.WriteValue(
-                            text
-                                ?? throw new System.ArgumentException(
-                                    "Invalid literal for the enumeration ReferenceTypes: " +
-                                    value.ToString()));
-                    });
+                WriteElement(
+                    "type", that.Type, writer, WriteReferenceTypes);
 
                 if (that.ReferredSemanticId != null)
                 {
-                    SerializeElement(
-                        "referredSemanticId",
-                        that.ReferredSemanticId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "referredSemanticId", that.ReferredSemanticId, writer, WriteIReference);
                 }
 
-                SerializeElement(
-                    "keys",
-                    that.Keys,
-                    writer,
-                    (value, w) =>
-                    {
-                        foreach (var item in value)
-                        {
-                            this.Visit(item, w);
-                        }
-                    });
-            }  // private void ReferenceToSequence
+                WriteElement(
+                    "keys", that.Keys, writer, WriteListOfIKey);
+            }  // private static void ReferenceToSequence
 
             public override void VisitReference(
                 Aas.IReference that,
@@ -11891,36 +10855,22 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "reference",
                     NS);
-                this.ReferenceToSequence(
+                ReferenceToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void KeyToSequence(
+            private static void KeyToSequence(
                 Aas.IKey that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "type",
-                    that.Type,
-                    writer,
-                    (value, w) =>
-                    {
-                        string? text = Stringification.ToString(value);
-                        w.WriteValue(
-                            text
-                                ?? throw new System.ArgumentException(
-                                    "Invalid literal for the enumeration KeyTypes: " +
-                                    value.ToString()));
-                    });
+                WriteElement(
+                    "type", that.Type, writer, WriteKeyTypes);
 
-                SerializeElement(
-                    "value",
-                    that.Value,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void KeyToSequence
+                WriteElement(
+                    "value", that.Value, writer, WriteString);
+            }  // private static void KeyToSequence
 
             public override void VisitKey(
                 Aas.IKey that,
@@ -11929,28 +10879,22 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "key",
                     NS);
-                this.KeyToSequence(
+                KeyToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void LangStringNameTypeToSequence(
+            private static void LangStringNameTypeToSequence(
                 Aas.ILangStringNameType that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "language",
-                    that.Language,
-                    writer,
-                    (value, w) => w.WriteValue(value));
+                WriteElement(
+                    "language", that.Language, writer, WriteString);
 
-                SerializeElement(
-                    "text",
-                    that.Text,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void LangStringNameTypeToSequence
+                WriteElement(
+                    "text", that.Text, writer, WriteString);
+            }  // private static void LangStringNameTypeToSequence
 
             public override void VisitLangStringNameType(
                 Aas.ILangStringNameType that,
@@ -11959,28 +10903,22 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "langStringNameType",
                     NS);
-                this.LangStringNameTypeToSequence(
+                LangStringNameTypeToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void LangStringTextTypeToSequence(
+            private static void LangStringTextTypeToSequence(
                 Aas.ILangStringTextType that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "language",
-                    that.Language,
-                    writer,
-                    (value, w) => w.WriteValue(value));
+                WriteElement(
+                    "language", that.Language, writer, WriteString);
 
-                SerializeElement(
-                    "text",
-                    that.Text,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void LangStringTextTypeToSequence
+                WriteElement(
+                    "text", that.Text, writer, WriteString);
+            }  // private static void LangStringTextTypeToSequence
 
             public override void VisitLangStringTextType(
                 Aas.ILangStringTextType that,
@@ -11989,61 +10927,40 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "langStringTextType",
                     NS);
-                this.LangStringTextTypeToSequence(
+                LangStringTextTypeToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void EnvironmentToSequence(
+            private static void EnvironmentToSequence(
                 Aas.IEnvironment that,
                 Xml.XmlWriter writer)
             {
                 if (that.AssetAdministrationShells != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "assetAdministrationShells",
                         that.AssetAdministrationShells,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIAssetAdministrationShell);
                 }
 
                 if (that.Submodels != null)
                 {
-                    SerializeElement(
-                        "submodels",
-                        that.Submodels,
-                        writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                    WriteElement(
+                        "submodels", that.Submodels, writer, WriteListOfISubmodel);
                 }
 
                 if (that.ConceptDescriptions != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "conceptDescriptions",
                         that.ConceptDescriptions,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfIConceptDescription);
                 }
-            }  // private void EnvironmentToSequence
+            }  // private static void EnvironmentToSequence
 
             public override void VisitEnvironment(
                 Aas.IEnvironment that,
@@ -12052,28 +10969,25 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "environment",
                     NS);
-                this.EnvironmentToSequence(
+                EnvironmentToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void EmbeddedDataSpecificationToSequence(
+            private static void EmbeddedDataSpecificationToSequence(
                 Aas.IEmbeddedDataSpecification that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "dataSpecification",
-                    that.DataSpecification,
-                    writer,
-                    (value, w) => this.ReferenceToSequence(value, w));
+                WriteElement(
+                    "dataSpecification", that.DataSpecification, writer, WriteIReference);
 
-                SerializeElement(
+                WriteElement(
                     "dataSpecificationContent",
                     that.DataSpecificationContent,
                     writer,
-                    (value, w) => this.Visit(value, w));
-            }  // private void EmbeddedDataSpecificationToSequence
+                    WriteIDataSpecificationContent);
+            }  // private static void EmbeddedDataSpecificationToSequence
 
             public override void VisitEmbeddedDataSpecification(
                 Aas.IEmbeddedDataSpecification that,
@@ -12082,40 +10996,28 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "embeddedDataSpecification",
                     NS);
-                this.EmbeddedDataSpecificationToSequence(
+                EmbeddedDataSpecificationToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void LevelTypeToSequence(
+            private static void LevelTypeToSequence(
                 Aas.ILevelType that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "min",
-                    that.Min,
-                    writer,
-                    (value, w) => w.WriteValue(value));
+                WriteElement(
+                    "min", that.Min, writer, WriteBool);
 
-                SerializeElement(
-                    "nom",
-                    that.Nom,
-                    writer,
-                    (value, w) => w.WriteValue(value));
+                WriteElement(
+                    "nom", that.Nom, writer, WriteBool);
 
-                SerializeElement(
-                    "typ",
-                    that.Typ,
-                    writer,
-                    (value, w) => w.WriteValue(value));
+                WriteElement(
+                    "typ", that.Typ, writer, WriteBool);
 
-                SerializeElement(
-                    "max",
-                    that.Max,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void LevelTypeToSequence
+                WriteElement(
+                    "max", that.Max, writer, WriteBool);
+            }  // private static void LevelTypeToSequence
 
             public override void VisitLevelType(
                 Aas.ILevelType that,
@@ -12124,28 +11026,22 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "levelType",
                     NS);
-                this.LevelTypeToSequence(
+                LevelTypeToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void ValueReferencePairToSequence(
+            private static void ValueReferencePairToSequence(
                 Aas.IValueReferencePair that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "value",
-                    that.Value,
-                    writer,
-                    (value, w) => w.WriteValue(value));
+                WriteElement(
+                    "value", that.Value, writer, WriteString);
 
-                SerializeElement(
-                    "valueId",
-                    that.ValueId,
-                    writer,
-                    (value, w) => this.ReferenceToSequence(value, w));
-            }  // private void ValueReferencePairToSequence
+                WriteElement(
+                    "valueId", that.ValueId, writer, WriteIReference);
+            }  // private static void ValueReferencePairToSequence
 
             public override void VisitValueReferencePair(
                 Aas.IValueReferencePair that,
@@ -12154,28 +11050,22 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "valueReferencePair",
                     NS);
-                this.ValueReferencePairToSequence(
+                ValueReferencePairToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void ValueListToSequence(
+            private static void ValueListToSequence(
                 Aas.IValueList that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
+                WriteElement(
                     "valueReferencePairs",
                     that.ValueReferencePairs,
                     writer,
-                    (value, w) =>
-                    {
-                        foreach (var item in value)
-                        {
-                            this.Visit(item, w);
-                        }
-                    });
-            }  // private void ValueListToSequence
+                    WriteListOfIValueReferencePair);
+            }  // private static void ValueListToSequence
 
             public override void VisitValueList(
                 Aas.IValueList that,
@@ -12184,28 +11074,22 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "valueList",
                     NS);
-                this.ValueListToSequence(
+                ValueListToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void LangStringPreferredNameTypeIec61360ToSequence(
+            private static void LangStringPreferredNameTypeIec61360ToSequence(
                 Aas.ILangStringPreferredNameTypeIec61360 that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "language",
-                    that.Language,
-                    writer,
-                    (value, w) => w.WriteValue(value));
+                WriteElement(
+                    "language", that.Language, writer, WriteString);
 
-                SerializeElement(
-                    "text",
-                    that.Text,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void LangStringPreferredNameTypeIec61360ToSequence
+                WriteElement(
+                    "text", that.Text, writer, WriteString);
+            }  // private static void LangStringPreferredNameTypeIec61360ToSequence
 
             public override void VisitLangStringPreferredNameTypeIec61360(
                 Aas.ILangStringPreferredNameTypeIec61360 that,
@@ -12214,28 +11098,22 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "langStringPreferredNameTypeIec61360",
                     NS);
-                this.LangStringPreferredNameTypeIec61360ToSequence(
+                LangStringPreferredNameTypeIec61360ToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void LangStringShortNameTypeIec61360ToSequence(
+            private static void LangStringShortNameTypeIec61360ToSequence(
                 Aas.ILangStringShortNameTypeIec61360 that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "language",
-                    that.Language,
-                    writer,
-                    (value, w) => w.WriteValue(value));
+                WriteElement(
+                    "language", that.Language, writer, WriteString);
 
-                SerializeElement(
-                    "text",
-                    that.Text,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void LangStringShortNameTypeIec61360ToSequence
+                WriteElement(
+                    "text", that.Text, writer, WriteString);
+            }  // private static void LangStringShortNameTypeIec61360ToSequence
 
             public override void VisitLangStringShortNameTypeIec61360(
                 Aas.ILangStringShortNameTypeIec61360 that,
@@ -12244,28 +11122,22 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "langStringShortNameTypeIec61360",
                     NS);
-                this.LangStringShortNameTypeIec61360ToSequence(
+                LangStringShortNameTypeIec61360ToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void LangStringDefinitionTypeIec61360ToSequence(
+            private static void LangStringDefinitionTypeIec61360ToSequence(
                 Aas.ILangStringDefinitionTypeIec61360 that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "language",
-                    that.Language,
-                    writer,
-                    (value, w) => w.WriteValue(value));
+                WriteElement(
+                    "language", that.Language, writer, WriteString);
 
-                SerializeElement(
-                    "text",
-                    that.Text,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void LangStringDefinitionTypeIec61360ToSequence
+                WriteElement(
+                    "text", that.Text, writer, WriteString);
+            }  // private static void LangStringDefinitionTypeIec61360ToSequence
 
             public override void VisitLangStringDefinitionTypeIec61360(
                 Aas.ILangStringDefinitionTypeIec61360 that,
@@ -12274,147 +11146,94 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "langStringDefinitionTypeIec61360",
                     NS);
-                this.LangStringDefinitionTypeIec61360ToSequence(
+                LangStringDefinitionTypeIec61360ToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void DataSpecificationIec61360ToSequence(
+            private static void DataSpecificationIec61360ToSequence(
                 Aas.IDataSpecificationIec61360 that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
+                WriteElement(
                     "preferredName",
                     that.PreferredName,
                     writer,
-                    (value, w) =>
-                    {
-                        foreach (var item in value)
-                        {
-                            this.Visit(item, w);
-                        }
-                    });
+                    WriteListOfILangStringPreferredNameTypeIec61360);
 
                 if (that.ShortName != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "shortName",
                         that.ShortName,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfILangStringShortNameTypeIec61360);
                 }
 
                 if (that.Unit != null)
                 {
-                    SerializeElement(
-                        "unit",
-                        that.Unit,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "unit", that.Unit, writer, WriteString);
                 }
 
                 if (that.UnitId != null)
                 {
-                    SerializeElement(
-                        "unitId",
-                        that.UnitId,
-                        writer,
-                        (value, w) => this.ReferenceToSequence(value, w));
+                    WriteElement(
+                        "unitId", that.UnitId, writer, WriteIReference);
                 }
 
                 if (that.SourceOfDefinition != null)
                 {
-                    SerializeElement(
-                        "sourceOfDefinition",
-                        that.SourceOfDefinition,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "sourceOfDefinition", that.SourceOfDefinition, writer, WriteString);
                 }
 
                 if (that.Symbol != null)
                 {
-                    SerializeElement(
-                        "symbol",
-                        that.Symbol,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "symbol", that.Symbol, writer, WriteString);
                 }
 
-                if (that.DataType != null)
+                if (that.DataType.HasValue)
                 {
-                    SerializeElement(
-                        "dataType",
-                        that.DataType,
-                        writer,
-                        (value, w) =>
-                        {
-                            string? text = Stringification.ToString(value);
-                            w.WriteValue(
-                                text
-                                    ?? throw new System.ArgumentException(
-                                        "Invalid literal for the enumeration DataTypeIec61360: " +
-                                        value.ToString()));
-                        });
+                    WriteElement(
+                        "dataType", that.DataType.Value, writer, WriteDataTypeIec61360);
                 }
 
                 if (that.Definition != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "definition",
                         that.Definition,
                         writer,
-                        (value, w) =>
-                        {
-                            foreach (var item in value)
-                            {
-                                this.Visit(item, w);
-                            }
-                        });
+                        WriteListOfILangStringDefinitionTypeIec61360);
                 }
 
                 if (that.ValueFormat != null)
                 {
-                    SerializeElement(
-                        "valueFormat",
-                        that.ValueFormat,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "valueFormat", that.ValueFormat, writer, WriteString);
                 }
 
                 if (that.ValueList != null)
                 {
-                    SerializeElement(
-                        "valueList",
-                        that.ValueList,
-                        writer,
-                        (value, w) => this.ValueListToSequence(value, w));
+                    WriteElement(
+                        "valueList", that.ValueList, writer, WriteIValueList);
                 }
 
                 if (that.Value != null)
                 {
-                    SerializeElement(
-                        "value",
-                        that.Value,
-                        writer,
-                        (value, w) => w.WriteValue(value));
+                    WriteElement(
+                        "value", that.Value, writer, WriteString);
                 }
 
                 if (that.LevelType != null)
                 {
-                    SerializeElement(
-                        "levelType",
-                        that.LevelType,
-                        writer,
-                        (value, w) => this.LevelTypeToSequence(value, w));
+                    WriteElement(
+                        "levelType", that.LevelType, writer, WriteILevelType);
                 }
-            }  // private void DataSpecificationIec61360ToSequence
+            }  // private static void DataSpecificationIec61360ToSequence
 
             public override void VisitDataSpecificationIec61360(
                 Aas.IDataSpecificationIec61360 that,
@@ -12423,7 +11242,7 @@ namespace AasCore.Aas3_0
                 writer.WriteStartElement(
                     "dataSpecificationIec61360",
                     NS);
-                this.DataSpecificationIec61360ToSequence(
+                DataSpecificationIec61360ToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
@@ -12447,10 +11266,6 @@ namespace AasCore.Aas3_0
         /// </example>
         public static class Serialize
         {
-            [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            private static readonly VisitorWithWriter _visitorWithWriter = (
-                new VisitorWithWriter());
-
             /// <summary>
             /// Serialize an instance of the meta-model to XML.
             /// </summary>
@@ -12458,7 +11273,7 @@ namespace AasCore.Aas3_0
                 Aas.IClass that,
                 Xml.XmlWriter writer)
             {
-                Serialize._visitorWithWriter.Visit(
+                VisitorWithWriter.WriteIClass(
                     that, writer);
             }
         }  // public static class Serialize

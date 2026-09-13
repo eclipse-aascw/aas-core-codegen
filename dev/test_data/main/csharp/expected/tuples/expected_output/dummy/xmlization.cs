@@ -685,7 +685,9 @@ namespace dummy
                     AtElement(
                         ReadLong, "v2")));
 
-            private static readonly ContentReader<(IAbstractItem, IAbstractItem)> ReadTupleOfIAbstractItemIAbstractItem = (
+            private static readonly ContentReader<
+                (IAbstractItem, IAbstractItem)
+            > ReadTupleOfIAbstractItemIAbstractItem = (
                 AsTuple2<IAbstractItem, IAbstractItem>(
                     IAbstractItemFromElement,
                     IAbstractItemFromElement));
@@ -694,7 +696,9 @@ namespace dummy
                 AsEnum<Aas.Result>(
                     Stringification.ResultFromString));
 
-            private static readonly ContentReader<(long, ISomeItem, IAbstractItem, ISomeItem, long, Result)> ReadTupleOfLongISomeItemIAbstractItemISomeItemLongResult = (
+            private static readonly ContentReader<
+                (long, ISomeItem, IAbstractItem, ISomeItem, long, Result)
+            > ReadTupleOfLongISomeItemIAbstractItemISomeItemLongResult = (
                 AsTuple6<long, ISomeItem, IAbstractItem, ISomeItem, long, Result>(
                     AtElement(
                         ReadLong, "v1"),
@@ -1224,204 +1228,234 @@ namespace dummy
             : Visitation.AbstractVisitorWithContext<Xml.XmlWriter>
         {
             /// <summary>
-            /// Write the content of a property, positioned between its start and end tag.
-            /// </summary>
-            /// <typeparam name="T">Type of the property value</typeparam>
-            private delegate void ElementContentSerializer<T>(
-                T that, Xml.XmlWriter writer);
-
-            /// <summary>
-            /// Serialize <paramref name="that" /> as an XML element with
-            /// the given <paramref name="name" />, delegating the content in-between the
-            /// start and the end tag to <paramref name="serializeContent" />.
+            /// Write <paramref name="that" /> where <paramref name="writer" /> already
+            /// is.
             /// </summary>
             /// <remarks>
-            /// This is shared by all the property kinds (primitive, enumeration, class,
-            /// interface, named union, list) as they all wrap their content in exactly
-            /// the same way.
+            /// Every value is written through this one shape, so that the writing can
+            /// be composed: a <c>Write*</c> combinator turns a stringification, a list
+            /// or a tuple of them into one of these, and a class's own
+            /// <c>...ToSequence</c> already is one.
+            ///
+            /// There is deliberately no second delegate for a whole element: an element
+            /// differs from a content only in what it writes, never in its shape, and
+            /// <c>WrapInElement</c> converts between the two.
+            ///
+            /// <typeparamref name="T" /> is contravariant, so that
+            /// <see cref="WriteIClass" /> can be used wherever the writer of a more
+            /// specific interface is expected.
             /// </remarks>
-            /// <typeparam name="T">Type of the property value</typeparam>
-            private static void SerializeElement<T>(
-                string name,
+            /// <typeparam name="T">Type of the value to write</typeparam>
+            private delegate void ContentWriter<in T>(
+                T that,
+                Xml.XmlWriter writer);
+
+            /// <summary>
+            /// Write <paramref name="that" /> as an XML element named
+            /// <paramref name="elementName" />, its content written by
+            /// <paramref name="writeContent" />.
+            /// </summary>
+            /// <remarks>
+            /// An element is nothing but a start and an end tag around a content, so
+            /// there is no writer per property kind -- only the content differs, and it
+            /// has been composed once into a field.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to write</typeparam>
+            private static void WriteElement<T>(
+                string elementName,
                 T that,
                 Xml.XmlWriter writer,
-                ElementContentSerializer<T> serializeContent)
-            {
-                writer.WriteStartElement(name, NS);
-                serializeContent(that, writer);
-                writer.WriteEndElement();
-            }
-
-            /// <summary>
-            /// Write <paramref name="that" /> as a named element.
-            /// </summary>
-            private static void WriteVElementAsBoolean(
-                bool that,
-                string elementName,
-                Xml.XmlWriter writer)
+                ContentWriter<T> writeContent)
             {
                 writer.WriteStartElement(elementName, NS);
-                writer.WriteValue(that);
+                writeContent(that, writer);
                 writer.WriteEndElement();
             }
 
             /// <summary>
-            /// Write <paramref name="that" /> as a named element.
-            /// </summary>
-            private static void WriteVElementAsLong(
-                long that,
-                string elementName,
-                Xml.XmlWriter writer)
-            {
-                writer.WriteStartElement(elementName, NS);
-                writer.WriteValue(that);
-                writer.WriteEndElement();
-            }
-
-            /// <summary>
-            /// Write <paramref name="that" /> as a named element.
-            /// </summary>
-            private static void WriteVElementAsDouble(
-                double that,
-                string elementName,
-                Xml.XmlWriter writer)
-            {
-                writer.WriteStartElement(elementName, NS);
-                writer.WriteValue(that);
-                writer.WriteEndElement();
-            }
-
-            /// <summary>
-            /// Write <paramref name="that" /> as a named element.
-            /// </summary>
-            private static void WriteVElementAsString(
-                string that,
-                string elementName,
-                Xml.XmlWriter writer)
-            {
-                writer.WriteStartElement(elementName, NS);
-                writer.WriteValue(that);
-                writer.WriteEndElement();
-            }
-
-            /// <summary>
-            /// Write <paramref name="that" /> as a named element.
-            /// </summary>
-            private static void WriteVElementAsBytes(
-                byte[] that,
-                string elementName,
-                Xml.XmlWriter writer)
-            {
-                writer.WriteStartElement(elementName, NS);
-                writer.WriteBase64(that, 0, that.Length);
-                writer.WriteEndElement();
-            }
-
-            /// <summary>
-            /// Write <paramref name="that" /> as a named element.
-            /// </summary>
-            private static void WriteVElementAsResult(
-                Aas.Result that,
-                string elementName,
-                Xml.XmlWriter writer)
-            {
-                writer.WriteStartElement(elementName, NS);
-                writer.WriteValue(
-                    Stringification.ToString(that)
-                        ?? throw new System.ArgumentException(
-                            "Invalid literal for the enumeration Result: " +
-                            that.ToString()));
-                writer.WriteEndElement();
-            }
-
-            /// <summary>
-            /// Write a single tuple item wrapped in a named element.
+            /// Bind <paramref name="elementName" /> and <paramref name="writeContent" />
+            /// to <see cref="WriteElement{T}" />, so that the result writes the whole
+            /// element, tags included.
             /// </summary>
             /// <remarks>
-            /// A tuple-typed property is written by <c>SerializeTupleN</c> (see
-            /// <see cref="SerializeTuple2{T0, T1}" /> for the arity-2 case, *etc.*),
-            /// which -- like <see cref="SerializeElement{T}" /> -- expects an
-            /// <see cref="ElementContentSerializer{T}" /> per item. A class or named
-            /// union item's own <c>Visit</c> method (or overload) already has that shape
-            /// (writing its own element directly, with no wrapping needed), so it can be
-            /// passed on unchanged. A primitive or enumeration item, on the other hand,
-            /// first needs to be wrapped in its own positional <c>v1</c>, <c>v2</c>,
-            /// *etc.* element -- this adapter closes over the element name so that
-            /// a tuple-typed property does not need to spell out that wrapping (start
-            /// element/write value/end element) at every item.
+            /// This is <see cref="WriteElement{T}" /> partially applied, which C# does
+            /// not give for free. It is used <em>only</em> for the <c>&lt;v&gt;</c>
+            /// element of a list item and for the positional <c>v1</c>, <c>v2</c>,
+            /// <c>...</c> elements of a tuple item. At a property, where the name and
+            /// the value are both at hand, <see cref="WriteElement{T}" /> is applied
+            /// and called in one go instead.
+            ///
+            /// It is needed because <c>WriteList</c> and <c>WriteTupleN</c> each take
+            /// exactly one item-writer type: an item which is a class, an interface or
+            /// a named union writes its own element, whose name is known only at
+            /// run-time, whereas a primitive or an enumeration item has to be wrapped in
+            /// a fixed positional name. Were those two different types, a tuple mixing
+            /// them -- and they do mix, item by item -- would need a combinator per
+            /// combination of the two.
             /// </remarks>
-            /// <typeparam name="T">Type of the item to be written</typeparam>
-            private delegate void NamedElementSerializer<T>(
-                T that, string elementName, Xml.XmlWriter writer);
-
-            /// <summary>
-            /// Adapt <paramref name="writeItem" /> -- a named-element item writer such as
-            /// <see cref="WriteVElementAsLong" /> -- into an
-            /// <see cref="ElementContentSerializer{T}" /> bound to
-            /// <paramref name="elementName" />, for use in a tuple-typed property.
-            /// </summary>
-            /// <typeparam name="T">Type of the item to be written</typeparam>
-            private static ElementContentSerializer<T> AsTupleItemSerializer<T>(
-                NamedElementSerializer<T> writeItem,
-                string elementName)
+            /// <typeparam name="T">Type of the value to write</typeparam>
+            private static ContentWriter<T> WrapInElement<T>(
+                ContentWriter<T> writeContent,
+                string elementName
+                )
             {
-                return (T that, Xml.XmlWriter writer) => writeItem(that, elementName, writer);
+                return (that, writer) => WriteElement<T>(
+                    elementName, that, writer, writeContent);
             }
 
             /// <summary>
-            /// Write the tuple <paramref name="that" /> of 2 item(s) with
-            /// <paramref name="serializeItem0" />, <paramref name="serializeItem1" />,
-            /// *etc.*, positioned wherever <paramref name="writer" /> already is.
+            /// Render the literal <paramref name="that" /> of <typeparamref name="T" />
+            /// as text.
             /// </summary>
             /// <remarks>
-            /// This is shared by all the tuple-typed properties of arity 2.
+            /// Every <c>Stringification.ToString</c> overload has this shape, so it can
+            /// be passed on directly -- which is what lets an enumeration be written by
+            /// one generated combinator instead of one per enumeration. The parameter is
+            /// nullable because the overloads are generated that way; a literal converts
+            /// to it implicitly.
             /// </remarks>
-            private static void SerializeTuple2<T0, T1>(
-                (T0, T1) that,
-                Xml.XmlWriter writer,
-                ElementContentSerializer<T0> serializeItem0,
-                ElementContentSerializer<T1> serializeItem1)
+            /// <typeparam name="T">Enumeration whose literal is rendered</typeparam>
+            private delegate string? LiteralStringifier<T>(T? that) where T : struct;
+
+            /// <summary>
+            /// Write a literal of <typeparamref name="T" />, rendered with
+            /// <paramref name="stringifyLiteral" />.
+            /// </summary>
+            /// <typeparam name="T">Enumeration to write the literal of</typeparam>
+            private static ContentWriter<T> WriteEnum<T>(
+                LiteralStringifier<T> stringifyLiteral
+                ) where T : struct
             {
-                serializeItem0(that.Item1, writer);
-                serializeItem1(that.Item2, writer);
+                return (that, writer) =>
+                {
+                    writer.WriteValue(
+                        stringifyLiteral(that)
+                            ?? throw new System.ArgumentException(
+                                $"Invalid literal for the enumeration {typeof(T).Name}: " +
+                                that.ToString()));
+                };
             }
 
             /// <summary>
-            /// Write the tuple <paramref name="that" /> of 6 item(s) with
-            /// <paramref name="serializeItem0" />, <paramref name="serializeItem1" />,
-            /// *etc.*, positioned wherever <paramref name="writer" /> already is.
+            /// Write a tuple of 2 item(s), each with its own <c>writeItem*</c>.
             /// </summary>
             /// <remarks>
-            /// This is shared by all the tuple-typed properties of arity 6.
+            /// This is shared by everything of a tuple type of arity 2 -- be it
+            /// a property, or a value nested in a list or in another tuple.
             /// </remarks>
-            private static void SerializeTuple6<T0, T1, T2, T3, T4, T5>(
-                (T0, T1, T2, T3, T4, T5) that,
-                Xml.XmlWriter writer,
-                ElementContentSerializer<T0> serializeItem0,
-                ElementContentSerializer<T1> serializeItem1,
-                ElementContentSerializer<T2> serializeItem2,
-                ElementContentSerializer<T3> serializeItem3,
-                ElementContentSerializer<T4> serializeItem4,
-                ElementContentSerializer<T5> serializeItem5)
+            private static ContentWriter<(T0, T1)> WriteTuple2<T0, T1>(
+                ContentWriter<T0> writeItem0,
+                ContentWriter<T1> writeItem1
+                )
             {
-                serializeItem0(that.Item1, writer);
-                serializeItem1(that.Item2, writer);
-                serializeItem2(that.Item3, writer);
-                serializeItem3(that.Item4, writer);
-                serializeItem4(that.Item5, writer);
-                serializeItem5(that.Item6, writer);
+                return (that, writer) =>
+                {
+                    writeItem0(that.Item1, writer);
+                    writeItem1(that.Item2, writer);
+                };
             }
 
-            private void SomeItemToSequence(
+            /// <summary>
+            /// Write a tuple of 6 item(s), each with its own <c>writeItem*</c>.
+            /// </summary>
+            /// <remarks>
+            /// This is shared by everything of a tuple type of arity 6 -- be it
+            /// a property, or a value nested in a list or in another tuple.
+            /// </remarks>
+            private static ContentWriter<(T0, T1, T2, T3, T4, T5)> WriteTuple6<T0, T1, T2, T3, T4, T5>(
+                ContentWriter<T0> writeItem0,
+                ContentWriter<T1> writeItem1,
+                ContentWriter<T2> writeItem2,
+                ContentWriter<T3> writeItem3,
+                ContentWriter<T4> writeItem4,
+                ContentWriter<T5> writeItem5
+                )
+            {
+                return (that, writer) =>
+                {
+                    writeItem0(that.Item1, writer);
+                    writeItem1(that.Item2, writer);
+                    writeItem2(that.Item3, writer);
+                    writeItem3(that.Item4, writer);
+                    writeItem4(that.Item5, writer);
+                    writeItem5(that.Item6, writer);
+                };
+            }
+
+            /// <summary>
+            /// The one instance through which the writing is dispatched.
+            /// </summary>
+            /// <remarks>
+            /// The visitor carries no state -- the writer is passed in as the context --
+            /// so a single instance serves the whole program. No field initializer reads
+            /// it, only <see cref="WriteIClass" /> does, so it does not matter where
+            /// among the writers it is initialized.
+            /// </remarks>
+            [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
+            private static readonly VisitorWithWriter _instance = (
+                new VisitorWithWriter());
+
+            /// <summary>
+            /// Write <paramref name="that" /> as its own XML element.
+            /// </summary>
+            /// <remarks>
+            /// Which element that is, is decided by the run-time type of
+            /// <paramref name="that" />, so this one writer serves every abstract class
+            /// and every concrete class with descendants, as well as the item of a list
+            /// or of a tuple of any of them.
+            /// </remarks>
+            internal static void WriteIClass(
+                Aas.IClass that,
+                Xml.XmlWriter writer)
+            {
+                that.Accept(_instance, writer);
+            }
+
+            private static readonly ContentWriter<string> WriteString = (
+                (that, writer) => writer.WriteValue(that));
+
+            private static readonly ContentWriter<long> WriteLong = (
+                (that, writer) => writer.WriteValue(that));
+
+            private static readonly ContentWriter<(string, long)> WriteTupleOfStringLong = (
+                WriteTuple2<string, long>(
+                    WrapInElement(
+                        WriteString, "v1"),
+                    WrapInElement(
+                        WriteLong, "v2")));
+
+            private static readonly ContentWriter<
+                (IAbstractItem, IAbstractItem)
+            > WriteTupleOfIAbstractItemIAbstractItem = (
+                WriteTuple2<IAbstractItem, IAbstractItem>(
+                    WriteIClass,
+                    WriteIClass));
+
+            private static readonly ContentWriter<Result> WriteResult = (
+                WriteEnum<Aas.Result>(
+                    Stringification.ToString));
+
+            private static readonly ContentWriter<
+                (long, ISomeItem, IAbstractItem, ISomeItem, long, Result)
+            > WriteTupleOfLongISomeItemIAbstractItemISomeItemLongResult = (
+                WriteTuple6<long, ISomeItem, IAbstractItem, ISomeItem, long, Result>(
+                    WrapInElement(
+                        WriteLong, "v1"),
+                    WriteIClass,
+                    WriteIClass,
+                    WriteIClass,
+                    WrapInElement(
+                        WriteLong, "v5"),
+                    WrapInElement(
+                        WriteResult, "v6")));
+
+            private static void SomeItemToSequence(
                 Aas.ISomeItem that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "name",
-                    that.Name,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void SomeItemToSequence
+                WriteElement(
+                    "name", that.Name, writer, WriteString);
+            }  // private static void SomeItemToSequence
 
             public override void VisitSomeItem(
                 Aas.ISomeItem that,
@@ -1430,22 +1464,19 @@ namespace dummy
                 writer.WriteStartElement(
                     "someItem",
                     NS);
-                this.SomeItemToSequence(
+                SomeItemToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void AnotherItemToSequence(
+            private static void AnotherItemToSequence(
                 Aas.IAnotherItem that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "serialNumber",
-                    that.SerialNumber,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void AnotherItemToSequence
+                WriteElement(
+                    "serialNumber", that.SerialNumber, writer, WriteLong);
+            }  // private static void AnotherItemToSequence
 
             public override void VisitAnotherItem(
                 Aas.IAnotherItem that,
@@ -1454,50 +1485,28 @@ namespace dummy
                 writer.WriteStartElement(
                     "anotherItem",
                     NS);
-                this.AnotherItemToSequence(
+                AnotherItemToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void SomethingToSequence(
+            private static void SomethingToSequence(
                 Aas.ISomething that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "pair",
-                    that.Pair,
-                    writer,
-                    (value, w) => SerializeTuple2(
-                        value,
-                        w,
-                        AsTupleItemSerializer<string>(WriteVElementAsString, "v1"),
-                        AsTupleItemSerializer<long>(WriteVElementAsLong, "v2")));
+                WriteElement(
+                    "pair", that.Pair, writer, WriteTupleOfStringLong);
 
-                SerializeElement(
-                    "items",
-                    that.Items,
-                    writer,
-                    (value, w) => SerializeTuple2(
-                        value,
-                        w,
-                        this.Visit,
-                        this.Visit));
+                WriteElement(
+                    "items", that.Items, writer, WriteTupleOfIAbstractItemIAbstractItem);
 
-                SerializeElement(
+                WriteElement(
                     "tricky",
                     that.Tricky,
                     writer,
-                    (value, w) => SerializeTuple6(
-                        value,
-                        w,
-                        AsTupleItemSerializer<long>(WriteVElementAsLong, "v1"),
-                        this.Visit,
-                        this.Visit,
-                        this.Visit,
-                        AsTupleItemSerializer<long>(WriteVElementAsLong, "v5"),
-                        AsTupleItemSerializer<Result>(WriteVElementAsResult, "v6")));
-            }  // private void SomethingToSequence
+                    WriteTupleOfLongISomeItemIAbstractItemISomeItemLongResult);
+            }  // private static void SomethingToSequence
 
             public override void VisitSomething(
                 Aas.ISomething that,
@@ -1506,7 +1515,7 @@ namespace dummy
                 writer.WriteStartElement(
                     "something",
                     NS);
-                this.SomethingToSequence(
+                SomethingToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
@@ -1530,10 +1539,6 @@ namespace dummy
         /// </example>
         public static class Serialize
         {
-            [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            private static readonly VisitorWithWriter _visitorWithWriter = (
-                new VisitorWithWriter());
-
             /// <summary>
             /// Serialize an instance of the meta-model to XML.
             /// </summary>
@@ -1541,7 +1546,7 @@ namespace dummy
                 Aas.IClass that,
                 Xml.XmlWriter writer)
             {
-                Serialize._visitorWithWriter.Visit(
+                VisitorWithWriter.WriteIClass(
                     that, writer);
             }
         }  // public static class Serialize
