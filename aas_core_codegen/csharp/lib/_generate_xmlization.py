@@ -1,9 +1,8 @@
 """Generate code for XML de/serialization."""
 
-import collections
 import io
 import textwrap
-from typing import Tuple, Optional, List, Mapping, MutableMapping, Set, Final
+from typing import Tuple, Optional, List, Mapping, Set, Final
 
 from icontract import ensure, require
 
@@ -353,8 +352,8 @@ _EMPTY_VALUE_BY_PRIMITIVE = {
 }
 
 
-class _NeededContentReaders:
-    """Capture which of the shared content readers a model actually needs."""
+class _NeededCombinators:
+    """Capture which of the shared combinators a model actually needs."""
 
     def __init__(
         self,
@@ -379,21 +378,26 @@ class _NeededContentReaders:
         )
 
 
-def _needed_content_readers(
+def _needed_combinators(
     symbol_table: intermediate.SymbolTable,
-) -> _NeededContentReaders:
+) -> _NeededCombinators:
     """
-    Determine which shared content readers need to be generated.
+    Determine which shared combinators need to be generated.
 
-    Only the properties of the concrete classes matter, as they are the only
-    ones de-serialized from a sequence of XML elements. A list or a tuple
-    contributes through its *items* as well, as they are read by the very
-    same combinators, only one nesting level deeper.
+    The reading and the writing are composed out of the very same shapes --
+    a text, an enumeration literal, a list, a tuple, a self-describing
+    element -- so one pass answers for both. Only the properties of
+    the concrete classes matter, as they are the only thing de/serialized as
+    a sequence of XML elements.
+
+    The pass recurses into the items of a list and of a tuple: an item is
+    de/serialized by the same combinators, only one nesting level deeper, and
+    the combinator it needs may occur nowhere else in the model.
 
     This mirrors how the tuple helpers are already emitted only for
     the arities which actually occur (see
     :py:func:`aas_core_codegen.intermediate.tuple_arities`) -- without it,
-    a model would pay for the readers it never calls.
+    a model would pay for the combinators it never calls.
     """
     primitive_types = set()  # type: Set[intermediate.PrimitiveType]
     enumerations = False
@@ -401,73 +405,70 @@ def _needed_content_readers(
     lists = False
     v_elements = False
 
-    for cls in symbol_table.concrete_classes:
-        for prop in cls.properties:
-            type_anno = intermediate.beneath_optional(prop.type_annotation)
+    def register(type_anno: intermediate.TypeAnnotationUnion, nested: bool) -> None:
+        """
+        Register what ``type_anno`` needs.
 
-            if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
-                primitive_types.add(type_anno.a_type)
+        ``nested`` tells whether the value is an item of a list or of
+        a tuple. Everything but a class, an interface and a named union is
+        then wrapped in a ``<v>`` element of its own, while those three
+        de/serialize their own, self-describing element and hence need no
+        dispatching combinator.
+        """
+        nonlocal enumerations, polymorphic, lists, v_elements
 
-            elif isinstance(type_anno, intermediate.OurTypeAnnotation):
-                our_type = type_anno.our_type
+        if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
+            primitive_types.add(type_anno.a_type)
+            v_elements = v_elements or nested
 
-                if isinstance(our_type, intermediate.Enumeration):
-                    enumerations = True
-                    primitive_types.add(intermediate.PrimitiveType.STR)
+        elif isinstance(type_anno, intermediate.OurTypeAnnotation):
+            our_type = type_anno.our_type
 
-                elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-                    primitive_types.add(our_type.constrainee)
+            if isinstance(our_type, intermediate.Enumeration):
+                enumerations = True
+                primitive_types.add(intermediate.PrimitiveType.STR)
+                v_elements = v_elements or nested
 
-                elif isinstance(
-                    our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
-                ):
-                    if (
-                        isinstance(our_type, intermediate.AbstractClass)
-                        or len(our_type.concrete_descendants) > 0
-                    ):
-                        polymorphic = True
-
-                elif isinstance(our_type, intermediate.NamedUnion):
-                    polymorphic = True
-
-                else:
-                    assert_never(our_type)
+            elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+                primitive_types.add(our_type.constrainee)
+                v_elements = v_elements or nested
 
             elif isinstance(
-                type_anno,
-                (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
+                our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
             ):
-                # NOTE (mristin):
-                # A primitive or an enumeration item of a list or of a tuple
-                # is wrapped in a ``<v>`` element of its own.
-                if isinstance(type_anno, intermediate.ListTypeAnnotation):
-                    lists = True
-                    item_type_annotations = [
-                        type_anno.items
-                    ]  # type: List[intermediate.TypeAnnotationUnion]
-                else:
-                    item_type_annotations = list(type_anno.items)
+                if not nested and (
+                    isinstance(our_type, intermediate.AbstractClass)
+                    or len(our_type.concrete_descendants) > 0
+                ):
+                    polymorphic = True
 
-                for item_type_anno in item_type_annotations:
-                    item_primitive_type = intermediate.try_primitive_type(
-                        item_type_anno
-                    )
-
-                    if item_primitive_type is not None:
-                        primitive_types.add(item_primitive_type)
-                        v_elements = True
-
-                    elif isinstance(
-                        item_type_anno, intermediate.OurTypeAnnotation
-                    ) and isinstance(item_type_anno.our_type, intermediate.Enumeration):
-                        primitive_types.add(intermediate.PrimitiveType.STR)
-                        enumerations = True
-                        v_elements = True
+            elif isinstance(our_type, intermediate.NamedUnion):
+                polymorphic = polymorphic or not nested
 
             else:
-                pass
+                assert_never(our_type)
 
-    return _NeededContentReaders(
+        elif isinstance(type_anno, intermediate.ListTypeAnnotation):
+            lists = True
+            v_elements = v_elements or nested
+            register(type_anno.items, nested=True)
+
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            v_elements = v_elements or nested
+            for item_type_anno in type_anno.items:
+                register(item_type_anno, nested=True)
+
+        elif isinstance(type_anno, intermediate.OptionalTypeAnnotation):
+            register(type_anno.value, nested=nested)
+
+        else:
+            assert_never(type_anno)
+
+    for cls in symbol_table.concrete_classes:
+        for prop in cls.properties:
+            register(intermediate.beneath_optional(prop.type_annotation), nested=False)
+
+    return _NeededCombinators(
         primitive_types=primitive_types,
         enumerations=enumerations,
         polymorphic=polymorphic,
@@ -476,8 +477,34 @@ def _needed_content_readers(
     )
 
 
+def _is_value_type(type_anno: intermediate.TypeAnnotationUnion) -> bool:
+    """
+    Check whether ``type_anno`` is represented as a C# value type.
+
+    An optional of such a type is a ``System.Nullable``, so it is tested with
+    ``HasValue`` and unwrapped with ``Value``, whereas an optional of
+    a reference type is simply compared against ``null``.
+    """
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        return primitive_type in (
+            intermediate.PrimitiveType.BOOL,
+            intermediate.PrimitiveType.INT,
+            intermediate.PrimitiveType.FLOAT,
+        )
+
+    if isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+        type_anno.our_type, intermediate.Enumeration
+    ):
+        return True
+
+    # NOTE (mristin):
+    # A tuple is a ``System.ValueTuple``.
+    return isinstance(type_anno, intermediate.TupleTypeAnnotation)
+
+
 def _generate_as_text_combinators(
-    needed: _NeededContentReaders,
+    needed: _NeededCombinators,
 ) -> List[Stripped]:
     """
     Generate the shared skeletons for reading a content as text.
@@ -1222,6 +1249,20 @@ AsTuple{len(type_anno.items)}<{item_types}>(
     )
 
 
+# NOTE (mristin):
+# The generated code is indented by the emitter after the fact, so
+# the generator has to compare against what is left of a line at the depth
+# where the snippet will end up.
+#
+# The name of a de/serializer field spells out the name of its type, so both
+# occur twice in its declaration -- a list of a long class name alone runs to
+# some 145 characters. Where a declaration does not fit, the type argument is
+# broken out onto a line of its own.
+_MAX_LINE_LENGTH = 100
+_FIELD_INDENTATION = len(I) * 3
+_PROPERTY_INDENTATION = len(I) * 4
+
+
 def _generate_from_element_fields(
     symbol_table: intermediate.SymbolTable,
 ) -> List[Stripped]:
@@ -1245,13 +1286,22 @@ def _generate_from_element_fields(
         name = csharp_naming.class_name(cls.name)
         xml_name_literal = csharp_common.string_literal(naming.xml_class_name(cls.name))
 
+        declaration = (
+            f"internal static readonly ElementReader<Aas.{name}> {name}FromElement = ("
+        )
+        if len(declaration) + _FIELD_INDENTATION > _MAX_LINE_LENGTH:
+            declaration = f"""\
+internal static readonly ElementReader<
+{I}Aas.{name}
+> {name}FromElement = ("""
+
         result.append(
             Stripped(
                 f"""\
 /// <summary>
 /// Read an instance of class {name} from its XML element.
 /// </summary>
-internal static readonly ElementReader<Aas.{name}> {name}FromElement = (
+{declaration}
 {I}AtElement<Aas.{name}>(
 {II}{name}FromSequence, {xml_name_literal}));"""
             )
@@ -1260,25 +1310,26 @@ internal static readonly ElementReader<Aas.{name}> {name}FromElement = (
     return result
 
 
-def _generate_content_reader_fields(
+def _content_types_in_initialization_order(
     symbol_table: intermediate.SymbolTable,
-) -> List[Stripped]:
+) -> List[intermediate.TypeAnnotationUnion]:
     """
-    Generate the fields holding one reader per distinct property type.
+    Collect the distinct types de/serialized as the content of an element.
 
-    The readers are composed once, at the initialization of the class,
-    instead of at every property of every instance -- composing them at
-    the call site would allocate a delegate on every single read.
+    A field initializer reads the fields it composes, so the items of a list
+    and of a tuple come before the container itself. A class, an interface
+    and a named union are left out: they de/serialize their own,
+    self-describing element and are referred to by a function, not by
+    a field.
+
+    The order and the de-duplication are the same for the reading and for
+    the writing, so both field generators walk this one list.
     """
-    initializer_by_name = (
-        collections.OrderedDict()
-    )  # type: MutableMapping[Identifier, Tuple[Stripped, Stripped]]
+    observed = set()  # type: Set[str]
+    result = []  # type: List[intermediate.TypeAnnotationUnion]
 
     def register(type_anno: intermediate.TypeAnnotationUnion) -> None:
-        """Register the reader of ``type_anno``, its items' readers first."""
-        # NOTE (mristin):
-        # A field initializer reads the fields it composes, so a reader has
-        # to be declared after the readers it is composed of.
+        """Register ``type_anno``, its items first."""
         if isinstance(type_anno, intermediate.ListTypeAnnotation):
             item_type_annotations = [
                 type_anno.items
@@ -1289,8 +1340,6 @@ def _generate_content_reader_fields(
             item_type_annotations = []
 
         for item_type_anno in item_type_annotations:
-            # NOTE (mristin):
-            # A class reads its own element, so it needs no reader of its own.
             if isinstance(
                 item_type_anno, intermediate.OurTypeAnnotation
             ) and isinstance(
@@ -1305,25 +1354,49 @@ def _generate_content_reader_fields(
 
             register(item_type_anno)
 
-        name = _content_reader_name(type_anno)
-        if name in initializer_by_name:
+        moniker = _type_moniker(type_anno)
+        if moniker in observed:
             return
 
-        initializer_by_name[name] = (
-            csharp_common.generate_type(type_anno),
-            _content_reader_initializer(type_anno),
-        )
+        observed.add(moniker)
+        result.append(type_anno)
 
     for cls in symbol_table.concrete_classes:
         for prop in cls.properties:
             register(intermediate.beneath_optional(prop.type_annotation))
 
+    return result
+
+
+def _generate_content_reader_fields(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the fields holding one reader per distinct property type.
+
+    The readers are composed once, at the initialization of the class,
+    instead of at every property of every instance -- composing them at
+    the call site would allocate a delegate on every single read.
+    """
     result = []  # type: List[Stripped]
-    for name, (csharp_type, initializer) in initializer_by_name.items():
+
+    for type_anno in _content_types_in_initialization_order(symbol_table):
+        csharp_type = csharp_common.generate_type(type_anno)
+        initializer = _content_reader_initializer(type_anno)
+
+        name = _content_reader_name(type_anno)
+
+        declaration = f"private static readonly ContentReader<{csharp_type}> {name} = ("
+        if len(declaration) + _FIELD_INDENTATION > _MAX_LINE_LENGTH:
+            declaration = f"""\
+private static readonly ContentReader<
+{I}{csharp_type}
+> {name} = ("""
+
         result.append(
             Stripped(
                 f"""\
-private static readonly ContentReader<{csharp_type}> {name} = (
+{declaration}
 {I}{indent_but_first_line(initializer, I)});"""
             )
         )
@@ -1900,7 +1973,7 @@ def _generate_deserialize_impl(
         _generate_element_reader_delegates(),
     ]  # type: List[Stripped]
 
-    needed_readers = _needed_content_readers(symbol_table)
+    needed_readers = _needed_combinators(symbol_table)
     from_element_fields = _generate_from_element_fields(symbol_table)
 
     blocks.extend(_generate_as_text_combinators(needed=needed_readers))
@@ -2199,163 +2272,219 @@ public static class Deserialize
     return Stripped(writer.getvalue())
 
 
-def _generate_serialize_element_helper() -> Stripped:
-    """Generate the generic helper to write a property as a named XML element."""
+def _generate_content_writer_delegate() -> Stripped:
+    """
+    Generate the single delegate through which every value is written.
+
+    Unlike the reading, the writing needs no distinction between the content
+    of an element and the whole element: both are "write something where
+    the writer already is", the same signature with nothing to report back.
+    :py:func:`_generate_wrap_in_element_combinator` converts between the two.
+
+    The type parameter is contravariant -- the dual of the covariance of
+    the :py:class:`ElementReader` -- so that the one writer of
+    an ``Aas.IClass`` serves wherever the writer of a more specific interface
+    is expected.
+    """
     return Stripped(
         f"""\
 /// <summary>
-/// Write the content of a property, positioned between its start and end tag.
-/// </summary>
-/// <typeparam name="T">Type of the property value</typeparam>
-private delegate void ElementContentSerializer<T>(
-{I}T that, Xml.XmlWriter writer);
-
-/// <summary>
-/// Serialize <paramref name="that" /> as an XML element with
-/// the given <paramref name="name" />, delegating the content in-between the
-/// start and the end tag to <paramref name="serializeContent" />.
+/// Write <paramref name="that" /> where <paramref name="writer" /> already
+/// is.
 /// </summary>
 /// <remarks>
-/// This is shared by all the property kinds (primitive, enumeration, class,
-/// interface, named union, list) as they all wrap their content in exactly
-/// the same way.
+/// Every value is written through this one shape, so that the writing can
+/// be composed: a <c>Write*</c> combinator turns a stringification, a list
+/// or a tuple of them into one of these, and a class's own
+/// <c>...ToSequence</c> already is one.
+///
+/// There is deliberately no second delegate for a whole element: an element
+/// differs from a content only in what it writes, never in its shape, and
+/// <c>WrapInElement</c> converts between the two.
+///
+/// <typeparamref name="T" /> is contravariant, so that
+/// <see cref="WriteIClass" /> can be used wherever the writer of a more
+/// specific interface is expected.
 /// </remarks>
-/// <typeparam name="T">Type of the property value</typeparam>
-private static void SerializeElement<T>(
-{I}string name,
+/// <typeparam name="T">Type of the value to write</typeparam>
+private delegate void ContentWriter<in T>(
+{I}T that,
+{I}Xml.XmlWriter writer);"""
+    )
+
+
+def _generate_write_element_helper() -> Stripped:
+    """Generate the shared helper writing a value as a named XML element."""
+    return Stripped(
+        f"""\
+/// <summary>
+/// Write <paramref name="that" /> as an XML element named
+/// <paramref name="elementName" />, its content written by
+/// <paramref name="writeContent" />.
+/// </summary>
+/// <remarks>
+/// An element is nothing but a start and an end tag around a content, so
+/// there is no writer per property kind -- only the content differs, and it
+/// has been composed once into a field.
+/// </remarks>
+/// <typeparam name="T">Type of the value to write</typeparam>
+private static void WriteElement<T>(
+{I}string elementName,
 {I}T that,
 {I}Xml.XmlWriter writer,
-{I}ElementContentSerializer<T> serializeContent)
+{I}ContentWriter<T> writeContent)
 {{
-{I}writer.WriteStartElement(name, NS);
-{I}serializeContent(that, writer);
+{I}writer.WriteStartElement(elementName, NS);
+{I}writeContent(that, writer);
 {I}writer.WriteEndElement();
 }}"""
     )
 
 
-def _generate_write_v_element_as_primitive_functions() -> List[Stripped]:
+def _generate_wrap_in_element_combinator() -> Stripped:
     """
-    Generate the functions to write a primitive value as a named element.
+    Generate the partially applied form of ``WriteElement``.
 
-    These mirror the read-side content readers
-    on the write side: a tuple item, unlike a list item, is wrapped in a
-    positional element name (<c>v1</c>, <c>v2</c>, *etc.*) instead of always
-    the fixed <c>v</c>, so we generate one write function per primitive type,
-    parameterized by the element name, instead of inlining the
-    start-element/write-value/end-element sequence at every tuple item.
+    The doc comment spells out why this exists next to ``WriteElement``,
+    since its handful of call sites make its payoff invisible: it is what
+    lets a list and a tuple take a *single* item-writer type even though
+    a class item writes its own element while a primitive item has to be
+    wrapped in a positional one.
     """
-    result = []  # type: List[Stripped]
-
-    for function_name, csharp_type, write_value_statement in (
-        ("WriteVElementAsBoolean", "bool", "writer.WriteValue(that);"),
-        ("WriteVElementAsLong", "long", "writer.WriteValue(that);"),
-        ("WriteVElementAsDouble", "double", "writer.WriteValue(that);"),
-        ("WriteVElementAsString", "string", "writer.WriteValue(that);"),
-        (
-            "WriteVElementAsBytes",
-            "byte[]",
-            "writer.WriteBase64(that, 0, that.Length);",
-        ),
-    ):
-        result.append(
-            Stripped(
-                f"""\
-/// <summary>
-/// Write <paramref name="that" /> as a named element.
-/// </summary>
-private static void {function_name}(
-{I}{csharp_type} that,
-{I}string elementName,
-{I}Xml.XmlWriter writer)
-{{
-{I}writer.WriteStartElement(elementName, NS);
-{I}{write_value_statement}
-{I}writer.WriteEndElement();
-}}"""
-            )
-        )
-
-    return result
-
-
-def _generate_write_v_element_as_enumeration(
-    enumeration: intermediate.Enumeration,
-) -> Stripped:
-    """Generate the function to write a literal of ``enumeration`` as a named element."""
-    enum_name = csharp_naming.enum_name(enumeration.name)
-
     return Stripped(
         f"""\
 /// <summary>
-/// Write <paramref name="that" /> as a named element.
-/// </summary>
-private static void WriteVElementAs{enum_name}(
-{I}Aas.{enum_name} that,
-{I}string elementName,
-{I}Xml.XmlWriter writer)
-{{
-{I}writer.WriteStartElement(elementName, NS);
-{I}writer.WriteValue(
-{II}Stringification.ToString(that)
-{III}?? throw new System.ArgumentException(
-{IIII}"Invalid literal for the enumeration {enum_name}: " +
-{IIII}that.ToString()));
-{I}writer.WriteEndElement();
-}}"""
-    )
-
-
-def _generate_tuple_item_serializer_helpers() -> Stripped:
-    """Generate the delegate and adapter shared by all the generic tuple serializers."""
-    return Stripped(
-        f"""\
-/// <summary>
-/// Write a single tuple item wrapped in a named element.
+/// Bind <paramref name="elementName" /> and <paramref name="writeContent" />
+/// to <see cref="WriteElement{{T}}" />, so that the result writes the whole
+/// element, tags included.
 /// </summary>
 /// <remarks>
-/// A tuple-typed property is written by <c>SerializeTupleN</c> (see
-/// <see cref="SerializeTuple2{{T0, T1}}" /> for the arity-2 case, *etc.*),
-/// which -- like <see cref="SerializeElement{{T}}" /> -- expects an
-/// <see cref="ElementContentSerializer{{T}}" /> per item. A class or named
-/// union item's own <c>Visit</c> method (or overload) already has that shape
-/// (writing its own element directly, with no wrapping needed), so it can be
-/// passed on unchanged. A primitive or enumeration item, on the other hand,
-/// first needs to be wrapped in its own positional <c>v1</c>, <c>v2</c>,
-/// *etc.* element -- this adapter closes over the element name so that
-/// a tuple-typed property does not need to spell out that wrapping (start
-/// element/write value/end element) at every item.
+/// This is <see cref="WriteElement{{T}}" /> partially applied, which C# does
+/// not give for free. It is used <em>only</em> for the <c>&lt;v&gt;</c>
+/// element of a list item and for the positional <c>v1</c>, <c>v2</c>,
+/// <c>...</c> elements of a tuple item. At a property, where the name and
+/// the value are both at hand, <see cref="WriteElement{{T}}" /> is applied
+/// and called in one go instead.
+///
+/// It is needed because <c>WriteList</c> and <c>WriteTupleN</c> each take
+/// exactly one item-writer type: an item which is a class, an interface or
+/// a named union writes its own element, whose name is known only at
+/// run-time, whereas a primitive or an enumeration item has to be wrapped in
+/// a fixed positional name. Were those two different types, a tuple mixing
+/// them -- and they do mix, item by item -- would need a combinator per
+/// combination of the two.
 /// </remarks>
-/// <typeparam name="T">Type of the item to be written</typeparam>
-private delegate void NamedElementSerializer<T>(
-{I}T that, string elementName, Xml.XmlWriter writer);
-
-/// <summary>
-/// Adapt <paramref name="writeItem" /> -- a named-element item writer such as
-/// <see cref="WriteVElementAsLong" /> -- into an
-/// <see cref="ElementContentSerializer{{T}}" /> bound to
-/// <paramref name="elementName" />, for use in a tuple-typed property.
-/// </summary>
-/// <typeparam name="T">Type of the item to be written</typeparam>
-private static ElementContentSerializer<T> AsTupleItemSerializer<T>(
-{I}NamedElementSerializer<T> writeItem,
-{I}string elementName)
+/// <typeparam name="T">Type of the value to write</typeparam>
+private static ContentWriter<T> WrapInElement<T>(
+{I}ContentWriter<T> writeContent,
+{I}string elementName
+{I})
 {{
-{I}return (T that, Xml.XmlWriter writer) => writeItem(that, elementName, writer);
+{I}return (that, writer) => WriteElement<T>(
+{II}elementName, that, writer, writeContent);
+}}"""
+    )
+
+
+def _generate_literal_stringifier_delegate() -> Stripped:
+    """Generate the delegate which renders a literal of an enumeration as text."""
+    return Stripped(
+        """\
+/// <summary>
+/// Render the literal <paramref name="that" /> of <typeparamref name="T" />
+/// as text.
+/// </summary>
+/// <remarks>
+/// Every <c>Stringification.ToString</c> overload has this shape, so it can
+/// be passed on directly -- which is what lets an enumeration be written by
+/// one generated combinator instead of one per enumeration. The parameter is
+/// nullable because the overloads are generated that way; a literal converts
+/// to it implicitly.
+/// </remarks>
+/// <typeparam name="T">Enumeration whose literal is rendered</typeparam>
+private delegate string? LiteralStringifier<T>(T? that) where T : struct;"""
+    )
+
+
+def _generate_write_enum_combinator() -> Stripped:
+    """
+    Generate the single combinator to write a literal of an enumeration.
+
+    The rendering of the literal is passed in as a
+    ``Stringification.ToString`` method group, so that this is generated once
+    instead of once per enumeration. The name of the enumeration comes from
+    ``typeof(T).Name`` for the same reason.
+    """
+    return Stripped(
+        f"""\
+/// <summary>
+/// Write a literal of <typeparamref name="T" />, rendered with
+/// <paramref name="stringifyLiteral" />.
+/// </summary>
+/// <typeparam name="T">Enumeration to write the literal of</typeparam>
+private static ContentWriter<T> WriteEnum<T>(
+{I}LiteralStringifier<T> stringifyLiteral
+{I}) where T : struct
+{{
+{I}return (that, writer) =>
+{I}{{
+{II}writer.WriteValue(
+{III}stringifyLiteral(that)
+{IIII}?? throw new System.ArgumentException(
+{IIIII}$"Invalid literal for the enumeration {{typeof(T).Name}}: " +
+{IIIII}that.ToString()));
+{I}}};
+}}"""
+    )
+
+
+def _generate_write_list_combinator() -> Stripped:
+    """
+    Generate the combinator to write a list.
+
+    The items are written by a plain :py:class:`ContentWriter`, which is what
+    ``WrapInElement`` and :py:func:`_generate_dispatch_helpers` produce, so
+    a list of anything -- a list of lists included -- composes without any
+    further combinator.
+    """
+    return Stripped(
+        f"""\
+/// <summary>
+/// Write the items of a list, each with <paramref name="writeItem" />.
+/// </summary>
+/// <remarks>
+/// An empty list writes no items at all, which the reading sees as
+/// a self-closing element.
+/// </remarks>
+/// <typeparam name="T">Type of a single list item</typeparam>
+private static ContentWriter<List<T>> WriteList<T>(
+{I}ContentWriter<T> writeItem
+{I})
+{{
+{I}return (that, writer) =>
+{I}{{
+{II}foreach (var item in that)
+{II}{{
+{III}writeItem(item, writer);
+{II}}}
+{I}}};
 }}"""
     )
 
 
 @require(lambda arity: arity > 0)
-def _generate_serialize_tuple_helper(arity: int) -> Stripped:
+def _generate_write_tuple_combinator(arity: int) -> Stripped:
     """
-    Generate a generic function to serialize a tuple of the given ``arity``.
+    Generate the combinator writing a tuple of the given ``arity``.
 
-    Each positional item is written by its own ``serializeItemI`` callable,
-    re-using the very same :py:class:`ElementContentSerializer` delegate
-    defined for :py:func:`_generate_serialize_element_helper`, since a tuple
-    item writer has exactly the same shape (write the item's own content,
-    positioned wherever the writer already is).
+    Each positional item is written by its own ``writeItemI``, which is
+    expected to write its own start and end tags (if any). We can not reuse
+    :py:func:`_generate_write_list_combinator` here, since a tuple is
+    heterogeneous -- but the very same :py:class:`ContentWriter` serves both.
+
+    The result is a plain ``ContentWriter``, so wrapping it in
+    ``WrapInElement`` makes a tuple writable as an item of a list or of
+    another tuple, arbitrarily deep.
     """
     type_params = [f"T{i}" for i in range(arity)]
     type_params_joined = ", ".join(type_params)
@@ -2366,538 +2495,363 @@ def _generate_serialize_tuple_helper(arity: int) -> Stripped:
         tuple_type = f"({type_params_joined})"
 
     params_joined = ",\n".join(
-        f"ElementContentSerializer<T{i}> serializeItem{i}" for i in range(arity)
+        f"ContentWriter<T{i}> writeItem{i}" for i in range(arity)
     )
 
     write_stmts_joined = "\n".join(
-        f"serializeItem{i}(that.Item{i + 1}, writer);" for i in range(arity)
+        f"writeItem{i}(that.Item{i + 1}, writer);" for i in range(arity)
     )
-
-    function_name = f"SerializeTuple{arity}"
 
     return Stripped(
         f"""\
 /// <summary>
-/// Write the tuple <paramref name="that" /> of {arity} item(s) with
-/// <paramref name="serializeItem0" />, <paramref name="serializeItem1" />,
-/// *etc.*, positioned wherever <paramref name="writer" /> already is.
+/// Write a tuple of {arity} item(s), each with its own <c>writeItem*</c>.
 /// </summary>
 /// <remarks>
-/// This is shared by all the tuple-typed properties of arity {arity}.
+/// This is shared by everything of a tuple type of arity {arity} -- be it
+/// a property, or a value nested in a list or in another tuple.
 /// </remarks>
-private static void {function_name}<{type_params_joined}>(
-{I}{tuple_type} that,
-{I}Xml.XmlWriter writer,
-{I}{indent_but_first_line(params_joined, I)})
+private static ContentWriter<{tuple_type}> WriteTuple{arity}<{type_params_joined}>(
+{I}{indent_but_first_line(params_joined, I)}
+{I})
 {{
-{I}{indent_but_first_line(write_stmts_joined, I)}
+{I}return (that, writer) =>
+{I}{{
+{II}{indent_but_first_line(write_stmts_joined, II)}
+{I}}};
 }}"""
     )
 
 
-def _generate_serialize_primitive_property_as_content(
-    prop: intermediate.Property,
-) -> Stripped:
-    """Generate the serialization of the primitive-type ``prop`` as XML content."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
+def _generate_dispatch_helpers(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the writers which pick the element from the value itself.
 
-    a_type = intermediate.try_primitive_type(type_anno)
-    assert (
-        a_type is not None
-    ), f"Unexpected non-primitive type of the property {prop.name!r}: {type_anno}"
+    An abstract class, a concrete class with descendants and a named union
+    are all written as *their own* element, whose name is known only at
+    run-time. One virtual call answers that for all of them at once, which is
+    why the writing needs neither a dispatcher per interface nor
+    a combinator to invoke one -- the reading, which has to decide what to
+    construct before it has read anything, needs both.
 
-    prop_name = csharp_naming.property_name(prop.name)
-    xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
+    ``WriteIClass`` is contravariant in its argument, so it doubles as
+    the item writer of a list or of a tuple of any of them.
+    """
+    result = [
+        Stripped(
+            f"""\
+/// <summary>
+/// The one instance through which the writing is dispatched.
+/// </summary>
+/// <remarks>
+/// The visitor carries no state -- the writer is passed in as the context --
+/// so a single instance serves the whole program. No field initializer reads
+/// it, only <see cref="WriteIClass" /> does, so it does not matter where
+/// among the writers it is initialized.
+/// </remarks>
+[CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
+private static readonly VisitorWithWriter _instance = (
+{I}new VisitorWithWriter());"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Write <paramref name="that" /> as its own XML element.
+/// </summary>
+/// <remarks>
+/// Which element that is, is decided by the run-time type of
+/// <paramref name="that" />, so this one writer serves every abstract class
+/// and every concrete class with descendants, as well as the item of a list
+/// or of a tuple of any of them.
+/// </remarks>
+internal static void WriteIClass(
+{I}Aas.IClass that,
+{I}Xml.XmlWriter writer)
+{{
+{I}that.Accept(_instance, writer);
+}}"""
+        ),
+    ]  # type: List[Stripped]
 
-    content_serializer: Stripped
-
-    if (
-        a_type is intermediate.PrimitiveType.BOOL
-        or a_type is intermediate.PrimitiveType.INT
-        or a_type is intermediate.PrimitiveType.FLOAT
-        or a_type is intermediate.PrimitiveType.STR
-    ):
-        content_serializer = Stripped("(value, w) => w.WriteValue(value)")
-    elif a_type is intermediate.PrimitiveType.BYTEARRAY:
-        content_serializer = Stripped(
-            "(value, w) => w.WriteBase64(value, 0, value.Length)"
+    if len(symbol_table.named_unions) > 0:
+        result.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Write the underlying instance of <paramref name="that" /> as its own XML
+/// element.
+/// </summary>
+/// <remarks>
+/// A named union is not itself an <c>Aas.IClass</c>, so it can not be
+/// dispatched by <see cref="WriteIClass" /> directly. Going through
+/// the common, non-generic <c>Aas.IUnion</c> instead of the union's own
+/// type means one writer for *all* the named unions, not one per union.
+///
+/// Should a named union ever be allowed to flatten a primitive or
+/// an enumeration alternative, only this body has to change.
+/// </remarks>
+private static void WriteIUnion(
+{I}Aas.IUnion that,
+{I}Xml.XmlWriter writer)
+{{
+{I}WriteIClass(that.Underlying, writer);
+}}"""
+            )
         )
-    else:
-        assert_never(a_type)
 
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        if a_type in (
-            intermediate.PrimitiveType.BOOL,
-            intermediate.PrimitiveType.INT,
-            intermediate.PrimitiveType.FLOAT,
+    return result
+
+
+# NOTE (mristin):
+# A ``byte[]`` is the only primitive which is not written by
+# ``Xml.XmlWriter.WriteValue``, so the writing has to be spelled out per
+# primitive -- unlike the reading, which goes through a conversion function.
+_WRITE_VALUE_BY_PRIMITIVE: Final[Mapping[intermediate.PrimitiveType, str]] = {
+    intermediate.PrimitiveType.BOOL: "writer.WriteValue(that)",
+    intermediate.PrimitiveType.INT: "writer.WriteValue(that)",
+    intermediate.PrimitiveType.FLOAT: "writer.WriteValue(that)",
+    intermediate.PrimitiveType.STR: "writer.WriteValue(that)",
+    intermediate.PrimitiveType.BYTEARRAY: "writer.WriteBase64(that, 0, that.Length)",
+}
+assert all(
+    primitive_type in _WRITE_VALUE_BY_PRIMITIVE
+    for primitive_type in intermediate.PrimitiveType
+)
+
+
+def _content_writer_name(type_anno: intermediate.TypeAnnotationUnion) -> Identifier:
+    """Name the field holding the writer of the content of ``type_anno``."""
+    return Identifier(f"Write{_type_moniker(type_anno)}")
+
+
+def _item_writer_expr(
+    type_anno: intermediate.TypeAnnotationUnion, v_name_literal: str
+) -> Stripped:
+    """
+    Generate the expression writing a single item of a list or of a tuple.
+
+    A class, an interface or a named union writes its own, self-describing
+    element, whereas everything else is wrapped in a ``<v>`` element whose
+    content is written by the very same writer as a property of that type.
+    """
+    if isinstance(type_anno, intermediate.OurTypeAnnotation):
+        our_type = type_anno.our_type
+
+        if isinstance(our_type, intermediate.NamedUnion):
+            return Stripped("WriteIUnion")
+
+        if isinstance(
+            our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
         ):
-            return Stripped(
-                f"""\
-if (that.{prop_name}.HasValue)
-{{
-{I}SerializeElement(
-{II}{xml_prop_name_literal},
-{II}that.{prop_name}.Value,
-{II}writer,
-{II}{indent_but_first_line(content_serializer, II)});
-}}"""
-            )
-        else:
-            return Stripped(
-                f"""\
-if (that.{prop_name} != null)
-{{
-{I}SerializeElement(
-{II}{xml_prop_name_literal},
-{II}that.{prop_name},
-{II}writer,
-{II}{indent_but_first_line(content_serializer, II)});
-}}"""
-            )
+            return Stripped("WriteIClass")
 
     return Stripped(
         f"""\
-SerializeElement(
-{I}{xml_prop_name_literal},
-{I}that.{prop_name},
-{I}writer,
-{I}{indent_but_first_line(content_serializer, I)});"""
+WrapInElement(
+{I}{_content_writer_name(type_anno)}, {v_name_literal})"""
     )
 
 
-def _generate_serialize_enumeration_property_as_content(
-    prop: intermediate.Property,
+def _content_writer_initializer(
+    type_anno: intermediate.TypeAnnotationUnion,
 ) -> Stripped:
-    """Generate the serialization of an enumeration ``prop`` as XML content."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-    assert isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
-        type_anno.our_type, intermediate.Enumeration
-    )
-
-    enumeration = type_anno.our_type
-
-    prop_name = csharp_naming.property_name(prop.name)
-    xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
-
-    enum_name = csharp_naming.enum_name(enumeration.name)
-
-    content_serializer = Stripped(
-        f"""\
-(value, w) =>
-{{
-{I}string? text = Stringification.ToString(value);
-{I}w.WriteValue(
-{II}text
-{III}?? throw new System.ArgumentException(
-{IIII}"Invalid literal for the enumeration {enum_name}: " +
-{IIII}value.ToString()));
-}}"""
-    )
-
-    result = Stripped(
-        f"""\
-SerializeElement(
-{I}{xml_prop_name_literal},
-{I}that.{prop_name},
-{I}writer,
-{I}{indent_but_first_line(content_serializer, I)});"""
-    )
-
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        result = Stripped(
-            f"""\
-if (that.{prop_name} != null)
-{{
-{I}{indent_but_first_line(result, I)}
-}}"""
-        )
-
-    return result
-
-
-def _generate_serialize_polymorphic_property_as_content(
-    prop: intermediate.Property,
-) -> Stripped:
-    """
-    Generate the serialization of a polymorphic property as XML content.
-
-    A property is polymorphic here if the element to write is picked at
-    run-time from the value itself, dispatched through its own discriminator
-    element -- this is the case both for an interface-typed property and for
-    a named union, so we treat them uniformly.
-    """
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-    # fmt: off
-    assert (
-            isinstance(type_anno, intermediate.OurTypeAnnotation)
-            and (
-                    # pylint: disable=consider-merging-isinstance
-                    isinstance(type_anno.our_type, intermediate.AbstractClass)
-                    or (
-                            isinstance(type_anno.our_type, intermediate.ConcreteClass)
-                            and len(type_anno.our_type.concrete_descendants) > 0
-                    )
-                    or isinstance(type_anno.our_type, intermediate.NamedUnion)
-            )
-    ), "See intermediate._translate._verify_only_simple_type_patterns"
-    # fmt: on
-
-    prop_name = csharp_naming.property_name(prop.name)
-    xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
-
-    content_serializer = Stripped("(value, w) => this.Visit(value, w)")
-
-    result = Stripped(
-        f"""\
-SerializeElement(
-{I}{xml_prop_name_literal},
-{I}that.{prop_name},
-{I}writer,
-{I}{indent_but_first_line(content_serializer, I)});"""
-    )
-
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        result = Stripped(
-            f"""\
-if (that.{prop_name} != null)
-{{
-{I}{indent_but_first_line(result, I)}
-}}"""
-        )
-
-    return result
-
-
-def _generate_serialize_concrete_class_property_as_sequence(
-    prop: intermediate.Property,
-) -> Stripped:
-    """Generate the serialization of the class ``prop`` as a sequence of properties."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-    assert isinstance(type_anno, intermediate.OurTypeAnnotation)
-    assert isinstance(type_anno.our_type, intermediate.ConcreteClass)
-
-    cls_to_sequence = csharp_naming.method_name(
-        Identifier(f"{type_anno.our_type.name}_to_sequence")
-    )
-
-    prop_name = csharp_naming.property_name(prop.name)
-    xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
-
-    content_serializer = Stripped(f"(value, w) => this.{cls_to_sequence}(value, w)")
-
-    result = Stripped(
-        f"""\
-SerializeElement(
-{I}{xml_prop_name_literal},
-{I}that.{prop_name},
-{I}writer,
-{I}{indent_but_first_line(content_serializer, I)});"""
-    )
-
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        result = Stripped(
-            f"""\
-if (that.{prop_name} != null)
-{{
-{I}{indent_but_first_line(result, I)}
-}}"""
-        )
-
-    return result
-
-
-def _generate_serialize_list_property_as_content(
-    prop: intermediate.Property,
-) -> Stripped:
-    """Generate the serialization of a list ``prop`` as a sequence of elements."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-    assert isinstance(type_anno, intermediate.ListTypeAnnotation)
-
-    primitive_type = intermediate.try_primitive_type(type_anno.items)
-
-    item_write_block: Stripped
-
+    """Generate the expression initializing the writer of ``type_anno``."""
+    primitive_type = intermediate.try_primitive_type(type_anno)
     if primitive_type is not None:
-        write_item_statement: Stripped
-
-        if (
-            primitive_type is intermediate.PrimitiveType.BOOL
-            or primitive_type is intermediate.PrimitiveType.INT
-            or primitive_type is intermediate.PrimitiveType.FLOAT
-            or primitive_type is intermediate.PrimitiveType.STR
-        ):
-            write_item_statement = Stripped(
-                """\
-w.WriteValue(item);"""
-            )
-        elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
-            write_item_statement = Stripped(
-                """\
-w.WriteBase64(item, 0, item.Length);"""
-            )
-        else:
-            assert_never(primitive_type)
-
-        item_write_block = Stripped(
-            f"""\
-w.WriteStartElement("v", NS);
-{write_item_statement}
-w.WriteEndElement();"""
+        return Stripped(
+            f"(that, writer) => {_WRITE_VALUE_BY_PRIMITIVE[primitive_type]}"
         )
 
-    elif isinstance(type_anno.items, intermediate.OurTypeAnnotation):
-        our_type = type_anno.items.our_type
-
-        if isinstance(our_type, intermediate.Enumeration):
-            enum_name = csharp_naming.enum_name(our_type.name)
-
-            item_write_block = Stripped(
-                f"""\
-w.WriteStartElement("v", NS);
-w.WriteValue(
-{I}Stringification.ToString(item)
-{II}?? throw new System.ArgumentException(
-{III}"Invalid literal for the enumeration {enum_name}: " +
-{III}item.ToString()));
-w.WriteEndElement();"""
-            )
-        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-            raise AssertionError("This case should have been handled before.")
-
-        elif isinstance(
-            our_type,
-            (
-                intermediate.AbstractClass,
-                intermediate.ConcreteClass,
-                intermediate.NamedUnion,
-            ),
-        ):
-            # A named union has its own ``Visit`` overload in the visitor
-            # (see :py:func:`_generate_union_visit_helper`), so it can be
-            # visited exactly like a class instance here.
-            item_write_block = Stripped(
-                """\
-this.Visit(item, w);"""
-            )
-        else:
-            assert_never(our_type)
-    else:
-        raise NotImplementedError(
-            "(mristin) We generate currently only the code for serializing lists of "
-            "atomic values to XML, but you want to generate the code for a list of "
-            f"type {type_anno}. "
-            f"Please contact the developers if you need this feature."
-        )
-
-    content_serializer = Stripped(
-        f"""\
-(value, w) =>
-{{
-{I}foreach (var item in value)
-{I}{{
-{II}{indent_but_first_line(item_write_block, II)}
-{I}}}
-}}"""
-    )
-
-    prop_name = csharp_naming.property_name(prop.name)
-    xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
-
-    result = Stripped(
-        f"""\
-SerializeElement(
-{I}{xml_prop_name_literal},
-{I}that.{prop_name},
-{I}writer,
-{I}{indent_but_first_line(content_serializer, I)});"""
-    )
-
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        result = Stripped(
-            f"""\
-if (that.{prop_name} != null)
-{{
-{I}{indent_but_first_line(result, I)}
-}}"""
-        )
-
-    return result
-
-
-def _generate_serialize_tuple_property_as_content(
-    prop: intermediate.Property,
-) -> Stripped:
-    """Generate the serialization of a tuple ``prop`` as a sequence of elements."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-    assert isinstance(type_anno, intermediate.TupleTypeAnnotation)
-
-    prop_name = csharp_naming.property_name(prop.name)
-
-    item_serializer_exprs = []  # type: List[Stripped]
-
-    for i, item_type_anno in enumerate(type_anno.items):
-        primitive_type = intermediate.try_primitive_type(item_type_anno)
-
-        if primitive_type is not None:
-            item_type = csharp_common.generate_type(item_type_anno)
-            v_name_literal = csharp_common.string_literal(f"v{i + 1}")
-
-            write_function: str
-            if primitive_type is intermediate.PrimitiveType.BOOL:
-                write_function = "WriteVElementAsBoolean"
-            elif primitive_type is intermediate.PrimitiveType.INT:
-                write_function = "WriteVElementAsLong"
-            elif primitive_type is intermediate.PrimitiveType.FLOAT:
-                write_function = "WriteVElementAsDouble"
-            elif primitive_type is intermediate.PrimitiveType.STR:
-                write_function = "WriteVElementAsString"
-            elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
-                write_function = "WriteVElementAsBytes"
-            else:
-                assert_never(primitive_type)
-
-            item_serializer_exprs.append(
-                Stripped(
-                    f"AsTupleItemSerializer<{item_type}>({write_function}, {v_name_literal})"
-                )
-            )
-        elif isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
-            item_type_anno.our_type, intermediate.Enumeration
-        ):
-            item_type = csharp_common.generate_type(item_type_anno)
-            enum_name = csharp_naming.enum_name(item_type_anno.our_type.name)
-            v_name_literal = csharp_common.string_literal(f"v{i + 1}")
-
-            item_serializer_exprs.append(
-                Stripped(
-                    f"AsTupleItemSerializer<{item_type}>("
-                    f"WriteVElementAs{enum_name}, {v_name_literal})"
-                )
-            )
-        elif isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
-            item_type_anno.our_type,
-            (
-                intermediate.AbstractClass,
-                intermediate.ConcreteClass,
-                intermediate.NamedUnion,
-            ),
-        ):
-            # NOTE (mristin):
-            # ``this.Visit`` already writes the item's own element directly
-            # (with no positional wrapping needed), so we can pass it on
-            # unchanged as a bare method group: for a class item, its
-            # ``(IClass, Xml.XmlWriter)`` overload is contravariantly
-            # compatible with ``ElementContentSerializer<T>`` for any more
-            # specific interface ``T``; for a named union item, overload
-            # resolution instead picks the union-specific ``Visit`` overload
-            # (see :py:func:`_generate_union_visit_helper`), which matches
-            # ``T`` exactly.
-            item_serializer_exprs.append(Stripped("this.Visit"))
-
-        else:
-            # NOTE (mristin):
-            # A tuple item can only be a primitive value, a constrained primitive,
-            # an enumeration literal, a class instance or a named union; see
-            # intermediate._translate._verify_only_simple_type_patterns.
-            raise AssertionError(
-                f"Unexpected tuple item type {item_type_anno} at index {i} "
-                f"for the property {prop.name!r}"
-            )
-
-    item_serializer_exprs_joined = ",\n".join(item_serializer_exprs)
-
-    xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
-
-    arity = len(type_anno.items)
-
-    content_serializer = Stripped(
-        f"""\
-(value, w) => SerializeTuple{arity}(
-{I}value,
-{I}w,
-{I}{indent_but_first_line(item_serializer_exprs_joined, I)})"""
-    )
-
-    result = Stripped(
-        f"""\
-SerializeElement(
-{I}{xml_prop_name_literal},
-{I}that.{prop_name},
-{I}writer,
-{I}{indent_but_first_line(content_serializer, I)});"""
-    )
-
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        result = Stripped(
-            f"""\
-if (that.{prop_name} != null)
-{{
-{I}{indent_but_first_line(result, I)}
-}}"""
-        )
-
-    return result
-
-
-def _generate_serialize_property_as_content(prop: intermediate.Property) -> Stripped:
-    """Generate the code to serialize the ``prop`` as content of an XML element."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-    body = None  # type: Optional[Stripped]
-
-    if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
-        body = _generate_serialize_primitive_property_as_content(prop=prop)
-    elif isinstance(type_anno, intermediate.OurTypeAnnotation):
+    if isinstance(type_anno, intermediate.OurTypeAnnotation):
         our_type = type_anno.our_type
 
         if isinstance(our_type, intermediate.Enumeration):
-            body = _generate_serialize_enumeration_property_as_content(prop=prop)
+            enum_name = csharp_naming.enum_name(our_type.name)
+            return Stripped(
+                f"""\
+WriteEnum<Aas.{enum_name}>(
+{I}Stringification.ToString)"""
+            )
 
-        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-            body = _generate_serialize_primitive_property_as_content(prop=prop)
+        if isinstance(our_type, intermediate.NamedUnion):
+            return Stripped("WriteIUnion")
 
-        elif isinstance(
+        assert isinstance(
             our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+        ), f"Unexpected our type for a content writer: {our_type}"
+
+        if (
+            isinstance(our_type, intermediate.AbstractClass)
+            or len(our_type.concrete_descendants) > 0
         ):
-            if (
-                isinstance(our_type, intermediate.AbstractClass)
-                or len(our_type.concrete_descendants) > 0
-            ):
-                body = _generate_serialize_polymorphic_property_as_content(prop=prop)
-            else:
-                body = _generate_serialize_concrete_class_property_as_sequence(
-                    prop=prop
-                )
+            return Stripped("WriteIClass")
 
-        elif isinstance(our_type, intermediate.NamedUnion):
-            body = _generate_serialize_polymorphic_property_as_content(prop=prop)
+        # NOTE (mristin):
+        # A concrete class without any descendant writes its own sequence,
+        # which is already a ``ContentWriter``.
+        return Stripped(
+            csharp_naming.method_name(Identifier(f"{our_type.name}_to_sequence"))
+        )
 
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        item_type = csharp_common.generate_type(type_anno.items)
+        item_writer = _item_writer_expr(type_anno.items, '"v"')
+        return Stripped(
+            f"""\
+WriteList<{item_type}>(
+{I}{indent_but_first_line(item_writer, I)})"""
+        )
+
+    assert isinstance(type_anno, intermediate.TupleTypeAnnotation)
+
+    item_types = ", ".join(
+        csharp_common.generate_type(item) for item in type_anno.items
+    )
+    item_writers = ",\n".join(
+        _item_writer_expr(item, csharp_common.string_literal(f"v{i + 1}"))
+        for i, item in enumerate(type_anno.items)
+    )
+    return Stripped(
+        f"""\
+WriteTuple{len(type_anno.items)}<{item_types}>(
+{I}{indent_but_first_line(item_writers, I)})"""
+    )
+
+
+def _generate_content_writer_fields(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """
+    Generate the fields holding one writer per distinct property type.
+
+    The writers are composed once, at the initialization of the class,
+    instead of at every property of every instance -- composing them at
+    the call site would allocate a closure on every single write.
+    """
+    result = []  # type: List[Stripped]
+
+    for type_anno in _content_types_in_initialization_order(symbol_table):
+        csharp_type = csharp_common.generate_type(type_anno)
+        initializer = _content_writer_initializer(type_anno)
+
+        name = _content_writer_name(type_anno)
+
+        declaration = f"private static readonly ContentWriter<{csharp_type}> {name} = ("
+        if len(declaration) + _FIELD_INDENTATION > _MAX_LINE_LENGTH:
+            declaration = f"""\
+private static readonly ContentWriter<
+{I}{csharp_type}
+> {name} = ("""
+
+        result.append(
+            Stripped(
+                f"""\
+{declaration}
+{I}{indent_but_first_line(initializer, I)});"""
+            )
+        )
+
+    return result
+
+
+@require(lambda prop, cls: id(prop) in cls.property_id_set)
+def _generate_serialize_property(
+    prop: intermediate.Property, cls: intermediate.ConcreteClass
+) -> Tuple[Optional[Stripped], Optional[Error]]:
+    """
+    Generate the snippet to serialize the property ``prop``.
+
+    Every property kind is written by the very same call -- only the content
+    writer differs, and it has been composed once into a field (see
+    :py:func:`_generate_content_writer_fields`).
+    """
+    type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation) and not isinstance(
+        type_anno.items, intermediate.AtomicTypeAnnotationAsTuple
+    ):
+        return None, Error(
+            prop.parsed.node,
+            f"(mristin) We only handle the XML serialization of lists of "
+            f"atomic values, but you want to generate the code for a list of "
+            f"type {type_anno}. Please contact the developers if you need "
+            f"this feature.",
+        )
+
+    prop_name = csharp_naming.property_name(prop.name)
+    xml_prop_name_literal = csharp_common.string_literal(prop.xml_name)
+
+    value_expr = f"that.{prop_name}"
+    condition = None  # type: Optional[str]
+
+    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
+        if _is_value_type(type_anno):
+            condition = f"that.{prop_name}.HasValue"
+            value_expr = f"that.{prop_name}.Value"
         else:
-            assert_never(our_type)
+            condition = f"that.{prop_name} != null"
 
-    elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        body = _generate_serialize_list_property_as_content(prop=prop)
+    arguments = [
+        xml_prop_name_literal,
+        value_expr,
+        "writer",
+        _content_writer_name(type_anno),
+    ]
 
-    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        body = _generate_serialize_tuple_property_as_content(prop=prop)
+    # NOTE (mristin):
+    # The arguments go on a single line, so that a property costs five lines
+    # at most -- but not at the price of an unreadable one, so a property
+    # whose names do not fit gets an argument per line instead.
+    indentation = _PROPERTY_INDENTATION + len(I)
+    if condition is not None:
+        indentation += len(I)
 
-    else:
-        assert_never(type_anno)
+    arguments_joined = ", ".join(arguments)
+    if indentation + len(arguments_joined) + len(");") > _MAX_LINE_LENGTH:
+        arguments_joined = ",\n".join(arguments)
 
-    return body
+    result = Stripped(
+        f"""\
+WriteElement(
+{I}{indent_but_first_line(arguments_joined, I)});"""
+    )
+
+    if condition is not None:
+        result = Stripped(
+            f"""\
+if ({condition})
+{{
+{I}{indent_but_first_line(result, I)}
+}}"""
+        )
+
+    return result, None
 
 
-def _generate_class_to_sequence(cls: intermediate.ConcreteClass) -> Stripped:
+@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+def _generate_class_to_sequence(
+    cls: intermediate.ConcreteClass,
+) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the method to write ``cls`` as a sequence of properties as XML."""
     blocks = []  # type: List[Stripped]
+    errors = []  # type: List[Error]
 
     for prop in cls.properties:
-        body = _generate_serialize_property_as_content(prop=prop)
-        blocks.append(body)
+        block, error = _generate_serialize_property(prop=prop, cls=cls)
+        if error is not None:
+            errors.append(error)
+            continue
 
-    interface_name = csharp_naming.interface_name(cls.name)
+        assert block is not None
+        blocks.append(block)
+
+    if len(errors) > 0:
+        return None, errors
+
     method_name = csharp_naming.method_name(Identifier(f"{cls.name}_to_sequence"))
+    interface_name = csharp_naming.interface_name(cls.name)
 
     writer = io.StringIO()
 
@@ -2910,7 +2864,7 @@ def _generate_class_to_sequence(cls: intermediate.ConcreteClass) -> Stripped:
 
     writer.write(
         f"""\
-private void {method_name}(
+private static void {method_name}(
 {I}Aas.{interface_name} that,
 {I}Xml.XmlWriter writer)
 {{
@@ -2922,9 +2876,9 @@ private void {method_name}(
             writer.write("\n\n")
         writer.write(textwrap.indent(block, I))
 
-    writer.write(f"\n}}  // private void {method_name}")
+    writer.write(f"\n}}  // private static void {method_name}")
 
-    return Stripped(writer.getvalue())
+    return Stripped(writer.getvalue()), None
 
 
 def _generate_visit_for_class(cls: intermediate.ConcreteClass) -> Stripped:
@@ -2947,42 +2901,10 @@ public override void {visit_name}(
 {I}writer.WriteStartElement(
 {II}{xml_cls_name_literal},
 {II}NS);
-{I}this.{cls_to_sequence_name}(
+{I}{cls_to_sequence_name}(
 {II}that,
 {II}writer);
 {I}writer.WriteEndElement();
-}}"""
-    )
-
-
-def _generate_union_visit_helper() -> Stripped:
-    """
-    Generate a single ``Visit`` overload shared by every named union.
-
-    A named union is not itself an ``Aas.IClass``, so it can not be dispatched
-    by the inherited, ``IClass``-typed ``Visit`` overload. We add this
-    overload, single-purpose and non-virtual, so that call sites can keep
-    passing ``this.Visit`` around as a plain method group or calling it
-    directly, regardless of whether the value at hand is a class instance or
-    a named union.
-
-    Dispatching over the common, non-generic ``Aas.IUnion`` (see ``generate()``
-    in ``_generate_types.py``) instead of the union's own type means we need
-    only this one overload for *all* named unions, not one per union.
-
-    Should a named union ever be allowed to flatten primitive or enumeration
-    alternatives, only the body of this method has to change (to dispatch on
-    the underlying value's kind) -- every call site stays the same.
-    """
-    return Stripped(
-        f"""\
-private void Visit(
-{I}Aas.IUnion that,
-{I}Xml.XmlWriter writer)
-{{
-{I}this.Visit(
-{II}that.Underlying,
-{II}writer);
 }}"""
     )
 
@@ -2995,16 +2917,39 @@ def _generate_visitor(
     """Generate a visitor which serializes instances of the meta-model to XML."""
     errors = []  # type: List[Error]
 
-    blocks = [_generate_serialize_element_helper()]  # type: List[Stripped]
+    blocks = []  # type: List[Stripped]
 
-    tuple_arities = intermediate.tuple_arities(symbol_table)
-    if len(tuple_arities) > 0:
-        blocks.extend(_generate_write_v_element_as_primitive_functions())
-        for enumeration in symbol_table.enumerations:
-            blocks.append(_generate_write_v_element_as_enumeration(enumeration))
-        blocks.append(_generate_tuple_item_serializer_helpers())
-        for arity in tuple_arities:
-            blocks.append(_generate_serialize_tuple_helper(arity))
+    needed = _needed_combinators(symbol_table)
+
+    if any(len(cls.properties) > 0 for cls in symbol_table.concrete_classes):
+        blocks.append(_generate_content_writer_delegate())
+        blocks.append(_generate_write_element_helper())
+
+    if needed.v_elements:
+        blocks.append(_generate_wrap_in_element_combinator())
+
+    if needed.enumerations:
+        blocks.append(_generate_literal_stringifier_delegate())
+        blocks.append(_generate_write_enum_combinator())
+
+    if needed.lists:
+        blocks.append(_generate_write_list_combinator())
+
+    for arity in intermediate.tuple_arities(symbol_table):
+        blocks.append(_generate_write_tuple_combinator(arity))
+
+    blocks.extend(_generate_dispatch_helpers(symbol_table=symbol_table))
+
+    # NOTE (mristin):
+    # The writers are composed once, here, rather than at every property of
+    # every instance -- composing them at the call site would allocate
+    # a closure on every single write.
+    #
+    # A field initializer reads the fields it composes, so a writer of
+    # a list or of a tuple has to be declared after the writers of its items.
+    # A class's writer, in contrast, is a method group, which imposes no
+    # order at all.
+    blocks.extend(_generate_content_writer_fields(symbol_table=symbol_table))
 
     # The abstract classes are directly dispatched by the transformer,
     # so we do not need to handle them separately.
@@ -3035,12 +2980,21 @@ def _generate_visitor(
 
                 blocks.append(spec_impls[implementation_key])
         else:
-            blocks.append(_generate_class_to_sequence(cls=cls))
+            block, generation_errors = _generate_class_to_sequence(cls=cls)
+            if generation_errors is not None:
+                errors.append(
+                    Error(
+                        cls.parsed.node,
+                        f"Failed to generate the XML serialization code "
+                        f"for the class {cls.name}",
+                        generation_errors,
+                    )
+                )
+            else:
+                assert block is not None
+                blocks.append(block)
 
             blocks.append(_generate_visit_for_class(cls=cls))
-
-    if len(symbol_table.named_unions) > 0:
-        blocks.append(_generate_union_visit_helper())
 
     if len(errors) > 0:
         return None, errors
@@ -3074,12 +3028,6 @@ def _generate_serialize(
     blocks = [
         Stripped(
             f"""\
-[CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-private static readonly VisitorWithWriter _visitorWithWriter = (
-{I}new VisitorWithWriter());"""
-        ),
-        Stripped(
-            f"""\
 /// <summary>
 /// Serialize an instance of the meta-model to XML.
 /// </summary>
@@ -3087,7 +3035,7 @@ public static void To(
 {I}Aas.IClass that,
 {I}Xml.XmlWriter writer)
 {{
-{I}Serialize._visitorWithWriter.Visit(
+{I}VisitorWithWriter.WriteIClass(
 {II}that, writer);
 }}"""
         ),

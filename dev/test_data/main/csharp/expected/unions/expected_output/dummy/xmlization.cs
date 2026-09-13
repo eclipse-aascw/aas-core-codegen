@@ -640,63 +640,81 @@ namespace dummy
             /// <summary>
             /// Read an instance of class StructuralFirst from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.StructuralFirst> StructuralFirstFromElement = (
+            internal static readonly ElementReader<
+                Aas.StructuralFirst
+            > StructuralFirstFromElement = (
                 AtElement<Aas.StructuralFirst>(
                     StructuralFirstFromSequence, "structuralFirst"));
 
             /// <summary>
             /// Read an instance of class StructuralSecond from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.StructuralSecond> StructuralSecondFromElement = (
+            internal static readonly ElementReader<
+                Aas.StructuralSecond
+            > StructuralSecondFromElement = (
                 AtElement<Aas.StructuralSecond>(
                     StructuralSecondFromSequence, "structuralSecond"));
 
             /// <summary>
             /// Read an instance of class MixedAbstractDescendantOne from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.MixedAbstractDescendantOne> MixedAbstractDescendantOneFromElement = (
+            internal static readonly ElementReader<
+                Aas.MixedAbstractDescendantOne
+            > MixedAbstractDescendantOneFromElement = (
                 AtElement<Aas.MixedAbstractDescendantOne>(
                     MixedAbstractDescendantOneFromSequence, "mixedAbstractDescendantOne"));
 
             /// <summary>
             /// Read an instance of class MixedAbstractDescendantTwo from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.MixedAbstractDescendantTwo> MixedAbstractDescendantTwoFromElement = (
+            internal static readonly ElementReader<
+                Aas.MixedAbstractDescendantTwo
+            > MixedAbstractDescendantTwoFromElement = (
                 AtElement<Aas.MixedAbstractDescendantTwo>(
                     MixedAbstractDescendantTwoFromSequence, "mixedAbstractDescendantTwo"));
 
             /// <summary>
             /// Read an instance of class MixedConcreteWithDescendants from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.MixedConcreteWithDescendants> MixedConcreteWithDescendantsFromElement = (
+            internal static readonly ElementReader<
+                Aas.MixedConcreteWithDescendants
+            > MixedConcreteWithDescendantsFromElement = (
                 AtElement<Aas.MixedConcreteWithDescendants>(
                     MixedConcreteWithDescendantsFromSequence, "mixedConcreteWithDescendants"));
 
             /// <summary>
             /// Read an instance of class MixedConcreteWithDescendantsChild from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.MixedConcreteWithDescendantsChild> MixedConcreteWithDescendantsChildFromElement = (
+            internal static readonly ElementReader<
+                Aas.MixedConcreteWithDescendantsChild
+            > MixedConcreteWithDescendantsChildFromElement = (
                 AtElement<Aas.MixedConcreteWithDescendantsChild>(
                     MixedConcreteWithDescendantsChildFromSequence, "mixedConcreteWithDescendantsChild"));
 
             /// <summary>
             /// Read an instance of class MixedConcreteLeaf from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.MixedConcreteLeaf> MixedConcreteLeafFromElement = (
+            internal static readonly ElementReader<
+                Aas.MixedConcreteLeaf
+            > MixedConcreteLeafFromElement = (
                 AtElement<Aas.MixedConcreteLeaf>(
                     MixedConcreteLeafFromSequence, "mixedConcreteLeaf"));
 
             /// <summary>
             /// Read an instance of class ModelTypedFirst from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.ModelTypedFirst> ModelTypedFirstFromElement = (
+            internal static readonly ElementReader<
+                Aas.ModelTypedFirst
+            > ModelTypedFirstFromElement = (
                 AtElement<Aas.ModelTypedFirst>(
                     ModelTypedFirstFromSequence, "modelTypedFirst"));
 
             /// <summary>
             /// Read an instance of class ModelTypedSecond from its XML element.
             /// </summary>
-            internal static readonly ElementReader<Aas.ModelTypedSecond> ModelTypedSecondFromElement = (
+            internal static readonly ElementReader<
+                Aas.ModelTypedSecond
+            > ModelTypedSecondFromElement = (
                 AtElement<Aas.ModelTypedSecond>(
                     ModelTypedSecondFromSequence, "modelTypedSecond"));
 
@@ -722,7 +740,9 @@ namespace dummy
                 AsElement<Aas.ModelTypedUnion>(
                     ModelTypedUnionFromElement));
 
-            private static readonly ContentReader<List<StructuralUnion>> ReadListOfStructuralUnion = (
+            private static readonly ContentReader<
+                List<StructuralUnion>
+            > ReadListOfStructuralUnion = (
                 AsList<StructuralUnion>(
                     StructuralUnionFromElement));
 
@@ -730,11 +750,15 @@ namespace dummy
                 AsList<MixedUnion>(
                     MixedUnionFromElement));
 
-            private static readonly ContentReader<List<ModelTypedUnion>> ReadListOfModelTypedUnion = (
+            private static readonly ContentReader<
+                List<ModelTypedUnion>
+            > ReadListOfModelTypedUnion = (
                 AsList<ModelTypedUnion>(
                     ModelTypedUnionFromElement));
 
-            private static readonly ContentReader<(StructuralUnion, MixedUnion, ModelTypedUnion)> ReadTupleOfStructuralUnionMixedUnionModelTypedUnion = (
+            private static readonly ContentReader<
+                (StructuralUnion, MixedUnion, ModelTypedUnion)
+            > ReadTupleOfStructuralUnionMixedUnionModelTypedUnion = (
                 AsTuple3<StructuralUnion, MixedUnion, ModelTypedUnion>(
                     StructuralUnionFromElement,
                     MixedUnionFromElement,
@@ -2556,163 +2580,184 @@ namespace dummy
             : Visitation.AbstractVisitorWithContext<Xml.XmlWriter>
         {
             /// <summary>
-            /// Write the content of a property, positioned between its start and end tag.
-            /// </summary>
-            /// <typeparam name="T">Type of the property value</typeparam>
-            private delegate void ElementContentSerializer<T>(
-                T that, Xml.XmlWriter writer);
-
-            /// <summary>
-            /// Serialize <paramref name="that" /> as an XML element with
-            /// the given <paramref name="name" />, delegating the content in-between the
-            /// start and the end tag to <paramref name="serializeContent" />.
+            /// Write <paramref name="that" /> where <paramref name="writer" /> already
+            /// is.
             /// </summary>
             /// <remarks>
-            /// This is shared by all the property kinds (primitive, enumeration, class,
-            /// interface, named union, list) as they all wrap their content in exactly
-            /// the same way.
+            /// Every value is written through this one shape, so that the writing can
+            /// be composed: a <c>Write*</c> combinator turns a stringification, a list
+            /// or a tuple of them into one of these, and a class's own
+            /// <c>...ToSequence</c> already is one.
+            ///
+            /// There is deliberately no second delegate for a whole element: an element
+            /// differs from a content only in what it writes, never in its shape, and
+            /// <c>WrapInElement</c> converts between the two.
+            ///
+            /// <typeparamref name="T" /> is contravariant, so that
+            /// <see cref="WriteIClass" /> can be used wherever the writer of a more
+            /// specific interface is expected.
             /// </remarks>
-            /// <typeparam name="T">Type of the property value</typeparam>
-            private static void SerializeElement<T>(
-                string name,
+            /// <typeparam name="T">Type of the value to write</typeparam>
+            private delegate void ContentWriter<in T>(
+                T that,
+                Xml.XmlWriter writer);
+
+            /// <summary>
+            /// Write <paramref name="that" /> as an XML element named
+            /// <paramref name="elementName" />, its content written by
+            /// <paramref name="writeContent" />.
+            /// </summary>
+            /// <remarks>
+            /// An element is nothing but a start and an end tag around a content, so
+            /// there is no writer per property kind -- only the content differs, and it
+            /// has been composed once into a field.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to write</typeparam>
+            private static void WriteElement<T>(
+                string elementName,
                 T that,
                 Xml.XmlWriter writer,
-                ElementContentSerializer<T> serializeContent)
-            {
-                writer.WriteStartElement(name, NS);
-                serializeContent(that, writer);
-                writer.WriteEndElement();
-            }
-
-            /// <summary>
-            /// Write <paramref name="that" /> as a named element.
-            /// </summary>
-            private static void WriteVElementAsBoolean(
-                bool that,
-                string elementName,
-                Xml.XmlWriter writer)
+                ContentWriter<T> writeContent)
             {
                 writer.WriteStartElement(elementName, NS);
-                writer.WriteValue(that);
+                writeContent(that, writer);
                 writer.WriteEndElement();
             }
 
             /// <summary>
-            /// Write <paramref name="that" /> as a named element.
-            /// </summary>
-            private static void WriteVElementAsLong(
-                long that,
-                string elementName,
-                Xml.XmlWriter writer)
-            {
-                writer.WriteStartElement(elementName, NS);
-                writer.WriteValue(that);
-                writer.WriteEndElement();
-            }
-
-            /// <summary>
-            /// Write <paramref name="that" /> as a named element.
-            /// </summary>
-            private static void WriteVElementAsDouble(
-                double that,
-                string elementName,
-                Xml.XmlWriter writer)
-            {
-                writer.WriteStartElement(elementName, NS);
-                writer.WriteValue(that);
-                writer.WriteEndElement();
-            }
-
-            /// <summary>
-            /// Write <paramref name="that" /> as a named element.
-            /// </summary>
-            private static void WriteVElementAsString(
-                string that,
-                string elementName,
-                Xml.XmlWriter writer)
-            {
-                writer.WriteStartElement(elementName, NS);
-                writer.WriteValue(that);
-                writer.WriteEndElement();
-            }
-
-            /// <summary>
-            /// Write <paramref name="that" /> as a named element.
-            /// </summary>
-            private static void WriteVElementAsBytes(
-                byte[] that,
-                string elementName,
-                Xml.XmlWriter writer)
-            {
-                writer.WriteStartElement(elementName, NS);
-                writer.WriteBase64(that, 0, that.Length);
-                writer.WriteEndElement();
-            }
-
-            /// <summary>
-            /// Write a single tuple item wrapped in a named element.
+            /// Write the items of a list, each with <paramref name="writeItem" />.
             /// </summary>
             /// <remarks>
-            /// A tuple-typed property is written by <c>SerializeTupleN</c> (see
-            /// <see cref="SerializeTuple2{T0, T1}" /> for the arity-2 case, *etc.*),
-            /// which -- like <see cref="SerializeElement{T}" /> -- expects an
-            /// <see cref="ElementContentSerializer{T}" /> per item. A class or named
-            /// union item's own <c>Visit</c> method (or overload) already has that shape
-            /// (writing its own element directly, with no wrapping needed), so it can be
-            /// passed on unchanged. A primitive or enumeration item, on the other hand,
-            /// first needs to be wrapped in its own positional <c>v1</c>, <c>v2</c>,
-            /// *etc.* element -- this adapter closes over the element name so that
-            /// a tuple-typed property does not need to spell out that wrapping (start
-            /// element/write value/end element) at every item.
+            /// An empty list writes no items at all, which the reading sees as
+            /// a self-closing element.
             /// </remarks>
-            /// <typeparam name="T">Type of the item to be written</typeparam>
-            private delegate void NamedElementSerializer<T>(
-                T that, string elementName, Xml.XmlWriter writer);
-
-            /// <summary>
-            /// Adapt <paramref name="writeItem" /> -- a named-element item writer such as
-            /// <see cref="WriteVElementAsLong" /> -- into an
-            /// <see cref="ElementContentSerializer{T}" /> bound to
-            /// <paramref name="elementName" />, for use in a tuple-typed property.
-            /// </summary>
-            /// <typeparam name="T">Type of the item to be written</typeparam>
-            private static ElementContentSerializer<T> AsTupleItemSerializer<T>(
-                NamedElementSerializer<T> writeItem,
-                string elementName)
+            /// <typeparam name="T">Type of a single list item</typeparam>
+            private static ContentWriter<List<T>> WriteList<T>(
+                ContentWriter<T> writeItem
+                )
             {
-                return (T that, Xml.XmlWriter writer) => writeItem(that, elementName, writer);
+                return (that, writer) =>
+                {
+                    foreach (var item in that)
+                    {
+                        writeItem(item, writer);
+                    }
+                };
             }
 
             /// <summary>
-            /// Write the tuple <paramref name="that" /> of 3 item(s) with
-            /// <paramref name="serializeItem0" />, <paramref name="serializeItem1" />,
-            /// *etc.*, positioned wherever <paramref name="writer" /> already is.
+            /// Write a tuple of 3 item(s), each with its own <c>writeItem*</c>.
             /// </summary>
             /// <remarks>
-            /// This is shared by all the tuple-typed properties of arity 3.
+            /// This is shared by everything of a tuple type of arity 3 -- be it
+            /// a property, or a value nested in a list or in another tuple.
             /// </remarks>
-            private static void SerializeTuple3<T0, T1, T2>(
-                (T0, T1, T2) that,
-                Xml.XmlWriter writer,
-                ElementContentSerializer<T0> serializeItem0,
-                ElementContentSerializer<T1> serializeItem1,
-                ElementContentSerializer<T2> serializeItem2)
+            private static ContentWriter<(T0, T1, T2)> WriteTuple3<T0, T1, T2>(
+                ContentWriter<T0> writeItem0,
+                ContentWriter<T1> writeItem1,
+                ContentWriter<T2> writeItem2
+                )
             {
-                serializeItem0(that.Item1, writer);
-                serializeItem1(that.Item2, writer);
-                serializeItem2(that.Item3, writer);
+                return (that, writer) =>
+                {
+                    writeItem0(that.Item1, writer);
+                    writeItem1(that.Item2, writer);
+                    writeItem2(that.Item3, writer);
+                };
             }
 
-            private void StructuralFirstToSequence(
+            /// <summary>
+            /// The one instance through which the writing is dispatched.
+            /// </summary>
+            /// <remarks>
+            /// The visitor carries no state -- the writer is passed in as the context --
+            /// so a single instance serves the whole program. No field initializer reads
+            /// it, only <see cref="WriteIClass" /> does, so it does not matter where
+            /// among the writers it is initialized.
+            /// </remarks>
+            [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
+            private static readonly VisitorWithWriter _instance = (
+                new VisitorWithWriter());
+
+            /// <summary>
+            /// Write <paramref name="that" /> as its own XML element.
+            /// </summary>
+            /// <remarks>
+            /// Which element that is, is decided by the run-time type of
+            /// <paramref name="that" />, so this one writer serves every abstract class
+            /// and every concrete class with descendants, as well as the item of a list
+            /// or of a tuple of any of them.
+            /// </remarks>
+            internal static void WriteIClass(
+                Aas.IClass that,
+                Xml.XmlWriter writer)
+            {
+                that.Accept(_instance, writer);
+            }
+
+            /// <summary>
+            /// Write the underlying instance of <paramref name="that" /> as its own XML
+            /// element.
+            /// </summary>
+            /// <remarks>
+            /// A named union is not itself an <c>Aas.IClass</c>, so it can not be
+            /// dispatched by <see cref="WriteIClass" /> directly. Going through
+            /// the common, non-generic <c>Aas.IUnion</c> instead of the union's own
+            /// type means one writer for *all* the named unions, not one per union.
+            ///
+            /// Should a named union ever be allowed to flatten a primitive or
+            /// an enumeration alternative, only this body has to change.
+            /// </remarks>
+            private static void WriteIUnion(
+                Aas.IUnion that,
+                Xml.XmlWriter writer)
+            {
+                WriteIClass(that.Underlying, writer);
+            }
+
+            private static readonly ContentWriter<string> WriteString = (
+                (that, writer) => writer.WriteValue(that));
+
+            private static readonly ContentWriter<StructuralUnion> WriteStructuralUnion = (
+                WriteIUnion);
+
+            private static readonly ContentWriter<MixedUnion> WriteMixedUnion = (
+                WriteIUnion);
+
+            private static readonly ContentWriter<ModelTypedUnion> WriteModelTypedUnion = (
+                WriteIUnion);
+
+            private static readonly ContentWriter<
+                List<StructuralUnion>
+            > WriteListOfStructuralUnion = (
+                WriteList<StructuralUnion>(
+                    WriteIUnion));
+
+            private static readonly ContentWriter<List<MixedUnion>> WriteListOfMixedUnion = (
+                WriteList<MixedUnion>(
+                    WriteIUnion));
+
+            private static readonly ContentWriter<
+                List<ModelTypedUnion>
+            > WriteListOfModelTypedUnion = (
+                WriteList<ModelTypedUnion>(
+                    WriteIUnion));
+
+            private static readonly ContentWriter<
+                (StructuralUnion, MixedUnion, ModelTypedUnion)
+            > WriteTupleOfStructuralUnionMixedUnionModelTypedUnion = (
+                WriteTuple3<StructuralUnion, MixedUnion, ModelTypedUnion>(
+                    WriteIUnion,
+                    WriteIUnion,
+                    WriteIUnion));
+
+            private static void StructuralFirstToSequence(
                 Aas.IStructuralFirst that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "uniqueToFirst",
-                    that.UniqueToFirst,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void StructuralFirstToSequence
+                WriteElement(
+                    "uniqueToFirst", that.UniqueToFirst, writer, WriteString);
+            }  // private static void StructuralFirstToSequence
 
             public override void VisitStructuralFirst(
                 Aas.IStructuralFirst that,
@@ -2721,22 +2766,19 @@ namespace dummy
                 writer.WriteStartElement(
                     "structuralFirst",
                     NS);
-                this.StructuralFirstToSequence(
+                StructuralFirstToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void StructuralSecondToSequence(
+            private static void StructuralSecondToSequence(
                 Aas.IStructuralSecond that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "uniqueToSecond",
-                    that.UniqueToSecond,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void StructuralSecondToSequence
+                WriteElement(
+                    "uniqueToSecond", that.UniqueToSecond, writer, WriteString);
+            }  // private static void StructuralSecondToSequence
 
             public override void VisitStructuralSecond(
                 Aas.IStructuralSecond that,
@@ -2745,22 +2787,22 @@ namespace dummy
                 writer.WriteStartElement(
                     "structuralSecond",
                     NS);
-                this.StructuralSecondToSequence(
+                StructuralSecondToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void MixedAbstractDescendantOneToSequence(
+            private static void MixedAbstractDescendantOneToSequence(
                 Aas.IMixedAbstractDescendantOne that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
+                WriteElement(
                     "uniqueToAbstractDescendantOne",
                     that.UniqueToAbstractDescendantOne,
                     writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void MixedAbstractDescendantOneToSequence
+                    WriteString);
+            }  // private static void MixedAbstractDescendantOneToSequence
 
             public override void VisitMixedAbstractDescendantOne(
                 Aas.IMixedAbstractDescendantOne that,
@@ -2769,22 +2811,22 @@ namespace dummy
                 writer.WriteStartElement(
                     "mixedAbstractDescendantOne",
                     NS);
-                this.MixedAbstractDescendantOneToSequence(
+                MixedAbstractDescendantOneToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void MixedAbstractDescendantTwoToSequence(
+            private static void MixedAbstractDescendantTwoToSequence(
                 Aas.IMixedAbstractDescendantTwo that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
+                WriteElement(
                     "uniqueToAbstractDescendantTwo",
                     that.UniqueToAbstractDescendantTwo,
                     writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void MixedAbstractDescendantTwoToSequence
+                    WriteString);
+            }  // private static void MixedAbstractDescendantTwoToSequence
 
             public override void VisitMixedAbstractDescendantTwo(
                 Aas.IMixedAbstractDescendantTwo that,
@@ -2793,22 +2835,19 @@ namespace dummy
                 writer.WriteStartElement(
                     "mixedAbstractDescendantTwo",
                     NS);
-                this.MixedAbstractDescendantTwoToSequence(
+                MixedAbstractDescendantTwoToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void MixedConcreteWithDescendantsToSequence(
+            private static void MixedConcreteWithDescendantsToSequence(
                 Aas.IMixedConcreteWithDescendants that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "someBaseProperty",
-                    that.SomeBaseProperty,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void MixedConcreteWithDescendantsToSequence
+                WriteElement(
+                    "someBaseProperty", that.SomeBaseProperty, writer, WriteString);
+            }  // private static void MixedConcreteWithDescendantsToSequence
 
             public override void VisitMixedConcreteWithDescendants(
                 Aas.IMixedConcreteWithDescendants that,
@@ -2817,28 +2856,22 @@ namespace dummy
                 writer.WriteStartElement(
                     "mixedConcreteWithDescendants",
                     NS);
-                this.MixedConcreteWithDescendantsToSequence(
+                MixedConcreteWithDescendantsToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void MixedConcreteWithDescendantsChildToSequence(
+            private static void MixedConcreteWithDescendantsChildToSequence(
                 Aas.IMixedConcreteWithDescendantsChild that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "someBaseProperty",
-                    that.SomeBaseProperty,
-                    writer,
-                    (value, w) => w.WriteValue(value));
+                WriteElement(
+                    "someBaseProperty", that.SomeBaseProperty, writer, WriteString);
 
-                SerializeElement(
-                    "someChildProperty",
-                    that.SomeChildProperty,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void MixedConcreteWithDescendantsChildToSequence
+                WriteElement(
+                    "someChildProperty", that.SomeChildProperty, writer, WriteString);
+            }  // private static void MixedConcreteWithDescendantsChildToSequence
 
             public override void VisitMixedConcreteWithDescendantsChild(
                 Aas.IMixedConcreteWithDescendantsChild that,
@@ -2847,22 +2880,19 @@ namespace dummy
                 writer.WriteStartElement(
                     "mixedConcreteWithDescendantsChild",
                     NS);
-                this.MixedConcreteWithDescendantsChildToSequence(
+                MixedConcreteWithDescendantsChildToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void MixedConcreteLeafToSequence(
+            private static void MixedConcreteLeafToSequence(
                 Aas.IMixedConcreteLeaf that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "uniqueToConcreteLeaf",
-                    that.UniqueToConcreteLeaf,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void MixedConcreteLeafToSequence
+                WriteElement(
+                    "uniqueToConcreteLeaf", that.UniqueToConcreteLeaf, writer, WriteString);
+            }  // private static void MixedConcreteLeafToSequence
 
             public override void VisitMixedConcreteLeaf(
                 Aas.IMixedConcreteLeaf that,
@@ -2871,22 +2901,19 @@ namespace dummy
                 writer.WriteStartElement(
                     "mixedConcreteLeaf",
                     NS);
-                this.MixedConcreteLeafToSequence(
+                MixedConcreteLeafToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void ModelTypedFirstToSequence(
+            private static void ModelTypedFirstToSequence(
                 Aas.IModelTypedFirst that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "someProperty",
-                    that.SomeProperty,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void ModelTypedFirstToSequence
+                WriteElement(
+                    "someProperty", that.SomeProperty, writer, WriteString);
+            }  // private static void ModelTypedFirstToSequence
 
             public override void VisitModelTypedFirst(
                 Aas.IModelTypedFirst that,
@@ -2895,22 +2922,19 @@ namespace dummy
                 writer.WriteStartElement(
                     "modelTypedFirst",
                     NS);
-                this.ModelTypedFirstToSequence(
+                ModelTypedFirstToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void ModelTypedSecondToSequence(
+            private static void ModelTypedSecondToSequence(
                 Aas.IModelTypedSecond that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "someProperty",
-                    that.SomeProperty,
-                    writer,
-                    (value, w) => w.WriteValue(value));
-            }  // private void ModelTypedSecondToSequence
+                WriteElement(
+                    "someProperty", that.SomeProperty, writer, WriteString);
+            }  // private static void ModelTypedSecondToSequence
 
             public override void VisitModelTypedSecond(
                 Aas.IModelTypedSecond that,
@@ -2919,108 +2943,73 @@ namespace dummy
                 writer.WriteStartElement(
                     "modelTypedSecond",
                     NS);
-                this.ModelTypedSecondToSequence(
+                ModelTypedSecondToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
             }
 
-            private void SomethingToSequence(
+            private static void SomethingToSequence(
                 Aas.ISomething that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "structuralProperty",
-                    that.StructuralProperty,
-                    writer,
-                    (value, w) => this.Visit(value, w));
+                WriteElement(
+                    "structuralProperty", that.StructuralProperty, writer, WriteStructuralUnion);
 
-                SerializeElement(
-                    "mixedProperty",
-                    that.MixedProperty,
-                    writer,
-                    (value, w) => this.Visit(value, w));
+                WriteElement(
+                    "mixedProperty", that.MixedProperty, writer, WriteMixedUnion);
 
-                SerializeElement(
-                    "modelTypedProperty",
-                    that.ModelTypedProperty,
-                    writer,
-                    (value, w) => this.Visit(value, w));
+                WriteElement(
+                    "modelTypedProperty", that.ModelTypedProperty, writer, WriteModelTypedUnion);
 
-                SerializeElement(
+                WriteElement(
                     "listStructuralProperty",
                     that.ListStructuralProperty,
                     writer,
-                    (value, w) =>
-                    {
-                        foreach (var item in value)
-                        {
-                            this.Visit(item, w);
-                        }
-                    });
+                    WriteListOfStructuralUnion);
 
-                SerializeElement(
-                    "listMixedProperty",
-                    that.ListMixedProperty,
-                    writer,
-                    (value, w) =>
-                    {
-                        foreach (var item in value)
-                        {
-                            this.Visit(item, w);
-                        }
-                    });
+                WriteElement(
+                    "listMixedProperty", that.ListMixedProperty, writer, WriteListOfMixedUnion);
 
-                SerializeElement(
+                WriteElement(
                     "listModelTypedProperty",
                     that.ListModelTypedProperty,
                     writer,
-                    (value, w) =>
-                    {
-                        foreach (var item in value)
-                        {
-                            this.Visit(item, w);
-                        }
-                    });
+                    WriteListOfModelTypedUnion);
 
-                SerializeElement(
+                WriteElement(
                     "tupleProperty",
                     that.TupleProperty,
                     writer,
-                    (value, w) => SerializeTuple3(
-                        value,
-                        w,
-                        this.Visit,
-                        this.Visit,
-                        this.Visit));
+                    WriteTupleOfStructuralUnionMixedUnionModelTypedUnion);
 
                 if (that.OptionalStructuralProperty != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "optionalStructuralProperty",
                         that.OptionalStructuralProperty,
                         writer,
-                        (value, w) => this.Visit(value, w));
+                        WriteStructuralUnion);
                 }
 
                 if (that.OptionalMixedProperty != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "optionalMixedProperty",
                         that.OptionalMixedProperty,
                         writer,
-                        (value, w) => this.Visit(value, w));
+                        WriteMixedUnion);
                 }
 
                 if (that.OptionalModelTypedProperty != null)
                 {
-                    SerializeElement(
+                    WriteElement(
                         "optionalModelTypedProperty",
                         that.OptionalModelTypedProperty,
                         writer,
-                        (value, w) => this.Visit(value, w));
+                        WriteModelTypedUnion);
                 }
-            }  // private void SomethingToSequence
+            }  // private static void SomethingToSequence
 
             public override void VisitSomething(
                 Aas.ISomething that,
@@ -3029,19 +3018,10 @@ namespace dummy
                 writer.WriteStartElement(
                     "something",
                     NS);
-                this.SomethingToSequence(
+                SomethingToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
-            }
-
-            private void Visit(
-                Aas.IUnion that,
-                Xml.XmlWriter writer)
-            {
-                this.Visit(
-                    that.Underlying,
-                    writer);
             }
         }  // internal class VisitorWithWriter
 
@@ -3062,10 +3042,6 @@ namespace dummy
         /// </example>
         public static class Serialize
         {
-            [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            private static readonly VisitorWithWriter _visitorWithWriter = (
-                new VisitorWithWriter());
-
             /// <summary>
             /// Serialize an instance of the meta-model to XML.
             /// </summary>
@@ -3073,7 +3049,7 @@ namespace dummy
                 Aas.IClass that,
                 Xml.XmlWriter writer)
             {
-                Serialize._visitorWithWriter.Visit(
+                VisitorWithWriter.WriteIClass(
                     that, writer);
             }
         }  // public static class Serialize

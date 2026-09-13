@@ -742,56 +742,180 @@ namespace dummy
             : Visitation.AbstractVisitorWithContext<Xml.XmlWriter>
         {
             /// <summary>
-            /// Write the content of a property, positioned between its start and end tag.
-            /// </summary>
-            /// <typeparam name="T">Type of the property value</typeparam>
-            private delegate void ElementContentSerializer<T>(
-                T that, Xml.XmlWriter writer);
-
-            /// <summary>
-            /// Serialize <paramref name="that" /> as an XML element with
-            /// the given <paramref name="name" />, delegating the content in-between the
-            /// start and the end tag to <paramref name="serializeContent" />.
+            /// Write <paramref name="that" /> where <paramref name="writer" /> already
+            /// is.
             /// </summary>
             /// <remarks>
-            /// This is shared by all the property kinds (primitive, enumeration, class,
-            /// interface, named union, list) as they all wrap their content in exactly
-            /// the same way.
+            /// Every value is written through this one shape, so that the writing can
+            /// be composed: a <c>Write*</c> combinator turns a stringification, a list
+            /// or a tuple of them into one of these, and a class's own
+            /// <c>...ToSequence</c> already is one.
+            ///
+            /// There is deliberately no second delegate for a whole element: an element
+            /// differs from a content only in what it writes, never in its shape, and
+            /// <c>WrapInElement</c> converts between the two.
+            ///
+            /// <typeparamref name="T" /> is contravariant, so that
+            /// <see cref="WriteIClass" /> can be used wherever the writer of a more
+            /// specific interface is expected.
             /// </remarks>
-            /// <typeparam name="T">Type of the property value</typeparam>
-            private static void SerializeElement<T>(
-                string name,
+            /// <typeparam name="T">Type of the value to write</typeparam>
+            private delegate void ContentWriter<in T>(
+                T that,
+                Xml.XmlWriter writer);
+
+            /// <summary>
+            /// Write <paramref name="that" /> as an XML element named
+            /// <paramref name="elementName" />, its content written by
+            /// <paramref name="writeContent" />.
+            /// </summary>
+            /// <remarks>
+            /// An element is nothing but a start and an end tag around a content, so
+            /// there is no writer per property kind -- only the content differs, and it
+            /// has been composed once into a field.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to write</typeparam>
+            private static void WriteElement<T>(
+                string elementName,
                 T that,
                 Xml.XmlWriter writer,
-                ElementContentSerializer<T> serializeContent)
+                ContentWriter<T> writeContent)
             {
-                writer.WriteStartElement(name, NS);
-                serializeContent(that, writer);
+                writer.WriteStartElement(elementName, NS);
+                writeContent(that, writer);
                 writer.WriteEndElement();
             }
 
-            private void SomethingToSequence(
+            /// <summary>
+            /// Bind <paramref name="elementName" /> and <paramref name="writeContent" />
+            /// to <see cref="WriteElement{T}" />, so that the result writes the whole
+            /// element, tags included.
+            /// </summary>
+            /// <remarks>
+            /// This is <see cref="WriteElement{T}" /> partially applied, which C# does
+            /// not give for free. It is used <em>only</em> for the <c>&lt;v&gt;</c>
+            /// element of a list item and for the positional <c>v1</c>, <c>v2</c>,
+            /// <c>...</c> elements of a tuple item. At a property, where the name and
+            /// the value are both at hand, <see cref="WriteElement{T}" /> is applied
+            /// and called in one go instead.
+            ///
+            /// It is needed because <c>WriteList</c> and <c>WriteTupleN</c> each take
+            /// exactly one item-writer type: an item which is a class, an interface or
+            /// a named union writes its own element, whose name is known only at
+            /// run-time, whereas a primitive or an enumeration item has to be wrapped in
+            /// a fixed positional name. Were those two different types, a tuple mixing
+            /// them -- and they do mix, item by item -- would need a combinator per
+            /// combination of the two.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to write</typeparam>
+            private static ContentWriter<T> WrapInElement<T>(
+                ContentWriter<T> writeContent,
+                string elementName
+                )
+            {
+                return (that, writer) => WriteElement<T>(
+                    elementName, that, writer, writeContent);
+            }
+
+            /// <summary>
+            /// Render the literal <paramref name="that" /> of <typeparamref name="T" />
+            /// as text.
+            /// </summary>
+            /// <remarks>
+            /// Every <c>Stringification.ToString</c> overload has this shape, so it can
+            /// be passed on directly -- which is what lets an enumeration be written by
+            /// one generated combinator instead of one per enumeration. The parameter is
+            /// nullable because the overloads are generated that way; a literal converts
+            /// to it implicitly.
+            /// </remarks>
+            /// <typeparam name="T">Enumeration whose literal is rendered</typeparam>
+            private delegate string? LiteralStringifier<T>(T? that) where T : struct;
+
+            /// <summary>
+            /// Write a literal of <typeparamref name="T" />, rendered with
+            /// <paramref name="stringifyLiteral" />.
+            /// </summary>
+            /// <typeparam name="T">Enumeration to write the literal of</typeparam>
+            private static ContentWriter<T> WriteEnum<T>(
+                LiteralStringifier<T> stringifyLiteral
+                ) where T : struct
+            {
+                return (that, writer) =>
+                {
+                    writer.WriteValue(
+                        stringifyLiteral(that)
+                            ?? throw new System.ArgumentException(
+                                $"Invalid literal for the enumeration {typeof(T).Name}: " +
+                                that.ToString()));
+                };
+            }
+
+            /// <summary>
+            /// Write the items of a list, each with <paramref name="writeItem" />.
+            /// </summary>
+            /// <remarks>
+            /// An empty list writes no items at all, which the reading sees as
+            /// a self-closing element.
+            /// </remarks>
+            /// <typeparam name="T">Type of a single list item</typeparam>
+            private static ContentWriter<List<T>> WriteList<T>(
+                ContentWriter<T> writeItem
+                )
+            {
+                return (that, writer) =>
+                {
+                    foreach (var item in that)
+                    {
+                        writeItem(item, writer);
+                    }
+                };
+            }
+
+            /// <summary>
+            /// The one instance through which the writing is dispatched.
+            /// </summary>
+            /// <remarks>
+            /// The visitor carries no state -- the writer is passed in as the context --
+            /// so a single instance serves the whole program. No field initializer reads
+            /// it, only <see cref="WriteIClass" /> does, so it does not matter where
+            /// among the writers it is initialized.
+            /// </remarks>
+            [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
+            private static readonly VisitorWithWriter _instance = (
+                new VisitorWithWriter());
+
+            /// <summary>
+            /// Write <paramref name="that" /> as its own XML element.
+            /// </summary>
+            /// <remarks>
+            /// Which element that is, is decided by the run-time type of
+            /// <paramref name="that" />, so this one writer serves every abstract class
+            /// and every concrete class with descendants, as well as the item of a list
+            /// or of a tuple of any of them.
+            /// </remarks>
+            internal static void WriteIClass(
+                Aas.IClass that,
+                Xml.XmlWriter writer)
+            {
+                that.Accept(_instance, writer);
+            }
+
+            private static readonly ContentWriter<Result> WriteResult = (
+                WriteEnum<Aas.Result>(
+                    Stringification.ToString));
+
+            private static readonly ContentWriter<List<Result>> WriteListOfResult = (
+                WriteList<Result>(
+                    WrapInElement(
+                        WriteResult, "v")));
+
+            private static void SomethingToSequence(
                 Aas.ISomething that,
                 Xml.XmlWriter writer)
             {
-                SerializeElement(
-                    "someResults",
-                    that.SomeResults,
-                    writer,
-                    (value, w) =>
-                    {
-                        foreach (var item in value)
-                        {
-                            w.WriteStartElement("v", NS);
-                            w.WriteValue(
-                                Stringification.ToString(item)
-                                    ?? throw new System.ArgumentException(
-                                        "Invalid literal for the enumeration Result: " +
-                                        item.ToString()));
-                            w.WriteEndElement();
-                        }
-                    });
-            }  // private void SomethingToSequence
+                WriteElement(
+                    "someResults", that.SomeResults, writer, WriteListOfResult);
+            }  // private static void SomethingToSequence
 
             public override void VisitSomething(
                 Aas.ISomething that,
@@ -800,7 +924,7 @@ namespace dummy
                 writer.WriteStartElement(
                     "something",
                     NS);
-                this.SomethingToSequence(
+                SomethingToSequence(
                     that,
                     writer);
                 writer.WriteEndElement();
@@ -824,10 +948,6 @@ namespace dummy
         /// </example>
         public static class Serialize
         {
-            [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            private static readonly VisitorWithWriter _visitorWithWriter = (
-                new VisitorWithWriter());
-
             /// <summary>
             /// Serialize an instance of the meta-model to XML.
             /// </summary>
@@ -835,7 +955,7 @@ namespace dummy
                 Aas.IClass that,
                 Xml.XmlWriter writer)
             {
-                Serialize._visitorWithWriter.Visit(
+                VisitorWithWriter.WriteIClass(
                     that, writer);
             }
         }  // public static class Serialize
