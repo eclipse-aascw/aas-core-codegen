@@ -12,7 +12,6 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.List;
 import java.util.Optional;
@@ -147,98 +146,6 @@ public class Xmlization {
       return currentEvent(reader).isEndElement();
     }
 
-    private static Reporting.Result<XMLEvent> verifyClosingTagForClass(
-      String className,
-      XMLEventReader reader,
-      Reporting.Result<String> tryElementName) {
-      final XMLEvent currentEvent = currentEvent(reader);
-      if (currentEvent.isEndDocument()) {
-        final Reporting.Error error = new Reporting.Error(
-            "Expected an XML end element to conclude a property of class " + className
-                + " with the element name " + tryElementName.getResult() + ", "
-                + "but got the end-of-file.");
-        return Reporting.Result.failure(error);
-      }
-
-      if (!currentEvent.isEndElement()) {
-        final Reporting.Error error = new Reporting.Error(
-            "Expected an XML end element to conclude a property of class " + className
-                + " with the element name " + tryElementName.getResult() + ", "
-                + "but got the node of type " + getEventTypeAsString(currentEvent)
-                + " with the value " + currentEvent);
-        return Reporting.Result.failure(error);
-      }
-      final Reporting.Result<String> tryEndElementName = tryElementName(reader);
-      if (tryEndElementName.isError()) {
-        return tryEndElementName.castTo(XMLEvent.class);
-      }
-      if (!tryElementName.getResult().equals(tryEndElementName.getResult())) {
-        final Reporting.Error error = new Reporting.Error(
-            "Expected an XML end element to conclude a property of class " + className
-                + " with the element name " + tryElementName.getResult() + ", "
-                + "but got the end element with the name " + tryEndElementName.getResult());
-        return Reporting.Result.failure(error);
-      }
-      try {
-        return Reporting.Result.success(reader.nextEvent());
-      } catch (XMLStreamException xmlStreamException) {
-        throw new Xmlization.DeserializeException("",
-          "Failed in method verifyClosingTagForClass because of: " +
-          xmlStreamException.getMessage());
-      }
-    }
-
-    /**
-     * Deserialize an instance of {@code T} from an XML element.
-     *
-     * <p>{@code parseAsSequence} is given the element's local name and whether
-     * the element is self-closing, and is expected to consume the properties of
-     * the instance, but not the element's closing tag.
-     */
-    private static <T> Reporting.Result<? extends T> parseInstanceFromElement(
-      XMLEventReader reader,
-      Class<T> type,
-      BiFunction<String, Boolean, Reporting.Result<? extends T>> parseAsSequence) {
-      skipWhitespaceAndComments(reader);
-
-      final XMLEvent currentEvent = currentEvent(reader);
-      if (currentEvent.getEventType() == XMLStreamConstants.END_DOCUMENT) {
-        return Reporting.Result.failure(new Reporting.Error(
-          "Expected an XML element representing an instance of " + type.getSimpleName() + ", " +
-            "but reached the end-of-file"));
-      }
-
-      if (currentEvent.getEventType() != XMLStreamConstants.START_ELEMENT) {
-        return Reporting.Result.failure(new Reporting.Error(
-          "Expected an XML element representing an instance of " + type.getSimpleName() + ", " +
-            "but got a node of type " + getEventTypeAsString(currentEvent) +
-            " with value " + currentEvent));
-      }
-
-      final Reporting.Result<String> tryElementName = tryElementName(reader);
-      if (tryElementName.isError()) {
-        return Reporting.Result.failure(tryElementName.getError());
-      }
-
-      final String elementName = tryElementName.getResult();
-      final boolean isEmptyElement = isEmptyElement(reader);
-
-      final Reporting.Result<? extends T> result = parseAsSequence.apply(elementName, isEmptyElement);
-      if (result.isError()) {
-        return result;
-      }
-
-      final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-        type.getSimpleName(),
-        reader,
-        tryElementName);
-      if (checkEndElement.isError()) {
-        return Reporting.Result.failure(checkEndElement.getError());
-      }
-
-      return result;
-    }
-
     private static void skipWhitespaceAndComments(XMLEventReader reader) {
       while (whiteSpaceOrComment(reader)) {
         reader.next();
@@ -294,17 +201,182 @@ public class Xmlization {
           : currentEvent.asEndElement().getName().getLocalPart());
     }
 
-    private static String readContentAsString(XMLEventReader reader) throws XMLStreamException {
-      final StringBuilder content = new StringBuilder();
+    /**
+     * Read the content of an element which has already been opened.
+     *
+     * <p>{@code isEmpty} tells whether that element was self-closing.
+     */
+    @FunctionalInterface
+    private interface ContentReader<T> {
+      Reporting.Result<? extends T> read(XMLEventReader reader, boolean isEmpty);
+    }
 
-      while (reader.peek().isCharacters() || reader.peek().getEventType() == XMLStreamConstants.COMMENT) {
-        if (reader.peek().isCharacters()) {
-          content.append(reader.peek().asCharacters().getData());
-        }
-        reader.nextEvent();
+    /**
+     * Read a whole element, opening and closing it.
+     */
+    @FunctionalInterface
+    private interface ElementReader<T> {
+      Reporting.Result<? extends T> read(XMLEventReader reader);
+    }
+
+    /**
+     * Convert the text content of an element which has already been opened.
+     */
+    @FunctionalInterface
+    private interface ContentConverter<T> {
+      T convert(XMLEventReader reader) throws XMLStreamException;
+    }
+
+    /**
+     * Look up the name of the element which {@code reader} is positioned at.
+     *
+     * <p>This is the single primitive answering "we are at an element, and this is
+     * its name": {@link #readNamedElement} checks that name against the one its
+     * container supplied, a dispatcher switches on it, and a property loop uses it
+     * to select the property. Nothing is consumed, which is what lets a dispatcher
+     * hand the whole element on to the reader it selected.
+     */
+    private static Reporting.Result<String> peekElementName(XMLEventReader reader) {
+      skipWhitespaceAndComments(reader);
+
+      final XMLEvent currentEvent = currentEvent(reader);
+      if (currentEvent.isEndDocument()) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "Expected an XML element, but reached the end-of-file"));
       }
 
-      return content.toString();
+      if (!currentEvent.isStartElement()) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "Expected an XML element, but got the node of type " +
+          getEventTypeAsString(currentEvent) + " with the value " + currentEvent));
+      }
+
+      return tryElementName(reader);
+    }
+
+    /**
+     * Consume the end tag concluding the element called {@code elementName}.
+     */
+    private static Reporting.Result<XMLEvent> consumeEndElement(
+      XMLEventReader reader, String elementName) {
+      skipWhitespaceAndComments(reader);
+
+      final XMLEvent currentEvent = currentEvent(reader);
+      if (currentEvent.isEndDocument()) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "Expected an XML end element to conclude the element " + elementName +
+          ", but got the end-of-file"));
+      }
+
+      if (!currentEvent.isEndElement()) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "Expected an XML end element to conclude the element " + elementName +
+          ", but got the node of type " + getEventTypeAsString(currentEvent) +
+          " with the value " + currentEvent));
+      }
+
+      final Reporting.Result<String> tryEndElementName = tryElementName(reader);
+      if (tryEndElementName.isError()) {
+        return tryEndElementName.castTo(XMLEvent.class);
+      }
+
+      if (!elementName.equals(tryEndElementName.getResult())) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "Expected an XML end element to conclude the element " + elementName +
+          ", but got the end element with the name " + tryEndElementName.getResult()));
+      }
+
+      try {
+        return Reporting.Result.success(reader.nextEvent());
+      } catch (XMLStreamException xmlStreamException) {
+        throw new Xmlization.DeserializeException("",
+          "Failed in method consumeEndElement because of: " +
+          xmlStreamException.getMessage());
+      }
+    }
+
+    /**
+     * Read a whole element which is expected to be called {@code name}, and read
+     * its content with {@code readContent}.
+     *
+     * <p>The name is data, not a type: an instance reads the XML name of its own
+     * class, a list item reads {@code "v"} and a tuple item reads {@code "v1"},
+     * {@code "v2"}, ... by position. One framer therefore serves them all.
+     */
+    private static <T> Reporting.Result<? extends T> readNamedElement(
+      XMLEventReader reader, String name, ContentReader<T> readContent) {
+      final Reporting.Result<String> tryElementName = peekElementName(reader);
+      if (tryElementName.isError()) {
+        return Reporting.Result.failure(tryElementName.getError());
+      }
+
+      if (!name.equals(tryElementName.getResult())) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "Expected an XML element " + name + ", but got an XML element " +
+          tryElementName.getResult()));
+      }
+
+      final boolean isEmpty = isEmptyElement(reader);
+
+      final Reporting.Result<? extends T> result = readContent.read(reader, isEmpty);
+      if (result.isError()) {
+        return result;
+      }
+
+      final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, name);
+      if (endResult.isError()) {
+        return Reporting.Result.failure(endResult.getError());
+      }
+
+      return result;
+    }
+
+    /**
+     * Read a self-describing element as the content of the property element which
+     * {@code reader} is already positioned inside.
+     *
+     * <p>This looks like a needless layer over {@code read...FromElement}: the
+     * reader sits at the very same position in both cases, just before a start
+     * element, whether that element is the only child of a property element or
+     * the next item of a list. The layer exists for the error path alone.
+     *
+     * <p>A property wraps its instance in an element of its own, so the failing
+     * node is one step deeper than the property and the discriminator's name has
+     * to be prepended: {@code value/property/idShort}. A list item is not
+     * wrapped -- the item element *is* the indexed child -- so prepending the name
+     * there would give {@code annotations/*[0]/property/idShort}, which walks one
+     * level past the element {@code *[0]} already selects and resolves to
+     * nothing.
+     *
+     * <p>The two callers therefore need different segments, which is why the name
+     * can not be prepended inside {@code read...FromElement}. Unifying them would
+     * take a segment carrying a name *and* a position
+     * ({@code annotations/property[1]}), and that is a change to
+     * {@link Reporting}, which the verification and the JSON de-serialization
+     * share.
+     */
+    private static <T> Reporting.Result<? extends T> readNestedElement(
+      XMLEventReader reader, boolean isEmpty, ElementReader<T> readInner) {
+      if (isEmpty) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "Expected an XML element representing an instance, " +
+          "but encountered a self-closing element"));
+      }
+
+      final Reporting.Result<String> tryElementName = peekElementName(reader);
+      if (tryElementName.isError()) {
+        return Reporting.Result.failure(tryElementName.getError());
+      }
+
+      final Reporting.Result<? extends T> result = readInner.read(reader);
+      if (result.isError()) {
+        result.getError()
+          .prependSegment(
+            new Reporting.NameSegment(
+              tryElementName.getResult()));
+      }
+
+      return result;
     }
 
     private static Boolean readContentAsBool(XMLEventReader reader) throws XMLStreamException {
@@ -322,7 +394,7 @@ public class Xmlization {
       return Boolean.valueOf(content.toString());
     }
 
-    private static Long readContentAsLong(XMLEventReader reader) throws XMLStreamException {
+    private static String readContentAsString(XMLEventReader reader) throws XMLStreamException {
       final StringBuilder content = new StringBuilder();
 
       while (reader.peek().isCharacters() || reader.peek().getEventType() == XMLStreamConstants.COMMENT) {
@@ -332,20 +404,7 @@ public class Xmlization {
         reader.nextEvent();
       }
 
-      return Long.valueOf(content.toString());
-    }
-
-    private static Double readContentAsDouble(XMLEventReader reader) throws XMLStreamException {
-      final StringBuilder content = new StringBuilder();
-
-      while (reader.peek().isCharacters() || reader.peek().getEventType() == XMLStreamConstants.COMMENT) {
-        if (reader.peek().isCharacters()) {
-          content.append(reader.peek().asCharacters().getData());
-        }
-        reader.nextEvent();
-      }
-
-      return Double.valueOf(content.toString());
+      return content.toString();
     }
 
     /**
@@ -377,272 +436,89 @@ public class Xmlization {
     }
 
     /**
-     * Consume a starting element of the {@code expectedName} from the reader
-     * and return whether it was a self-closing (empty) element.
-     */
-    private static Reporting.Result<Boolean> tryNamedStartElement(
-      XMLEventReader reader, String expectedName) {
-      if (currentEvent(reader).isEndDocument()) {
-        final Reporting.Error error = new Reporting.Error(
-          "Expected a <" + expectedName + "> element, but got an end-of-file.");
-        return Reporting.Result.failure(error);
-      }
-
-      if (!currentEvent(reader).isStartElement()) {
-        final Reporting.Error error = new Reporting.Error(
-          "Expected a <" + expectedName + "> start element, but got the node "
-            + "of type " + getEventTypeAsString(currentEvent(reader)));
-        return Reporting.Result.failure(error);
-      }
-
-      final Reporting.Result<String> tryElementName = tryElementName(reader);
-      if (tryElementName.isError()) {
-        return tryElementName.castTo(Boolean.class);
-      }
-
-      if (!expectedName.equals(tryElementName.getResult())) {
-        final Reporting.Error error = new Reporting.Error(
-          "Expected a <" + expectedName + "> element, but got an element "
-            + tryElementName.getResult());
-        return Reporting.Result.failure(error);
-      }
-
-      final boolean isEmpty = isEmptyElement(reader);
-      return Reporting.Result.success(isEmpty);
-    }
-
-    /**
-     * Consume a closing element of the {@code expectedName} from the reader.
-     */
-    private static Reporting.Result<XMLEvent> tryNamedEndElement(
-      XMLEventReader reader, String expectedName) {
-      skipWhitespaceAndComments(reader);
-
-      if (currentEvent(reader).isEndDocument()) {
-        final Reporting.Error error = new Reporting.Error(
-          "Expected a closing element for " + expectedName + ", "
-            + "but got an end-of-file.");
-        return Reporting.Result.failure(error);
-      }
-
-      if (!currentEvent(reader).isEndElement()) {
-        final Reporting.Error error = new Reporting.Error(
-          "Expected a closing element for " + expectedName + ", "
-            + "but got the node of type " + getEventTypeAsString(currentEvent(reader)));
-        return Reporting.Result.failure(error);
-      }
-
-      final Reporting.Result<String> tryElementName = tryElementName(reader);
-      if (tryElementName.isError()) {
-        return tryElementName.castTo(XMLEvent.class);
-      }
-
-      if (!expectedName.equals(tryElementName.getResult())) {
-        final Reporting.Error error = new Reporting.Error(
-          "Expected a closing element for " + expectedName + ", "
-            + "but got an end element " + tryElementName.getResult());
-        return Reporting.Result.failure(error);
-      }
-
-      try {
-        return Reporting.Result.success(reader.nextEvent());
-      } catch (XMLStreamException xmlStreamException) {
-        throw new Xmlization.DeserializeException("",
-          "Failed in method tryNamedEndElement because of: " +
-            xmlStreamException.getMessage());
-      }
-    }
-
-    /**
-     * Read the content of a named element and parse it as Boolean.
-     */
-    private static Reporting.Result<Boolean> tryNamedElementAsBoolean(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<Boolean> tryStart = tryNamedStartElement(reader, expectedName);
-      if (tryStart.isError()) {
-        return tryStart.castTo(Boolean.class);
-      }
-
-      if (tryStart.getResult()) {
-        final Reporting.Error error = new Reporting.Error(
-          "Expected an XML content representing Boolean, " +
-          "but got a self-closing <" + expectedName + " /> element");
-        return Reporting.Result.failure(error);
-      }
-
-      final Boolean result;
-      try {
-        result = readContentAsBool(reader);
-      } catch (Exception exception) {
-        final Reporting.Error error = new Reporting.Error(
-          "The content of a <" + expectedName + "> element could not be "
-            + "de-serialized as Boolean: " + exception.getMessage());
-        return Reporting.Result.failure(error);
-      }
-
-      final Reporting.Result<XMLEvent> tryEnd = tryNamedEndElement(reader, expectedName);
-      if (tryEnd.isError()) {
-        return tryEnd.castTo(Boolean.class);
-      }
-
-      return Reporting.Result.success(result);
-    }
-
-    /**
-     * Read the content of a named element and parse it as Long.
-     */
-    private static Reporting.Result<Long> tryNamedElementAsLong(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<Boolean> tryStart = tryNamedStartElement(reader, expectedName);
-      if (tryStart.isError()) {
-        return tryStart.castTo(Long.class);
-      }
-
-      if (tryStart.getResult()) {
-        final Reporting.Error error = new Reporting.Error(
-          "Expected an XML content representing Long, " +
-          "but got a self-closing <" + expectedName + " /> element");
-        return Reporting.Result.failure(error);
-      }
-
-      final Long result;
-      try {
-        result = readContentAsLong(reader);
-      } catch (Exception exception) {
-        final Reporting.Error error = new Reporting.Error(
-          "The content of a <" + expectedName + "> element could not be "
-            + "de-serialized as Long: " + exception.getMessage());
-        return Reporting.Result.failure(error);
-      }
-
-      final Reporting.Result<XMLEvent> tryEnd = tryNamedEndElement(reader, expectedName);
-      if (tryEnd.isError()) {
-        return tryEnd.castTo(Long.class);
-      }
-
-      return Reporting.Result.success(result);
-    }
-
-    /**
-     * Read the content of a named element and parse it as Double.
-     */
-    private static Reporting.Result<Double> tryNamedElementAsDouble(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<Boolean> tryStart = tryNamedStartElement(reader, expectedName);
-      if (tryStart.isError()) {
-        return tryStart.castTo(Double.class);
-      }
-
-      if (tryStart.getResult()) {
-        final Reporting.Error error = new Reporting.Error(
-          "Expected an XML content representing Double, " +
-          "but got a self-closing <" + expectedName + " /> element");
-        return Reporting.Result.failure(error);
-      }
-
-      final Double result;
-      try {
-        result = readContentAsDouble(reader);
-      } catch (Exception exception) {
-        final Reporting.Error error = new Reporting.Error(
-          "The content of a <" + expectedName + "> element could not be "
-            + "de-serialized as Double: " + exception.getMessage());
-        return Reporting.Result.failure(error);
-      }
-
-      final Reporting.Result<XMLEvent> tryEnd = tryNamedEndElement(reader, expectedName);
-      if (tryEnd.isError()) {
-        return tryEnd.castTo(Double.class);
-      }
-
-      return Reporting.Result.success(result);
-    }
-
-    /**
-     * Read the content of a named element and parse it as a string.
-     */
-    private static Reporting.Result<String> tryNamedElementAsString(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<Boolean> tryStart = tryNamedStartElement(reader, expectedName);
-      if (tryStart.isError()) {
-        return tryStart.castTo(String.class);
-      }
-
-      final String result;
-      if (tryStart.getResult()) {
-        result = "";
-      } else {
-        try {
-          result = readContentAsString(reader);
-        } catch (Exception exception) {
-          final Reporting.Error error = new Reporting.Error(
-            "The content of a <" + expectedName + "> element could not be "
-              + "de-serialized as String: " + exception.getMessage());
-          return Reporting.Result.failure(error);
-        }
-      }
-
-      // NOTE (mristin):
-      // A self-closing named element is represented as a pair of start and end
-      // events in StAX, so we need to consume the end element even if the
-      // element was empty.
-      final Reporting.Result<XMLEvent> tryEnd = tryNamedEndElement(reader, expectedName);
-      if (tryEnd.isError()) {
-        return tryEnd.castTo(String.class);
-      }
-
-      return Reporting.Result.success(result);
-    }
-
-    /**
-     * Read a named element as base64-encoded bytes.
-     */
-    private static Reporting.Result<byte[]> tryNamedElementAsBytes(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<Boolean> tryStart = tryNamedStartElement(reader, expectedName);
-      if (tryStart.isError()) {
-        return tryStart.castTo(byte[].class);
-      }
-
-      final byte[] result;
-      if (tryStart.getResult()) {
-        result = new byte[0];
-      } else {
-        try {
-          result = readContentAsBase64(reader);
-        } catch (Exception exception) {
-          final Reporting.Error error = new Reporting.Error(
-            "The content of a <" + expectedName + "> element could not be "
-              + "de-serialized as base64-encoded bytes: " + exception.getMessage());
-          return Reporting.Result.failure(error);
-        }
-      }
-
-      // NOTE (mristin):
-      // A self-closing named element is represented as a pair of start and end
-      // events in StAX, so we need to consume the end element even if the
-      // element was empty.
-      final Reporting.Result<XMLEvent> tryEnd = tryNamedEndElement(reader, expectedName);
-      if (tryEnd.isError()) {
-        return tryEnd.castTo(byte[].class);
-      }
-
-      return Reporting.Result.success(result);
-    }
-
-    /**
-     * Parse a list of items, each de-serialized by {@code parseItem}.
+     * Read the text content of an element and convert it with
+     * {@code convert}.
      *
-     * <p>Every start element is considered to mark the start of an item. Parsing
+     * <p>A self-closing element is an error, since there is no text to convert.
+     */
+    private static <T> Reporting.Result<T> readText(
+      XMLEventReader reader,
+      boolean isEmpty,
+      ContentConverter<T> convert,
+      String typeName) {
+      if (isEmpty) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "Expected an XML content representing " + typeName +
+          ", but encountered a self-closing element"));
+      }
+
+      if (currentEvent(reader).isEndDocument()) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "Expected an XML content representing " + typeName +
+          ", but reached the end-of-file"));
+      }
+
+      try {
+        return Reporting.Result.success(convert.convert(reader));
+      } catch (Exception exception) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "The XML content could not be de-serialized as " + typeName + ": " +
+          exception.getMessage()));
+      }
+    }
+
+    /**
+     * Read the text content of an element and convert it with
+     * {@code convert}, giving {@code whenEmpty} for a self-closing element.
+     */
+    private static <T> Reporting.Result<T> readText(
+      XMLEventReader reader,
+      boolean isEmpty,
+      ContentConverter<T> convert,
+      String typeName,
+      T whenEmpty) {
+      if (isEmpty) {
+        return Reporting.Result.success(whenEmpty);
+      }
+
+      return readText(reader, isEmpty, convert, typeName);
+    }
+
+    /**
+     * Read the text content of an element and parse it as a literal of
+     * the enumeration called {@code enumName}.
+     */
+    private static <T> Reporting.Result<T> readEnum(
+      XMLEventReader reader,
+      boolean isEmpty,
+      Function<String, Optional<T>> parseLiteral,
+      String enumName) {
+      final Reporting.Result<String> tryText = readText(
+        reader, isEmpty, _DeserializeImplementation::readContentAsString, enumName);
+      if (tryText.isError()) {
+        return Reporting.Result.failure(tryText.getError());
+      }
+
+      final Optional<T> literal = parseLiteral.apply(tryText.getResult());
+      if (!literal.isPresent()) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "The text could not be parsed as a literal of " + enumName + ": " +
+          tryText.getResult()));
+      }
+
+      return Reporting.Result.success(literal.get());
+    }
+
+    /**
+     * Read the items of a list, each with {@code readItem}.
+     *
+     * <p>Every start element is considered to mark the start of an item. Reading
      * stops as soon as a non-start element is encountered.
      */
-    private static <T> Reporting.Result<List<T>> parseList(
-      XMLEventReader reader,
-      boolean isEmptyProperty,
-      Class<T> itemType,
-      Function<XMLEventReader, Reporting.Result<? extends T>> parseItem) {
+    private static <T> Reporting.Result<List<T>> readList(
+      XMLEventReader reader, boolean isEmpty, ElementReader<T> readItem) {
       final List<T> result = new ArrayList<>();
-      if (isEmptyProperty) {
+      if (isEmpty) {
         return Reporting.Result.success(result);
       }
 
@@ -650,14 +526,14 @@ public class Xmlization {
       int index = 0;
       if (!currentEvent(reader).isStartElement()) {
         final Reporting.Error error = new Reporting.Error(
-          "Expected a start element opening an instance of " + itemType.getSimpleName() +
-            ", but got an XML " + getEventTypeAsString(currentEvent(reader)));
+          "Expected a start element opening an item of the list, " +
+          "but got an XML " + getEventTypeAsString(currentEvent(reader)));
         error.prependSegment(new Reporting.IndexSegment(index));
         return Reporting.Result.failure(error);
       }
 
       while (currentEvent(reader).isStartElement()) {
-        final Reporting.Result<? extends T> itemResult = parseItem.apply(reader);
+        final Reporting.Result<? extends T> itemResult = readItem.read(reader);
         if (itemResult.isError()) {
           itemResult.getError()
             .prependSegment(
@@ -674,321 +550,330 @@ public class Xmlization {
     }
 
     /**
-     * Read a named element and parse its content as a literal
-     * of {@link ModellingKind}.
+     * Check whether the sequence of the properties has ended.
+     *
+     * <p>Only the end tag of the enclosing element concludes a sequence. Reaching
+     * the end-of-file does not -- that is an error, which
+     * {@link #peekElementName} reports when the caller goes on to read the next
+     * property.
      */
-    private static Reporting.Result<ModellingKind> tryNamedElementAsModellingKind(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
-      if (tryText.isError()) {
-        return tryText.castTo(ModellingKind.class);
-      }
-
-      final Optional<ModellingKind> result = Stringification.modellingKindFromString(
-        tryText.getResult());
-
-      if (!result.isPresent()) {
-        final Reporting.Error error = new Reporting.Error(
-          "The text could not be parsed as a literal of ModellingKind: " +
-          tryText.getResult());
-        return Reporting.Result.failure(error);
-      }
-
-      return Reporting.Result.success(result.get());
+    private static boolean atEndOfSequence(XMLEventReader reader) {
+      skipWhitespaceAndComments(reader);
+      return currentEvent(reader).isEndElement();
     }
 
     /**
-     * Read a named element and parse its content as a literal
-     * of {@link QualifierKind}.
+     * Report an element which is not a property of the class {@code className}.
      */
-    private static Reporting.Result<QualifierKind> tryNamedElementAsQualifierKind(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
-      if (tryText.isError()) {
-        return tryText.castTo(QualifierKind.class);
-      }
-
-      final Optional<QualifierKind> result = Stringification.qualifierKindFromString(
-        tryText.getResult());
-
-      if (!result.isPresent()) {
-        final Reporting.Error error = new Reporting.Error(
-          "The text could not be parsed as a literal of QualifierKind: " +
-          tryText.getResult());
-        return Reporting.Result.failure(error);
-      }
-
-      return Reporting.Result.success(result.get());
+    private static <T> Reporting.Result<T> unexpectedProperty(
+      String className, String elementName) {
+      return Reporting.Result.failure(new Reporting.Error(
+        "We expected properties of the class " + className + ", " +
+        "but got an unexpected element " +
+        "with the name " + elementName));
     }
 
     /**
-     * Read a named element and parse its content as a literal
-     * of {@link AssetKind}.
+     * Report a required property of the class {@code className} which the
+     * sequence of the properties did not give.
      */
-    private static Reporting.Result<AssetKind> tryNamedElementAsAssetKind(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
-      if (tryText.isError()) {
-        return tryText.castTo(AssetKind.class);
-      }
-
-      final Optional<AssetKind> result = Stringification.assetKindFromString(
-        tryText.getResult());
-
-      if (!result.isPresent()) {
-        final Reporting.Error error = new Reporting.Error(
-          "The text could not be parsed as a literal of AssetKind: " +
-          tryText.getResult());
-        return Reporting.Result.failure(error);
-      }
-
-      return Reporting.Result.success(result.get());
+    private static <T> Reporting.Result<T> missingRequiredProperty(
+      String propertyName, String className) {
+      return Reporting.Result.failure(new Reporting.Error(
+        "The required property " + propertyName + " has not been given " +
+        "in the XML representation of an instance of class " + className));
     }
 
-    /**
-     * Read a named element and parse its content as a literal
-     * of {@link AasSubmodelElements}.
-     */
-    private static Reporting.Result<AasSubmodelElements> tryNamedElementAsAasSubmodelElements(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
-      if (tryText.isError()) {
-        return tryText.castTo(AasSubmodelElements.class);
-      }
-
-      final Optional<AasSubmodelElements> result = Stringification.aasSubmodelElementsFromString(
-        tryText.getResult());
-
-      if (!result.isPresent()) {
-        final Reporting.Error error = new Reporting.Error(
-          "The text could not be parsed as a literal of AasSubmodelElements: " +
-          tryText.getResult());
-        return Reporting.Result.failure(error);
-      }
-
-      return Reporting.Result.success(result.get());
+    private static Reporting.Result<List<IReference>> readListOf_IReference(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readReferenceFromElement);
     }
 
-    /**
-     * Read a named element and parse its content as a literal
-     * of {@link EntityType}.
-     */
-    private static Reporting.Result<EntityType> tryNamedElementAsEntityType(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
-      if (tryText.isError()) {
-        return tryText.castTo(EntityType.class);
-      }
-
-      final Optional<EntityType> result = Stringification.entityTypeFromString(
-        tryText.getResult());
-
-      if (!result.isPresent()) {
-        final Reporting.Error error = new Reporting.Error(
-          "The text could not be parsed as a literal of EntityType: " +
-          tryText.getResult());
-        return Reporting.Result.failure(error);
-      }
-
-      return Reporting.Result.success(result.get());
+    private static Reporting.Result<String> readTextAs_string(
+      XMLEventReader reader, boolean isEmpty) {
+      return readText(
+        reader,
+        isEmpty,
+        _DeserializeImplementation::readContentAsString,
+        "String",
+        "");
     }
 
-    /**
-     * Read a named element and parse its content as a literal
-     * of {@link Direction}.
-     */
-    private static Reporting.Result<Direction> tryNamedElementAsDirection(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
-      if (tryText.isError()) {
-        return tryText.castTo(Direction.class);
-      }
-
-      final Optional<Direction> result = Stringification.directionFromString(
-        tryText.getResult());
-
-      if (!result.isPresent()) {
-        final Reporting.Error error = new Reporting.Error(
-          "The text could not be parsed as a literal of Direction: " +
-          tryText.getResult());
-        return Reporting.Result.failure(error);
-      }
-
-      return Reporting.Result.success(result.get());
+    private static Reporting.Result<DataTypeDefXsd> readTextAs_DataTypeDefXsd(
+      XMLEventReader reader, boolean isEmpty) {
+      return readEnum(
+        reader,
+        isEmpty,
+        Stringification::dataTypeDefXsdFromString,
+        "DataTypeDefXsd");
     }
 
-    /**
-     * Read a named element and parse its content as a literal
-     * of {@link StateOfEvent}.
-     */
-    private static Reporting.Result<StateOfEvent> tryNamedElementAsStateOfEvent(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
-      if (tryText.isError()) {
-        return tryText.castTo(StateOfEvent.class);
-      }
-
-      final Optional<StateOfEvent> result = Stringification.stateOfEventFromString(
-        tryText.getResult());
-
-      if (!result.isPresent()) {
-        final Reporting.Error error = new Reporting.Error(
-          "The text could not be parsed as a literal of StateOfEvent: " +
-          tryText.getResult());
-        return Reporting.Result.failure(error);
-      }
-
-      return Reporting.Result.success(result.get());
+    private static Reporting.Result<List<IEmbeddedDataSpecification>> readListOf_IEmbeddedDataSpecification(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readEmbeddedDataSpecificationFromElement);
     }
 
-    /**
-     * Read a named element and parse its content as a literal
-     * of {@link ReferenceTypes}.
-     */
-    private static Reporting.Result<ReferenceTypes> tryNamedElementAsReferenceTypes(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
-      if (tryText.isError()) {
-        return tryText.castTo(ReferenceTypes.class);
-      }
-
-      final Optional<ReferenceTypes> result = Stringification.referenceTypesFromString(
-        tryText.getResult());
-
-      if (!result.isPresent()) {
-        final Reporting.Error error = new Reporting.Error(
-          "The text could not be parsed as a literal of ReferenceTypes: " +
-          tryText.getResult());
-        return Reporting.Result.failure(error);
-      }
-
-      return Reporting.Result.success(result.get());
+    private static Reporting.Result<QualifierKind> readTextAs_QualifierKind(
+      XMLEventReader reader, boolean isEmpty) {
+      return readEnum(
+        reader,
+        isEmpty,
+        Stringification::qualifierKindFromString,
+        "QualifierKind");
     }
 
-    /**
-     * Read a named element and parse its content as a literal
-     * of {@link KeyTypes}.
-     */
-    private static Reporting.Result<KeyTypes> tryNamedElementAsKeyTypes(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
-      if (tryText.isError()) {
-        return tryText.castTo(KeyTypes.class);
-      }
-
-      final Optional<KeyTypes> result = Stringification.keyTypesFromString(
-        tryText.getResult());
-
-      if (!result.isPresent()) {
-        final Reporting.Error error = new Reporting.Error(
-          "The text could not be parsed as a literal of KeyTypes: " +
-          tryText.getResult());
-        return Reporting.Result.failure(error);
-      }
-
-      return Reporting.Result.success(result.get());
+    private static Reporting.Result<List<IExtension>> readListOf_IExtension(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readExtensionFromElement);
     }
 
-    /**
-     * Read a named element and parse its content as a literal
-     * of {@link DataTypeDefXsd}.
-     */
-    private static Reporting.Result<DataTypeDefXsd> tryNamedElementAsDataTypeDefXsd(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
-      if (tryText.isError()) {
-        return tryText.castTo(DataTypeDefXsd.class);
-      }
-
-      final Optional<DataTypeDefXsd> result = Stringification.dataTypeDefXsdFromString(
-        tryText.getResult());
-
-      if (!result.isPresent()) {
-        final Reporting.Error error = new Reporting.Error(
-          "The text could not be parsed as a literal of DataTypeDefXsd: " +
-          tryText.getResult());
-        return Reporting.Result.failure(error);
-      }
-
-      return Reporting.Result.success(result.get());
+    private static Reporting.Result<List<ILangStringNameType>> readListOf_ILangStringNameType(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readLangStringNameTypeFromElement);
     }
 
-    /**
-     * Read a named element and parse its content as a literal
-     * of {@link DataTypeIec61360}.
-     */
-    private static Reporting.Result<DataTypeIec61360> tryNamedElementAsDataTypeIec61360(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
-      if (tryText.isError()) {
-        return tryText.castTo(DataTypeIec61360.class);
-      }
+    private static Reporting.Result<List<ILangStringTextType>> readListOf_ILangStringTextType(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readLangStringTextTypeFromElement);
+    }
 
-      final Optional<DataTypeIec61360> result = Stringification.dataTypeIec61360FromString(
-        tryText.getResult());
+    private static Reporting.Result<AssetKind> readTextAs_AssetKind(
+      XMLEventReader reader, boolean isEmpty) {
+      return readEnum(
+        reader,
+        isEmpty,
+        Stringification::assetKindFromString,
+        "AssetKind");
+    }
 
-      if (!result.isPresent()) {
-        final Reporting.Error error = new Reporting.Error(
-          "The text could not be parsed as a literal of DataTypeIec61360: " +
-          tryText.getResult());
-        return Reporting.Result.failure(error);
-      }
+    private static Reporting.Result<List<ISpecificAssetId>> readListOf_ISpecificAssetId(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readSpecificAssetIdFromElement);
+    }
 
-      return Reporting.Result.success(result.get());
+    private static Reporting.Result<ModellingKind> readTextAs_ModellingKind(
+      XMLEventReader reader, boolean isEmpty) {
+      return readEnum(
+        reader,
+        isEmpty,
+        Stringification::modellingKindFromString,
+        "ModellingKind");
+    }
+
+    private static Reporting.Result<List<IQualifier>> readListOf_IQualifier(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readQualifierFromElement);
+    }
+
+    private static Reporting.Result<List<ISubmodelElement>> readListOf_ISubmodelElement(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readISubmodelElementFromElement);
+    }
+
+    private static Reporting.Result<Boolean> readTextAs_bool(
+      XMLEventReader reader, boolean isEmpty) {
+      return readText(
+        reader,
+        isEmpty,
+        _DeserializeImplementation::readContentAsBool,
+        "Boolean");
+    }
+
+    private static Reporting.Result<AasSubmodelElements> readTextAs_AasSubmodelElements(
+      XMLEventReader reader, boolean isEmpty) {
+      return readEnum(
+        reader,
+        isEmpty,
+        Stringification::aasSubmodelElementsFromString,
+        "AasSubmodelElements");
+    }
+
+    private static Reporting.Result<byte[]> readTextAs_bytes(
+      XMLEventReader reader, boolean isEmpty) {
+      return readText(
+        reader,
+        isEmpty,
+        _DeserializeImplementation::readContentAsBase64,
+        "base64-encoded bytes",
+        new byte[0]);
+    }
+
+    private static Reporting.Result<List<IDataElement>> readListOf_IDataElement(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readIDataElementFromElement);
+    }
+
+    private static Reporting.Result<EntityType> readTextAs_EntityType(
+      XMLEventReader reader, boolean isEmpty) {
+      return readEnum(
+        reader,
+        isEmpty,
+        Stringification::entityTypeFromString,
+        "EntityType");
+    }
+
+    private static Reporting.Result<Direction> readTextAs_Direction(
+      XMLEventReader reader, boolean isEmpty) {
+      return readEnum(
+        reader,
+        isEmpty,
+        Stringification::directionFromString,
+        "Direction");
+    }
+
+    private static Reporting.Result<StateOfEvent> readTextAs_StateOfEvent(
+      XMLEventReader reader, boolean isEmpty) {
+      return readEnum(
+        reader,
+        isEmpty,
+        Stringification::stateOfEventFromString,
+        "StateOfEvent");
+    }
+
+    private static Reporting.Result<List<IOperationVariable>> readListOf_IOperationVariable(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readOperationVariableFromElement);
+    }
+
+    private static Reporting.Result<ReferenceTypes> readTextAs_ReferenceTypes(
+      XMLEventReader reader, boolean isEmpty) {
+      return readEnum(
+        reader,
+        isEmpty,
+        Stringification::referenceTypesFromString,
+        "ReferenceTypes");
+    }
+
+    private static Reporting.Result<List<IKey>> readListOf_IKey(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readKeyFromElement);
+    }
+
+    private static Reporting.Result<KeyTypes> readTextAs_KeyTypes(
+      XMLEventReader reader, boolean isEmpty) {
+      return readEnum(
+        reader,
+        isEmpty,
+        Stringification::keyTypesFromString,
+        "KeyTypes");
+    }
+
+    private static Reporting.Result<List<IAssetAdministrationShell>> readListOf_IAssetAdministrationShell(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readAssetAdministrationShellFromElement);
+    }
+
+    private static Reporting.Result<List<ISubmodel>> readListOf_ISubmodel(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readSubmodelFromElement);
+    }
+
+    private static Reporting.Result<List<IConceptDescription>> readListOf_IConceptDescription(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readConceptDescriptionFromElement);
+    }
+
+    private static Reporting.Result<List<IValueReferencePair>> readListOf_IValueReferencePair(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readValueReferencePairFromElement);
+    }
+
+    private static Reporting.Result<List<ILangStringPreferredNameTypeIec61360>> readListOf_ILangStringPreferredNameTypeIec61360(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readLangStringPreferredNameTypeIec61360FromElement);
+    }
+
+    private static Reporting.Result<List<ILangStringShortNameTypeIec61360>> readListOf_ILangStringShortNameTypeIec61360(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readLangStringShortNameTypeIec61360FromElement);
+    }
+
+    private static Reporting.Result<DataTypeIec61360> readTextAs_DataTypeIec61360(
+      XMLEventReader reader, boolean isEmpty) {
+      return readEnum(
+        reader,
+        isEmpty,
+        Stringification::dataTypeIec61360FromString,
+        "DataTypeIec61360");
+    }
+
+    private static Reporting.Result<List<ILangStringDefinitionTypeIec61360>> readListOf_ILangStringDefinitionTypeIec61360(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readLangStringDefinitionTypeIec61360FromElement);
     }
 
     /**
      * Deserialize an instance of IHasSemantics from an XML element.
      */
-    private static Reporting.Result<? extends IHasSemantics> tryIHasSemanticsFromElement(
+    private static Reporting.Result<? extends IHasSemantics> readIHasSemanticsFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
-        reader,
-        IHasSemantics.class,
-        (elementName, isEmptyElement) -> {
-          switch (elementName) {
-            case "relationshipElement":
-              return tryRelationshipElementFromSequence(reader, isEmptyElement);
-            case "annotatedRelationshipElement":
-              return tryAnnotatedRelationshipElementFromSequence(reader, isEmptyElement);
-            case "basicEventElement":
-              return tryBasicEventElementFromSequence(reader, isEmptyElement);
-            case "blob":
-              return tryBlobFromSequence(reader, isEmptyElement);
-            case "capability":
-              return tryCapabilityFromSequence(reader, isEmptyElement);
-            case "entity":
-              return tryEntityFromSequence(reader, isEmptyElement);
-            case "extension":
-              return tryExtensionFromSequence(reader, isEmptyElement);
-            case "file":
-              return tryFileFromSequence(reader, isEmptyElement);
-            case "multiLanguageProperty":
-              return tryMultiLanguagePropertyFromSequence(reader, isEmptyElement);
-            case "operation":
-              return tryOperationFromSequence(reader, isEmptyElement);
-            case "property":
-              return tryPropertyFromSequence(reader, isEmptyElement);
-            case "qualifier":
-              return tryQualifierFromSequence(reader, isEmptyElement);
-            case "range":
-              return tryRangeFromSequence(reader, isEmptyElement);
-            case "referenceElement":
-              return tryReferenceElementFromSequence(reader, isEmptyElement);
-            case "specificAssetId":
-              return trySpecificAssetIdFromSequence(reader, isEmptyElement);
-            case "submodel":
-              return trySubmodelFromSequence(reader, isEmptyElement);
-            case "submodelElementCollection":
-              return trySubmodelElementCollectionFromSequence(reader, isEmptyElement);
-            case "submodelElementList":
-              return trySubmodelElementListFromSequence(reader, isEmptyElement);
-            default:
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected element with the name " + elementName);
-              return Reporting.Result.failure(error);
-          }
-        });
+      // NOTE (mristin):
+      // We only peek the name, so that the whole element can be handed on to
+      // the reader which we select below.
+      final Reporting.Result<String> tryElementName = peekElementName(reader);
+      if (tryElementName.isError()) {
+        return Reporting.Result.failure(tryElementName.getError());
+      }
+
+      switch (tryElementName.getResult()) {
+        case "relationshipElement":
+          return readRelationshipElementFromElement(reader);
+        case "annotatedRelationshipElement":
+          return readAnnotatedRelationshipElementFromElement(reader);
+        case "basicEventElement":
+          return readBasicEventElementFromElement(reader);
+        case "blob":
+          return readBlobFromElement(reader);
+        case "capability":
+          return readCapabilityFromElement(reader);
+        case "entity":
+          return readEntityFromElement(reader);
+        case "extension":
+          return readExtensionFromElement(reader);
+        case "file":
+          return readFileFromElement(reader);
+        case "multiLanguageProperty":
+          return readMultiLanguagePropertyFromElement(reader);
+        case "operation":
+          return readOperationFromElement(reader);
+        case "property":
+          return readPropertyFromElement(reader);
+        case "qualifier":
+          return readQualifierFromElement(reader);
+        case "range":
+          return readRangeFromElement(reader);
+        case "referenceElement":
+          return readReferenceElementFromElement(reader);
+        case "specificAssetId":
+          return readSpecificAssetIdFromElement(reader);
+        case "submodel":
+          return readSubmodelFromElement(reader);
+        case "submodelElementCollection":
+          return readSubmodelElementCollectionFromElement(reader);
+        case "submodelElementList":
+          return readSubmodelElementListFromElement(reader);
+        default:
+          return Reporting.Result.failure(new Reporting.Error(
+            "Unexpected element with the name " + tryElementName.getResult()));
+      }
     }
 
     /**
@@ -998,7 +883,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<Extension> tryExtensionFromSequence(
+    private static Reporting.Result<Extension> readExtensionFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       IReference theSemanticId = null;
@@ -1009,226 +894,98 @@ public class Xmlization {
       List<IReference> theRefersTo = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class Extension, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class Extension, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(Extension.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "semanticId":
-            {
-              Reporting.Result<Reference> trySemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
+          Reporting.Error valueError = null;
 
-              if (trySemanticId.isError()) {
-                trySemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "semanticId"));
-                return trySemanticId.castTo(Extension.class);
-              }
-
-              theSemanticId = trySemanticId.getResult();
-              break;
-            }
-            case "supplementalSemanticIds":
-            {
-              final Reporting.Result<List<IReference>> trySupplementalSemanticIds = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (trySupplementalSemanticIds.isError()) {
-                trySupplementalSemanticIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return trySupplementalSemanticIds.castTo(Extension.class);
-              }
-
-              theSupplementalSemanticIds = trySupplementalSemanticIds.getResult();
-              break;
-            }
-            case "name":
-            {
-              if (isEmptyProperty) {
-                theName = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property name of an instance of class Extension, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theName = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property name of an instance of class Extension "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "name"));
-                  return Reporting.Result.failure(error);
-                }
-              }
-              break;
-            }
-            case "valueType":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property valueType of an instance of class Extension " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "valueType"));
-                return Reporting.Result.failure(error);
-              }
-
-              if (currentEvent(reader).isEndDocument()) {
-                final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing "
-                        + "the property valueType of an instance of class Extension, "
-                        + "but reached the end-of-file");
-                return Reporting.Result.failure(error);
-              }
-
-              String textValueType;
-              try {
-                textValueType = readContentAsString(reader);
-              } catch (Exception e) {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property valueType of an instance of class Extension"
-                        + " could not be de-serialized: " + e.getMessage());
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "valueType"));
-                return Reporting.Result.failure(error);
-              }
-
-              final Optional<DataTypeDefXsd> optionalValueType =
-                Stringification.dataTypeDefXsdFromString(
-                  textValueType);
-
-              if (optionalValueType.isPresent()) {
-                theValueType = optionalValueType.get();
+          switch (elementName) {
+            case "semanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
               } else {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property valueType of an instance of class Extension" +
-                        " could not be de-serialized from an unexpected enumeration literal: " +
-                        textValueType);
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "valueType"));
-                return Reporting.Result.failure(error);
+                theSemanticId = value.getResult();
               }
               break;
             }
-            case "value":
-            {
-              if (isEmptyProperty) {
-                theValue = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property value of an instance of class Extension, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theValue = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property value of an instance of class Extension "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "value"));
-                  return Reporting.Result.failure(error);
-                }
+            case "supplementalSemanticIds": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSupplementalSemanticIds = value.getResult();
               }
               break;
             }
-            case "refersTo":
-            {
-              final Reporting.Result<List<IReference>> tryRefersTo = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (tryRefersTo.isError()) {
-                tryRefersTo.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "refersTo"));
-                return tryRefersTo.castTo(Extension.class);
+            case "name": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theName = value.getResult();
               }
-
-              theRefersTo = tryRefersTo.getResult();
+              break;
+            }
+            case "valueType": {
+              final Reporting.Result<DataTypeDefXsd> value =
+                readTextAs_DataTypeDefXsd(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValueType = value.getResult();
+              }
+              break;
+            }
+            case "value": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValue = value.getResult();
+              }
+              break;
+            }
+            case "refersTo": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theRefersTo = value.getResult();
+              }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class Extension, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("Extension", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "Extension",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(Extension.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theName == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property name has not been given " +
-          "in the XML representation of an instance of class Extension");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("name", "Extension");
       }
 
       return Reporting.Result.success(new Extension(
@@ -1243,223 +1000,224 @@ public class Xmlization {
     /**
      * Deserialize an instance of class Extension from an XML element.
      */
-    private static Reporting.Result<? extends Extension> tryExtensionFromElement(
+    private static Reporting.Result<? extends Extension> readExtensionFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        Extension.class,
-        (elementName, isEmptyElement) -> {
-          if (!"extension".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class Extension " +
-              "with element name extension, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryExtensionFromSequence(reader, isEmptyElement);
-        });
+        "extension",
+        _DeserializeImplementation::readExtensionFromSequence);
     }
 
     /**
      * Deserialize an instance of IHasExtensions from an XML element.
      */
-    private static Reporting.Result<? extends IHasExtensions> tryIHasExtensionsFromElement(
+    private static Reporting.Result<? extends IHasExtensions> readIHasExtensionsFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
-        reader,
-        IHasExtensions.class,
-        (elementName, isEmptyElement) -> {
-          switch (elementName) {
-            case "relationshipElement":
-              return tryRelationshipElementFromSequence(reader, isEmptyElement);
-            case "annotatedRelationshipElement":
-              return tryAnnotatedRelationshipElementFromSequence(reader, isEmptyElement);
-            case "assetAdministrationShell":
-              return tryAssetAdministrationShellFromSequence(reader, isEmptyElement);
-            case "basicEventElement":
-              return tryBasicEventElementFromSequence(reader, isEmptyElement);
-            case "blob":
-              return tryBlobFromSequence(reader, isEmptyElement);
-            case "capability":
-              return tryCapabilityFromSequence(reader, isEmptyElement);
-            case "conceptDescription":
-              return tryConceptDescriptionFromSequence(reader, isEmptyElement);
-            case "entity":
-              return tryEntityFromSequence(reader, isEmptyElement);
-            case "file":
-              return tryFileFromSequence(reader, isEmptyElement);
-            case "multiLanguageProperty":
-              return tryMultiLanguagePropertyFromSequence(reader, isEmptyElement);
-            case "operation":
-              return tryOperationFromSequence(reader, isEmptyElement);
-            case "property":
-              return tryPropertyFromSequence(reader, isEmptyElement);
-            case "range":
-              return tryRangeFromSequence(reader, isEmptyElement);
-            case "referenceElement":
-              return tryReferenceElementFromSequence(reader, isEmptyElement);
-            case "submodel":
-              return trySubmodelFromSequence(reader, isEmptyElement);
-            case "submodelElementCollection":
-              return trySubmodelElementCollectionFromSequence(reader, isEmptyElement);
-            case "submodelElementList":
-              return trySubmodelElementListFromSequence(reader, isEmptyElement);
-            default:
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected element with the name " + elementName);
-              return Reporting.Result.failure(error);
-          }
-        });
+      // NOTE (mristin):
+      // We only peek the name, so that the whole element can be handed on to
+      // the reader which we select below.
+      final Reporting.Result<String> tryElementName = peekElementName(reader);
+      if (tryElementName.isError()) {
+        return Reporting.Result.failure(tryElementName.getError());
+      }
+
+      switch (tryElementName.getResult()) {
+        case "relationshipElement":
+          return readRelationshipElementFromElement(reader);
+        case "annotatedRelationshipElement":
+          return readAnnotatedRelationshipElementFromElement(reader);
+        case "assetAdministrationShell":
+          return readAssetAdministrationShellFromElement(reader);
+        case "basicEventElement":
+          return readBasicEventElementFromElement(reader);
+        case "blob":
+          return readBlobFromElement(reader);
+        case "capability":
+          return readCapabilityFromElement(reader);
+        case "conceptDescription":
+          return readConceptDescriptionFromElement(reader);
+        case "entity":
+          return readEntityFromElement(reader);
+        case "file":
+          return readFileFromElement(reader);
+        case "multiLanguageProperty":
+          return readMultiLanguagePropertyFromElement(reader);
+        case "operation":
+          return readOperationFromElement(reader);
+        case "property":
+          return readPropertyFromElement(reader);
+        case "range":
+          return readRangeFromElement(reader);
+        case "referenceElement":
+          return readReferenceElementFromElement(reader);
+        case "submodel":
+          return readSubmodelFromElement(reader);
+        case "submodelElementCollection":
+          return readSubmodelElementCollectionFromElement(reader);
+        case "submodelElementList":
+          return readSubmodelElementListFromElement(reader);
+        default:
+          return Reporting.Result.failure(new Reporting.Error(
+            "Unexpected element with the name " + tryElementName.getResult()));
+      }
     }
 
     /**
      * Deserialize an instance of IReferable from an XML element.
      */
-    private static Reporting.Result<? extends IReferable> tryIReferableFromElement(
+    private static Reporting.Result<? extends IReferable> readIReferableFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
-        reader,
-        IReferable.class,
-        (elementName, isEmptyElement) -> {
-          switch (elementName) {
-            case "relationshipElement":
-              return tryRelationshipElementFromSequence(reader, isEmptyElement);
-            case "annotatedRelationshipElement":
-              return tryAnnotatedRelationshipElementFromSequence(reader, isEmptyElement);
-            case "assetAdministrationShell":
-              return tryAssetAdministrationShellFromSequence(reader, isEmptyElement);
-            case "basicEventElement":
-              return tryBasicEventElementFromSequence(reader, isEmptyElement);
-            case "blob":
-              return tryBlobFromSequence(reader, isEmptyElement);
-            case "capability":
-              return tryCapabilityFromSequence(reader, isEmptyElement);
-            case "conceptDescription":
-              return tryConceptDescriptionFromSequence(reader, isEmptyElement);
-            case "entity":
-              return tryEntityFromSequence(reader, isEmptyElement);
-            case "file":
-              return tryFileFromSequence(reader, isEmptyElement);
-            case "multiLanguageProperty":
-              return tryMultiLanguagePropertyFromSequence(reader, isEmptyElement);
-            case "operation":
-              return tryOperationFromSequence(reader, isEmptyElement);
-            case "property":
-              return tryPropertyFromSequence(reader, isEmptyElement);
-            case "range":
-              return tryRangeFromSequence(reader, isEmptyElement);
-            case "referenceElement":
-              return tryReferenceElementFromSequence(reader, isEmptyElement);
-            case "submodel":
-              return trySubmodelFromSequence(reader, isEmptyElement);
-            case "submodelElementCollection":
-              return trySubmodelElementCollectionFromSequence(reader, isEmptyElement);
-            case "submodelElementList":
-              return trySubmodelElementListFromSequence(reader, isEmptyElement);
-            default:
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected element with the name " + elementName);
-              return Reporting.Result.failure(error);
-          }
-        });
+      // NOTE (mristin):
+      // We only peek the name, so that the whole element can be handed on to
+      // the reader which we select below.
+      final Reporting.Result<String> tryElementName = peekElementName(reader);
+      if (tryElementName.isError()) {
+        return Reporting.Result.failure(tryElementName.getError());
+      }
+
+      switch (tryElementName.getResult()) {
+        case "relationshipElement":
+          return readRelationshipElementFromElement(reader);
+        case "annotatedRelationshipElement":
+          return readAnnotatedRelationshipElementFromElement(reader);
+        case "assetAdministrationShell":
+          return readAssetAdministrationShellFromElement(reader);
+        case "basicEventElement":
+          return readBasicEventElementFromElement(reader);
+        case "blob":
+          return readBlobFromElement(reader);
+        case "capability":
+          return readCapabilityFromElement(reader);
+        case "conceptDescription":
+          return readConceptDescriptionFromElement(reader);
+        case "entity":
+          return readEntityFromElement(reader);
+        case "file":
+          return readFileFromElement(reader);
+        case "multiLanguageProperty":
+          return readMultiLanguagePropertyFromElement(reader);
+        case "operation":
+          return readOperationFromElement(reader);
+        case "property":
+          return readPropertyFromElement(reader);
+        case "range":
+          return readRangeFromElement(reader);
+        case "referenceElement":
+          return readReferenceElementFromElement(reader);
+        case "submodel":
+          return readSubmodelFromElement(reader);
+        case "submodelElementCollection":
+          return readSubmodelElementCollectionFromElement(reader);
+        case "submodelElementList":
+          return readSubmodelElementListFromElement(reader);
+        default:
+          return Reporting.Result.failure(new Reporting.Error(
+            "Unexpected element with the name " + tryElementName.getResult()));
+      }
     }
 
     /**
      * Deserialize an instance of IIdentifiable from an XML element.
      */
-    private static Reporting.Result<? extends IIdentifiable> tryIIdentifiableFromElement(
+    private static Reporting.Result<? extends IIdentifiable> readIIdentifiableFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
-        reader,
-        IIdentifiable.class,
-        (elementName, isEmptyElement) -> {
-          switch (elementName) {
-            case "assetAdministrationShell":
-              return tryAssetAdministrationShellFromSequence(reader, isEmptyElement);
-            case "conceptDescription":
-              return tryConceptDescriptionFromSequence(reader, isEmptyElement);
-            case "submodel":
-              return trySubmodelFromSequence(reader, isEmptyElement);
-            default:
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected element with the name " + elementName);
-              return Reporting.Result.failure(error);
-          }
-        });
+      // NOTE (mristin):
+      // We only peek the name, so that the whole element can be handed on to
+      // the reader which we select below.
+      final Reporting.Result<String> tryElementName = peekElementName(reader);
+      if (tryElementName.isError()) {
+        return Reporting.Result.failure(tryElementName.getError());
+      }
+
+      switch (tryElementName.getResult()) {
+        case "assetAdministrationShell":
+          return readAssetAdministrationShellFromElement(reader);
+        case "conceptDescription":
+          return readConceptDescriptionFromElement(reader);
+        case "submodel":
+          return readSubmodelFromElement(reader);
+        default:
+          return Reporting.Result.failure(new Reporting.Error(
+            "Unexpected element with the name " + tryElementName.getResult()));
+      }
     }
 
     /**
      * Deserialize an instance of IHasKind from an XML element.
      */
-    private static Reporting.Result<? extends IHasKind> tryIHasKindFromElement(
+    private static Reporting.Result<? extends IHasKind> readIHasKindFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
-        reader,
-        IHasKind.class,
-        (elementName, isEmptyElement) -> {
-          switch (elementName) {
-            case "submodel":
-              return trySubmodelFromSequence(reader, isEmptyElement);
-            default:
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected element with the name " + elementName);
-              return Reporting.Result.failure(error);
-          }
-        });
+      // NOTE (mristin):
+      // We only peek the name, so that the whole element can be handed on to
+      // the reader which we select below.
+      final Reporting.Result<String> tryElementName = peekElementName(reader);
+      if (tryElementName.isError()) {
+        return Reporting.Result.failure(tryElementName.getError());
+      }
+
+      switch (tryElementName.getResult()) {
+        case "submodel":
+          return readSubmodelFromElement(reader);
+        default:
+          return Reporting.Result.failure(new Reporting.Error(
+            "Unexpected element with the name " + tryElementName.getResult()));
+      }
     }
 
     /**
      * Deserialize an instance of IHasDataSpecification from an XML element.
      */
-    private static Reporting.Result<? extends IHasDataSpecification> tryIHasDataSpecificationFromElement(
+    private static Reporting.Result<? extends IHasDataSpecification> readIHasDataSpecificationFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
-        reader,
-        IHasDataSpecification.class,
-        (elementName, isEmptyElement) -> {
-          switch (elementName) {
-            case "administrativeInformation":
-              return tryAdministrativeInformationFromSequence(reader, isEmptyElement);
-            case "relationshipElement":
-              return tryRelationshipElementFromSequence(reader, isEmptyElement);
-            case "annotatedRelationshipElement":
-              return tryAnnotatedRelationshipElementFromSequence(reader, isEmptyElement);
-            case "assetAdministrationShell":
-              return tryAssetAdministrationShellFromSequence(reader, isEmptyElement);
-            case "basicEventElement":
-              return tryBasicEventElementFromSequence(reader, isEmptyElement);
-            case "blob":
-              return tryBlobFromSequence(reader, isEmptyElement);
-            case "capability":
-              return tryCapabilityFromSequence(reader, isEmptyElement);
-            case "conceptDescription":
-              return tryConceptDescriptionFromSequence(reader, isEmptyElement);
-            case "entity":
-              return tryEntityFromSequence(reader, isEmptyElement);
-            case "file":
-              return tryFileFromSequence(reader, isEmptyElement);
-            case "multiLanguageProperty":
-              return tryMultiLanguagePropertyFromSequence(reader, isEmptyElement);
-            case "operation":
-              return tryOperationFromSequence(reader, isEmptyElement);
-            case "property":
-              return tryPropertyFromSequence(reader, isEmptyElement);
-            case "range":
-              return tryRangeFromSequence(reader, isEmptyElement);
-            case "referenceElement":
-              return tryReferenceElementFromSequence(reader, isEmptyElement);
-            case "submodel":
-              return trySubmodelFromSequence(reader, isEmptyElement);
-            case "submodelElementCollection":
-              return trySubmodelElementCollectionFromSequence(reader, isEmptyElement);
-            case "submodelElementList":
-              return trySubmodelElementListFromSequence(reader, isEmptyElement);
-            default:
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected element with the name " + elementName);
-              return Reporting.Result.failure(error);
-          }
-        });
+      // NOTE (mristin):
+      // We only peek the name, so that the whole element can be handed on to
+      // the reader which we select below.
+      final Reporting.Result<String> tryElementName = peekElementName(reader);
+      if (tryElementName.isError()) {
+        return Reporting.Result.failure(tryElementName.getError());
+      }
+
+      switch (tryElementName.getResult()) {
+        case "administrativeInformation":
+          return readAdministrativeInformationFromElement(reader);
+        case "relationshipElement":
+          return readRelationshipElementFromElement(reader);
+        case "annotatedRelationshipElement":
+          return readAnnotatedRelationshipElementFromElement(reader);
+        case "assetAdministrationShell":
+          return readAssetAdministrationShellFromElement(reader);
+        case "basicEventElement":
+          return readBasicEventElementFromElement(reader);
+        case "blob":
+          return readBlobFromElement(reader);
+        case "capability":
+          return readCapabilityFromElement(reader);
+        case "conceptDescription":
+          return readConceptDescriptionFromElement(reader);
+        case "entity":
+          return readEntityFromElement(reader);
+        case "file":
+          return readFileFromElement(reader);
+        case "multiLanguageProperty":
+          return readMultiLanguagePropertyFromElement(reader);
+        case "operation":
+          return readOperationFromElement(reader);
+        case "property":
+          return readPropertyFromElement(reader);
+        case "range":
+          return readRangeFromElement(reader);
+        case "referenceElement":
+          return readReferenceElementFromElement(reader);
+        case "submodel":
+          return readSubmodelFromElement(reader);
+        case "submodelElementCollection":
+          return readSubmodelElementCollectionFromElement(reader);
+        case "submodelElementList":
+          return readSubmodelElementListFromElement(reader);
+        default:
+          return Reporting.Result.failure(new Reporting.Error(
+            "Unexpected element with the name " + tryElementName.getResult()));
+      }
     }
 
     /**
@@ -1469,7 +1227,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<AdministrativeInformation> tryAdministrativeInformationFromSequence(
+    private static Reporting.Result<AdministrativeInformation> readAdministrativeInformationFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
@@ -1479,175 +1237,83 @@ public class Xmlization {
       String theTemplateId = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class AdministrativeInformation, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class AdministrativeInformation, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(AdministrativeInformation.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "embeddedDataSpecifications":
-            {
-              final Reporting.Result<List<IEmbeddedDataSpecification>> tryEmbeddedDataSpecifications = parseList(
-                reader,
-                isEmptyProperty,
-                IEmbeddedDataSpecification.class,
-                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryEmbeddedDataSpecifications.isError()) {
-                tryEmbeddedDataSpecifications.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return tryEmbeddedDataSpecifications.castTo(AdministrativeInformation.class);
-              }
-
-              theEmbeddedDataSpecifications = tryEmbeddedDataSpecifications.getResult();
-              break;
-            }
-            case "version":
-            {
-              if (isEmptyProperty) {
-                theVersion = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property version of an instance of class AdministrativeInformation, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theVersion = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property version of an instance of class AdministrativeInformation "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "version"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "embeddedDataSpecifications": {
+              final Reporting.Result<List<IEmbeddedDataSpecification>> value =
+                readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theEmbeddedDataSpecifications = value.getResult();
               }
               break;
             }
-            case "revision":
-            {
-              if (isEmptyProperty) {
-                theRevision = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property revision of an instance of class AdministrativeInformation, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theRevision = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property revision of an instance of class AdministrativeInformation "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "revision"));
-                  return Reporting.Result.failure(error);
-                }
+            case "version": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theVersion = value.getResult();
               }
               break;
             }
-            case "creator":
-            {
-              Reporting.Result<Reference> tryCreator = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryCreator.isError()) {
-                tryCreator.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "creator"));
-                return tryCreator.castTo(AdministrativeInformation.class);
+            case "revision": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theRevision = value.getResult();
               }
-
-              theCreator = tryCreator.getResult();
               break;
             }
-            case "templateId":
-            {
-              if (isEmptyProperty) {
-                theTemplateId = "";
+            case "creator": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theCreator = value.getResult();
               }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property templateId of an instance of class AdministrativeInformation, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theTemplateId = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property templateId of an instance of class AdministrativeInformation "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "templateId"));
-                  return Reporting.Result.failure(error);
-                }
+              break;
+            }
+            case "templateId": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theTemplateId = value.getResult();
               }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class AdministrativeInformation, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("AdministrativeInformation", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "AdministrativeInformation",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(AdministrativeInformation.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
@@ -1662,69 +1328,62 @@ public class Xmlization {
     /**
      * Deserialize an instance of class AdministrativeInformation from an XML element.
      */
-    private static Reporting.Result<? extends AdministrativeInformation> tryAdministrativeInformationFromElement(
+    private static Reporting.Result<? extends AdministrativeInformation> readAdministrativeInformationFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        AdministrativeInformation.class,
-        (elementName, isEmptyElement) -> {
-          if (!"administrativeInformation".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class AdministrativeInformation " +
-              "with element name administrativeInformation, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryAdministrativeInformationFromSequence(reader, isEmptyElement);
-        });
+        "administrativeInformation",
+        _DeserializeImplementation::readAdministrativeInformationFromSequence);
     }
 
     /**
      * Deserialize an instance of IQualifiable from an XML element.
      */
-    private static Reporting.Result<? extends IQualifiable> tryIQualifiableFromElement(
+    private static Reporting.Result<? extends IQualifiable> readIQualifiableFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
-        reader,
-        IQualifiable.class,
-        (elementName, isEmptyElement) -> {
-          switch (elementName) {
-            case "relationshipElement":
-              return tryRelationshipElementFromSequence(reader, isEmptyElement);
-            case "annotatedRelationshipElement":
-              return tryAnnotatedRelationshipElementFromSequence(reader, isEmptyElement);
-            case "basicEventElement":
-              return tryBasicEventElementFromSequence(reader, isEmptyElement);
-            case "blob":
-              return tryBlobFromSequence(reader, isEmptyElement);
-            case "capability":
-              return tryCapabilityFromSequence(reader, isEmptyElement);
-            case "entity":
-              return tryEntityFromSequence(reader, isEmptyElement);
-            case "file":
-              return tryFileFromSequence(reader, isEmptyElement);
-            case "multiLanguageProperty":
-              return tryMultiLanguagePropertyFromSequence(reader, isEmptyElement);
-            case "operation":
-              return tryOperationFromSequence(reader, isEmptyElement);
-            case "property":
-              return tryPropertyFromSequence(reader, isEmptyElement);
-            case "range":
-              return tryRangeFromSequence(reader, isEmptyElement);
-            case "referenceElement":
-              return tryReferenceElementFromSequence(reader, isEmptyElement);
-            case "submodel":
-              return trySubmodelFromSequence(reader, isEmptyElement);
-            case "submodelElementCollection":
-              return trySubmodelElementCollectionFromSequence(reader, isEmptyElement);
-            case "submodelElementList":
-              return trySubmodelElementListFromSequence(reader, isEmptyElement);
-            default:
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected element with the name " + elementName);
-              return Reporting.Result.failure(error);
-          }
-        });
+      // NOTE (mristin):
+      // We only peek the name, so that the whole element can be handed on to
+      // the reader which we select below.
+      final Reporting.Result<String> tryElementName = peekElementName(reader);
+      if (tryElementName.isError()) {
+        return Reporting.Result.failure(tryElementName.getError());
+      }
+
+      switch (tryElementName.getResult()) {
+        case "relationshipElement":
+          return readRelationshipElementFromElement(reader);
+        case "annotatedRelationshipElement":
+          return readAnnotatedRelationshipElementFromElement(reader);
+        case "basicEventElement":
+          return readBasicEventElementFromElement(reader);
+        case "blob":
+          return readBlobFromElement(reader);
+        case "capability":
+          return readCapabilityFromElement(reader);
+        case "entity":
+          return readEntityFromElement(reader);
+        case "file":
+          return readFileFromElement(reader);
+        case "multiLanguageProperty":
+          return readMultiLanguagePropertyFromElement(reader);
+        case "operation":
+          return readOperationFromElement(reader);
+        case "property":
+          return readPropertyFromElement(reader);
+        case "range":
+          return readRangeFromElement(reader);
+        case "referenceElement":
+          return readReferenceElementFromElement(reader);
+        case "submodel":
+          return readSubmodelFromElement(reader);
+        case "submodelElementCollection":
+          return readSubmodelElementCollectionFromElement(reader);
+        case "submodelElementList":
+          return readSubmodelElementListFromElement(reader);
+        default:
+          return Reporting.Result.failure(new Reporting.Error(
+            "Unexpected element with the name " + tryElementName.getResult()));
+      }
     }
 
     /**
@@ -1734,7 +1393,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<Qualifier> tryQualifierFromSequence(
+    private static Reporting.Result<Qualifier> readQualifierFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       IReference theSemanticId = null;
@@ -1746,282 +1405,112 @@ public class Xmlization {
       IReference theValueId = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class Qualifier, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class Qualifier, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(Qualifier.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "semanticId":
-            {
-              Reporting.Result<Reference> trySemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
+          Reporting.Error valueError = null;
 
-              if (trySemanticId.isError()) {
-                trySemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "semanticId"));
-                return trySemanticId.castTo(Qualifier.class);
-              }
-
-              theSemanticId = trySemanticId.getResult();
-              break;
-            }
-            case "supplementalSemanticIds":
-            {
-              final Reporting.Result<List<IReference>> trySupplementalSemanticIds = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (trySupplementalSemanticIds.isError()) {
-                trySupplementalSemanticIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return trySupplementalSemanticIds.castTo(Qualifier.class);
-              }
-
-              theSupplementalSemanticIds = trySupplementalSemanticIds.getResult();
-              break;
-            }
-            case "kind":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property kind of an instance of class Qualifier " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "kind"));
-                return Reporting.Result.failure(error);
-              }
-
-              if (currentEvent(reader).isEndDocument()) {
-                final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing "
-                        + "the property kind of an instance of class Qualifier, "
-                        + "but reached the end-of-file");
-                return Reporting.Result.failure(error);
-              }
-
-              String textKind;
-              try {
-                textKind = readContentAsString(reader);
-              } catch (Exception e) {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property kind of an instance of class Qualifier"
-                        + " could not be de-serialized: " + e.getMessage());
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "kind"));
-                return Reporting.Result.failure(error);
-              }
-
-              final Optional<QualifierKind> optionalKind =
-                Stringification.qualifierKindFromString(
-                  textKind);
-
-              if (optionalKind.isPresent()) {
-                theKind = optionalKind.get();
+          switch (elementName) {
+            case "semanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
               } else {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property kind of an instance of class Qualifier" +
-                        " could not be de-serialized from an unexpected enumeration literal: " +
-                        textKind);
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "kind"));
-                return Reporting.Result.failure(error);
+                theSemanticId = value.getResult();
               }
               break;
             }
-            case "type":
-            {
-              if (isEmptyProperty) {
-                theType = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property type of an instance of class Qualifier, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theType = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property type of an instance of class Qualifier "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "type"));
-                  return Reporting.Result.failure(error);
-                }
-              }
-              break;
-            }
-            case "valueType":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property valueType of an instance of class Qualifier " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "valueType"));
-                return Reporting.Result.failure(error);
-              }
-
-              if (currentEvent(reader).isEndDocument()) {
-                final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing "
-                        + "the property valueType of an instance of class Qualifier, "
-                        + "but reached the end-of-file");
-                return Reporting.Result.failure(error);
-              }
-
-              String textValueType;
-              try {
-                textValueType = readContentAsString(reader);
-              } catch (Exception e) {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property valueType of an instance of class Qualifier"
-                        + " could not be de-serialized: " + e.getMessage());
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "valueType"));
-                return Reporting.Result.failure(error);
-              }
-
-              final Optional<DataTypeDefXsd> optionalValueType =
-                Stringification.dataTypeDefXsdFromString(
-                  textValueType);
-
-              if (optionalValueType.isPresent()) {
-                theValueType = optionalValueType.get();
+            case "supplementalSemanticIds": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
               } else {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property valueType of an instance of class Qualifier" +
-                        " could not be de-serialized from an unexpected enumeration literal: " +
-                        textValueType);
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "valueType"));
-                return Reporting.Result.failure(error);
+                theSupplementalSemanticIds = value.getResult();
               }
               break;
             }
-            case "value":
-            {
-              if (isEmptyProperty) {
-                theValue = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property value of an instance of class Qualifier, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theValue = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property value of an instance of class Qualifier "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "value"));
-                  return Reporting.Result.failure(error);
-                }
+            case "kind": {
+              final Reporting.Result<QualifierKind> value =
+                readTextAs_QualifierKind(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theKind = value.getResult();
               }
               break;
             }
-            case "valueId":
-            {
-              Reporting.Result<Reference> tryValueId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryValueId.isError()) {
-                tryValueId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "valueId"));
-                return tryValueId.castTo(Qualifier.class);
+            case "type": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theType = value.getResult();
               }
-
-              theValueId = tryValueId.getResult();
+              break;
+            }
+            case "valueType": {
+              final Reporting.Result<DataTypeDefXsd> value =
+                readTextAs_DataTypeDefXsd(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValueType = value.getResult();
+              }
+              break;
+            }
+            case "value": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValue = value.getResult();
+              }
+              break;
+            }
+            case "valueId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValueId = value.getResult();
+              }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class Qualifier, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("Qualifier", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "Qualifier",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(Qualifier.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theType == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property type has not been given " +
-          "in the XML representation of an instance of class Qualifier");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("type", "Qualifier");
       }
 
       if (theValueType == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property valueType has not been given " +
-          "in the XML representation of an instance of class Qualifier");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("valueType", "Qualifier");
       }
 
       return Reporting.Result.success(new Qualifier(
@@ -2037,21 +1526,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class Qualifier from an XML element.
      */
-    private static Reporting.Result<? extends Qualifier> tryQualifierFromElement(
+    private static Reporting.Result<? extends Qualifier> readQualifierFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        Qualifier.class,
-        (elementName, isEmptyElement) -> {
-          if (!"qualifier".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class Qualifier " +
-              "with element name qualifier, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryQualifierFromSequence(reader, isEmptyElement);
-        });
+        "qualifier",
+        _DeserializeImplementation::readQualifierFromSequence);
     }
 
     /**
@@ -2061,7 +1541,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<AssetAdministrationShell> tryAssetAdministrationShellFromSequence(
+    private static Reporting.Result<AssetAdministrationShell> readAssetAdministrationShellFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IExtension> theExtensions = null;
@@ -2077,298 +1557,152 @@ public class Xmlization {
       List<IReference> theSubmodels = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class AssetAdministrationShell, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class AssetAdministrationShell, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(AssetAdministrationShell.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "extensions":
-            {
-              final Reporting.Result<List<IExtension>> tryExtensions = parseList(
-                reader,
-                isEmptyProperty,
-                IExtension.class,
-                itemReader -> tryExtensionFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryExtensions.isError()) {
-                tryExtensions.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return tryExtensions.castTo(AssetAdministrationShell.class);
-              }
-
-              theExtensions = tryExtensions.getResult();
-              break;
-            }
-            case "category":
-            {
-              if (isEmptyProperty) {
-                theCategory = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property category of an instance of class AssetAdministrationShell, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theCategory = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property category of an instance of class AssetAdministrationShell "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "category"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "extensions": {
+              final Reporting.Result<List<IExtension>> value =
+                readListOf_IExtension(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theExtensions = value.getResult();
               }
               break;
             }
-            case "idShort":
-            {
-              if (isEmptyProperty) {
-                theIdShort = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property idShort of an instance of class AssetAdministrationShell, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theIdShort = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property idShort of an instance of class AssetAdministrationShell "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "idShort"));
-                  return Reporting.Result.failure(error);
-                }
+            case "category": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theCategory = value.getResult();
               }
               break;
             }
-            case "displayName":
-            {
-              final Reporting.Result<List<ILangStringNameType>> tryDisplayName = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringNameType.class,
-                itemReader -> tryLangStringNameTypeFromElement(itemReader));
-
-              if (tryDisplayName.isError()) {
-                tryDisplayName.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return tryDisplayName.castTo(AssetAdministrationShell.class);
-              }
-
-              theDisplayName = tryDisplayName.getResult();
-              break;
-            }
-            case "description":
-            {
-              final Reporting.Result<List<ILangStringTextType>> tryDescription = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringTextType.class,
-                itemReader -> tryLangStringTextTypeFromElement(itemReader));
-
-              if (tryDescription.isError()) {
-                tryDescription.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return tryDescription.castTo(AssetAdministrationShell.class);
-              }
-
-              theDescription = tryDescription.getResult();
-              break;
-            }
-            case "administration":
-            {
-              Reporting.Result<AdministrativeInformation> tryAdministration = tryAdministrativeInformationFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryAdministration.isError()) {
-                tryAdministration.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "administration"));
-                return tryAdministration.castTo(AssetAdministrationShell.class);
-              }
-
-              theAdministration = tryAdministration.getResult();
-              break;
-            }
-            case "id":
-            {
-              if (isEmptyProperty) {
-                theId = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property id of an instance of class AssetAdministrationShell, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theId = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property id of an instance of class AssetAdministrationShell "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "id"));
-                  return Reporting.Result.failure(error);
-                }
+            case "idShort": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theIdShort = value.getResult();
               }
               break;
             }
-            case "embeddedDataSpecifications":
-            {
-              final Reporting.Result<List<IEmbeddedDataSpecification>> tryEmbeddedDataSpecifications = parseList(
-                reader,
-                isEmptyProperty,
-                IEmbeddedDataSpecification.class,
-                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
-
-              if (tryEmbeddedDataSpecifications.isError()) {
-                tryEmbeddedDataSpecifications.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return tryEmbeddedDataSpecifications.castTo(AssetAdministrationShell.class);
+            case "displayName": {
+              final Reporting.Result<List<ILangStringNameType>> value =
+                readListOf_ILangStringNameType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDisplayName = value.getResult();
               }
-
-              theEmbeddedDataSpecifications = tryEmbeddedDataSpecifications.getResult();
               break;
             }
-            case "derivedFrom":
-            {
-              Reporting.Result<Reference> tryDerivedFrom = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryDerivedFrom.isError()) {
-                tryDerivedFrom.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "derivedFrom"));
-                return tryDerivedFrom.castTo(AssetAdministrationShell.class);
+            case "description": {
+              final Reporting.Result<List<ILangStringTextType>> value =
+                readListOf_ILangStringTextType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDescription = value.getResult();
               }
-
-              theDerivedFrom = tryDerivedFrom.getResult();
               break;
             }
-            case "assetInformation":
-            {
-              Reporting.Result<AssetInformation> tryAssetInformation = tryAssetInformationFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryAssetInformation.isError()) {
-                tryAssetInformation.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "assetInformation"));
-                return tryAssetInformation.castTo(AssetAdministrationShell.class);
+            case "administration": {
+              final Reporting.Result<AdministrativeInformation> value =
+                readAdministrativeInformationFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theAdministration = value.getResult();
               }
-
-              theAssetInformation = tryAssetInformation.getResult();
               break;
             }
-            case "submodels":
-            {
-              final Reporting.Result<List<IReference>> trySubmodels = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (trySubmodels.isError()) {
-                trySubmodels.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "submodels"));
-                return trySubmodels.castTo(AssetAdministrationShell.class);
+            case "id": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theId = value.getResult();
               }
-
-              theSubmodels = trySubmodels.getResult();
+              break;
+            }
+            case "embeddedDataSpecifications": {
+              final Reporting.Result<List<IEmbeddedDataSpecification>> value =
+                readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theEmbeddedDataSpecifications = value.getResult();
+              }
+              break;
+            }
+            case "derivedFrom": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDerivedFrom = value.getResult();
+              }
+              break;
+            }
+            case "assetInformation": {
+              final Reporting.Result<AssetInformation> value =
+                readAssetInformationFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theAssetInformation = value.getResult();
+              }
+              break;
+            }
+            case "submodels": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSubmodels = value.getResult();
+              }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class AssetAdministrationShell, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("AssetAdministrationShell", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "AssetAdministrationShell",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(AssetAdministrationShell.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theId == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property id has not been given " +
-          "in the XML representation of an instance of class AssetAdministrationShell");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("id", "AssetAdministrationShell");
       }
 
       if (theAssetInformation == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property assetInformation has not been given " +
-          "in the XML representation of an instance of class AssetAdministrationShell");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("assetInformation", "AssetAdministrationShell");
       }
 
       return Reporting.Result.success(new AssetAdministrationShell(
@@ -2388,21 +1722,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class AssetAdministrationShell from an XML element.
      */
-    private static Reporting.Result<? extends AssetAdministrationShell> tryAssetAdministrationShellFromElement(
+    private static Reporting.Result<? extends AssetAdministrationShell> readAssetAdministrationShellFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        AssetAdministrationShell.class,
-        (elementName, isEmptyElement) -> {
-          if (!"assetAdministrationShell".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class AssetAdministrationShell " +
-              "with element name assetAdministrationShell, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryAssetAdministrationShellFromSequence(reader, isEmptyElement);
-        });
+        "assetAdministrationShell",
+        _DeserializeImplementation::readAssetAdministrationShellFromSequence);
     }
 
     /**
@@ -2412,7 +1737,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<AssetInformation> tryAssetInformationFromSequence(
+    private static Reporting.Result<AssetInformation> readAssetInformationFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       AssetKind theAssetKind = null;
@@ -2422,207 +1747,88 @@ public class Xmlization {
       IResource theDefaultThumbnail = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class AssetInformation, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class AssetInformation, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(AssetInformation.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "assetKind":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property assetKind of an instance of class AssetInformation " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "assetKind"));
-                return Reporting.Result.failure(error);
-              }
+          Reporting.Error valueError = null;
 
-              if (currentEvent(reader).isEndDocument()) {
-                final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing "
-                        + "the property assetKind of an instance of class AssetInformation, "
-                        + "but reached the end-of-file");
-                return Reporting.Result.failure(error);
-              }
-
-              String textAssetKind;
-              try {
-                textAssetKind = readContentAsString(reader);
-              } catch (Exception e) {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property assetKind of an instance of class AssetInformation"
-                        + " could not be de-serialized: " + e.getMessage());
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "assetKind"));
-                return Reporting.Result.failure(error);
-              }
-
-              final Optional<AssetKind> optionalAssetKind =
-                Stringification.assetKindFromString(
-                  textAssetKind);
-
-              if (optionalAssetKind.isPresent()) {
-                theAssetKind = optionalAssetKind.get();
+          switch (elementName) {
+            case "assetKind": {
+              final Reporting.Result<AssetKind> value =
+                readTextAs_AssetKind(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
               } else {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property assetKind of an instance of class AssetInformation" +
-                        " could not be de-serialized from an unexpected enumeration literal: " +
-                        textAssetKind);
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "assetKind"));
-                return Reporting.Result.failure(error);
+                theAssetKind = value.getResult();
               }
               break;
             }
-            case "globalAssetId":
-            {
-              if (isEmptyProperty) {
-                theGlobalAssetId = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property globalAssetId of an instance of class AssetInformation, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theGlobalAssetId = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property globalAssetId of an instance of class AssetInformation "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "globalAssetId"));
-                  return Reporting.Result.failure(error);
-                }
+            case "globalAssetId": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theGlobalAssetId = value.getResult();
               }
               break;
             }
-            case "specificAssetIds":
-            {
-              final Reporting.Result<List<ISpecificAssetId>> trySpecificAssetIds = parseList(
-                reader,
-                isEmptyProperty,
-                ISpecificAssetId.class,
-                itemReader -> trySpecificAssetIdFromElement(itemReader));
-
-              if (trySpecificAssetIds.isError()) {
-                trySpecificAssetIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "specificAssetIds"));
-                return trySpecificAssetIds.castTo(AssetInformation.class);
-              }
-
-              theSpecificAssetIds = trySpecificAssetIds.getResult();
-              break;
-            }
-            case "assetType":
-            {
-              if (isEmptyProperty) {
-                theAssetType = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property assetType of an instance of class AssetInformation, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theAssetType = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property assetType of an instance of class AssetInformation "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "assetType"));
-                  return Reporting.Result.failure(error);
-                }
+            case "specificAssetIds": {
+              final Reporting.Result<List<ISpecificAssetId>> value =
+                readListOf_ISpecificAssetId(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSpecificAssetIds = value.getResult();
               }
               break;
             }
-            case "defaultThumbnail":
-            {
-              Reporting.Result<Resource> tryDefaultThumbnail = tryResourceFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryDefaultThumbnail.isError()) {
-                tryDefaultThumbnail.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "defaultThumbnail"));
-                return tryDefaultThumbnail.castTo(AssetInformation.class);
+            case "assetType": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theAssetType = value.getResult();
               }
-
-              theDefaultThumbnail = tryDefaultThumbnail.getResult();
+              break;
+            }
+            case "defaultThumbnail": {
+              final Reporting.Result<Resource> value =
+                readResourceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDefaultThumbnail = value.getResult();
+              }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class AssetInformation, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("AssetInformation", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "AssetInformation",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(AssetInformation.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theAssetKind == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property assetKind has not been given " +
-          "in the XML representation of an instance of class AssetInformation");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("assetKind", "AssetInformation");
       }
 
       return Reporting.Result.success(new AssetInformation(
@@ -2636,21 +1842,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class AssetInformation from an XML element.
      */
-    private static Reporting.Result<? extends AssetInformation> tryAssetInformationFromElement(
+    private static Reporting.Result<? extends AssetInformation> readAssetInformationFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        AssetInformation.class,
-        (elementName, isEmptyElement) -> {
-          if (!"assetInformation".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class AssetInformation " +
-              "with element name assetInformation, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryAssetInformationFromSequence(reader, isEmptyElement);
-        });
+        "assetInformation",
+        _DeserializeImplementation::readAssetInformationFromSequence);
     }
 
     /**
@@ -2660,127 +1857,65 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<Resource> tryResourceFromSequence(
+    private static Reporting.Result<Resource> readResourceFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       String thePath = null;
       String theContentType = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class Resource, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class Resource, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(Resource.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "path":
-            {
-              if (isEmptyProperty) {
-                thePath = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property path of an instance of class Resource, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
+          Reporting.Error valueError = null;
 
-                try {
-                  thePath = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property path of an instance of class Resource "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "path"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "path": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                thePath = value.getResult();
               }
               break;
             }
-            case "contentType":
-            {
-              if (isEmptyProperty) {
-                theContentType = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property contentType of an instance of class Resource, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theContentType = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property contentType of an instance of class Resource "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "contentType"));
-                  return Reporting.Result.failure(error);
-                }
+            case "contentType": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theContentType = value.getResult();
               }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class Resource, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("Resource", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "Resource",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(Resource.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (thePath == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property path has not been given " +
-          "in the XML representation of an instance of class Resource");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("path", "Resource");
       }
 
       return Reporting.Result.success(new Resource(
@@ -2791,21 +1926,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class Resource from an XML element.
      */
-    private static Reporting.Result<? extends Resource> tryResourceFromElement(
+    private static Reporting.Result<? extends Resource> readResourceFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        Resource.class,
-        (elementName, isEmptyElement) -> {
-          if (!"resource".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class Resource " +
-              "with element name resource, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryResourceFromSequence(reader, isEmptyElement);
-        });
+        "resource",
+        _DeserializeImplementation::readResourceFromSequence);
     }
 
     /**
@@ -2815,7 +1941,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<SpecificAssetId> trySpecificAssetIdFromSequence(
+    private static Reporting.Result<SpecificAssetId> readSpecificAssetIdFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       IReference theSemanticId = null;
@@ -2825,178 +1951,92 @@ public class Xmlization {
       IReference theExternalSubjectId = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class SpecificAssetId, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class SpecificAssetId, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(SpecificAssetId.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "semanticId":
-            {
-              Reporting.Result<Reference> trySemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
+          Reporting.Error valueError = null;
 
-              if (trySemanticId.isError()) {
-                trySemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "semanticId"));
-                return trySemanticId.castTo(SpecificAssetId.class);
-              }
-
-              theSemanticId = trySemanticId.getResult();
-              break;
-            }
-            case "supplementalSemanticIds":
-            {
-              final Reporting.Result<List<IReference>> trySupplementalSemanticIds = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (trySupplementalSemanticIds.isError()) {
-                trySupplementalSemanticIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return trySupplementalSemanticIds.castTo(SpecificAssetId.class);
-              }
-
-              theSupplementalSemanticIds = trySupplementalSemanticIds.getResult();
-              break;
-            }
-            case "name":
-            {
-              if (isEmptyProperty) {
-                theName = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property name of an instance of class SpecificAssetId, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theName = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property name of an instance of class SpecificAssetId "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "name"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "semanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSemanticId = value.getResult();
               }
               break;
             }
-            case "value":
-            {
-              if (isEmptyProperty) {
-                theValue = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property value of an instance of class SpecificAssetId, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theValue = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property value of an instance of class SpecificAssetId "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "value"));
-                  return Reporting.Result.failure(error);
-                }
+            case "supplementalSemanticIds": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSupplementalSemanticIds = value.getResult();
               }
               break;
             }
-            case "externalSubjectId":
-            {
-              Reporting.Result<Reference> tryExternalSubjectId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryExternalSubjectId.isError()) {
-                tryExternalSubjectId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "externalSubjectId"));
-                return tryExternalSubjectId.castTo(SpecificAssetId.class);
+            case "name": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theName = value.getResult();
               }
-
-              theExternalSubjectId = tryExternalSubjectId.getResult();
+              break;
+            }
+            case "value": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValue = value.getResult();
+              }
+              break;
+            }
+            case "externalSubjectId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theExternalSubjectId = value.getResult();
+              }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class SpecificAssetId, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("SpecificAssetId", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "SpecificAssetId",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(SpecificAssetId.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theName == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property name has not been given " +
-          "in the XML representation of an instance of class SpecificAssetId");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("name", "SpecificAssetId");
       }
 
       if (theValue == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property value has not been given " +
-          "in the XML representation of an instance of class SpecificAssetId");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("value", "SpecificAssetId");
       }
 
       return Reporting.Result.success(new SpecificAssetId(
@@ -3010,21 +2050,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class SpecificAssetId from an XML element.
      */
-    private static Reporting.Result<? extends SpecificAssetId> trySpecificAssetIdFromElement(
+    private static Reporting.Result<? extends SpecificAssetId> readSpecificAssetIdFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        SpecificAssetId.class,
-        (elementName, isEmptyElement) -> {
-          if (!"specificAssetId".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class SpecificAssetId " +
-              "with element name specificAssetId, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return trySpecificAssetIdFromSequence(reader, isEmptyElement);
-        });
+        "specificAssetId",
+        _DeserializeImplementation::readSpecificAssetIdFromSequence);
     }
 
     /**
@@ -3034,7 +2065,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<Submodel> trySubmodelFromSequence(
+    private static Reporting.Result<Submodel> readSubmodelFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IExtension> theExtensions = null;
@@ -3052,365 +2083,168 @@ public class Xmlization {
       List<ISubmodelElement> theSubmodelElements = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class Submodel, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class Submodel, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(Submodel.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "extensions":
-            {
-              final Reporting.Result<List<IExtension>> tryExtensions = parseList(
-                reader,
-                isEmptyProperty,
-                IExtension.class,
-                itemReader -> tryExtensionFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryExtensions.isError()) {
-                tryExtensions.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return tryExtensions.castTo(Submodel.class);
-              }
-
-              theExtensions = tryExtensions.getResult();
-              break;
-            }
-            case "category":
-            {
-              if (isEmptyProperty) {
-                theCategory = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property category of an instance of class Submodel, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theCategory = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property category of an instance of class Submodel "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "category"));
-                  return Reporting.Result.failure(error);
-                }
-              }
-              break;
-            }
-            case "idShort":
-            {
-              if (isEmptyProperty) {
-                theIdShort = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property idShort of an instance of class Submodel, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theIdShort = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property idShort of an instance of class Submodel "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "idShort"));
-                  return Reporting.Result.failure(error);
-                }
-              }
-              break;
-            }
-            case "displayName":
-            {
-              final Reporting.Result<List<ILangStringNameType>> tryDisplayName = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringNameType.class,
-                itemReader -> tryLangStringNameTypeFromElement(itemReader));
-
-              if (tryDisplayName.isError()) {
-                tryDisplayName.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return tryDisplayName.castTo(Submodel.class);
-              }
-
-              theDisplayName = tryDisplayName.getResult();
-              break;
-            }
-            case "description":
-            {
-              final Reporting.Result<List<ILangStringTextType>> tryDescription = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringTextType.class,
-                itemReader -> tryLangStringTextTypeFromElement(itemReader));
-
-              if (tryDescription.isError()) {
-                tryDescription.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return tryDescription.castTo(Submodel.class);
-              }
-
-              theDescription = tryDescription.getResult();
-              break;
-            }
-            case "administration":
-            {
-              Reporting.Result<AdministrativeInformation> tryAdministration = tryAdministrativeInformationFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryAdministration.isError()) {
-                tryAdministration.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "administration"));
-                return tryAdministration.castTo(Submodel.class);
-              }
-
-              theAdministration = tryAdministration.getResult();
-              break;
-            }
-            case "id":
-            {
-              if (isEmptyProperty) {
-                theId = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property id of an instance of class Submodel, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theId = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property id of an instance of class Submodel "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "id"));
-                  return Reporting.Result.failure(error);
-                }
-              }
-              break;
-            }
-            case "kind":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property kind of an instance of class Submodel " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "kind"));
-                return Reporting.Result.failure(error);
-              }
-
-              if (currentEvent(reader).isEndDocument()) {
-                final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing "
-                        + "the property kind of an instance of class Submodel, "
-                        + "but reached the end-of-file");
-                return Reporting.Result.failure(error);
-              }
-
-              String textKind;
-              try {
-                textKind = readContentAsString(reader);
-              } catch (Exception e) {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property kind of an instance of class Submodel"
-                        + " could not be de-serialized: " + e.getMessage());
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "kind"));
-                return Reporting.Result.failure(error);
-              }
-
-              final Optional<ModellingKind> optionalKind =
-                Stringification.modellingKindFromString(
-                  textKind);
-
-              if (optionalKind.isPresent()) {
-                theKind = optionalKind.get();
+          switch (elementName) {
+            case "extensions": {
+              final Reporting.Result<List<IExtension>> value =
+                readListOf_IExtension(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
               } else {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property kind of an instance of class Submodel" +
-                        " could not be de-serialized from an unexpected enumeration literal: " +
-                        textKind);
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "kind"));
-                return Reporting.Result.failure(error);
+                theExtensions = value.getResult();
               }
               break;
             }
-            case "semanticId":
-            {
-              Reporting.Result<Reference> trySemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySemanticId.isError()) {
-                trySemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "semanticId"));
-                return trySemanticId.castTo(Submodel.class);
+            case "category": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theCategory = value.getResult();
               }
-
-              theSemanticId = trySemanticId.getResult();
               break;
             }
-            case "supplementalSemanticIds":
-            {
-              final Reporting.Result<List<IReference>> trySupplementalSemanticIds = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (trySupplementalSemanticIds.isError()) {
-                trySupplementalSemanticIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return trySupplementalSemanticIds.castTo(Submodel.class);
+            case "idShort": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theIdShort = value.getResult();
               }
-
-              theSupplementalSemanticIds = trySupplementalSemanticIds.getResult();
               break;
             }
-            case "qualifiers":
-            {
-              final Reporting.Result<List<IQualifier>> tryQualifiers = parseList(
-                reader,
-                isEmptyProperty,
-                IQualifier.class,
-                itemReader -> tryQualifierFromElement(itemReader));
-
-              if (tryQualifiers.isError()) {
-                tryQualifiers.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return tryQualifiers.castTo(Submodel.class);
+            case "displayName": {
+              final Reporting.Result<List<ILangStringNameType>> value =
+                readListOf_ILangStringNameType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDisplayName = value.getResult();
               }
-
-              theQualifiers = tryQualifiers.getResult();
               break;
             }
-            case "embeddedDataSpecifications":
-            {
-              final Reporting.Result<List<IEmbeddedDataSpecification>> tryEmbeddedDataSpecifications = parseList(
-                reader,
-                isEmptyProperty,
-                IEmbeddedDataSpecification.class,
-                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
-
-              if (tryEmbeddedDataSpecifications.isError()) {
-                tryEmbeddedDataSpecifications.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return tryEmbeddedDataSpecifications.castTo(Submodel.class);
+            case "description": {
+              final Reporting.Result<List<ILangStringTextType>> value =
+                readListOf_ILangStringTextType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDescription = value.getResult();
               }
-
-              theEmbeddedDataSpecifications = tryEmbeddedDataSpecifications.getResult();
               break;
             }
-            case "submodelElements":
-            {
-              final Reporting.Result<List<ISubmodelElement>> trySubmodelElements = parseList(
-                reader,
-                isEmptyProperty,
-                ISubmodelElement.class,
-                itemReader -> tryISubmodelElementFromElement(itemReader));
-
-              if (trySubmodelElements.isError()) {
-                trySubmodelElements.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "submodelElements"));
-                return trySubmodelElements.castTo(Submodel.class);
+            case "administration": {
+              final Reporting.Result<AdministrativeInformation> value =
+                readAdministrativeInformationFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theAdministration = value.getResult();
               }
-
-              theSubmodelElements = trySubmodelElements.getResult();
+              break;
+            }
+            case "id": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theId = value.getResult();
+              }
+              break;
+            }
+            case "kind": {
+              final Reporting.Result<ModellingKind> value =
+                readTextAs_ModellingKind(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theKind = value.getResult();
+              }
+              break;
+            }
+            case "semanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSemanticId = value.getResult();
+              }
+              break;
+            }
+            case "supplementalSemanticIds": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSupplementalSemanticIds = value.getResult();
+              }
+              break;
+            }
+            case "qualifiers": {
+              final Reporting.Result<List<IQualifier>> value =
+                readListOf_IQualifier(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theQualifiers = value.getResult();
+              }
+              break;
+            }
+            case "embeddedDataSpecifications": {
+              final Reporting.Result<List<IEmbeddedDataSpecification>> value =
+                readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theEmbeddedDataSpecifications = value.getResult();
+              }
+              break;
+            }
+            case "submodelElements": {
+              final Reporting.Result<List<ISubmodelElement>> value =
+                readListOf_ISubmodelElement(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSubmodelElements = value.getResult();
+              }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class Submodel, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("Submodel", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "Submodel",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(Submodel.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theId == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property id has not been given " +
-          "in the XML representation of an instance of class Submodel");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("id", "Submodel");
       }
 
       return Reporting.Result.success(new Submodel(
@@ -3432,67 +2266,60 @@ public class Xmlization {
     /**
      * Deserialize an instance of class Submodel from an XML element.
      */
-    private static Reporting.Result<? extends Submodel> trySubmodelFromElement(
+    private static Reporting.Result<? extends Submodel> readSubmodelFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        Submodel.class,
-        (elementName, isEmptyElement) -> {
-          if (!"submodel".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class Submodel " +
-              "with element name submodel, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return trySubmodelFromSequence(reader, isEmptyElement);
-        });
+        "submodel",
+        _DeserializeImplementation::readSubmodelFromSequence);
     }
 
     /**
      * Deserialize an instance of ISubmodelElement from an XML element.
      */
-    private static Reporting.Result<? extends ISubmodelElement> tryISubmodelElementFromElement(
+    private static Reporting.Result<? extends ISubmodelElement> readISubmodelElementFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
-        reader,
-        ISubmodelElement.class,
-        (elementName, isEmptyElement) -> {
-          switch (elementName) {
-            case "relationshipElement":
-              return tryRelationshipElementFromSequence(reader, isEmptyElement);
-            case "annotatedRelationshipElement":
-              return tryAnnotatedRelationshipElementFromSequence(reader, isEmptyElement);
-            case "basicEventElement":
-              return tryBasicEventElementFromSequence(reader, isEmptyElement);
-            case "blob":
-              return tryBlobFromSequence(reader, isEmptyElement);
-            case "capability":
-              return tryCapabilityFromSequence(reader, isEmptyElement);
-            case "entity":
-              return tryEntityFromSequence(reader, isEmptyElement);
-            case "file":
-              return tryFileFromSequence(reader, isEmptyElement);
-            case "multiLanguageProperty":
-              return tryMultiLanguagePropertyFromSequence(reader, isEmptyElement);
-            case "operation":
-              return tryOperationFromSequence(reader, isEmptyElement);
-            case "property":
-              return tryPropertyFromSequence(reader, isEmptyElement);
-            case "range":
-              return tryRangeFromSequence(reader, isEmptyElement);
-            case "referenceElement":
-              return tryReferenceElementFromSequence(reader, isEmptyElement);
-            case "submodelElementCollection":
-              return trySubmodelElementCollectionFromSequence(reader, isEmptyElement);
-            case "submodelElementList":
-              return trySubmodelElementListFromSequence(reader, isEmptyElement);
-            default:
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected element with the name " + elementName);
-              return Reporting.Result.failure(error);
-          }
-        });
+      // NOTE (mristin):
+      // We only peek the name, so that the whole element can be handed on to
+      // the reader which we select below.
+      final Reporting.Result<String> tryElementName = peekElementName(reader);
+      if (tryElementName.isError()) {
+        return Reporting.Result.failure(tryElementName.getError());
+      }
+
+      switch (tryElementName.getResult()) {
+        case "relationshipElement":
+          return readRelationshipElementFromElement(reader);
+        case "annotatedRelationshipElement":
+          return readAnnotatedRelationshipElementFromElement(reader);
+        case "basicEventElement":
+          return readBasicEventElementFromElement(reader);
+        case "blob":
+          return readBlobFromElement(reader);
+        case "capability":
+          return readCapabilityFromElement(reader);
+        case "entity":
+          return readEntityFromElement(reader);
+        case "file":
+          return readFileFromElement(reader);
+        case "multiLanguageProperty":
+          return readMultiLanguagePropertyFromElement(reader);
+        case "operation":
+          return readOperationFromElement(reader);
+        case "property":
+          return readPropertyFromElement(reader);
+        case "range":
+          return readRangeFromElement(reader);
+        case "referenceElement":
+          return readReferenceElementFromElement(reader);
+        case "submodelElementCollection":
+          return readSubmodelElementCollectionFromElement(reader);
+        case "submodelElementList":
+          return readSubmodelElementListFromElement(reader);
+        default:
+          return Reporting.Result.failure(new Reporting.Error(
+            "Unexpected element with the name " + tryElementName.getResult()));
+      }
     }
 
     /**
@@ -3502,7 +2329,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<RelationshipElement> tryRelationshipElementFromSequence(
+    private static Reporting.Result<RelationshipElement> readRelationshipElementFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IExtension> theExtensions = null;
@@ -3518,289 +2345,152 @@ public class Xmlization {
       IReference theSecond = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class RelationshipElement, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class RelationshipElement, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(RelationshipElement.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "extensions":
-            {
-              final Reporting.Result<List<IExtension>> tryExtensions = parseList(
-                reader,
-                isEmptyProperty,
-                IExtension.class,
-                itemReader -> tryExtensionFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryExtensions.isError()) {
-                tryExtensions.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return tryExtensions.castTo(RelationshipElement.class);
-              }
-
-              theExtensions = tryExtensions.getResult();
-              break;
-            }
-            case "category":
-            {
-              if (isEmptyProperty) {
-                theCategory = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property category of an instance of class RelationshipElement, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theCategory = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property category of an instance of class RelationshipElement "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "category"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "extensions": {
+              final Reporting.Result<List<IExtension>> value =
+                readListOf_IExtension(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theExtensions = value.getResult();
               }
               break;
             }
-            case "idShort":
-            {
-              if (isEmptyProperty) {
-                theIdShort = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property idShort of an instance of class RelationshipElement, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theIdShort = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property idShort of an instance of class RelationshipElement "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "idShort"));
-                  return Reporting.Result.failure(error);
-                }
+            case "category": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theCategory = value.getResult();
               }
               break;
             }
-            case "displayName":
-            {
-              final Reporting.Result<List<ILangStringNameType>> tryDisplayName = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringNameType.class,
-                itemReader -> tryLangStringNameTypeFromElement(itemReader));
-
-              if (tryDisplayName.isError()) {
-                tryDisplayName.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return tryDisplayName.castTo(RelationshipElement.class);
+            case "idShort": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theIdShort = value.getResult();
               }
-
-              theDisplayName = tryDisplayName.getResult();
               break;
             }
-            case "description":
-            {
-              final Reporting.Result<List<ILangStringTextType>> tryDescription = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringTextType.class,
-                itemReader -> tryLangStringTextTypeFromElement(itemReader));
-
-              if (tryDescription.isError()) {
-                tryDescription.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return tryDescription.castTo(RelationshipElement.class);
+            case "displayName": {
+              final Reporting.Result<List<ILangStringNameType>> value =
+                readListOf_ILangStringNameType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDisplayName = value.getResult();
               }
-
-              theDescription = tryDescription.getResult();
               break;
             }
-            case "semanticId":
-            {
-              Reporting.Result<Reference> trySemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySemanticId.isError()) {
-                trySemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "semanticId"));
-                return trySemanticId.castTo(RelationshipElement.class);
+            case "description": {
+              final Reporting.Result<List<ILangStringTextType>> value =
+                readListOf_ILangStringTextType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDescription = value.getResult();
               }
-
-              theSemanticId = trySemanticId.getResult();
               break;
             }
-            case "supplementalSemanticIds":
-            {
-              final Reporting.Result<List<IReference>> trySupplementalSemanticIds = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (trySupplementalSemanticIds.isError()) {
-                trySupplementalSemanticIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return trySupplementalSemanticIds.castTo(RelationshipElement.class);
+            case "semanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSemanticId = value.getResult();
               }
-
-              theSupplementalSemanticIds = trySupplementalSemanticIds.getResult();
               break;
             }
-            case "qualifiers":
-            {
-              final Reporting.Result<List<IQualifier>> tryQualifiers = parseList(
-                reader,
-                isEmptyProperty,
-                IQualifier.class,
-                itemReader -> tryQualifierFromElement(itemReader));
-
-              if (tryQualifiers.isError()) {
-                tryQualifiers.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return tryQualifiers.castTo(RelationshipElement.class);
+            case "supplementalSemanticIds": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSupplementalSemanticIds = value.getResult();
               }
-
-              theQualifiers = tryQualifiers.getResult();
               break;
             }
-            case "embeddedDataSpecifications":
-            {
-              final Reporting.Result<List<IEmbeddedDataSpecification>> tryEmbeddedDataSpecifications = parseList(
-                reader,
-                isEmptyProperty,
-                IEmbeddedDataSpecification.class,
-                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
-
-              if (tryEmbeddedDataSpecifications.isError()) {
-                tryEmbeddedDataSpecifications.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return tryEmbeddedDataSpecifications.castTo(RelationshipElement.class);
+            case "qualifiers": {
+              final Reporting.Result<List<IQualifier>> value =
+                readListOf_IQualifier(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theQualifiers = value.getResult();
               }
-
-              theEmbeddedDataSpecifications = tryEmbeddedDataSpecifications.getResult();
               break;
             }
-            case "first":
-            {
-              Reporting.Result<Reference> tryFirst = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryFirst.isError()) {
-                tryFirst.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "first"));
-                return tryFirst.castTo(RelationshipElement.class);
+            case "embeddedDataSpecifications": {
+              final Reporting.Result<List<IEmbeddedDataSpecification>> value =
+                readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theEmbeddedDataSpecifications = value.getResult();
               }
-
-              theFirst = tryFirst.getResult();
               break;
             }
-            case "second":
-            {
-              Reporting.Result<Reference> trySecond = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySecond.isError()) {
-                trySecond.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "second"));
-                return trySecond.castTo(RelationshipElement.class);
+            case "first": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theFirst = value.getResult();
               }
-
-              theSecond = trySecond.getResult();
+              break;
+            }
+            case "second": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSecond = value.getResult();
+              }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class RelationshipElement, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("RelationshipElement", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "RelationshipElement",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(RelationshipElement.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theFirst == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property first has not been given " +
-          "in the XML representation of an instance of class RelationshipElement");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("first", "RelationshipElement");
       }
 
       if (theSecond == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property second has not been given " +
-          "in the XML representation of an instance of class RelationshipElement");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("second", "RelationshipElement");
       }
 
       return Reporting.Result.success(new RelationshipElement(
@@ -3820,43 +2510,36 @@ public class Xmlization {
     /**
      * Deserialize an instance of IRelationshipElement from an XML element.
      */
-    private static Reporting.Result<? extends IRelationshipElement> tryIRelationshipElementFromElement(
+    private static Reporting.Result<? extends IRelationshipElement> readIRelationshipElementFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
-        reader,
-        IRelationshipElement.class,
-        (elementName, isEmptyElement) -> {
-          switch (elementName) {
-            case "annotatedRelationshipElement":
-              return tryAnnotatedRelationshipElementFromSequence(reader, isEmptyElement);
-            case "relationshipElement":
-              return tryRelationshipElementFromSequence(reader, isEmptyElement);
-            default:
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected element with the name " + elementName);
-              return Reporting.Result.failure(error);
-          }
-        });
+      // NOTE (mristin):
+      // We only peek the name, so that the whole element can be handed on to
+      // the reader which we select below.
+      final Reporting.Result<String> tryElementName = peekElementName(reader);
+      if (tryElementName.isError()) {
+        return Reporting.Result.failure(tryElementName.getError());
+      }
+
+      switch (tryElementName.getResult()) {
+        case "annotatedRelationshipElement":
+          return readAnnotatedRelationshipElementFromElement(reader);
+        case "relationshipElement":
+          return readRelationshipElementFromElement(reader);
+        default:
+          return Reporting.Result.failure(new Reporting.Error(
+            "Unexpected element with the name " + tryElementName.getResult()));
+      }
     }
 
     /**
      * Deserialize an instance of class RelationshipElement from an XML element.
      */
-    private static Reporting.Result<? extends RelationshipElement> tryRelationshipElementFromElement(
+    private static Reporting.Result<? extends RelationshipElement> readRelationshipElementFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        RelationshipElement.class,
-        (elementName, isEmptyElement) -> {
-          if (!"relationshipElement".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class RelationshipElement " +
-              "with element name relationshipElement, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryRelationshipElementFromSequence(reader, isEmptyElement);
-        });
+        "relationshipElement",
+        _DeserializeImplementation::readRelationshipElementFromSequence);
     }
 
     /**
@@ -3866,7 +2549,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<SubmodelElementList> trySubmodelElementListFromSequence(
+    private static Reporting.Result<SubmodelElementList> readSubmodelElementListFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IExtension> theExtensions = null;
@@ -3885,424 +2568,178 @@ public class Xmlization {
       List<ISubmodelElement> theValue = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class SubmodelElementList, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class SubmodelElementList, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(SubmodelElementList.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "extensions":
-            {
-              final Reporting.Result<List<IExtension>> tryExtensions = parseList(
-                reader,
-                isEmptyProperty,
-                IExtension.class,
-                itemReader -> tryExtensionFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryExtensions.isError()) {
-                tryExtensions.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return tryExtensions.castTo(SubmodelElementList.class);
-              }
-
-              theExtensions = tryExtensions.getResult();
-              break;
-            }
-            case "category":
-            {
-              if (isEmptyProperty) {
-                theCategory = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property category of an instance of class SubmodelElementList, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theCategory = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property category of an instance of class SubmodelElementList "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "category"));
-                  return Reporting.Result.failure(error);
-                }
-              }
-              break;
-            }
-            case "idShort":
-            {
-              if (isEmptyProperty) {
-                theIdShort = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property idShort of an instance of class SubmodelElementList, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theIdShort = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property idShort of an instance of class SubmodelElementList "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "idShort"));
-                  return Reporting.Result.failure(error);
-                }
-              }
-              break;
-            }
-            case "displayName":
-            {
-              final Reporting.Result<List<ILangStringNameType>> tryDisplayName = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringNameType.class,
-                itemReader -> tryLangStringNameTypeFromElement(itemReader));
-
-              if (tryDisplayName.isError()) {
-                tryDisplayName.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return tryDisplayName.castTo(SubmodelElementList.class);
-              }
-
-              theDisplayName = tryDisplayName.getResult();
-              break;
-            }
-            case "description":
-            {
-              final Reporting.Result<List<ILangStringTextType>> tryDescription = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringTextType.class,
-                itemReader -> tryLangStringTextTypeFromElement(itemReader));
-
-              if (tryDescription.isError()) {
-                tryDescription.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return tryDescription.castTo(SubmodelElementList.class);
-              }
-
-              theDescription = tryDescription.getResult();
-              break;
-            }
-            case "semanticId":
-            {
-              Reporting.Result<Reference> trySemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySemanticId.isError()) {
-                trySemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "semanticId"));
-                return trySemanticId.castTo(SubmodelElementList.class);
-              }
-
-              theSemanticId = trySemanticId.getResult();
-              break;
-            }
-            case "supplementalSemanticIds":
-            {
-              final Reporting.Result<List<IReference>> trySupplementalSemanticIds = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (trySupplementalSemanticIds.isError()) {
-                trySupplementalSemanticIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return trySupplementalSemanticIds.castTo(SubmodelElementList.class);
-              }
-
-              theSupplementalSemanticIds = trySupplementalSemanticIds.getResult();
-              break;
-            }
-            case "qualifiers":
-            {
-              final Reporting.Result<List<IQualifier>> tryQualifiers = parseList(
-                reader,
-                isEmptyProperty,
-                IQualifier.class,
-                itemReader -> tryQualifierFromElement(itemReader));
-
-              if (tryQualifiers.isError()) {
-                tryQualifiers.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return tryQualifiers.castTo(SubmodelElementList.class);
-              }
-
-              theQualifiers = tryQualifiers.getResult();
-              break;
-            }
-            case "embeddedDataSpecifications":
-            {
-              final Reporting.Result<List<IEmbeddedDataSpecification>> tryEmbeddedDataSpecifications = parseList(
-                reader,
-                isEmptyProperty,
-                IEmbeddedDataSpecification.class,
-                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
-
-              if (tryEmbeddedDataSpecifications.isError()) {
-                tryEmbeddedDataSpecifications.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return tryEmbeddedDataSpecifications.castTo(SubmodelElementList.class);
-              }
-
-              theEmbeddedDataSpecifications = tryEmbeddedDataSpecifications.getResult();
-              break;
-            }
-            case "orderRelevant":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property orderRelevant of an instance of class SubmodelElementList " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "orderRelevant"));
-                return Reporting.Result.failure(error);
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property orderRelevant of an instance of class SubmodelElementList, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theOrderRelevant = readContentAsBool(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property orderRelevant of an instance of class SubmodelElementList "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "orderRelevant"));
-                  return Reporting.Result.failure(error);
-                }
-              }
-              break;
-            }
-            case "semanticIdListElement":
-            {
-              Reporting.Result<Reference> trySemanticIdListElement = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySemanticIdListElement.isError()) {
-                trySemanticIdListElement.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "semanticIdListElement"));
-                return trySemanticIdListElement.castTo(SubmodelElementList.class);
-              }
-
-              theSemanticIdListElement = trySemanticIdListElement.getResult();
-              break;
-            }
-            case "typeValueListElement":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property typeValueListElement of an instance of class SubmodelElementList " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "typeValueListElement"));
-                return Reporting.Result.failure(error);
-              }
-
-              if (currentEvent(reader).isEndDocument()) {
-                final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing "
-                        + "the property typeValueListElement of an instance of class SubmodelElementList, "
-                        + "but reached the end-of-file");
-                return Reporting.Result.failure(error);
-              }
-
-              String textTypeValueListElement;
-              try {
-                textTypeValueListElement = readContentAsString(reader);
-              } catch (Exception e) {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property typeValueListElement of an instance of class SubmodelElementList"
-                        + " could not be de-serialized: " + e.getMessage());
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "typeValueListElement"));
-                return Reporting.Result.failure(error);
-              }
-
-              final Optional<AasSubmodelElements> optionalTypeValueListElement =
-                Stringification.aasSubmodelElementsFromString(
-                  textTypeValueListElement);
-
-              if (optionalTypeValueListElement.isPresent()) {
-                theTypeValueListElement = optionalTypeValueListElement.get();
+          switch (elementName) {
+            case "extensions": {
+              final Reporting.Result<List<IExtension>> value =
+                readListOf_IExtension(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
               } else {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property typeValueListElement of an instance of class SubmodelElementList" +
-                        " could not be de-serialized from an unexpected enumeration literal: " +
-                        textTypeValueListElement);
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "typeValueListElement"));
-                return Reporting.Result.failure(error);
+                theExtensions = value.getResult();
               }
               break;
             }
-            case "valueTypeListElement":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property valueTypeListElement of an instance of class SubmodelElementList " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "valueTypeListElement"));
-                return Reporting.Result.failure(error);
-              }
-
-              if (currentEvent(reader).isEndDocument()) {
-                final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing "
-                        + "the property valueTypeListElement of an instance of class SubmodelElementList, "
-                        + "but reached the end-of-file");
-                return Reporting.Result.failure(error);
-              }
-
-              String textValueTypeListElement;
-              try {
-                textValueTypeListElement = readContentAsString(reader);
-              } catch (Exception e) {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property valueTypeListElement of an instance of class SubmodelElementList"
-                        + " could not be de-serialized: " + e.getMessage());
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "valueTypeListElement"));
-                return Reporting.Result.failure(error);
-              }
-
-              final Optional<DataTypeDefXsd> optionalValueTypeListElement =
-                Stringification.dataTypeDefXsdFromString(
-                  textValueTypeListElement);
-
-              if (optionalValueTypeListElement.isPresent()) {
-                theValueTypeListElement = optionalValueTypeListElement.get();
+            case "category": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
               } else {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property valueTypeListElement of an instance of class SubmodelElementList" +
-                        " could not be de-serialized from an unexpected enumeration literal: " +
-                        textValueTypeListElement);
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "valueTypeListElement"));
-                return Reporting.Result.failure(error);
+                theCategory = value.getResult();
               }
               break;
             }
-            case "value":
-            {
-              final Reporting.Result<List<ISubmodelElement>> tryValue = parseList(
-                reader,
-                isEmptyProperty,
-                ISubmodelElement.class,
-                itemReader -> tryISubmodelElementFromElement(itemReader));
-
-              if (tryValue.isError()) {
-                tryValue.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "value"));
-                return tryValue.castTo(SubmodelElementList.class);
+            case "idShort": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theIdShort = value.getResult();
               }
-
-              theValue = tryValue.getResult();
+              break;
+            }
+            case "displayName": {
+              final Reporting.Result<List<ILangStringNameType>> value =
+                readListOf_ILangStringNameType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDisplayName = value.getResult();
+              }
+              break;
+            }
+            case "description": {
+              final Reporting.Result<List<ILangStringTextType>> value =
+                readListOf_ILangStringTextType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDescription = value.getResult();
+              }
+              break;
+            }
+            case "semanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSemanticId = value.getResult();
+              }
+              break;
+            }
+            case "supplementalSemanticIds": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSupplementalSemanticIds = value.getResult();
+              }
+              break;
+            }
+            case "qualifiers": {
+              final Reporting.Result<List<IQualifier>> value =
+                readListOf_IQualifier(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theQualifiers = value.getResult();
+              }
+              break;
+            }
+            case "embeddedDataSpecifications": {
+              final Reporting.Result<List<IEmbeddedDataSpecification>> value =
+                readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theEmbeddedDataSpecifications = value.getResult();
+              }
+              break;
+            }
+            case "orderRelevant": {
+              final Reporting.Result<Boolean> value =
+                readTextAs_bool(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theOrderRelevant = value.getResult();
+              }
+              break;
+            }
+            case "semanticIdListElement": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSemanticIdListElement = value.getResult();
+              }
+              break;
+            }
+            case "typeValueListElement": {
+              final Reporting.Result<AasSubmodelElements> value =
+                readTextAs_AasSubmodelElements(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theTypeValueListElement = value.getResult();
+              }
+              break;
+            }
+            case "valueTypeListElement": {
+              final Reporting.Result<DataTypeDefXsd> value =
+                readTextAs_DataTypeDefXsd(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValueTypeListElement = value.getResult();
+              }
+              break;
+            }
+            case "value": {
+              final Reporting.Result<List<ISubmodelElement>> value =
+                readListOf_ISubmodelElement(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValue = value.getResult();
+              }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class SubmodelElementList, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("SubmodelElementList", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "SubmodelElementList",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(SubmodelElementList.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theTypeValueListElement == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property typeValueListElement has not been given " +
-          "in the XML representation of an instance of class SubmodelElementList");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("typeValueListElement", "SubmodelElementList");
       }
 
       return Reporting.Result.success(new SubmodelElementList(
@@ -4325,21 +2762,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class SubmodelElementList from an XML element.
      */
-    private static Reporting.Result<? extends SubmodelElementList> trySubmodelElementListFromElement(
+    private static Reporting.Result<? extends SubmodelElementList> readSubmodelElementListFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        SubmodelElementList.class,
-        (elementName, isEmptyElement) -> {
-          if (!"submodelElementList".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class SubmodelElementList " +
-              "with element name submodelElementList, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return trySubmodelElementListFromSequence(reader, isEmptyElement);
-        });
+        "submodelElementList",
+        _DeserializeImplementation::readSubmodelElementListFromSequence);
     }
 
     /**
@@ -4349,7 +2777,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<SubmodelElementCollection> trySubmodelElementCollectionFromSequence(
+    private static Reporting.Result<SubmodelElementCollection> readSubmodelElementCollectionFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IExtension> theExtensions = null;
@@ -4364,261 +2792,133 @@ public class Xmlization {
       List<ISubmodelElement> theValue = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class SubmodelElementCollection, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class SubmodelElementCollection, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(SubmodelElementCollection.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "extensions":
-            {
-              final Reporting.Result<List<IExtension>> tryExtensions = parseList(
-                reader,
-                isEmptyProperty,
-                IExtension.class,
-                itemReader -> tryExtensionFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryExtensions.isError()) {
-                tryExtensions.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return tryExtensions.castTo(SubmodelElementCollection.class);
-              }
-
-              theExtensions = tryExtensions.getResult();
-              break;
-            }
-            case "category":
-            {
-              if (isEmptyProperty) {
-                theCategory = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property category of an instance of class SubmodelElementCollection, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theCategory = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property category of an instance of class SubmodelElementCollection "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "category"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "extensions": {
+              final Reporting.Result<List<IExtension>> value =
+                readListOf_IExtension(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theExtensions = value.getResult();
               }
               break;
             }
-            case "idShort":
-            {
-              if (isEmptyProperty) {
-                theIdShort = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property idShort of an instance of class SubmodelElementCollection, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theIdShort = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property idShort of an instance of class SubmodelElementCollection "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "idShort"));
-                  return Reporting.Result.failure(error);
-                }
+            case "category": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theCategory = value.getResult();
               }
               break;
             }
-            case "displayName":
-            {
-              final Reporting.Result<List<ILangStringNameType>> tryDisplayName = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringNameType.class,
-                itemReader -> tryLangStringNameTypeFromElement(itemReader));
-
-              if (tryDisplayName.isError()) {
-                tryDisplayName.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return tryDisplayName.castTo(SubmodelElementCollection.class);
+            case "idShort": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theIdShort = value.getResult();
               }
-
-              theDisplayName = tryDisplayName.getResult();
               break;
             }
-            case "description":
-            {
-              final Reporting.Result<List<ILangStringTextType>> tryDescription = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringTextType.class,
-                itemReader -> tryLangStringTextTypeFromElement(itemReader));
-
-              if (tryDescription.isError()) {
-                tryDescription.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return tryDescription.castTo(SubmodelElementCollection.class);
+            case "displayName": {
+              final Reporting.Result<List<ILangStringNameType>> value =
+                readListOf_ILangStringNameType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDisplayName = value.getResult();
               }
-
-              theDescription = tryDescription.getResult();
               break;
             }
-            case "semanticId":
-            {
-              Reporting.Result<Reference> trySemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySemanticId.isError()) {
-                trySemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "semanticId"));
-                return trySemanticId.castTo(SubmodelElementCollection.class);
+            case "description": {
+              final Reporting.Result<List<ILangStringTextType>> value =
+                readListOf_ILangStringTextType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDescription = value.getResult();
               }
-
-              theSemanticId = trySemanticId.getResult();
               break;
             }
-            case "supplementalSemanticIds":
-            {
-              final Reporting.Result<List<IReference>> trySupplementalSemanticIds = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (trySupplementalSemanticIds.isError()) {
-                trySupplementalSemanticIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return trySupplementalSemanticIds.castTo(SubmodelElementCollection.class);
+            case "semanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSemanticId = value.getResult();
               }
-
-              theSupplementalSemanticIds = trySupplementalSemanticIds.getResult();
               break;
             }
-            case "qualifiers":
-            {
-              final Reporting.Result<List<IQualifier>> tryQualifiers = parseList(
-                reader,
-                isEmptyProperty,
-                IQualifier.class,
-                itemReader -> tryQualifierFromElement(itemReader));
-
-              if (tryQualifiers.isError()) {
-                tryQualifiers.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return tryQualifiers.castTo(SubmodelElementCollection.class);
+            case "supplementalSemanticIds": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSupplementalSemanticIds = value.getResult();
               }
-
-              theQualifiers = tryQualifiers.getResult();
               break;
             }
-            case "embeddedDataSpecifications":
-            {
-              final Reporting.Result<List<IEmbeddedDataSpecification>> tryEmbeddedDataSpecifications = parseList(
-                reader,
-                isEmptyProperty,
-                IEmbeddedDataSpecification.class,
-                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
-
-              if (tryEmbeddedDataSpecifications.isError()) {
-                tryEmbeddedDataSpecifications.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return tryEmbeddedDataSpecifications.castTo(SubmodelElementCollection.class);
+            case "qualifiers": {
+              final Reporting.Result<List<IQualifier>> value =
+                readListOf_IQualifier(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theQualifiers = value.getResult();
               }
-
-              theEmbeddedDataSpecifications = tryEmbeddedDataSpecifications.getResult();
               break;
             }
-            case "value":
-            {
-              final Reporting.Result<List<ISubmodelElement>> tryValue = parseList(
-                reader,
-                isEmptyProperty,
-                ISubmodelElement.class,
-                itemReader -> tryISubmodelElementFromElement(itemReader));
-
-              if (tryValue.isError()) {
-                tryValue.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "value"));
-                return tryValue.castTo(SubmodelElementCollection.class);
+            case "embeddedDataSpecifications": {
+              final Reporting.Result<List<IEmbeddedDataSpecification>> value =
+                readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theEmbeddedDataSpecifications = value.getResult();
               }
-
-              theValue = tryValue.getResult();
+              break;
+            }
+            case "value": {
+              final Reporting.Result<List<ISubmodelElement>> value =
+                readListOf_ISubmodelElement(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValue = value.getResult();
+              }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class SubmodelElementCollection, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("SubmodelElementCollection", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "SubmodelElementCollection",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(SubmodelElementCollection.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
@@ -4638,51 +2938,44 @@ public class Xmlization {
     /**
      * Deserialize an instance of class SubmodelElementCollection from an XML element.
      */
-    private static Reporting.Result<? extends SubmodelElementCollection> trySubmodelElementCollectionFromElement(
+    private static Reporting.Result<? extends SubmodelElementCollection> readSubmodelElementCollectionFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        SubmodelElementCollection.class,
-        (elementName, isEmptyElement) -> {
-          if (!"submodelElementCollection".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class SubmodelElementCollection " +
-              "with element name submodelElementCollection, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return trySubmodelElementCollectionFromSequence(reader, isEmptyElement);
-        });
+        "submodelElementCollection",
+        _DeserializeImplementation::readSubmodelElementCollectionFromSequence);
     }
 
     /**
      * Deserialize an instance of IDataElement from an XML element.
      */
-    private static Reporting.Result<? extends IDataElement> tryIDataElementFromElement(
+    private static Reporting.Result<? extends IDataElement> readIDataElementFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
-        reader,
-        IDataElement.class,
-        (elementName, isEmptyElement) -> {
-          switch (elementName) {
-            case "blob":
-              return tryBlobFromSequence(reader, isEmptyElement);
-            case "file":
-              return tryFileFromSequence(reader, isEmptyElement);
-            case "multiLanguageProperty":
-              return tryMultiLanguagePropertyFromSequence(reader, isEmptyElement);
-            case "property":
-              return tryPropertyFromSequence(reader, isEmptyElement);
-            case "range":
-              return tryRangeFromSequence(reader, isEmptyElement);
-            case "referenceElement":
-              return tryReferenceElementFromSequence(reader, isEmptyElement);
-            default:
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected element with the name " + elementName);
-              return Reporting.Result.failure(error);
-          }
-        });
+      // NOTE (mristin):
+      // We only peek the name, so that the whole element can be handed on to
+      // the reader which we select below.
+      final Reporting.Result<String> tryElementName = peekElementName(reader);
+      if (tryElementName.isError()) {
+        return Reporting.Result.failure(tryElementName.getError());
+      }
+
+      switch (tryElementName.getResult()) {
+        case "blob":
+          return readBlobFromElement(reader);
+        case "file":
+          return readFileFromElement(reader);
+        case "multiLanguageProperty":
+          return readMultiLanguagePropertyFromElement(reader);
+        case "property":
+          return readPropertyFromElement(reader);
+        case "range":
+          return readRangeFromElement(reader);
+        case "referenceElement":
+          return readReferenceElementFromElement(reader);
+        default:
+          return Reporting.Result.failure(new Reporting.Error(
+            "Unexpected element with the name " + tryElementName.getResult()));
+      }
     }
 
     /**
@@ -4692,7 +2985,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<Property> tryPropertyFromSequence(
+    private static Reporting.Result<Property> readPropertyFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IExtension> theExtensions = null;
@@ -4709,346 +3002,158 @@ public class Xmlization {
       IReference theValueId = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class Property, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class Property, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(Property.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "extensions":
-            {
-              final Reporting.Result<List<IExtension>> tryExtensions = parseList(
-                reader,
-                isEmptyProperty,
-                IExtension.class,
-                itemReader -> tryExtensionFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryExtensions.isError()) {
-                tryExtensions.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return tryExtensions.castTo(Property.class);
-              }
-
-              theExtensions = tryExtensions.getResult();
-              break;
-            }
-            case "category":
-            {
-              if (isEmptyProperty) {
-                theCategory = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property category of an instance of class Property, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theCategory = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property category of an instance of class Property "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "category"));
-                  return Reporting.Result.failure(error);
-                }
-              }
-              break;
-            }
-            case "idShort":
-            {
-              if (isEmptyProperty) {
-                theIdShort = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property idShort of an instance of class Property, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theIdShort = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property idShort of an instance of class Property "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "idShort"));
-                  return Reporting.Result.failure(error);
-                }
-              }
-              break;
-            }
-            case "displayName":
-            {
-              final Reporting.Result<List<ILangStringNameType>> tryDisplayName = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringNameType.class,
-                itemReader -> tryLangStringNameTypeFromElement(itemReader));
-
-              if (tryDisplayName.isError()) {
-                tryDisplayName.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return tryDisplayName.castTo(Property.class);
-              }
-
-              theDisplayName = tryDisplayName.getResult();
-              break;
-            }
-            case "description":
-            {
-              final Reporting.Result<List<ILangStringTextType>> tryDescription = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringTextType.class,
-                itemReader -> tryLangStringTextTypeFromElement(itemReader));
-
-              if (tryDescription.isError()) {
-                tryDescription.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return tryDescription.castTo(Property.class);
-              }
-
-              theDescription = tryDescription.getResult();
-              break;
-            }
-            case "semanticId":
-            {
-              Reporting.Result<Reference> trySemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySemanticId.isError()) {
-                trySemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "semanticId"));
-                return trySemanticId.castTo(Property.class);
-              }
-
-              theSemanticId = trySemanticId.getResult();
-              break;
-            }
-            case "supplementalSemanticIds":
-            {
-              final Reporting.Result<List<IReference>> trySupplementalSemanticIds = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (trySupplementalSemanticIds.isError()) {
-                trySupplementalSemanticIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return trySupplementalSemanticIds.castTo(Property.class);
-              }
-
-              theSupplementalSemanticIds = trySupplementalSemanticIds.getResult();
-              break;
-            }
-            case "qualifiers":
-            {
-              final Reporting.Result<List<IQualifier>> tryQualifiers = parseList(
-                reader,
-                isEmptyProperty,
-                IQualifier.class,
-                itemReader -> tryQualifierFromElement(itemReader));
-
-              if (tryQualifiers.isError()) {
-                tryQualifiers.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return tryQualifiers.castTo(Property.class);
-              }
-
-              theQualifiers = tryQualifiers.getResult();
-              break;
-            }
-            case "embeddedDataSpecifications":
-            {
-              final Reporting.Result<List<IEmbeddedDataSpecification>> tryEmbeddedDataSpecifications = parseList(
-                reader,
-                isEmptyProperty,
-                IEmbeddedDataSpecification.class,
-                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
-
-              if (tryEmbeddedDataSpecifications.isError()) {
-                tryEmbeddedDataSpecifications.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return tryEmbeddedDataSpecifications.castTo(Property.class);
-              }
-
-              theEmbeddedDataSpecifications = tryEmbeddedDataSpecifications.getResult();
-              break;
-            }
-            case "valueType":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property valueType of an instance of class Property " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "valueType"));
-                return Reporting.Result.failure(error);
-              }
-
-              if (currentEvent(reader).isEndDocument()) {
-                final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing "
-                        + "the property valueType of an instance of class Property, "
-                        + "but reached the end-of-file");
-                return Reporting.Result.failure(error);
-              }
-
-              String textValueType;
-              try {
-                textValueType = readContentAsString(reader);
-              } catch (Exception e) {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property valueType of an instance of class Property"
-                        + " could not be de-serialized: " + e.getMessage());
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "valueType"));
-                return Reporting.Result.failure(error);
-              }
-
-              final Optional<DataTypeDefXsd> optionalValueType =
-                Stringification.dataTypeDefXsdFromString(
-                  textValueType);
-
-              if (optionalValueType.isPresent()) {
-                theValueType = optionalValueType.get();
+          switch (elementName) {
+            case "extensions": {
+              final Reporting.Result<List<IExtension>> value =
+                readListOf_IExtension(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
               } else {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property valueType of an instance of class Property" +
-                        " could not be de-serialized from an unexpected enumeration literal: " +
-                        textValueType);
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "valueType"));
-                return Reporting.Result.failure(error);
+                theExtensions = value.getResult();
               }
               break;
             }
-            case "value":
-            {
-              if (isEmptyProperty) {
-                theValue = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property value of an instance of class Property, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theValue = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property value of an instance of class Property "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "value"));
-                  return Reporting.Result.failure(error);
-                }
+            case "category": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theCategory = value.getResult();
               }
               break;
             }
-            case "valueId":
-            {
-              Reporting.Result<Reference> tryValueId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryValueId.isError()) {
-                tryValueId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "valueId"));
-                return tryValueId.castTo(Property.class);
+            case "idShort": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theIdShort = value.getResult();
               }
-
-              theValueId = tryValueId.getResult();
+              break;
+            }
+            case "displayName": {
+              final Reporting.Result<List<ILangStringNameType>> value =
+                readListOf_ILangStringNameType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDisplayName = value.getResult();
+              }
+              break;
+            }
+            case "description": {
+              final Reporting.Result<List<ILangStringTextType>> value =
+                readListOf_ILangStringTextType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDescription = value.getResult();
+              }
+              break;
+            }
+            case "semanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSemanticId = value.getResult();
+              }
+              break;
+            }
+            case "supplementalSemanticIds": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSupplementalSemanticIds = value.getResult();
+              }
+              break;
+            }
+            case "qualifiers": {
+              final Reporting.Result<List<IQualifier>> value =
+                readListOf_IQualifier(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theQualifiers = value.getResult();
+              }
+              break;
+            }
+            case "embeddedDataSpecifications": {
+              final Reporting.Result<List<IEmbeddedDataSpecification>> value =
+                readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theEmbeddedDataSpecifications = value.getResult();
+              }
+              break;
+            }
+            case "valueType": {
+              final Reporting.Result<DataTypeDefXsd> value =
+                readTextAs_DataTypeDefXsd(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValueType = value.getResult();
+              }
+              break;
+            }
+            case "value": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValue = value.getResult();
+              }
+              break;
+            }
+            case "valueId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValueId = value.getResult();
+              }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class Property, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("Property", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "Property",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(Property.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theValueType == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property valueType has not been given " +
-          "in the XML representation of an instance of class Property");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("valueType", "Property");
       }
 
       return Reporting.Result.success(new Property(
@@ -5069,21 +3174,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class Property from an XML element.
      */
-    private static Reporting.Result<? extends Property> tryPropertyFromElement(
+    private static Reporting.Result<? extends Property> readPropertyFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        Property.class,
-        (elementName, isEmptyElement) -> {
-          if (!"property".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class Property " +
-              "with element name property, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryPropertyFromSequence(reader, isEmptyElement);
-        });
+        "property",
+        _DeserializeImplementation::readPropertyFromSequence);
     }
 
     /**
@@ -5093,7 +3189,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<MultiLanguageProperty> tryMultiLanguagePropertyFromSequence(
+    private static Reporting.Result<MultiLanguageProperty> readMultiLanguagePropertyFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IExtension> theExtensions = null;
@@ -5109,277 +3205,143 @@ public class Xmlization {
       IReference theValueId = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class MultiLanguageProperty, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class MultiLanguageProperty, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(MultiLanguageProperty.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "extensions":
-            {
-              final Reporting.Result<List<IExtension>> tryExtensions = parseList(
-                reader,
-                isEmptyProperty,
-                IExtension.class,
-                itemReader -> tryExtensionFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryExtensions.isError()) {
-                tryExtensions.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return tryExtensions.castTo(MultiLanguageProperty.class);
-              }
-
-              theExtensions = tryExtensions.getResult();
-              break;
-            }
-            case "category":
-            {
-              if (isEmptyProperty) {
-                theCategory = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property category of an instance of class MultiLanguageProperty, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theCategory = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property category of an instance of class MultiLanguageProperty "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "category"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "extensions": {
+              final Reporting.Result<List<IExtension>> value =
+                readListOf_IExtension(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theExtensions = value.getResult();
               }
               break;
             }
-            case "idShort":
-            {
-              if (isEmptyProperty) {
-                theIdShort = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property idShort of an instance of class MultiLanguageProperty, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theIdShort = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property idShort of an instance of class MultiLanguageProperty "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "idShort"));
-                  return Reporting.Result.failure(error);
-                }
+            case "category": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theCategory = value.getResult();
               }
               break;
             }
-            case "displayName":
-            {
-              final Reporting.Result<List<ILangStringNameType>> tryDisplayName = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringNameType.class,
-                itemReader -> tryLangStringNameTypeFromElement(itemReader));
-
-              if (tryDisplayName.isError()) {
-                tryDisplayName.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return tryDisplayName.castTo(MultiLanguageProperty.class);
+            case "idShort": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theIdShort = value.getResult();
               }
-
-              theDisplayName = tryDisplayName.getResult();
               break;
             }
-            case "description":
-            {
-              final Reporting.Result<List<ILangStringTextType>> tryDescription = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringTextType.class,
-                itemReader -> tryLangStringTextTypeFromElement(itemReader));
-
-              if (tryDescription.isError()) {
-                tryDescription.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return tryDescription.castTo(MultiLanguageProperty.class);
+            case "displayName": {
+              final Reporting.Result<List<ILangStringNameType>> value =
+                readListOf_ILangStringNameType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDisplayName = value.getResult();
               }
-
-              theDescription = tryDescription.getResult();
               break;
             }
-            case "semanticId":
-            {
-              Reporting.Result<Reference> trySemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySemanticId.isError()) {
-                trySemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "semanticId"));
-                return trySemanticId.castTo(MultiLanguageProperty.class);
+            case "description": {
+              final Reporting.Result<List<ILangStringTextType>> value =
+                readListOf_ILangStringTextType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDescription = value.getResult();
               }
-
-              theSemanticId = trySemanticId.getResult();
               break;
             }
-            case "supplementalSemanticIds":
-            {
-              final Reporting.Result<List<IReference>> trySupplementalSemanticIds = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (trySupplementalSemanticIds.isError()) {
-                trySupplementalSemanticIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return trySupplementalSemanticIds.castTo(MultiLanguageProperty.class);
+            case "semanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSemanticId = value.getResult();
               }
-
-              theSupplementalSemanticIds = trySupplementalSemanticIds.getResult();
               break;
             }
-            case "qualifiers":
-            {
-              final Reporting.Result<List<IQualifier>> tryQualifiers = parseList(
-                reader,
-                isEmptyProperty,
-                IQualifier.class,
-                itemReader -> tryQualifierFromElement(itemReader));
-
-              if (tryQualifiers.isError()) {
-                tryQualifiers.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return tryQualifiers.castTo(MultiLanguageProperty.class);
+            case "supplementalSemanticIds": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSupplementalSemanticIds = value.getResult();
               }
-
-              theQualifiers = tryQualifiers.getResult();
               break;
             }
-            case "embeddedDataSpecifications":
-            {
-              final Reporting.Result<List<IEmbeddedDataSpecification>> tryEmbeddedDataSpecifications = parseList(
-                reader,
-                isEmptyProperty,
-                IEmbeddedDataSpecification.class,
-                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
-
-              if (tryEmbeddedDataSpecifications.isError()) {
-                tryEmbeddedDataSpecifications.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return tryEmbeddedDataSpecifications.castTo(MultiLanguageProperty.class);
+            case "qualifiers": {
+              final Reporting.Result<List<IQualifier>> value =
+                readListOf_IQualifier(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theQualifiers = value.getResult();
               }
-
-              theEmbeddedDataSpecifications = tryEmbeddedDataSpecifications.getResult();
               break;
             }
-            case "value":
-            {
-              final Reporting.Result<List<ILangStringTextType>> tryValue = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringTextType.class,
-                itemReader -> tryLangStringTextTypeFromElement(itemReader));
-
-              if (tryValue.isError()) {
-                tryValue.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "value"));
-                return tryValue.castTo(MultiLanguageProperty.class);
+            case "embeddedDataSpecifications": {
+              final Reporting.Result<List<IEmbeddedDataSpecification>> value =
+                readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theEmbeddedDataSpecifications = value.getResult();
               }
-
-              theValue = tryValue.getResult();
               break;
             }
-            case "valueId":
-            {
-              Reporting.Result<Reference> tryValueId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryValueId.isError()) {
-                tryValueId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "valueId"));
-                return tryValueId.castTo(MultiLanguageProperty.class);
+            case "value": {
+              final Reporting.Result<List<ILangStringTextType>> value =
+                readListOf_ILangStringTextType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValue = value.getResult();
               }
-
-              theValueId = tryValueId.getResult();
+              break;
+            }
+            case "valueId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValueId = value.getResult();
+              }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class MultiLanguageProperty, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("MultiLanguageProperty", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "MultiLanguageProperty",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(MultiLanguageProperty.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
@@ -5400,21 +3362,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class MultiLanguageProperty from an XML element.
      */
-    private static Reporting.Result<? extends MultiLanguageProperty> tryMultiLanguagePropertyFromElement(
+    private static Reporting.Result<? extends MultiLanguageProperty> readMultiLanguagePropertyFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        MultiLanguageProperty.class,
-        (elementName, isEmptyElement) -> {
-          if (!"multiLanguageProperty".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class MultiLanguageProperty " +
-              "with element name multiLanguageProperty, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryMultiLanguagePropertyFromSequence(reader, isEmptyElement);
-        });
+        "multiLanguageProperty",
+        _DeserializeImplementation::readMultiLanguagePropertyFromSequence);
     }
 
     /**
@@ -5424,7 +3377,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<Range> tryRangeFromSequence(
+    private static Reporting.Result<Range> readRangeFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IExtension> theExtensions = null;
@@ -5441,358 +3394,158 @@ public class Xmlization {
       String theMax = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class Range, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class Range, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(Range.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "extensions":
-            {
-              final Reporting.Result<List<IExtension>> tryExtensions = parseList(
-                reader,
-                isEmptyProperty,
-                IExtension.class,
-                itemReader -> tryExtensionFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryExtensions.isError()) {
-                tryExtensions.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return tryExtensions.castTo(Range.class);
-              }
-
-              theExtensions = tryExtensions.getResult();
-              break;
-            }
-            case "category":
-            {
-              if (isEmptyProperty) {
-                theCategory = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property category of an instance of class Range, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theCategory = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property category of an instance of class Range "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "category"));
-                  return Reporting.Result.failure(error);
-                }
-              }
-              break;
-            }
-            case "idShort":
-            {
-              if (isEmptyProperty) {
-                theIdShort = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property idShort of an instance of class Range, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theIdShort = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property idShort of an instance of class Range "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "idShort"));
-                  return Reporting.Result.failure(error);
-                }
-              }
-              break;
-            }
-            case "displayName":
-            {
-              final Reporting.Result<List<ILangStringNameType>> tryDisplayName = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringNameType.class,
-                itemReader -> tryLangStringNameTypeFromElement(itemReader));
-
-              if (tryDisplayName.isError()) {
-                tryDisplayName.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return tryDisplayName.castTo(Range.class);
-              }
-
-              theDisplayName = tryDisplayName.getResult();
-              break;
-            }
-            case "description":
-            {
-              final Reporting.Result<List<ILangStringTextType>> tryDescription = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringTextType.class,
-                itemReader -> tryLangStringTextTypeFromElement(itemReader));
-
-              if (tryDescription.isError()) {
-                tryDescription.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return tryDescription.castTo(Range.class);
-              }
-
-              theDescription = tryDescription.getResult();
-              break;
-            }
-            case "semanticId":
-            {
-              Reporting.Result<Reference> trySemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySemanticId.isError()) {
-                trySemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "semanticId"));
-                return trySemanticId.castTo(Range.class);
-              }
-
-              theSemanticId = trySemanticId.getResult();
-              break;
-            }
-            case "supplementalSemanticIds":
-            {
-              final Reporting.Result<List<IReference>> trySupplementalSemanticIds = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (trySupplementalSemanticIds.isError()) {
-                trySupplementalSemanticIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return trySupplementalSemanticIds.castTo(Range.class);
-              }
-
-              theSupplementalSemanticIds = trySupplementalSemanticIds.getResult();
-              break;
-            }
-            case "qualifiers":
-            {
-              final Reporting.Result<List<IQualifier>> tryQualifiers = parseList(
-                reader,
-                isEmptyProperty,
-                IQualifier.class,
-                itemReader -> tryQualifierFromElement(itemReader));
-
-              if (tryQualifiers.isError()) {
-                tryQualifiers.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return tryQualifiers.castTo(Range.class);
-              }
-
-              theQualifiers = tryQualifiers.getResult();
-              break;
-            }
-            case "embeddedDataSpecifications":
-            {
-              final Reporting.Result<List<IEmbeddedDataSpecification>> tryEmbeddedDataSpecifications = parseList(
-                reader,
-                isEmptyProperty,
-                IEmbeddedDataSpecification.class,
-                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
-
-              if (tryEmbeddedDataSpecifications.isError()) {
-                tryEmbeddedDataSpecifications.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return tryEmbeddedDataSpecifications.castTo(Range.class);
-              }
-
-              theEmbeddedDataSpecifications = tryEmbeddedDataSpecifications.getResult();
-              break;
-            }
-            case "valueType":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property valueType of an instance of class Range " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "valueType"));
-                return Reporting.Result.failure(error);
-              }
-
-              if (currentEvent(reader).isEndDocument()) {
-                final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing "
-                        + "the property valueType of an instance of class Range, "
-                        + "but reached the end-of-file");
-                return Reporting.Result.failure(error);
-              }
-
-              String textValueType;
-              try {
-                textValueType = readContentAsString(reader);
-              } catch (Exception e) {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property valueType of an instance of class Range"
-                        + " could not be de-serialized: " + e.getMessage());
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "valueType"));
-                return Reporting.Result.failure(error);
-              }
-
-              final Optional<DataTypeDefXsd> optionalValueType =
-                Stringification.dataTypeDefXsdFromString(
-                  textValueType);
-
-              if (optionalValueType.isPresent()) {
-                theValueType = optionalValueType.get();
+          switch (elementName) {
+            case "extensions": {
+              final Reporting.Result<List<IExtension>> value =
+                readListOf_IExtension(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
               } else {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property valueType of an instance of class Range" +
-                        " could not be de-serialized from an unexpected enumeration literal: " +
-                        textValueType);
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "valueType"));
-                return Reporting.Result.failure(error);
+                theExtensions = value.getResult();
               }
               break;
             }
-            case "min":
-            {
-              if (isEmptyProperty) {
-                theMin = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property min of an instance of class Range, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theMin = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property min of an instance of class Range "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "min"));
-                  return Reporting.Result.failure(error);
-                }
+            case "category": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theCategory = value.getResult();
               }
               break;
             }
-            case "max":
-            {
-              if (isEmptyProperty) {
-                theMax = "";
+            case "idShort": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theIdShort = value.getResult();
               }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property max of an instance of class Range, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theMax = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property max of an instance of class Range "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "max"));
-                  return Reporting.Result.failure(error);
-                }
+              break;
+            }
+            case "displayName": {
+              final Reporting.Result<List<ILangStringNameType>> value =
+                readListOf_ILangStringNameType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDisplayName = value.getResult();
+              }
+              break;
+            }
+            case "description": {
+              final Reporting.Result<List<ILangStringTextType>> value =
+                readListOf_ILangStringTextType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDescription = value.getResult();
+              }
+              break;
+            }
+            case "semanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSemanticId = value.getResult();
+              }
+              break;
+            }
+            case "supplementalSemanticIds": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSupplementalSemanticIds = value.getResult();
+              }
+              break;
+            }
+            case "qualifiers": {
+              final Reporting.Result<List<IQualifier>> value =
+                readListOf_IQualifier(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theQualifiers = value.getResult();
+              }
+              break;
+            }
+            case "embeddedDataSpecifications": {
+              final Reporting.Result<List<IEmbeddedDataSpecification>> value =
+                readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theEmbeddedDataSpecifications = value.getResult();
+              }
+              break;
+            }
+            case "valueType": {
+              final Reporting.Result<DataTypeDefXsd> value =
+                readTextAs_DataTypeDefXsd(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValueType = value.getResult();
+              }
+              break;
+            }
+            case "min": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theMin = value.getResult();
+              }
+              break;
+            }
+            case "max": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theMax = value.getResult();
               }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class Range, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("Range", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "Range",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(Range.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theValueType == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property valueType has not been given " +
-          "in the XML representation of an instance of class Range");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("valueType", "Range");
       }
 
       return Reporting.Result.success(new Range(
@@ -5813,21 +3566,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class Range from an XML element.
      */
-    private static Reporting.Result<? extends Range> tryRangeFromElement(
+    private static Reporting.Result<? extends Range> readRangeFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        Range.class,
-        (elementName, isEmptyElement) -> {
-          if (!"range".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class Range " +
-              "with element name range, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryRangeFromSequence(reader, isEmptyElement);
-        });
+        "range",
+        _DeserializeImplementation::readRangeFromSequence);
     }
 
     /**
@@ -5837,7 +3581,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<ReferenceElement> tryReferenceElementFromSequence(
+    private static Reporting.Result<ReferenceElement> readReferenceElementFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IExtension> theExtensions = null;
@@ -5852,258 +3596,133 @@ public class Xmlization {
       IReference theValue = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class ReferenceElement, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class ReferenceElement, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(ReferenceElement.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "extensions":
-            {
-              final Reporting.Result<List<IExtension>> tryExtensions = parseList(
-                reader,
-                isEmptyProperty,
-                IExtension.class,
-                itemReader -> tryExtensionFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryExtensions.isError()) {
-                tryExtensions.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return tryExtensions.castTo(ReferenceElement.class);
-              }
-
-              theExtensions = tryExtensions.getResult();
-              break;
-            }
-            case "category":
-            {
-              if (isEmptyProperty) {
-                theCategory = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property category of an instance of class ReferenceElement, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theCategory = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property category of an instance of class ReferenceElement "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "category"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "extensions": {
+              final Reporting.Result<List<IExtension>> value =
+                readListOf_IExtension(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theExtensions = value.getResult();
               }
               break;
             }
-            case "idShort":
-            {
-              if (isEmptyProperty) {
-                theIdShort = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property idShort of an instance of class ReferenceElement, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theIdShort = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property idShort of an instance of class ReferenceElement "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "idShort"));
-                  return Reporting.Result.failure(error);
-                }
+            case "category": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theCategory = value.getResult();
               }
               break;
             }
-            case "displayName":
-            {
-              final Reporting.Result<List<ILangStringNameType>> tryDisplayName = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringNameType.class,
-                itemReader -> tryLangStringNameTypeFromElement(itemReader));
-
-              if (tryDisplayName.isError()) {
-                tryDisplayName.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return tryDisplayName.castTo(ReferenceElement.class);
+            case "idShort": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theIdShort = value.getResult();
               }
-
-              theDisplayName = tryDisplayName.getResult();
               break;
             }
-            case "description":
-            {
-              final Reporting.Result<List<ILangStringTextType>> tryDescription = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringTextType.class,
-                itemReader -> tryLangStringTextTypeFromElement(itemReader));
-
-              if (tryDescription.isError()) {
-                tryDescription.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return tryDescription.castTo(ReferenceElement.class);
+            case "displayName": {
+              final Reporting.Result<List<ILangStringNameType>> value =
+                readListOf_ILangStringNameType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDisplayName = value.getResult();
               }
-
-              theDescription = tryDescription.getResult();
               break;
             }
-            case "semanticId":
-            {
-              Reporting.Result<Reference> trySemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySemanticId.isError()) {
-                trySemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "semanticId"));
-                return trySemanticId.castTo(ReferenceElement.class);
+            case "description": {
+              final Reporting.Result<List<ILangStringTextType>> value =
+                readListOf_ILangStringTextType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDescription = value.getResult();
               }
-
-              theSemanticId = trySemanticId.getResult();
               break;
             }
-            case "supplementalSemanticIds":
-            {
-              final Reporting.Result<List<IReference>> trySupplementalSemanticIds = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (trySupplementalSemanticIds.isError()) {
-                trySupplementalSemanticIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return trySupplementalSemanticIds.castTo(ReferenceElement.class);
+            case "semanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSemanticId = value.getResult();
               }
-
-              theSupplementalSemanticIds = trySupplementalSemanticIds.getResult();
               break;
             }
-            case "qualifiers":
-            {
-              final Reporting.Result<List<IQualifier>> tryQualifiers = parseList(
-                reader,
-                isEmptyProperty,
-                IQualifier.class,
-                itemReader -> tryQualifierFromElement(itemReader));
-
-              if (tryQualifiers.isError()) {
-                tryQualifiers.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return tryQualifiers.castTo(ReferenceElement.class);
+            case "supplementalSemanticIds": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSupplementalSemanticIds = value.getResult();
               }
-
-              theQualifiers = tryQualifiers.getResult();
               break;
             }
-            case "embeddedDataSpecifications":
-            {
-              final Reporting.Result<List<IEmbeddedDataSpecification>> tryEmbeddedDataSpecifications = parseList(
-                reader,
-                isEmptyProperty,
-                IEmbeddedDataSpecification.class,
-                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
-
-              if (tryEmbeddedDataSpecifications.isError()) {
-                tryEmbeddedDataSpecifications.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return tryEmbeddedDataSpecifications.castTo(ReferenceElement.class);
+            case "qualifiers": {
+              final Reporting.Result<List<IQualifier>> value =
+                readListOf_IQualifier(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theQualifiers = value.getResult();
               }
-
-              theEmbeddedDataSpecifications = tryEmbeddedDataSpecifications.getResult();
               break;
             }
-            case "value":
-            {
-              Reporting.Result<Reference> tryValue = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryValue.isError()) {
-                tryValue.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "value"));
-                return tryValue.castTo(ReferenceElement.class);
+            case "embeddedDataSpecifications": {
+              final Reporting.Result<List<IEmbeddedDataSpecification>> value =
+                readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theEmbeddedDataSpecifications = value.getResult();
               }
-
-              theValue = tryValue.getResult();
+              break;
+            }
+            case "value": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValue = value.getResult();
+              }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class ReferenceElement, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("ReferenceElement", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "ReferenceElement",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(ReferenceElement.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
@@ -6123,21 +3742,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class ReferenceElement from an XML element.
      */
-    private static Reporting.Result<? extends ReferenceElement> tryReferenceElementFromElement(
+    private static Reporting.Result<? extends ReferenceElement> readReferenceElementFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        ReferenceElement.class,
-        (elementName, isEmptyElement) -> {
-          if (!"referenceElement".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class ReferenceElement " +
-              "with element name referenceElement, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryReferenceElementFromSequence(reader, isEmptyElement);
-        });
+        "referenceElement",
+        _DeserializeImplementation::readReferenceElementFromSequence);
     }
 
     /**
@@ -6147,7 +3757,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<Blob> tryBlobFromSequence(
+    private static Reporting.Result<Blob> readBlobFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IExtension> theExtensions = null;
@@ -6163,313 +3773,148 @@ public class Xmlization {
       String theContentType = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class Blob, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class Blob, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(Blob.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "extensions":
-            {
-              final Reporting.Result<List<IExtension>> tryExtensions = parseList(
-                reader,
-                isEmptyProperty,
-                IExtension.class,
-                itemReader -> tryExtensionFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryExtensions.isError()) {
-                tryExtensions.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return tryExtensions.castTo(Blob.class);
-              }
-
-              theExtensions = tryExtensions.getResult();
-              break;
-            }
-            case "category":
-            {
-              if (isEmptyProperty) {
-                theCategory = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property category of an instance of class Blob, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theCategory = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property category of an instance of class Blob "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "category"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "extensions": {
+              final Reporting.Result<List<IExtension>> value =
+                readListOf_IExtension(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theExtensions = value.getResult();
               }
               break;
             }
-            case "idShort":
-            {
-              if (isEmptyProperty) {
-                theIdShort = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property idShort of an instance of class Blob, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theIdShort = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property idShort of an instance of class Blob "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "idShort"));
-                  return Reporting.Result.failure(error);
-                }
+            case "category": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theCategory = value.getResult();
               }
               break;
             }
-            case "displayName":
-            {
-              final Reporting.Result<List<ILangStringNameType>> tryDisplayName = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringNameType.class,
-                itemReader -> tryLangStringNameTypeFromElement(itemReader));
-
-              if (tryDisplayName.isError()) {
-                tryDisplayName.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return tryDisplayName.castTo(Blob.class);
-              }
-
-              theDisplayName = tryDisplayName.getResult();
-              break;
-            }
-            case "description":
-            {
-              final Reporting.Result<List<ILangStringTextType>> tryDescription = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringTextType.class,
-                itemReader -> tryLangStringTextTypeFromElement(itemReader));
-
-              if (tryDescription.isError()) {
-                tryDescription.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return tryDescription.castTo(Blob.class);
-              }
-
-              theDescription = tryDescription.getResult();
-              break;
-            }
-            case "semanticId":
-            {
-              Reporting.Result<Reference> trySemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySemanticId.isError()) {
-                trySemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "semanticId"));
-                return trySemanticId.castTo(Blob.class);
-              }
-
-              theSemanticId = trySemanticId.getResult();
-              break;
-            }
-            case "supplementalSemanticIds":
-            {
-              final Reporting.Result<List<IReference>> trySupplementalSemanticIds = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (trySupplementalSemanticIds.isError()) {
-                trySupplementalSemanticIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return trySupplementalSemanticIds.castTo(Blob.class);
-              }
-
-              theSupplementalSemanticIds = trySupplementalSemanticIds.getResult();
-              break;
-            }
-            case "qualifiers":
-            {
-              final Reporting.Result<List<IQualifier>> tryQualifiers = parseList(
-                reader,
-                isEmptyProperty,
-                IQualifier.class,
-                itemReader -> tryQualifierFromElement(itemReader));
-
-              if (tryQualifiers.isError()) {
-                tryQualifiers.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return tryQualifiers.castTo(Blob.class);
-              }
-
-              theQualifiers = tryQualifiers.getResult();
-              break;
-            }
-            case "embeddedDataSpecifications":
-            {
-              final Reporting.Result<List<IEmbeddedDataSpecification>> tryEmbeddedDataSpecifications = parseList(
-                reader,
-                isEmptyProperty,
-                IEmbeddedDataSpecification.class,
-                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
-
-              if (tryEmbeddedDataSpecifications.isError()) {
-                tryEmbeddedDataSpecifications.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return tryEmbeddedDataSpecifications.castTo(Blob.class);
-              }
-
-              theEmbeddedDataSpecifications = tryEmbeddedDataSpecifications.getResult();
-              break;
-            }
-            case "value":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property value of an instance of class Blob " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "value"));
-                return Reporting.Result.failure(error);
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property value of an instance of class Blob, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theValue = readContentAsBase64(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property value of an instance of class Blob "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "value"));
-                  return Reporting.Result.failure(error);
-                }
+            case "idShort": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theIdShort = value.getResult();
               }
               break;
             }
-            case "contentType":
-            {
-              if (isEmptyProperty) {
-                theContentType = "";
+            case "displayName": {
+              final Reporting.Result<List<ILangStringNameType>> value =
+                readListOf_ILangStringNameType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDisplayName = value.getResult();
               }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property contentType of an instance of class Blob, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theContentType = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property contentType of an instance of class Blob "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "contentType"));
-                  return Reporting.Result.failure(error);
-                }
+              break;
+            }
+            case "description": {
+              final Reporting.Result<List<ILangStringTextType>> value =
+                readListOf_ILangStringTextType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDescription = value.getResult();
+              }
+              break;
+            }
+            case "semanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSemanticId = value.getResult();
+              }
+              break;
+            }
+            case "supplementalSemanticIds": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSupplementalSemanticIds = value.getResult();
+              }
+              break;
+            }
+            case "qualifiers": {
+              final Reporting.Result<List<IQualifier>> value =
+                readListOf_IQualifier(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theQualifiers = value.getResult();
+              }
+              break;
+            }
+            case "embeddedDataSpecifications": {
+              final Reporting.Result<List<IEmbeddedDataSpecification>> value =
+                readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theEmbeddedDataSpecifications = value.getResult();
+              }
+              break;
+            }
+            case "value": {
+              final Reporting.Result<byte[]> value =
+                readTextAs_bytes(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValue = value.getResult();
+              }
+              break;
+            }
+            case "contentType": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theContentType = value.getResult();
               }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class Blob, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("Blob", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "Blob",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(Blob.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theContentType == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property contentType has not been given " +
-          "in the XML representation of an instance of class Blob");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("contentType", "Blob");
       }
 
       return Reporting.Result.success(new Blob(
@@ -6489,21 +3934,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class Blob from an XML element.
      */
-    private static Reporting.Result<? extends Blob> tryBlobFromElement(
+    private static Reporting.Result<? extends Blob> readBlobFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        Blob.class,
-        (elementName, isEmptyElement) -> {
-          if (!"blob".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class Blob " +
-              "with element name blob, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryBlobFromSequence(reader, isEmptyElement);
-        });
+        "blob",
+        _DeserializeImplementation::readBlobFromSequence);
     }
 
     /**
@@ -6513,7 +3949,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<File> tryFileFromSequence(
+    private static Reporting.Result<File> readFileFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IExtension> theExtensions = null;
@@ -6529,306 +3965,148 @@ public class Xmlization {
       String theContentType = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class File, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class File, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(File.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "extensions":
-            {
-              final Reporting.Result<List<IExtension>> tryExtensions = parseList(
-                reader,
-                isEmptyProperty,
-                IExtension.class,
-                itemReader -> tryExtensionFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryExtensions.isError()) {
-                tryExtensions.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return tryExtensions.castTo(File.class);
-              }
-
-              theExtensions = tryExtensions.getResult();
-              break;
-            }
-            case "category":
-            {
-              if (isEmptyProperty) {
-                theCategory = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property category of an instance of class File, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theCategory = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property category of an instance of class File "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "category"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "extensions": {
+              final Reporting.Result<List<IExtension>> value =
+                readListOf_IExtension(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theExtensions = value.getResult();
               }
               break;
             }
-            case "idShort":
-            {
-              if (isEmptyProperty) {
-                theIdShort = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property idShort of an instance of class File, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theIdShort = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property idShort of an instance of class File "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "idShort"));
-                  return Reporting.Result.failure(error);
-                }
+            case "category": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theCategory = value.getResult();
               }
               break;
             }
-            case "displayName":
-            {
-              final Reporting.Result<List<ILangStringNameType>> tryDisplayName = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringNameType.class,
-                itemReader -> tryLangStringNameTypeFromElement(itemReader));
-
-              if (tryDisplayName.isError()) {
-                tryDisplayName.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return tryDisplayName.castTo(File.class);
-              }
-
-              theDisplayName = tryDisplayName.getResult();
-              break;
-            }
-            case "description":
-            {
-              final Reporting.Result<List<ILangStringTextType>> tryDescription = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringTextType.class,
-                itemReader -> tryLangStringTextTypeFromElement(itemReader));
-
-              if (tryDescription.isError()) {
-                tryDescription.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return tryDescription.castTo(File.class);
-              }
-
-              theDescription = tryDescription.getResult();
-              break;
-            }
-            case "semanticId":
-            {
-              Reporting.Result<Reference> trySemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySemanticId.isError()) {
-                trySemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "semanticId"));
-                return trySemanticId.castTo(File.class);
-              }
-
-              theSemanticId = trySemanticId.getResult();
-              break;
-            }
-            case "supplementalSemanticIds":
-            {
-              final Reporting.Result<List<IReference>> trySupplementalSemanticIds = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (trySupplementalSemanticIds.isError()) {
-                trySupplementalSemanticIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return trySupplementalSemanticIds.castTo(File.class);
-              }
-
-              theSupplementalSemanticIds = trySupplementalSemanticIds.getResult();
-              break;
-            }
-            case "qualifiers":
-            {
-              final Reporting.Result<List<IQualifier>> tryQualifiers = parseList(
-                reader,
-                isEmptyProperty,
-                IQualifier.class,
-                itemReader -> tryQualifierFromElement(itemReader));
-
-              if (tryQualifiers.isError()) {
-                tryQualifiers.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return tryQualifiers.castTo(File.class);
-              }
-
-              theQualifiers = tryQualifiers.getResult();
-              break;
-            }
-            case "embeddedDataSpecifications":
-            {
-              final Reporting.Result<List<IEmbeddedDataSpecification>> tryEmbeddedDataSpecifications = parseList(
-                reader,
-                isEmptyProperty,
-                IEmbeddedDataSpecification.class,
-                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
-
-              if (tryEmbeddedDataSpecifications.isError()) {
-                tryEmbeddedDataSpecifications.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return tryEmbeddedDataSpecifications.castTo(File.class);
-              }
-
-              theEmbeddedDataSpecifications = tryEmbeddedDataSpecifications.getResult();
-              break;
-            }
-            case "value":
-            {
-              if (isEmptyProperty) {
-                theValue = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property value of an instance of class File, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theValue = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property value of an instance of class File "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "value"));
-                  return Reporting.Result.failure(error);
-                }
+            case "idShort": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theIdShort = value.getResult();
               }
               break;
             }
-            case "contentType":
-            {
-              if (isEmptyProperty) {
-                theContentType = "";
+            case "displayName": {
+              final Reporting.Result<List<ILangStringNameType>> value =
+                readListOf_ILangStringNameType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDisplayName = value.getResult();
               }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property contentType of an instance of class File, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theContentType = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property contentType of an instance of class File "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "contentType"));
-                  return Reporting.Result.failure(error);
-                }
+              break;
+            }
+            case "description": {
+              final Reporting.Result<List<ILangStringTextType>> value =
+                readListOf_ILangStringTextType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDescription = value.getResult();
+              }
+              break;
+            }
+            case "semanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSemanticId = value.getResult();
+              }
+              break;
+            }
+            case "supplementalSemanticIds": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSupplementalSemanticIds = value.getResult();
+              }
+              break;
+            }
+            case "qualifiers": {
+              final Reporting.Result<List<IQualifier>> value =
+                readListOf_IQualifier(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theQualifiers = value.getResult();
+              }
+              break;
+            }
+            case "embeddedDataSpecifications": {
+              final Reporting.Result<List<IEmbeddedDataSpecification>> value =
+                readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theEmbeddedDataSpecifications = value.getResult();
+              }
+              break;
+            }
+            case "value": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValue = value.getResult();
+              }
+              break;
+            }
+            case "contentType": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theContentType = value.getResult();
               }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class File, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("File", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "File",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(File.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theContentType == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property contentType has not been given " +
-          "in the XML representation of an instance of class File");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("contentType", "File");
       }
 
       return Reporting.Result.success(new File(
@@ -6848,21 +4126,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class File from an XML element.
      */
-    private static Reporting.Result<? extends File> tryFileFromElement(
+    private static Reporting.Result<? extends File> readFileFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        File.class,
-        (elementName, isEmptyElement) -> {
-          if (!"file".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class File " +
-              "with element name file, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryFileFromSequence(reader, isEmptyElement);
-        });
+        "file",
+        _DeserializeImplementation::readFileFromSequence);
     }
 
     /**
@@ -6872,7 +4141,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<AnnotatedRelationshipElement> tryAnnotatedRelationshipElementFromSequence(
+    private static Reporting.Result<AnnotatedRelationshipElement> readAnnotatedRelationshipElementFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IExtension> theExtensions = null;
@@ -6889,308 +4158,162 @@ public class Xmlization {
       List<IDataElement> theAnnotations = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class AnnotatedRelationshipElement, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class AnnotatedRelationshipElement, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(AnnotatedRelationshipElement.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "extensions":
-            {
-              final Reporting.Result<List<IExtension>> tryExtensions = parseList(
-                reader,
-                isEmptyProperty,
-                IExtension.class,
-                itemReader -> tryExtensionFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryExtensions.isError()) {
-                tryExtensions.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return tryExtensions.castTo(AnnotatedRelationshipElement.class);
-              }
-
-              theExtensions = tryExtensions.getResult();
-              break;
-            }
-            case "category":
-            {
-              if (isEmptyProperty) {
-                theCategory = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property category of an instance of class AnnotatedRelationshipElement, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theCategory = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property category of an instance of class AnnotatedRelationshipElement "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "category"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "extensions": {
+              final Reporting.Result<List<IExtension>> value =
+                readListOf_IExtension(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theExtensions = value.getResult();
               }
               break;
             }
-            case "idShort":
-            {
-              if (isEmptyProperty) {
-                theIdShort = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property idShort of an instance of class AnnotatedRelationshipElement, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theIdShort = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property idShort of an instance of class AnnotatedRelationshipElement "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "idShort"));
-                  return Reporting.Result.failure(error);
-                }
+            case "category": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theCategory = value.getResult();
               }
               break;
             }
-            case "displayName":
-            {
-              final Reporting.Result<List<ILangStringNameType>> tryDisplayName = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringNameType.class,
-                itemReader -> tryLangStringNameTypeFromElement(itemReader));
-
-              if (tryDisplayName.isError()) {
-                tryDisplayName.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return tryDisplayName.castTo(AnnotatedRelationshipElement.class);
+            case "idShort": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theIdShort = value.getResult();
               }
-
-              theDisplayName = tryDisplayName.getResult();
               break;
             }
-            case "description":
-            {
-              final Reporting.Result<List<ILangStringTextType>> tryDescription = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringTextType.class,
-                itemReader -> tryLangStringTextTypeFromElement(itemReader));
-
-              if (tryDescription.isError()) {
-                tryDescription.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return tryDescription.castTo(AnnotatedRelationshipElement.class);
+            case "displayName": {
+              final Reporting.Result<List<ILangStringNameType>> value =
+                readListOf_ILangStringNameType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDisplayName = value.getResult();
               }
-
-              theDescription = tryDescription.getResult();
               break;
             }
-            case "semanticId":
-            {
-              Reporting.Result<Reference> trySemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySemanticId.isError()) {
-                trySemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "semanticId"));
-                return trySemanticId.castTo(AnnotatedRelationshipElement.class);
+            case "description": {
+              final Reporting.Result<List<ILangStringTextType>> value =
+                readListOf_ILangStringTextType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDescription = value.getResult();
               }
-
-              theSemanticId = trySemanticId.getResult();
               break;
             }
-            case "supplementalSemanticIds":
-            {
-              final Reporting.Result<List<IReference>> trySupplementalSemanticIds = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (trySupplementalSemanticIds.isError()) {
-                trySupplementalSemanticIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return trySupplementalSemanticIds.castTo(AnnotatedRelationshipElement.class);
+            case "semanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSemanticId = value.getResult();
               }
-
-              theSupplementalSemanticIds = trySupplementalSemanticIds.getResult();
               break;
             }
-            case "qualifiers":
-            {
-              final Reporting.Result<List<IQualifier>> tryQualifiers = parseList(
-                reader,
-                isEmptyProperty,
-                IQualifier.class,
-                itemReader -> tryQualifierFromElement(itemReader));
-
-              if (tryQualifiers.isError()) {
-                tryQualifiers.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return tryQualifiers.castTo(AnnotatedRelationshipElement.class);
+            case "supplementalSemanticIds": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSupplementalSemanticIds = value.getResult();
               }
-
-              theQualifiers = tryQualifiers.getResult();
               break;
             }
-            case "embeddedDataSpecifications":
-            {
-              final Reporting.Result<List<IEmbeddedDataSpecification>> tryEmbeddedDataSpecifications = parseList(
-                reader,
-                isEmptyProperty,
-                IEmbeddedDataSpecification.class,
-                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
-
-              if (tryEmbeddedDataSpecifications.isError()) {
-                tryEmbeddedDataSpecifications.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return tryEmbeddedDataSpecifications.castTo(AnnotatedRelationshipElement.class);
+            case "qualifiers": {
+              final Reporting.Result<List<IQualifier>> value =
+                readListOf_IQualifier(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theQualifiers = value.getResult();
               }
-
-              theEmbeddedDataSpecifications = tryEmbeddedDataSpecifications.getResult();
               break;
             }
-            case "first":
-            {
-              Reporting.Result<Reference> tryFirst = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryFirst.isError()) {
-                tryFirst.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "first"));
-                return tryFirst.castTo(AnnotatedRelationshipElement.class);
+            case "embeddedDataSpecifications": {
+              final Reporting.Result<List<IEmbeddedDataSpecification>> value =
+                readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theEmbeddedDataSpecifications = value.getResult();
               }
-
-              theFirst = tryFirst.getResult();
               break;
             }
-            case "second":
-            {
-              Reporting.Result<Reference> trySecond = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySecond.isError()) {
-                trySecond.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "second"));
-                return trySecond.castTo(AnnotatedRelationshipElement.class);
+            case "first": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theFirst = value.getResult();
               }
-
-              theSecond = trySecond.getResult();
               break;
             }
-            case "annotations":
-            {
-              final Reporting.Result<List<IDataElement>> tryAnnotations = parseList(
-                reader,
-                isEmptyProperty,
-                IDataElement.class,
-                itemReader -> tryIDataElementFromElement(itemReader));
-
-              if (tryAnnotations.isError()) {
-                tryAnnotations.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "annotations"));
-                return tryAnnotations.castTo(AnnotatedRelationshipElement.class);
+            case "second": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSecond = value.getResult();
               }
-
-              theAnnotations = tryAnnotations.getResult();
+              break;
+            }
+            case "annotations": {
+              final Reporting.Result<List<IDataElement>> value =
+                readListOf_IDataElement(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theAnnotations = value.getResult();
+              }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class AnnotatedRelationshipElement, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("AnnotatedRelationshipElement", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "AnnotatedRelationshipElement",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(AnnotatedRelationshipElement.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theFirst == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property first has not been given " +
-          "in the XML representation of an instance of class AnnotatedRelationshipElement");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("first", "AnnotatedRelationshipElement");
       }
 
       if (theSecond == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property second has not been given " +
-          "in the XML representation of an instance of class AnnotatedRelationshipElement");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("second", "AnnotatedRelationshipElement");
       }
 
       return Reporting.Result.success(new AnnotatedRelationshipElement(
@@ -7211,21 +4334,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class AnnotatedRelationshipElement from an XML element.
      */
-    private static Reporting.Result<? extends AnnotatedRelationshipElement> tryAnnotatedRelationshipElementFromElement(
+    private static Reporting.Result<? extends AnnotatedRelationshipElement> readAnnotatedRelationshipElementFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        AnnotatedRelationshipElement.class,
-        (elementName, isEmptyElement) -> {
-          if (!"annotatedRelationshipElement".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class AnnotatedRelationshipElement " +
-              "with element name annotatedRelationshipElement, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryAnnotatedRelationshipElementFromSequence(reader, isEmptyElement);
-        });
+        "annotatedRelationshipElement",
+        _DeserializeImplementation::readAnnotatedRelationshipElementFromSequence);
     }
 
     /**
@@ -7235,7 +4349,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<Entity> tryEntityFromSequence(
+    private static Reporting.Result<Entity> readEntityFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IExtension> theExtensions = null;
@@ -7253,368 +4367,168 @@ public class Xmlization {
       List<ISpecificAssetId> theSpecificAssetIds = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class Entity, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class Entity, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(Entity.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "extensions":
-            {
-              final Reporting.Result<List<IExtension>> tryExtensions = parseList(
-                reader,
-                isEmptyProperty,
-                IExtension.class,
-                itemReader -> tryExtensionFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryExtensions.isError()) {
-                tryExtensions.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return tryExtensions.castTo(Entity.class);
-              }
-
-              theExtensions = tryExtensions.getResult();
-              break;
-            }
-            case "category":
-            {
-              if (isEmptyProperty) {
-                theCategory = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property category of an instance of class Entity, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theCategory = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property category of an instance of class Entity "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "category"));
-                  return Reporting.Result.failure(error);
-                }
-              }
-              break;
-            }
-            case "idShort":
-            {
-              if (isEmptyProperty) {
-                theIdShort = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property idShort of an instance of class Entity, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theIdShort = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property idShort of an instance of class Entity "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "idShort"));
-                  return Reporting.Result.failure(error);
-                }
-              }
-              break;
-            }
-            case "displayName":
-            {
-              final Reporting.Result<List<ILangStringNameType>> tryDisplayName = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringNameType.class,
-                itemReader -> tryLangStringNameTypeFromElement(itemReader));
-
-              if (tryDisplayName.isError()) {
-                tryDisplayName.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return tryDisplayName.castTo(Entity.class);
-              }
-
-              theDisplayName = tryDisplayName.getResult();
-              break;
-            }
-            case "description":
-            {
-              final Reporting.Result<List<ILangStringTextType>> tryDescription = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringTextType.class,
-                itemReader -> tryLangStringTextTypeFromElement(itemReader));
-
-              if (tryDescription.isError()) {
-                tryDescription.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return tryDescription.castTo(Entity.class);
-              }
-
-              theDescription = tryDescription.getResult();
-              break;
-            }
-            case "semanticId":
-            {
-              Reporting.Result<Reference> trySemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySemanticId.isError()) {
-                trySemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "semanticId"));
-                return trySemanticId.castTo(Entity.class);
-              }
-
-              theSemanticId = trySemanticId.getResult();
-              break;
-            }
-            case "supplementalSemanticIds":
-            {
-              final Reporting.Result<List<IReference>> trySupplementalSemanticIds = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (trySupplementalSemanticIds.isError()) {
-                trySupplementalSemanticIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return trySupplementalSemanticIds.castTo(Entity.class);
-              }
-
-              theSupplementalSemanticIds = trySupplementalSemanticIds.getResult();
-              break;
-            }
-            case "qualifiers":
-            {
-              final Reporting.Result<List<IQualifier>> tryQualifiers = parseList(
-                reader,
-                isEmptyProperty,
-                IQualifier.class,
-                itemReader -> tryQualifierFromElement(itemReader));
-
-              if (tryQualifiers.isError()) {
-                tryQualifiers.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return tryQualifiers.castTo(Entity.class);
-              }
-
-              theQualifiers = tryQualifiers.getResult();
-              break;
-            }
-            case "embeddedDataSpecifications":
-            {
-              final Reporting.Result<List<IEmbeddedDataSpecification>> tryEmbeddedDataSpecifications = parseList(
-                reader,
-                isEmptyProperty,
-                IEmbeddedDataSpecification.class,
-                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
-
-              if (tryEmbeddedDataSpecifications.isError()) {
-                tryEmbeddedDataSpecifications.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return tryEmbeddedDataSpecifications.castTo(Entity.class);
-              }
-
-              theEmbeddedDataSpecifications = tryEmbeddedDataSpecifications.getResult();
-              break;
-            }
-            case "statements":
-            {
-              final Reporting.Result<List<ISubmodelElement>> tryStatements = parseList(
-                reader,
-                isEmptyProperty,
-                ISubmodelElement.class,
-                itemReader -> tryISubmodelElementFromElement(itemReader));
-
-              if (tryStatements.isError()) {
-                tryStatements.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "statements"));
-                return tryStatements.castTo(Entity.class);
-              }
-
-              theStatements = tryStatements.getResult();
-              break;
-            }
-            case "entityType":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property entityType of an instance of class Entity " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "entityType"));
-                return Reporting.Result.failure(error);
-              }
-
-              if (currentEvent(reader).isEndDocument()) {
-                final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing "
-                        + "the property entityType of an instance of class Entity, "
-                        + "but reached the end-of-file");
-                return Reporting.Result.failure(error);
-              }
-
-              String textEntityType;
-              try {
-                textEntityType = readContentAsString(reader);
-              } catch (Exception e) {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property entityType of an instance of class Entity"
-                        + " could not be de-serialized: " + e.getMessage());
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "entityType"));
-                return Reporting.Result.failure(error);
-              }
-
-              final Optional<EntityType> optionalEntityType =
-                Stringification.entityTypeFromString(
-                  textEntityType);
-
-              if (optionalEntityType.isPresent()) {
-                theEntityType = optionalEntityType.get();
+          switch (elementName) {
+            case "extensions": {
+              final Reporting.Result<List<IExtension>> value =
+                readListOf_IExtension(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
               } else {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property entityType of an instance of class Entity" +
-                        " could not be de-serialized from an unexpected enumeration literal: " +
-                        textEntityType);
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "entityType"));
-                return Reporting.Result.failure(error);
+                theExtensions = value.getResult();
               }
               break;
             }
-            case "globalAssetId":
-            {
-              if (isEmptyProperty) {
-                theGlobalAssetId = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property globalAssetId of an instance of class Entity, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theGlobalAssetId = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property globalAssetId of an instance of class Entity "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "globalAssetId"));
-                  return Reporting.Result.failure(error);
-                }
+            case "category": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theCategory = value.getResult();
               }
               break;
             }
-            case "specificAssetIds":
-            {
-              final Reporting.Result<List<ISpecificAssetId>> trySpecificAssetIds = parseList(
-                reader,
-                isEmptyProperty,
-                ISpecificAssetId.class,
-                itemReader -> trySpecificAssetIdFromElement(itemReader));
-
-              if (trySpecificAssetIds.isError()) {
-                trySpecificAssetIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "specificAssetIds"));
-                return trySpecificAssetIds.castTo(Entity.class);
+            case "idShort": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theIdShort = value.getResult();
               }
-
-              theSpecificAssetIds = trySpecificAssetIds.getResult();
+              break;
+            }
+            case "displayName": {
+              final Reporting.Result<List<ILangStringNameType>> value =
+                readListOf_ILangStringNameType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDisplayName = value.getResult();
+              }
+              break;
+            }
+            case "description": {
+              final Reporting.Result<List<ILangStringTextType>> value =
+                readListOf_ILangStringTextType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDescription = value.getResult();
+              }
+              break;
+            }
+            case "semanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSemanticId = value.getResult();
+              }
+              break;
+            }
+            case "supplementalSemanticIds": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSupplementalSemanticIds = value.getResult();
+              }
+              break;
+            }
+            case "qualifiers": {
+              final Reporting.Result<List<IQualifier>> value =
+                readListOf_IQualifier(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theQualifiers = value.getResult();
+              }
+              break;
+            }
+            case "embeddedDataSpecifications": {
+              final Reporting.Result<List<IEmbeddedDataSpecification>> value =
+                readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theEmbeddedDataSpecifications = value.getResult();
+              }
+              break;
+            }
+            case "statements": {
+              final Reporting.Result<List<ISubmodelElement>> value =
+                readListOf_ISubmodelElement(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theStatements = value.getResult();
+              }
+              break;
+            }
+            case "entityType": {
+              final Reporting.Result<EntityType> value =
+                readTextAs_EntityType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theEntityType = value.getResult();
+              }
+              break;
+            }
+            case "globalAssetId": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theGlobalAssetId = value.getResult();
+              }
+              break;
+            }
+            case "specificAssetIds": {
+              final Reporting.Result<List<ISpecificAssetId>> value =
+                readListOf_ISpecificAssetId(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSpecificAssetIds = value.getResult();
+              }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class Entity, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("Entity", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "Entity",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(Entity.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theEntityType == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property entityType has not been given " +
-          "in the XML representation of an instance of class Entity");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("entityType", "Entity");
       }
 
       return Reporting.Result.success(new Entity(
@@ -7636,21 +4550,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class Entity from an XML element.
      */
-    private static Reporting.Result<? extends Entity> tryEntityFromElement(
+    private static Reporting.Result<? extends Entity> readEntityFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        Entity.class,
-        (elementName, isEmptyElement) -> {
-          if (!"entity".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class Entity " +
-              "with element name entity, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryEntityFromSequence(reader, isEmptyElement);
-        });
+        "entity",
+        _DeserializeImplementation::readEntityFromSequence);
     }
 
     /**
@@ -7660,7 +4565,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<EventPayload> tryEventPayloadFromSequence(
+    private static Reporting.Result<EventPayload> readEventPayloadFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       IReference theSource = null;
@@ -7673,249 +4578,126 @@ public class Xmlization {
       byte[] thePayload = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class EventPayload, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class EventPayload, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(EventPayload.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "source":
-            {
-              Reporting.Result<Reference> trySource = tryReferenceFromSequence(
-                reader, isEmptyProperty);
+          Reporting.Error valueError = null;
 
-              if (trySource.isError()) {
-                trySource.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "source"));
-                return trySource.castTo(EventPayload.class);
-              }
-
-              theSource = trySource.getResult();
-              break;
-            }
-            case "sourceSemanticId":
-            {
-              Reporting.Result<Reference> trySourceSemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySourceSemanticId.isError()) {
-                trySourceSemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "sourceSemanticId"));
-                return trySourceSemanticId.castTo(EventPayload.class);
-              }
-
-              theSourceSemanticId = trySourceSemanticId.getResult();
-              break;
-            }
-            case "observableReference":
-            {
-              Reporting.Result<Reference> tryObservableReference = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryObservableReference.isError()) {
-                tryObservableReference.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "observableReference"));
-                return tryObservableReference.castTo(EventPayload.class);
-              }
-
-              theObservableReference = tryObservableReference.getResult();
-              break;
-            }
-            case "observableSemanticId":
-            {
-              Reporting.Result<Reference> tryObservableSemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryObservableSemanticId.isError()) {
-                tryObservableSemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "observableSemanticId"));
-                return tryObservableSemanticId.castTo(EventPayload.class);
-              }
-
-              theObservableSemanticId = tryObservableSemanticId.getResult();
-              break;
-            }
-            case "topic":
-            {
-              if (isEmptyProperty) {
-                theTopic = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property topic of an instance of class EventPayload, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theTopic = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property topic of an instance of class EventPayload "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "topic"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "source": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSource = value.getResult();
               }
               break;
             }
-            case "subjectId":
-            {
-              Reporting.Result<Reference> trySubjectId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySubjectId.isError()) {
-                trySubjectId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "subjectId"));
-                return trySubjectId.castTo(EventPayload.class);
-              }
-
-              theSubjectId = trySubjectId.getResult();
-              break;
-            }
-            case "timeStamp":
-            {
-              if (isEmptyProperty) {
-                theTimeStamp = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property timeStamp of an instance of class EventPayload, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theTimeStamp = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property timeStamp of an instance of class EventPayload "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "timeStamp"));
-                  return Reporting.Result.failure(error);
-                }
+            case "sourceSemanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSourceSemanticId = value.getResult();
               }
               break;
             }
-            case "payload":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property payload of an instance of class EventPayload " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "payload"));
-                return Reporting.Result.failure(error);
+            case "observableReference": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theObservableReference = value.getResult();
               }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property payload of an instance of class EventPayload, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  thePayload = readContentAsBase64(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property payload of an instance of class EventPayload "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "payload"));
-                  return Reporting.Result.failure(error);
-                }
+              break;
+            }
+            case "observableSemanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theObservableSemanticId = value.getResult();
+              }
+              break;
+            }
+            case "topic": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theTopic = value.getResult();
+              }
+              break;
+            }
+            case "subjectId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSubjectId = value.getResult();
+              }
+              break;
+            }
+            case "timeStamp": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theTimeStamp = value.getResult();
+              }
+              break;
+            }
+            case "payload": {
+              final Reporting.Result<byte[]> value =
+                readTextAs_bytes(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                thePayload = value.getResult();
               }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class EventPayload, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("EventPayload", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "EventPayload",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(EventPayload.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theSource == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property source has not been given " +
-          "in the XML representation of an instance of class EventPayload");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("source", "EventPayload");
       }
 
       if (theObservableReference == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property observableReference has not been given " +
-          "in the XML representation of an instance of class EventPayload");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("observableReference", "EventPayload");
       }
 
       if (theTimeStamp == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property timeStamp has not been given " +
-          "in the XML representation of an instance of class EventPayload");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("timeStamp", "EventPayload");
       }
 
       return Reporting.Result.success(new EventPayload(
@@ -7932,41 +4714,34 @@ public class Xmlization {
     /**
      * Deserialize an instance of class EventPayload from an XML element.
      */
-    private static Reporting.Result<? extends EventPayload> tryEventPayloadFromElement(
+    private static Reporting.Result<? extends EventPayload> readEventPayloadFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        EventPayload.class,
-        (elementName, isEmptyElement) -> {
-          if (!"eventPayload".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class EventPayload " +
-              "with element name eventPayload, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryEventPayloadFromSequence(reader, isEmptyElement);
-        });
+        "eventPayload",
+        _DeserializeImplementation::readEventPayloadFromSequence);
     }
 
     /**
      * Deserialize an instance of IEventElement from an XML element.
      */
-    private static Reporting.Result<? extends IEventElement> tryIEventElementFromElement(
+    private static Reporting.Result<? extends IEventElement> readIEventElementFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
-        reader,
-        IEventElement.class,
-        (elementName, isEmptyElement) -> {
-          switch (elementName) {
-            case "basicEventElement":
-              return tryBasicEventElementFromSequence(reader, isEmptyElement);
-            default:
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected element with the name " + elementName);
-              return Reporting.Result.failure(error);
-          }
-        });
+      // NOTE (mristin):
+      // We only peek the name, so that the whole element can be handed on to
+      // the reader which we select below.
+      final Reporting.Result<String> tryElementName = peekElementName(reader);
+      if (tryElementName.isError()) {
+        return Reporting.Result.failure(tryElementName.getError());
+      }
+
+      switch (tryElementName.getResult()) {
+        case "basicEventElement":
+          return readBasicEventElementFromElement(reader);
+        default:
+          return Reporting.Result.failure(new Reporting.Error(
+            "Unexpected element with the name " + tryElementName.getResult()));
+      }
     }
 
     /**
@@ -7976,7 +4751,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<BasicEventElement> tryBasicEventElementFromSequence(
+    private static Reporting.Result<BasicEventElement> readBasicEventElementFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IExtension> theExtensions = null;
@@ -7998,512 +4773,216 @@ public class Xmlization {
       String theMaxInterval = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class BasicEventElement, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class BasicEventElement, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(BasicEventElement.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "extensions":
-            {
-              final Reporting.Result<List<IExtension>> tryExtensions = parseList(
-                reader,
-                isEmptyProperty,
-                IExtension.class,
-                itemReader -> tryExtensionFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryExtensions.isError()) {
-                tryExtensions.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return tryExtensions.castTo(BasicEventElement.class);
-              }
-
-              theExtensions = tryExtensions.getResult();
-              break;
-            }
-            case "category":
-            {
-              if (isEmptyProperty) {
-                theCategory = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property category of an instance of class BasicEventElement, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theCategory = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property category of an instance of class BasicEventElement "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "category"));
-                  return Reporting.Result.failure(error);
-                }
-              }
-              break;
-            }
-            case "idShort":
-            {
-              if (isEmptyProperty) {
-                theIdShort = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property idShort of an instance of class BasicEventElement, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theIdShort = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property idShort of an instance of class BasicEventElement "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "idShort"));
-                  return Reporting.Result.failure(error);
-                }
-              }
-              break;
-            }
-            case "displayName":
-            {
-              final Reporting.Result<List<ILangStringNameType>> tryDisplayName = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringNameType.class,
-                itemReader -> tryLangStringNameTypeFromElement(itemReader));
-
-              if (tryDisplayName.isError()) {
-                tryDisplayName.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return tryDisplayName.castTo(BasicEventElement.class);
-              }
-
-              theDisplayName = tryDisplayName.getResult();
-              break;
-            }
-            case "description":
-            {
-              final Reporting.Result<List<ILangStringTextType>> tryDescription = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringTextType.class,
-                itemReader -> tryLangStringTextTypeFromElement(itemReader));
-
-              if (tryDescription.isError()) {
-                tryDescription.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return tryDescription.castTo(BasicEventElement.class);
-              }
-
-              theDescription = tryDescription.getResult();
-              break;
-            }
-            case "semanticId":
-            {
-              Reporting.Result<Reference> trySemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySemanticId.isError()) {
-                trySemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "semanticId"));
-                return trySemanticId.castTo(BasicEventElement.class);
-              }
-
-              theSemanticId = trySemanticId.getResult();
-              break;
-            }
-            case "supplementalSemanticIds":
-            {
-              final Reporting.Result<List<IReference>> trySupplementalSemanticIds = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (trySupplementalSemanticIds.isError()) {
-                trySupplementalSemanticIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return trySupplementalSemanticIds.castTo(BasicEventElement.class);
-              }
-
-              theSupplementalSemanticIds = trySupplementalSemanticIds.getResult();
-              break;
-            }
-            case "qualifiers":
-            {
-              final Reporting.Result<List<IQualifier>> tryQualifiers = parseList(
-                reader,
-                isEmptyProperty,
-                IQualifier.class,
-                itemReader -> tryQualifierFromElement(itemReader));
-
-              if (tryQualifiers.isError()) {
-                tryQualifiers.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return tryQualifiers.castTo(BasicEventElement.class);
-              }
-
-              theQualifiers = tryQualifiers.getResult();
-              break;
-            }
-            case "embeddedDataSpecifications":
-            {
-              final Reporting.Result<List<IEmbeddedDataSpecification>> tryEmbeddedDataSpecifications = parseList(
-                reader,
-                isEmptyProperty,
-                IEmbeddedDataSpecification.class,
-                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
-
-              if (tryEmbeddedDataSpecifications.isError()) {
-                tryEmbeddedDataSpecifications.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return tryEmbeddedDataSpecifications.castTo(BasicEventElement.class);
-              }
-
-              theEmbeddedDataSpecifications = tryEmbeddedDataSpecifications.getResult();
-              break;
-            }
-            case "observed":
-            {
-              Reporting.Result<Reference> tryObserved = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryObserved.isError()) {
-                tryObserved.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "observed"));
-                return tryObserved.castTo(BasicEventElement.class);
-              }
-
-              theObserved = tryObserved.getResult();
-              break;
-            }
-            case "direction":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property direction of an instance of class BasicEventElement " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "direction"));
-                return Reporting.Result.failure(error);
-              }
-
-              if (currentEvent(reader).isEndDocument()) {
-                final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing "
-                        + "the property direction of an instance of class BasicEventElement, "
-                        + "but reached the end-of-file");
-                return Reporting.Result.failure(error);
-              }
-
-              String textDirection;
-              try {
-                textDirection = readContentAsString(reader);
-              } catch (Exception e) {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property direction of an instance of class BasicEventElement"
-                        + " could not be de-serialized: " + e.getMessage());
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "direction"));
-                return Reporting.Result.failure(error);
-              }
-
-              final Optional<Direction> optionalDirection =
-                Stringification.directionFromString(
-                  textDirection);
-
-              if (optionalDirection.isPresent()) {
-                theDirection = optionalDirection.get();
+          switch (elementName) {
+            case "extensions": {
+              final Reporting.Result<List<IExtension>> value =
+                readListOf_IExtension(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
               } else {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property direction of an instance of class BasicEventElement" +
-                        " could not be de-serialized from an unexpected enumeration literal: " +
-                        textDirection);
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "direction"));
-                return Reporting.Result.failure(error);
+                theExtensions = value.getResult();
               }
               break;
             }
-            case "state":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property state of an instance of class BasicEventElement " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "state"));
-                return Reporting.Result.failure(error);
-              }
-
-              if (currentEvent(reader).isEndDocument()) {
-                final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing "
-                        + "the property state of an instance of class BasicEventElement, "
-                        + "but reached the end-of-file");
-                return Reporting.Result.failure(error);
-              }
-
-              String textState;
-              try {
-                textState = readContentAsString(reader);
-              } catch (Exception e) {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property state of an instance of class BasicEventElement"
-                        + " could not be de-serialized: " + e.getMessage());
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "state"));
-                return Reporting.Result.failure(error);
-              }
-
-              final Optional<StateOfEvent> optionalState =
-                Stringification.stateOfEventFromString(
-                  textState);
-
-              if (optionalState.isPresent()) {
-                theState = optionalState.get();
+            case "category": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
               } else {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property state of an instance of class BasicEventElement" +
-                        " could not be de-serialized from an unexpected enumeration literal: " +
-                        textState);
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "state"));
-                return Reporting.Result.failure(error);
+                theCategory = value.getResult();
               }
               break;
             }
-            case "messageTopic":
-            {
-              if (isEmptyProperty) {
-                theMessageTopic = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property messageTopic of an instance of class BasicEventElement, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theMessageTopic = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property messageTopic of an instance of class BasicEventElement "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "messageTopic"));
-                  return Reporting.Result.failure(error);
-                }
+            case "idShort": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theIdShort = value.getResult();
               }
               break;
             }
-            case "messageBroker":
-            {
-              Reporting.Result<Reference> tryMessageBroker = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryMessageBroker.isError()) {
-                tryMessageBroker.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "messageBroker"));
-                return tryMessageBroker.castTo(BasicEventElement.class);
-              }
-
-              theMessageBroker = tryMessageBroker.getResult();
-              break;
-            }
-            case "lastUpdate":
-            {
-              if (isEmptyProperty) {
-                theLastUpdate = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property lastUpdate of an instance of class BasicEventElement, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theLastUpdate = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property lastUpdate of an instance of class BasicEventElement "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "lastUpdate"));
-                  return Reporting.Result.failure(error);
-                }
+            case "displayName": {
+              final Reporting.Result<List<ILangStringNameType>> value =
+                readListOf_ILangStringNameType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDisplayName = value.getResult();
               }
               break;
             }
-            case "minInterval":
-            {
-              if (isEmptyProperty) {
-                theMinInterval = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property minInterval of an instance of class BasicEventElement, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theMinInterval = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property minInterval of an instance of class BasicEventElement "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "minInterval"));
-                  return Reporting.Result.failure(error);
-                }
+            case "description": {
+              final Reporting.Result<List<ILangStringTextType>> value =
+                readListOf_ILangStringTextType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDescription = value.getResult();
               }
               break;
             }
-            case "maxInterval":
-            {
-              if (isEmptyProperty) {
-                theMaxInterval = "";
+            case "semanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSemanticId = value.getResult();
               }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property maxInterval of an instance of class BasicEventElement, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theMaxInterval = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property maxInterval of an instance of class BasicEventElement "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "maxInterval"));
-                  return Reporting.Result.failure(error);
-                }
+              break;
+            }
+            case "supplementalSemanticIds": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSupplementalSemanticIds = value.getResult();
+              }
+              break;
+            }
+            case "qualifiers": {
+              final Reporting.Result<List<IQualifier>> value =
+                readListOf_IQualifier(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theQualifiers = value.getResult();
+              }
+              break;
+            }
+            case "embeddedDataSpecifications": {
+              final Reporting.Result<List<IEmbeddedDataSpecification>> value =
+                readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theEmbeddedDataSpecifications = value.getResult();
+              }
+              break;
+            }
+            case "observed": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theObserved = value.getResult();
+              }
+              break;
+            }
+            case "direction": {
+              final Reporting.Result<Direction> value =
+                readTextAs_Direction(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDirection = value.getResult();
+              }
+              break;
+            }
+            case "state": {
+              final Reporting.Result<StateOfEvent> value =
+                readTextAs_StateOfEvent(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theState = value.getResult();
+              }
+              break;
+            }
+            case "messageTopic": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theMessageTopic = value.getResult();
+              }
+              break;
+            }
+            case "messageBroker": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theMessageBroker = value.getResult();
+              }
+              break;
+            }
+            case "lastUpdate": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theLastUpdate = value.getResult();
+              }
+              break;
+            }
+            case "minInterval": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theMinInterval = value.getResult();
+              }
+              break;
+            }
+            case "maxInterval": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theMaxInterval = value.getResult();
               }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class BasicEventElement, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("BasicEventElement", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "BasicEventElement",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(BasicEventElement.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theObserved == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property observed has not been given " +
-          "in the XML representation of an instance of class BasicEventElement");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("observed", "BasicEventElement");
       }
 
       if (theDirection == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property direction has not been given " +
-          "in the XML representation of an instance of class BasicEventElement");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("direction", "BasicEventElement");
       }
 
       if (theState == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property state has not been given " +
-          "in the XML representation of an instance of class BasicEventElement");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("state", "BasicEventElement");
       }
 
       return Reporting.Result.success(new BasicEventElement(
@@ -8529,21 +5008,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class BasicEventElement from an XML element.
      */
-    private static Reporting.Result<? extends BasicEventElement> tryBasicEventElementFromElement(
+    private static Reporting.Result<? extends BasicEventElement> readBasicEventElementFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        BasicEventElement.class,
-        (elementName, isEmptyElement) -> {
-          if (!"basicEventElement".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class BasicEventElement " +
-              "with element name basicEventElement, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryBasicEventElementFromSequence(reader, isEmptyElement);
-        });
+        "basicEventElement",
+        _DeserializeImplementation::readBasicEventElementFromSequence);
     }
 
     /**
@@ -8553,7 +5023,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<Operation> tryOperationFromSequence(
+    private static Reporting.Result<Operation> readOperationFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IExtension> theExtensions = null;
@@ -8570,299 +5040,153 @@ public class Xmlization {
       List<IOperationVariable> theInoutputVariables = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class Operation, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class Operation, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(Operation.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "extensions":
-            {
-              final Reporting.Result<List<IExtension>> tryExtensions = parseList(
-                reader,
-                isEmptyProperty,
-                IExtension.class,
-                itemReader -> tryExtensionFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryExtensions.isError()) {
-                tryExtensions.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return tryExtensions.castTo(Operation.class);
-              }
-
-              theExtensions = tryExtensions.getResult();
-              break;
-            }
-            case "category":
-            {
-              if (isEmptyProperty) {
-                theCategory = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property category of an instance of class Operation, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theCategory = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property category of an instance of class Operation "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "category"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "extensions": {
+              final Reporting.Result<List<IExtension>> value =
+                readListOf_IExtension(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theExtensions = value.getResult();
               }
               break;
             }
-            case "idShort":
-            {
-              if (isEmptyProperty) {
-                theIdShort = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property idShort of an instance of class Operation, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theIdShort = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property idShort of an instance of class Operation "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "idShort"));
-                  return Reporting.Result.failure(error);
-                }
+            case "category": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theCategory = value.getResult();
               }
               break;
             }
-            case "displayName":
-            {
-              final Reporting.Result<List<ILangStringNameType>> tryDisplayName = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringNameType.class,
-                itemReader -> tryLangStringNameTypeFromElement(itemReader));
-
-              if (tryDisplayName.isError()) {
-                tryDisplayName.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return tryDisplayName.castTo(Operation.class);
+            case "idShort": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theIdShort = value.getResult();
               }
-
-              theDisplayName = tryDisplayName.getResult();
               break;
             }
-            case "description":
-            {
-              final Reporting.Result<List<ILangStringTextType>> tryDescription = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringTextType.class,
-                itemReader -> tryLangStringTextTypeFromElement(itemReader));
-
-              if (tryDescription.isError()) {
-                tryDescription.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return tryDescription.castTo(Operation.class);
+            case "displayName": {
+              final Reporting.Result<List<ILangStringNameType>> value =
+                readListOf_ILangStringNameType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDisplayName = value.getResult();
               }
-
-              theDescription = tryDescription.getResult();
               break;
             }
-            case "semanticId":
-            {
-              Reporting.Result<Reference> trySemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySemanticId.isError()) {
-                trySemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "semanticId"));
-                return trySemanticId.castTo(Operation.class);
+            case "description": {
+              final Reporting.Result<List<ILangStringTextType>> value =
+                readListOf_ILangStringTextType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDescription = value.getResult();
               }
-
-              theSemanticId = trySemanticId.getResult();
               break;
             }
-            case "supplementalSemanticIds":
-            {
-              final Reporting.Result<List<IReference>> trySupplementalSemanticIds = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (trySupplementalSemanticIds.isError()) {
-                trySupplementalSemanticIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return trySupplementalSemanticIds.castTo(Operation.class);
+            case "semanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSemanticId = value.getResult();
               }
-
-              theSupplementalSemanticIds = trySupplementalSemanticIds.getResult();
               break;
             }
-            case "qualifiers":
-            {
-              final Reporting.Result<List<IQualifier>> tryQualifiers = parseList(
-                reader,
-                isEmptyProperty,
-                IQualifier.class,
-                itemReader -> tryQualifierFromElement(itemReader));
-
-              if (tryQualifiers.isError()) {
-                tryQualifiers.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return tryQualifiers.castTo(Operation.class);
+            case "supplementalSemanticIds": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSupplementalSemanticIds = value.getResult();
               }
-
-              theQualifiers = tryQualifiers.getResult();
               break;
             }
-            case "embeddedDataSpecifications":
-            {
-              final Reporting.Result<List<IEmbeddedDataSpecification>> tryEmbeddedDataSpecifications = parseList(
-                reader,
-                isEmptyProperty,
-                IEmbeddedDataSpecification.class,
-                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
-
-              if (tryEmbeddedDataSpecifications.isError()) {
-                tryEmbeddedDataSpecifications.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return tryEmbeddedDataSpecifications.castTo(Operation.class);
+            case "qualifiers": {
+              final Reporting.Result<List<IQualifier>> value =
+                readListOf_IQualifier(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theQualifiers = value.getResult();
               }
-
-              theEmbeddedDataSpecifications = tryEmbeddedDataSpecifications.getResult();
               break;
             }
-            case "inputVariables":
-            {
-              final Reporting.Result<List<IOperationVariable>> tryInputVariables = parseList(
-                reader,
-                isEmptyProperty,
-                IOperationVariable.class,
-                itemReader -> tryOperationVariableFromElement(itemReader));
-
-              if (tryInputVariables.isError()) {
-                tryInputVariables.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "inputVariables"));
-                return tryInputVariables.castTo(Operation.class);
+            case "embeddedDataSpecifications": {
+              final Reporting.Result<List<IEmbeddedDataSpecification>> value =
+                readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theEmbeddedDataSpecifications = value.getResult();
               }
-
-              theInputVariables = tryInputVariables.getResult();
               break;
             }
-            case "outputVariables":
-            {
-              final Reporting.Result<List<IOperationVariable>> tryOutputVariables = parseList(
-                reader,
-                isEmptyProperty,
-                IOperationVariable.class,
-                itemReader -> tryOperationVariableFromElement(itemReader));
-
-              if (tryOutputVariables.isError()) {
-                tryOutputVariables.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "outputVariables"));
-                return tryOutputVariables.castTo(Operation.class);
+            case "inputVariables": {
+              final Reporting.Result<List<IOperationVariable>> value =
+                readListOf_IOperationVariable(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theInputVariables = value.getResult();
               }
-
-              theOutputVariables = tryOutputVariables.getResult();
               break;
             }
-            case "inoutputVariables":
-            {
-              final Reporting.Result<List<IOperationVariable>> tryInoutputVariables = parseList(
-                reader,
-                isEmptyProperty,
-                IOperationVariable.class,
-                itemReader -> tryOperationVariableFromElement(itemReader));
-
-              if (tryInoutputVariables.isError()) {
-                tryInoutputVariables.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "inoutputVariables"));
-                return tryInoutputVariables.castTo(Operation.class);
+            case "outputVariables": {
+              final Reporting.Result<List<IOperationVariable>> value =
+                readListOf_IOperationVariable(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theOutputVariables = value.getResult();
               }
-
-              theInoutputVariables = tryInoutputVariables.getResult();
+              break;
+            }
+            case "inoutputVariables": {
+              final Reporting.Result<List<IOperationVariable>> value =
+                readListOf_IOperationVariable(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theInoutputVariables = value.getResult();
+              }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class Operation, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("Operation", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "Operation",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(Operation.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
@@ -8884,21 +5208,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class Operation from an XML element.
      */
-    private static Reporting.Result<? extends Operation> tryOperationFromElement(
+    private static Reporting.Result<? extends Operation> readOperationFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        Operation.class,
-        (elementName, isEmptyElement) -> {
-          if (!"operation".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class Operation " +
-              "with element name operation, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryOperationFromSequence(reader, isEmptyElement);
-        });
+        "operation",
+        _DeserializeImplementation::readOperationFromSequence);
     }
 
     /**
@@ -8908,123 +5223,57 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<OperationVariable> tryOperationVariableFromSequence(
+    private static Reporting.Result<OperationVariable> readOperationVariableFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       ISubmodelElement theValue = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class OperationVariable, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class OperationVariable, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(OperationVariable.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "value":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected an XML element within the element " + tryElementName.getResult() + " representing " +
-                  "the property value of an instance of class OperationVariable, " +
-                  "but encountered a self-closing element.");
-                return Reporting.Result.failure(error);
+          Reporting.Error valueError = null;
+
+          switch (elementName) {
+            case "value": {
+              final Reporting.Result<? extends ISubmodelElement> value =
+                readNestedElement(
+                  reader,
+                  isEmptyProperty,
+                  _DeserializeImplementation::readISubmodelElementFromElement);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValue = value.getResult();
               }
-
-              // We need to skip the whitespace here in order to be able to look ahead
-              // the discriminator element shortly.
-              skipWhitespaceAndComments(reader);
-
-              if (currentEvent(reader).isEndDocument()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected an XML element within the element " + tryElementName.getResult() + " representing " +
-                  "the property value of an instance of class OperationVariable, " +
-                  "but reached the end-of-file");
-                return Reporting.Result.failure(error);
-              }
-
-              // Try to look ahead the discriminator name;
-              // we need this name only for the error reporting below.
-              // ISubmodelElementFromElement will perform more sophisticated
-              // checks.
-              String discriminatorElementName = null;
-              if (currentEvent(reader).isStartElement()) {
-                Reporting.Result<String> tryDiscriminatorElementName = tryElementName(reader);
-                assert(!tryDiscriminatorElementName.isError());
-                discriminatorElementName = tryDiscriminatorElementName.getResult();
-              }
-
-              Reporting.Result<? extends ISubmodelElement> tryValue = tryISubmodelElementFromElement(reader);
-
-              if (tryValue.isError()) {
-                if (discriminatorElementName != null) {
-                  tryValue.getError().
-                    prependSegment(
-                      new Reporting.NameSegment(
-                        discriminatorElementName));
-                }
-
-                tryValue.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "value"));
-                return tryValue.castTo(OperationVariable.class);
-              }
-
-              theValue = tryValue.getResult();
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class OperationVariable, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("OperationVariable", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "OperationVariable",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(OperationVariable.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theValue == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property value has not been given " +
-          "in the XML representation of an instance of class OperationVariable");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("value", "OperationVariable");
       }
 
       return Reporting.Result.success(new OperationVariable(
@@ -9034,21 +5283,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class OperationVariable from an XML element.
      */
-    private static Reporting.Result<? extends OperationVariable> tryOperationVariableFromElement(
+    private static Reporting.Result<? extends OperationVariable> readOperationVariableFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        OperationVariable.class,
-        (elementName, isEmptyElement) -> {
-          if (!"operationVariable".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class OperationVariable " +
-              "with element name operationVariable, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryOperationVariableFromSequence(reader, isEmptyElement);
-        });
+        "operationVariable",
+        _DeserializeImplementation::readOperationVariableFromSequence);
     }
 
     /**
@@ -9058,7 +5298,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<Capability> tryCapabilityFromSequence(
+    private static Reporting.Result<Capability> readCapabilityFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IExtension> theExtensions = null;
@@ -9072,242 +5312,123 @@ public class Xmlization {
       List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class Capability, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class Capability, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(Capability.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "extensions":
-            {
-              final Reporting.Result<List<IExtension>> tryExtensions = parseList(
-                reader,
-                isEmptyProperty,
-                IExtension.class,
-                itemReader -> tryExtensionFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryExtensions.isError()) {
-                tryExtensions.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return tryExtensions.castTo(Capability.class);
-              }
-
-              theExtensions = tryExtensions.getResult();
-              break;
-            }
-            case "category":
-            {
-              if (isEmptyProperty) {
-                theCategory = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property category of an instance of class Capability, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theCategory = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property category of an instance of class Capability "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "category"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "extensions": {
+              final Reporting.Result<List<IExtension>> value =
+                readListOf_IExtension(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theExtensions = value.getResult();
               }
               break;
             }
-            case "idShort":
-            {
-              if (isEmptyProperty) {
-                theIdShort = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property idShort of an instance of class Capability, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theIdShort = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property idShort of an instance of class Capability "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "idShort"));
-                  return Reporting.Result.failure(error);
-                }
+            case "category": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theCategory = value.getResult();
               }
               break;
             }
-            case "displayName":
-            {
-              final Reporting.Result<List<ILangStringNameType>> tryDisplayName = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringNameType.class,
-                itemReader -> tryLangStringNameTypeFromElement(itemReader));
-
-              if (tryDisplayName.isError()) {
-                tryDisplayName.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return tryDisplayName.castTo(Capability.class);
+            case "idShort": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theIdShort = value.getResult();
               }
-
-              theDisplayName = tryDisplayName.getResult();
               break;
             }
-            case "description":
-            {
-              final Reporting.Result<List<ILangStringTextType>> tryDescription = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringTextType.class,
-                itemReader -> tryLangStringTextTypeFromElement(itemReader));
-
-              if (tryDescription.isError()) {
-                tryDescription.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return tryDescription.castTo(Capability.class);
+            case "displayName": {
+              final Reporting.Result<List<ILangStringNameType>> value =
+                readListOf_ILangStringNameType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDisplayName = value.getResult();
               }
-
-              theDescription = tryDescription.getResult();
               break;
             }
-            case "semanticId":
-            {
-              Reporting.Result<Reference> trySemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (trySemanticId.isError()) {
-                trySemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "semanticId"));
-                return trySemanticId.castTo(Capability.class);
+            case "description": {
+              final Reporting.Result<List<ILangStringTextType>> value =
+                readListOf_ILangStringTextType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDescription = value.getResult();
               }
-
-              theSemanticId = trySemanticId.getResult();
               break;
             }
-            case "supplementalSemanticIds":
-            {
-              final Reporting.Result<List<IReference>> trySupplementalSemanticIds = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (trySupplementalSemanticIds.isError()) {
-                trySupplementalSemanticIds.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return trySupplementalSemanticIds.castTo(Capability.class);
+            case "semanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSemanticId = value.getResult();
               }
-
-              theSupplementalSemanticIds = trySupplementalSemanticIds.getResult();
               break;
             }
-            case "qualifiers":
-            {
-              final Reporting.Result<List<IQualifier>> tryQualifiers = parseList(
-                reader,
-                isEmptyProperty,
-                IQualifier.class,
-                itemReader -> tryQualifierFromElement(itemReader));
-
-              if (tryQualifiers.isError()) {
-                tryQualifiers.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return tryQualifiers.castTo(Capability.class);
+            case "supplementalSemanticIds": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSupplementalSemanticIds = value.getResult();
               }
-
-              theQualifiers = tryQualifiers.getResult();
               break;
             }
-            case "embeddedDataSpecifications":
-            {
-              final Reporting.Result<List<IEmbeddedDataSpecification>> tryEmbeddedDataSpecifications = parseList(
-                reader,
-                isEmptyProperty,
-                IEmbeddedDataSpecification.class,
-                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
-
-              if (tryEmbeddedDataSpecifications.isError()) {
-                tryEmbeddedDataSpecifications.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return tryEmbeddedDataSpecifications.castTo(Capability.class);
+            case "qualifiers": {
+              final Reporting.Result<List<IQualifier>> value =
+                readListOf_IQualifier(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theQualifiers = value.getResult();
               }
-
-              theEmbeddedDataSpecifications = tryEmbeddedDataSpecifications.getResult();
+              break;
+            }
+            case "embeddedDataSpecifications": {
+              final Reporting.Result<List<IEmbeddedDataSpecification>> value =
+                readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theEmbeddedDataSpecifications = value.getResult();
+              }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class Capability, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("Capability", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "Capability",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(Capability.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
@@ -9326,21 +5447,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class Capability from an XML element.
      */
-    private static Reporting.Result<? extends Capability> tryCapabilityFromElement(
+    private static Reporting.Result<? extends Capability> readCapabilityFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        Capability.class,
-        (elementName, isEmptyElement) -> {
-          if (!"capability".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class Capability " +
-              "with element name capability, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryCapabilityFromSequence(reader, isEmptyElement);
-        });
+        "capability",
+        _DeserializeImplementation::readCapabilityFromSequence);
     }
 
     /**
@@ -9350,7 +5462,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<ConceptDescription> tryConceptDescriptionFromSequence(
+    private static Reporting.Result<ConceptDescription> readConceptDescriptionFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IExtension> theExtensions = null;
@@ -9364,259 +5476,128 @@ public class Xmlization {
       List<IReference> theIsCaseOf = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class ConceptDescription, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class ConceptDescription, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(ConceptDescription.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "extensions":
-            {
-              final Reporting.Result<List<IExtension>> tryExtensions = parseList(
-                reader,
-                isEmptyProperty,
-                IExtension.class,
-                itemReader -> tryExtensionFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryExtensions.isError()) {
-                tryExtensions.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return tryExtensions.castTo(ConceptDescription.class);
-              }
-
-              theExtensions = tryExtensions.getResult();
-              break;
-            }
-            case "category":
-            {
-              if (isEmptyProperty) {
-                theCategory = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property category of an instance of class ConceptDescription, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theCategory = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property category of an instance of class ConceptDescription "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "category"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "extensions": {
+              final Reporting.Result<List<IExtension>> value =
+                readListOf_IExtension(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theExtensions = value.getResult();
               }
               break;
             }
-            case "idShort":
-            {
-              if (isEmptyProperty) {
-                theIdShort = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property idShort of an instance of class ConceptDescription, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theIdShort = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property idShort of an instance of class ConceptDescription "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "idShort"));
-                  return Reporting.Result.failure(error);
-                }
+            case "category": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theCategory = value.getResult();
               }
               break;
             }
-            case "displayName":
-            {
-              final Reporting.Result<List<ILangStringNameType>> tryDisplayName = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringNameType.class,
-                itemReader -> tryLangStringNameTypeFromElement(itemReader));
-
-              if (tryDisplayName.isError()) {
-                tryDisplayName.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return tryDisplayName.castTo(ConceptDescription.class);
-              }
-
-              theDisplayName = tryDisplayName.getResult();
-              break;
-            }
-            case "description":
-            {
-              final Reporting.Result<List<ILangStringTextType>> tryDescription = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringTextType.class,
-                itemReader -> tryLangStringTextTypeFromElement(itemReader));
-
-              if (tryDescription.isError()) {
-                tryDescription.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return tryDescription.castTo(ConceptDescription.class);
-              }
-
-              theDescription = tryDescription.getResult();
-              break;
-            }
-            case "administration":
-            {
-              Reporting.Result<AdministrativeInformation> tryAdministration = tryAdministrativeInformationFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryAdministration.isError()) {
-                tryAdministration.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "administration"));
-                return tryAdministration.castTo(ConceptDescription.class);
-              }
-
-              theAdministration = tryAdministration.getResult();
-              break;
-            }
-            case "id":
-            {
-              if (isEmptyProperty) {
-                theId = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property id of an instance of class ConceptDescription, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theId = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property id of an instance of class ConceptDescription "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "id"));
-                  return Reporting.Result.failure(error);
-                }
+            case "idShort": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theIdShort = value.getResult();
               }
               break;
             }
-            case "embeddedDataSpecifications":
-            {
-              final Reporting.Result<List<IEmbeddedDataSpecification>> tryEmbeddedDataSpecifications = parseList(
-                reader,
-                isEmptyProperty,
-                IEmbeddedDataSpecification.class,
-                itemReader -> tryEmbeddedDataSpecificationFromElement(itemReader));
-
-              if (tryEmbeddedDataSpecifications.isError()) {
-                tryEmbeddedDataSpecifications.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return tryEmbeddedDataSpecifications.castTo(ConceptDescription.class);
+            case "displayName": {
+              final Reporting.Result<List<ILangStringNameType>> value =
+                readListOf_ILangStringNameType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDisplayName = value.getResult();
               }
-
-              theEmbeddedDataSpecifications = tryEmbeddedDataSpecifications.getResult();
               break;
             }
-            case "isCaseOf":
-            {
-              final Reporting.Result<List<IReference>> tryIsCaseOf = parseList(
-                reader,
-                isEmptyProperty,
-                IReference.class,
-                itemReader -> tryReferenceFromElement(itemReader));
-
-              if (tryIsCaseOf.isError()) {
-                tryIsCaseOf.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "isCaseOf"));
-                return tryIsCaseOf.castTo(ConceptDescription.class);
+            case "description": {
+              final Reporting.Result<List<ILangStringTextType>> value =
+                readListOf_ILangStringTextType(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDescription = value.getResult();
               }
-
-              theIsCaseOf = tryIsCaseOf.getResult();
+              break;
+            }
+            case "administration": {
+              final Reporting.Result<AdministrativeInformation> value =
+                readAdministrativeInformationFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theAdministration = value.getResult();
+              }
+              break;
+            }
+            case "id": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theId = value.getResult();
+              }
+              break;
+            }
+            case "embeddedDataSpecifications": {
+              final Reporting.Result<List<IEmbeddedDataSpecification>> value =
+                readListOf_IEmbeddedDataSpecification(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theEmbeddedDataSpecifications = value.getResult();
+              }
+              break;
+            }
+            case "isCaseOf": {
+              final Reporting.Result<List<IReference>> value =
+                readListOf_IReference(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theIsCaseOf = value.getResult();
+              }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class ConceptDescription, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("ConceptDescription", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "ConceptDescription",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(ConceptDescription.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theId == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property id has not been given " +
-          "in the XML representation of an instance of class ConceptDescription");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("id", "ConceptDescription");
       }
 
       return Reporting.Result.success(new ConceptDescription(
@@ -9634,21 +5615,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class ConceptDescription from an XML element.
      */
-    private static Reporting.Result<? extends ConceptDescription> tryConceptDescriptionFromElement(
+    private static Reporting.Result<? extends ConceptDescription> readConceptDescriptionFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        ConceptDescription.class,
-        (elementName, isEmptyElement) -> {
-          if (!"conceptDescription".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class ConceptDescription " +
-              "with element name conceptDescription, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryConceptDescriptionFromSequence(reader, isEmptyElement);
-        });
+        "conceptDescription",
+        _DeserializeImplementation::readConceptDescriptionFromSequence);
     }
 
     /**
@@ -9658,7 +5630,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<Reference> tryReferenceFromSequence(
+    private static Reporting.Result<Reference> readReferenceFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       ReferenceTypes theType = null;
@@ -9666,158 +5638,72 @@ public class Xmlization {
       List<IKey> theKeys = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class Reference, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class Reference, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(Reference.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "type":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property type of an instance of class Reference " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "type"));
-                return Reporting.Result.failure(error);
-              }
+          Reporting.Error valueError = null;
 
-              if (currentEvent(reader).isEndDocument()) {
-                final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing "
-                        + "the property type of an instance of class Reference, "
-                        + "but reached the end-of-file");
-                return Reporting.Result.failure(error);
-              }
-
-              String textType;
-              try {
-                textType = readContentAsString(reader);
-              } catch (Exception e) {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property type of an instance of class Reference"
-                        + " could not be de-serialized: " + e.getMessage());
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "type"));
-                return Reporting.Result.failure(error);
-              }
-
-              final Optional<ReferenceTypes> optionalType =
-                Stringification.referenceTypesFromString(
-                  textType);
-
-              if (optionalType.isPresent()) {
-                theType = optionalType.get();
+          switch (elementName) {
+            case "type": {
+              final Reporting.Result<ReferenceTypes> value =
+                readTextAs_ReferenceTypes(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
               } else {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property type of an instance of class Reference" +
-                        " could not be de-serialized from an unexpected enumeration literal: " +
-                        textType);
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "type"));
-                return Reporting.Result.failure(error);
+                theType = value.getResult();
               }
               break;
             }
-            case "referredSemanticId":
-            {
-              Reporting.Result<Reference> tryReferredSemanticId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryReferredSemanticId.isError()) {
-                tryReferredSemanticId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "referredSemanticId"));
-                return tryReferredSemanticId.castTo(Reference.class);
+            case "referredSemanticId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theReferredSemanticId = value.getResult();
               }
-
-              theReferredSemanticId = tryReferredSemanticId.getResult();
               break;
             }
-            case "keys":
-            {
-              final Reporting.Result<List<IKey>> tryKeys = parseList(
-                reader,
-                isEmptyProperty,
-                IKey.class,
-                itemReader -> tryKeyFromElement(itemReader));
-
-              if (tryKeys.isError()) {
-                tryKeys.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "keys"));
-                return tryKeys.castTo(Reference.class);
+            case "keys": {
+              final Reporting.Result<List<IKey>> value =
+                readListOf_IKey(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theKeys = value.getResult();
               }
-
-              theKeys = tryKeys.getResult();
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class Reference, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("Reference", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "Reference",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(Reference.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theType == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property type has not been given " +
-          "in the XML representation of an instance of class Reference");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("type", "Reference");
       }
 
       if (theKeys == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property keys has not been given " +
-          "in the XML representation of an instance of class Reference");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("keys", "Reference");
       }
 
       return Reporting.Result.success(new Reference(
@@ -9829,21 +5715,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class Reference from an XML element.
      */
-    private static Reporting.Result<? extends Reference> tryReferenceFromElement(
+    private static Reporting.Result<? extends Reference> readReferenceFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        Reference.class,
-        (elementName, isEmptyElement) -> {
-          if (!"reference".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class Reference " +
-              "with element name reference, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryReferenceFromSequence(reader, isEmptyElement);
-        });
+        "reference",
+        _DeserializeImplementation::readReferenceFromSequence);
     }
 
     /**
@@ -9853,158 +5730,69 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<Key> tryKeyFromSequence(
+    private static Reporting.Result<Key> readKeyFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       KeyTypes theType = null;
       String theValue = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class Key, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class Key, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(Key.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "type":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property type of an instance of class Key " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "type"));
-                return Reporting.Result.failure(error);
-              }
+          Reporting.Error valueError = null;
 
-              if (currentEvent(reader).isEndDocument()) {
-                final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing "
-                        + "the property type of an instance of class Key, "
-                        + "but reached the end-of-file");
-                return Reporting.Result.failure(error);
-              }
-
-              String textType;
-              try {
-                textType = readContentAsString(reader);
-              } catch (Exception e) {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property type of an instance of class Key"
-                        + " could not be de-serialized: " + e.getMessage());
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "type"));
-                return Reporting.Result.failure(error);
-              }
-
-              final Optional<KeyTypes> optionalType =
-                Stringification.keyTypesFromString(
-                  textType);
-
-              if (optionalType.isPresent()) {
-                theType = optionalType.get();
+          switch (elementName) {
+            case "type": {
+              final Reporting.Result<KeyTypes> value =
+                readTextAs_KeyTypes(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
               } else {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property type of an instance of class Key" +
-                        " could not be de-serialized from an unexpected enumeration literal: " +
-                        textType);
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "type"));
-                return Reporting.Result.failure(error);
+                theType = value.getResult();
               }
               break;
             }
-            case "value":
-            {
-              if (isEmptyProperty) {
-                theValue = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property value of an instance of class Key, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theValue = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property value of an instance of class Key "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "value"));
-                  return Reporting.Result.failure(error);
-                }
+            case "value": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValue = value.getResult();
               }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class Key, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("Key", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "Key",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(Key.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theType == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property type has not been given " +
-          "in the XML representation of an instance of class Key");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("type", "Key");
       }
 
       if (theValue == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property value has not been given " +
-          "in the XML representation of an instance of class Key");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("value", "Key");
       }
 
       return Reporting.Result.success(new Key(
@@ -10015,49 +5803,42 @@ public class Xmlization {
     /**
      * Deserialize an instance of class Key from an XML element.
      */
-    private static Reporting.Result<? extends Key> tryKeyFromElement(
+    private static Reporting.Result<? extends Key> readKeyFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        Key.class,
-        (elementName, isEmptyElement) -> {
-          if (!"key".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class Key " +
-              "with element name key, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryKeyFromSequence(reader, isEmptyElement);
-        });
+        "key",
+        _DeserializeImplementation::readKeyFromSequence);
     }
 
     /**
      * Deserialize an instance of IAbstractLangString from an XML element.
      */
-    private static Reporting.Result<? extends IAbstractLangString> tryIAbstractLangStringFromElement(
+    private static Reporting.Result<? extends IAbstractLangString> readIAbstractLangStringFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
-        reader,
-        IAbstractLangString.class,
-        (elementName, isEmptyElement) -> {
-          switch (elementName) {
-            case "langStringDefinitionTypeIec61360":
-              return tryLangStringDefinitionTypeIec61360FromSequence(reader, isEmptyElement);
-            case "langStringNameType":
-              return tryLangStringNameTypeFromSequence(reader, isEmptyElement);
-            case "langStringPreferredNameTypeIec61360":
-              return tryLangStringPreferredNameTypeIec61360FromSequence(reader, isEmptyElement);
-            case "langStringShortNameTypeIec61360":
-              return tryLangStringShortNameTypeIec61360FromSequence(reader, isEmptyElement);
-            case "langStringTextType":
-              return tryLangStringTextTypeFromSequence(reader, isEmptyElement);
-            default:
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected element with the name " + elementName);
-              return Reporting.Result.failure(error);
-          }
-        });
+      // NOTE (mristin):
+      // We only peek the name, so that the whole element can be handed on to
+      // the reader which we select below.
+      final Reporting.Result<String> tryElementName = peekElementName(reader);
+      if (tryElementName.isError()) {
+        return Reporting.Result.failure(tryElementName.getError());
+      }
+
+      switch (tryElementName.getResult()) {
+        case "langStringDefinitionTypeIec61360":
+          return readLangStringDefinitionTypeIec61360FromElement(reader);
+        case "langStringNameType":
+          return readLangStringNameTypeFromElement(reader);
+        case "langStringPreferredNameTypeIec61360":
+          return readLangStringPreferredNameTypeIec61360FromElement(reader);
+        case "langStringShortNameTypeIec61360":
+          return readLangStringShortNameTypeIec61360FromElement(reader);
+        case "langStringTextType":
+          return readLangStringTextTypeFromElement(reader);
+        default:
+          return Reporting.Result.failure(new Reporting.Error(
+            "Unexpected element with the name " + tryElementName.getResult()));
+      }
     }
 
     /**
@@ -10067,134 +5848,69 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<LangStringNameType> tryLangStringNameTypeFromSequence(
+    private static Reporting.Result<LangStringNameType> readLangStringNameTypeFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       String theLanguage = null;
       String theText = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class LangStringNameType, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class LangStringNameType, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(LangStringNameType.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "language":
-            {
-              if (isEmptyProperty) {
-                theLanguage = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property language of an instance of class LangStringNameType, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
+          Reporting.Error valueError = null;
 
-                try {
-                  theLanguage = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property language of an instance of class LangStringNameType "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "language"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "language": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theLanguage = value.getResult();
               }
               break;
             }
-            case "text":
-            {
-              if (isEmptyProperty) {
-                theText = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property text of an instance of class LangStringNameType, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theText = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property text of an instance of class LangStringNameType "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "text"));
-                  return Reporting.Result.failure(error);
-                }
+            case "text": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theText = value.getResult();
               }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class LangStringNameType, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("LangStringNameType", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "LangStringNameType",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(LangStringNameType.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theLanguage == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property language has not been given " +
-          "in the XML representation of an instance of class LangStringNameType");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("language", "LangStringNameType");
       }
 
       if (theText == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property text has not been given " +
-          "in the XML representation of an instance of class LangStringNameType");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("text", "LangStringNameType");
       }
 
       return Reporting.Result.success(new LangStringNameType(
@@ -10205,21 +5921,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class LangStringNameType from an XML element.
      */
-    private static Reporting.Result<? extends LangStringNameType> tryLangStringNameTypeFromElement(
+    private static Reporting.Result<? extends LangStringNameType> readLangStringNameTypeFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        LangStringNameType.class,
-        (elementName, isEmptyElement) -> {
-          if (!"langStringNameType".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class LangStringNameType " +
-              "with element name langStringNameType, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryLangStringNameTypeFromSequence(reader, isEmptyElement);
-        });
+        "langStringNameType",
+        _DeserializeImplementation::readLangStringNameTypeFromSequence);
     }
 
     /**
@@ -10229,134 +5936,69 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<LangStringTextType> tryLangStringTextTypeFromSequence(
+    private static Reporting.Result<LangStringTextType> readLangStringTextTypeFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       String theLanguage = null;
       String theText = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class LangStringTextType, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class LangStringTextType, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(LangStringTextType.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "language":
-            {
-              if (isEmptyProperty) {
-                theLanguage = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property language of an instance of class LangStringTextType, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
+          Reporting.Error valueError = null;
 
-                try {
-                  theLanguage = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property language of an instance of class LangStringTextType "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "language"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "language": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theLanguage = value.getResult();
               }
               break;
             }
-            case "text":
-            {
-              if (isEmptyProperty) {
-                theText = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property text of an instance of class LangStringTextType, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theText = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property text of an instance of class LangStringTextType "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "text"));
-                  return Reporting.Result.failure(error);
-                }
+            case "text": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theText = value.getResult();
               }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class LangStringTextType, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("LangStringTextType", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "LangStringTextType",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(LangStringTextType.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theLanguage == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property language has not been given " +
-          "in the XML representation of an instance of class LangStringTextType");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("language", "LangStringTextType");
       }
 
       if (theText == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property text has not been given " +
-          "in the XML representation of an instance of class LangStringTextType");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("text", "LangStringTextType");
       }
 
       return Reporting.Result.success(new LangStringTextType(
@@ -10367,21 +6009,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class LangStringTextType from an XML element.
      */
-    private static Reporting.Result<? extends LangStringTextType> tryLangStringTextTypeFromElement(
+    private static Reporting.Result<? extends LangStringTextType> readLangStringTextTypeFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        LangStringTextType.class,
-        (elementName, isEmptyElement) -> {
-          if (!"langStringTextType".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class LangStringTextType " +
-              "with element name langStringTextType, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryLangStringTextTypeFromSequence(reader, isEmptyElement);
-        });
+        "langStringTextType",
+        _DeserializeImplementation::readLangStringTextTypeFromSequence);
     }
 
     /**
@@ -10391,7 +6024,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<Environment> tryEnvironmentFromSequence(
+    private static Reporting.Result<Environment> readEnvironmentFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IAssetAdministrationShell> theAssetAdministrationShells = null;
@@ -10399,113 +6032,63 @@ public class Xmlization {
       List<IConceptDescription> theConceptDescriptions = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class Environment, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class Environment, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(Environment.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "assetAdministrationShells":
-            {
-              final Reporting.Result<List<IAssetAdministrationShell>> tryAssetAdministrationShells = parseList(
-                reader,
-                isEmptyProperty,
-                IAssetAdministrationShell.class,
-                itemReader -> tryAssetAdministrationShellFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryAssetAdministrationShells.isError()) {
-                tryAssetAdministrationShells.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "assetAdministrationShells"));
-                return tryAssetAdministrationShells.castTo(Environment.class);
+          switch (elementName) {
+            case "assetAdministrationShells": {
+              final Reporting.Result<List<IAssetAdministrationShell>> value =
+                readListOf_IAssetAdministrationShell(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theAssetAdministrationShells = value.getResult();
               }
-
-              theAssetAdministrationShells = tryAssetAdministrationShells.getResult();
               break;
             }
-            case "submodels":
-            {
-              final Reporting.Result<List<ISubmodel>> trySubmodels = parseList(
-                reader,
-                isEmptyProperty,
-                ISubmodel.class,
-                itemReader -> trySubmodelFromElement(itemReader));
-
-              if (trySubmodels.isError()) {
-                trySubmodels.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "submodels"));
-                return trySubmodels.castTo(Environment.class);
+            case "submodels": {
+              final Reporting.Result<List<ISubmodel>> value =
+                readListOf_ISubmodel(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSubmodels = value.getResult();
               }
-
-              theSubmodels = trySubmodels.getResult();
               break;
             }
-            case "conceptDescriptions":
-            {
-              final Reporting.Result<List<IConceptDescription>> tryConceptDescriptions = parseList(
-                reader,
-                isEmptyProperty,
-                IConceptDescription.class,
-                itemReader -> tryConceptDescriptionFromElement(itemReader));
-
-              if (tryConceptDescriptions.isError()) {
-                tryConceptDescriptions.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "conceptDescriptions"));
-                return tryConceptDescriptions.castTo(Environment.class);
+            case "conceptDescriptions": {
+              final Reporting.Result<List<IConceptDescription>> value =
+                readListOf_IConceptDescription(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theConceptDescriptions = value.getResult();
               }
-
-              theConceptDescriptions = tryConceptDescriptions.getResult();
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class Environment, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("Environment", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "Environment",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(Environment.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
@@ -10518,41 +6101,34 @@ public class Xmlization {
     /**
      * Deserialize an instance of class Environment from an XML element.
      */
-    private static Reporting.Result<? extends Environment> tryEnvironmentFromElement(
+    private static Reporting.Result<? extends Environment> readEnvironmentFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        Environment.class,
-        (elementName, isEmptyElement) -> {
-          if (!"environment".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class Environment " +
-              "with element name environment, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryEnvironmentFromSequence(reader, isEmptyElement);
-        });
+        "environment",
+        _DeserializeImplementation::readEnvironmentFromSequence);
     }
 
     /**
      * Deserialize an instance of IDataSpecificationContent from an XML element.
      */
-    private static Reporting.Result<? extends IDataSpecificationContent> tryIDataSpecificationContentFromElement(
+    private static Reporting.Result<? extends IDataSpecificationContent> readIDataSpecificationContentFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
-        reader,
-        IDataSpecificationContent.class,
-        (elementName, isEmptyElement) -> {
-          switch (elementName) {
-            case "dataSpecificationIec61360":
-              return tryDataSpecificationIec61360FromSequence(reader, isEmptyElement);
-            default:
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected element with the name " + elementName);
-              return Reporting.Result.failure(error);
-          }
-        });
+      // NOTE (mristin):
+      // We only peek the name, so that the whole element can be handed on to
+      // the reader which we select below.
+      final Reporting.Result<String> tryElementName = peekElementName(reader);
+      if (tryElementName.isError()) {
+        return Reporting.Result.failure(tryElementName.getError());
+      }
+
+      switch (tryElementName.getResult()) {
+        case "dataSpecificationIec61360":
+          return readDataSpecificationIec61360FromElement(reader);
+        default:
+          return Reporting.Result.failure(new Reporting.Error(
+            "Unexpected element with the name " + tryElementName.getResult()));
+      }
     }
 
     /**
@@ -10562,147 +6138,72 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<EmbeddedDataSpecification> tryEmbeddedDataSpecificationFromSequence(
+    private static Reporting.Result<EmbeddedDataSpecification> readEmbeddedDataSpecificationFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       IReference theDataSpecification = null;
       IDataSpecificationContent theDataSpecificationContent = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class EmbeddedDataSpecification, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class EmbeddedDataSpecification, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(EmbeddedDataSpecification.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "dataSpecification":
-            {
-              Reporting.Result<Reference> tryDataSpecification = tryReferenceFromSequence(
-                reader, isEmptyProperty);
+          Reporting.Error valueError = null;
 
-              if (tryDataSpecification.isError()) {
-                tryDataSpecification.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "dataSpecification"));
-                return tryDataSpecification.castTo(EmbeddedDataSpecification.class);
+          switch (elementName) {
+            case "dataSpecification": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDataSpecification = value.getResult();
               }
-
-              theDataSpecification = tryDataSpecification.getResult();
               break;
             }
-            case "dataSpecificationContent":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected an XML element within the element " + tryElementName.getResult() + " representing " +
-                  "the property dataSpecificationContent of an instance of class EmbeddedDataSpecification, " +
-                  "but encountered a self-closing element.");
-                return Reporting.Result.failure(error);
+            case "dataSpecificationContent": {
+              final Reporting.Result<? extends IDataSpecificationContent> value =
+                readNestedElement(
+                  reader,
+                  isEmptyProperty,
+                  _DeserializeImplementation::readIDataSpecificationContentFromElement);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDataSpecificationContent = value.getResult();
               }
-
-              // We need to skip the whitespace here in order to be able to look ahead
-              // the discriminator element shortly.
-              skipWhitespaceAndComments(reader);
-
-              if (currentEvent(reader).isEndDocument()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected an XML element within the element " + tryElementName.getResult() + " representing " +
-                  "the property dataSpecificationContent of an instance of class EmbeddedDataSpecification, " +
-                  "but reached the end-of-file");
-                return Reporting.Result.failure(error);
-              }
-
-              // Try to look ahead the discriminator name;
-              // we need this name only for the error reporting below.
-              // IDataSpecificationContentFromElement will perform more sophisticated
-              // checks.
-              String discriminatorElementName = null;
-              if (currentEvent(reader).isStartElement()) {
-                Reporting.Result<String> tryDiscriminatorElementName = tryElementName(reader);
-                assert(!tryDiscriminatorElementName.isError());
-                discriminatorElementName = tryDiscriminatorElementName.getResult();
-              }
-
-              Reporting.Result<? extends IDataSpecificationContent> tryDataSpecificationContent = tryIDataSpecificationContentFromElement(reader);
-
-              if (tryDataSpecificationContent.isError()) {
-                if (discriminatorElementName != null) {
-                  tryDataSpecificationContent.getError().
-                    prependSegment(
-                      new Reporting.NameSegment(
-                        discriminatorElementName));
-                }
-
-                tryDataSpecificationContent.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "dataSpecificationContent"));
-                return tryDataSpecificationContent.castTo(EmbeddedDataSpecification.class);
-              }
-
-              theDataSpecificationContent = tryDataSpecificationContent.getResult();
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class EmbeddedDataSpecification, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("EmbeddedDataSpecification", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "EmbeddedDataSpecification",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(EmbeddedDataSpecification.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theDataSpecification == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property dataSpecification has not been given " +
-          "in the XML representation of an instance of class EmbeddedDataSpecification");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("dataSpecification", "EmbeddedDataSpecification");
       }
 
       if (theDataSpecificationContent == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property dataSpecificationContent has not been given " +
-          "in the XML representation of an instance of class EmbeddedDataSpecification");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("dataSpecificationContent", "EmbeddedDataSpecification");
       }
 
       return Reporting.Result.success(new EmbeddedDataSpecification(
@@ -10713,21 +6214,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class EmbeddedDataSpecification from an XML element.
      */
-    private static Reporting.Result<? extends EmbeddedDataSpecification> tryEmbeddedDataSpecificationFromElement(
+    private static Reporting.Result<? extends EmbeddedDataSpecification> readEmbeddedDataSpecificationFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        EmbeddedDataSpecification.class,
-        (elementName, isEmptyElement) -> {
-          if (!"embeddedDataSpecification".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class EmbeddedDataSpecification " +
-              "with element name embeddedDataSpecification, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryEmbeddedDataSpecificationFromSequence(reader, isEmptyElement);
-        });
+        "embeddedDataSpecification",
+        _DeserializeImplementation::readEmbeddedDataSpecificationFromSequence);
     }
 
     /**
@@ -10737,7 +6229,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<LevelType> tryLevelTypeFromSequence(
+    private static Reporting.Result<LevelType> readLevelTypeFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       Boolean theMin = null;
@@ -10746,225 +6238,90 @@ public class Xmlization {
       Boolean theMax = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class LevelType, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class LevelType, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(LevelType.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "min":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property min of an instance of class LevelType " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "min"));
-                return Reporting.Result.failure(error);
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property min of an instance of class LevelType, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
+          Reporting.Error valueError = null;
 
-                try {
-                  theMin = readContentAsBool(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property min of an instance of class LevelType "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "min"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "min": {
+              final Reporting.Result<Boolean> value =
+                readTextAs_bool(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theMin = value.getResult();
               }
               break;
             }
-            case "nom":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property nom of an instance of class LevelType " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "nom"));
-                return Reporting.Result.failure(error);
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property nom of an instance of class LevelType, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theNom = readContentAsBool(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property nom of an instance of class LevelType "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "nom"));
-                  return Reporting.Result.failure(error);
-                }
+            case "nom": {
+              final Reporting.Result<Boolean> value =
+                readTextAs_bool(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theNom = value.getResult();
               }
               break;
             }
-            case "typ":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property typ of an instance of class LevelType " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "typ"));
-                return Reporting.Result.failure(error);
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property typ of an instance of class LevelType, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theTyp = readContentAsBool(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property typ of an instance of class LevelType "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "typ"));
-                  return Reporting.Result.failure(error);
-                }
+            case "typ": {
+              final Reporting.Result<Boolean> value =
+                readTextAs_bool(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theTyp = value.getResult();
               }
               break;
             }
-            case "max":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property max of an instance of class LevelType " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "max"));
-                return Reporting.Result.failure(error);
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property max of an instance of class LevelType, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theMax = readContentAsBool(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property max of an instance of class LevelType "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "max"));
-                  return Reporting.Result.failure(error);
-                }
+            case "max": {
+              final Reporting.Result<Boolean> value =
+                readTextAs_bool(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theMax = value.getResult();
               }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class LevelType, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("LevelType", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "LevelType",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(LevelType.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theMin == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property min has not been given " +
-          "in the XML representation of an instance of class LevelType");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("min", "LevelType");
       }
 
       if (theNom == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property nom has not been given " +
-          "in the XML representation of an instance of class LevelType");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("nom", "LevelType");
       }
 
       if (theTyp == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property typ has not been given " +
-          "in the XML representation of an instance of class LevelType");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("typ", "LevelType");
       }
 
       if (theMax == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property max has not been given " +
-          "in the XML representation of an instance of class LevelType");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("max", "LevelType");
       }
 
       return Reporting.Result.success(new LevelType(
@@ -10977,21 +6334,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class LevelType from an XML element.
      */
-    private static Reporting.Result<? extends LevelType> tryLevelTypeFromElement(
+    private static Reporting.Result<? extends LevelType> readLevelTypeFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        LevelType.class,
-        (elementName, isEmptyElement) -> {
-          if (!"levelType".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class LevelType " +
-              "with element name levelType, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryLevelTypeFromSequence(reader, isEmptyElement);
-        });
+        "levelType",
+        _DeserializeImplementation::readLevelTypeFromSequence);
     }
 
     /**
@@ -11001,122 +6349,69 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<ValueReferencePair> tryValueReferencePairFromSequence(
+    private static Reporting.Result<ValueReferencePair> readValueReferencePairFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       String theValue = null;
       IReference theValueId = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class ValueReferencePair, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class ValueReferencePair, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(ValueReferencePair.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "value":
-            {
-              if (isEmptyProperty) {
-                theValue = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property value of an instance of class ValueReferencePair, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
+          Reporting.Error valueError = null;
 
-                try {
-                  theValue = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property value of an instance of class ValueReferencePair "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "value"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "value": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValue = value.getResult();
               }
               break;
             }
-            case "valueId":
-            {
-              Reporting.Result<Reference> tryValueId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryValueId.isError()) {
-                tryValueId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "valueId"));
-                return tryValueId.castTo(ValueReferencePair.class);
+            case "valueId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValueId = value.getResult();
               }
-
-              theValueId = tryValueId.getResult();
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class ValueReferencePair, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("ValueReferencePair", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "ValueReferencePair",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(ValueReferencePair.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theValue == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property value has not been given " +
-          "in the XML representation of an instance of class ValueReferencePair");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("value", "ValueReferencePair");
       }
 
       if (theValueId == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property valueId has not been given " +
-          "in the XML representation of an instance of class ValueReferencePair");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("valueId", "ValueReferencePair");
       }
 
       return Reporting.Result.success(new ValueReferencePair(
@@ -11127,21 +6422,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class ValueReferencePair from an XML element.
      */
-    private static Reporting.Result<? extends ValueReferencePair> tryValueReferencePairFromElement(
+    private static Reporting.Result<? extends ValueReferencePair> readValueReferencePairFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        ValueReferencePair.class,
-        (elementName, isEmptyElement) -> {
-          if (!"valueReferencePair".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class ValueReferencePair " +
-              "with element name valueReferencePair, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryValueReferencePairFromSequence(reader, isEmptyElement);
-        });
+        "valueReferencePair",
+        _DeserializeImplementation::readValueReferencePairFromSequence);
     }
 
     /**
@@ -11151,89 +6437,54 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<ValueList> tryValueListFromSequence(
+    private static Reporting.Result<ValueList> readValueListFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<IValueReferencePair> theValueReferencePairs = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class ValueList, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class ValueList, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(ValueList.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "valueReferencePairs":
-            {
-              final Reporting.Result<List<IValueReferencePair>> tryValueReferencePairs = parseList(
-                reader,
-                isEmptyProperty,
-                IValueReferencePair.class,
-                itemReader -> tryValueReferencePairFromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryValueReferencePairs.isError()) {
-                tryValueReferencePairs.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "valueReferencePairs"));
-                return tryValueReferencePairs.castTo(ValueList.class);
+          switch (elementName) {
+            case "valueReferencePairs": {
+              final Reporting.Result<List<IValueReferencePair>> value =
+                readListOf_IValueReferencePair(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValueReferencePairs = value.getResult();
               }
-
-              theValueReferencePairs = tryValueReferencePairs.getResult();
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class ValueList, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("ValueList", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "ValueList",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(ValueList.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theValueReferencePairs == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property valueReferencePairs has not been given " +
-          "in the XML representation of an instance of class ValueList");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("valueReferencePairs", "ValueList");
       }
 
       return Reporting.Result.success(new ValueList(
@@ -11243,21 +6494,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class ValueList from an XML element.
      */
-    private static Reporting.Result<? extends ValueList> tryValueListFromElement(
+    private static Reporting.Result<? extends ValueList> readValueListFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        ValueList.class,
-        (elementName, isEmptyElement) -> {
-          if (!"valueList".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class ValueList " +
-              "with element name valueList, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryValueListFromSequence(reader, isEmptyElement);
-        });
+        "valueList",
+        _DeserializeImplementation::readValueListFromSequence);
     }
 
     /**
@@ -11267,134 +6509,69 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<LangStringPreferredNameTypeIec61360> tryLangStringPreferredNameTypeIec61360FromSequence(
+    private static Reporting.Result<LangStringPreferredNameTypeIec61360> readLangStringPreferredNameTypeIec61360FromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       String theLanguage = null;
       String theText = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class LangStringPreferredNameTypeIec61360, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class LangStringPreferredNameTypeIec61360, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(LangStringPreferredNameTypeIec61360.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "language":
-            {
-              if (isEmptyProperty) {
-                theLanguage = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property language of an instance of class LangStringPreferredNameTypeIec61360, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
+          Reporting.Error valueError = null;
 
-                try {
-                  theLanguage = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property language of an instance of class LangStringPreferredNameTypeIec61360 "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "language"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "language": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theLanguage = value.getResult();
               }
               break;
             }
-            case "text":
-            {
-              if (isEmptyProperty) {
-                theText = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property text of an instance of class LangStringPreferredNameTypeIec61360, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theText = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property text of an instance of class LangStringPreferredNameTypeIec61360 "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "text"));
-                  return Reporting.Result.failure(error);
-                }
+            case "text": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theText = value.getResult();
               }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class LangStringPreferredNameTypeIec61360, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("LangStringPreferredNameTypeIec61360", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "LangStringPreferredNameTypeIec61360",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(LangStringPreferredNameTypeIec61360.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theLanguage == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property language has not been given " +
-          "in the XML representation of an instance of class LangStringPreferredNameTypeIec61360");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("language", "LangStringPreferredNameTypeIec61360");
       }
 
       if (theText == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property text has not been given " +
-          "in the XML representation of an instance of class LangStringPreferredNameTypeIec61360");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("text", "LangStringPreferredNameTypeIec61360");
       }
 
       return Reporting.Result.success(new LangStringPreferredNameTypeIec61360(
@@ -11405,21 +6582,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class LangStringPreferredNameTypeIec61360 from an XML element.
      */
-    private static Reporting.Result<? extends LangStringPreferredNameTypeIec61360> tryLangStringPreferredNameTypeIec61360FromElement(
+    private static Reporting.Result<? extends LangStringPreferredNameTypeIec61360> readLangStringPreferredNameTypeIec61360FromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        LangStringPreferredNameTypeIec61360.class,
-        (elementName, isEmptyElement) -> {
-          if (!"langStringPreferredNameTypeIec61360".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class LangStringPreferredNameTypeIec61360 " +
-              "with element name langStringPreferredNameTypeIec61360, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryLangStringPreferredNameTypeIec61360FromSequence(reader, isEmptyElement);
-        });
+        "langStringPreferredNameTypeIec61360",
+        _DeserializeImplementation::readLangStringPreferredNameTypeIec61360FromSequence);
     }
 
     /**
@@ -11429,134 +6597,69 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<LangStringShortNameTypeIec61360> tryLangStringShortNameTypeIec61360FromSequence(
+    private static Reporting.Result<LangStringShortNameTypeIec61360> readLangStringShortNameTypeIec61360FromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       String theLanguage = null;
       String theText = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class LangStringShortNameTypeIec61360, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class LangStringShortNameTypeIec61360, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(LangStringShortNameTypeIec61360.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "language":
-            {
-              if (isEmptyProperty) {
-                theLanguage = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property language of an instance of class LangStringShortNameTypeIec61360, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
+          Reporting.Error valueError = null;
 
-                try {
-                  theLanguage = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property language of an instance of class LangStringShortNameTypeIec61360 "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "language"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "language": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theLanguage = value.getResult();
               }
               break;
             }
-            case "text":
-            {
-              if (isEmptyProperty) {
-                theText = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property text of an instance of class LangStringShortNameTypeIec61360, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theText = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property text of an instance of class LangStringShortNameTypeIec61360 "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "text"));
-                  return Reporting.Result.failure(error);
-                }
+            case "text": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theText = value.getResult();
               }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class LangStringShortNameTypeIec61360, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("LangStringShortNameTypeIec61360", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "LangStringShortNameTypeIec61360",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(LangStringShortNameTypeIec61360.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theLanguage == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property language has not been given " +
-          "in the XML representation of an instance of class LangStringShortNameTypeIec61360");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("language", "LangStringShortNameTypeIec61360");
       }
 
       if (theText == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property text has not been given " +
-          "in the XML representation of an instance of class LangStringShortNameTypeIec61360");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("text", "LangStringShortNameTypeIec61360");
       }
 
       return Reporting.Result.success(new LangStringShortNameTypeIec61360(
@@ -11567,21 +6670,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class LangStringShortNameTypeIec61360 from an XML element.
      */
-    private static Reporting.Result<? extends LangStringShortNameTypeIec61360> tryLangStringShortNameTypeIec61360FromElement(
+    private static Reporting.Result<? extends LangStringShortNameTypeIec61360> readLangStringShortNameTypeIec61360FromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        LangStringShortNameTypeIec61360.class,
-        (elementName, isEmptyElement) -> {
-          if (!"langStringShortNameTypeIec61360".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class LangStringShortNameTypeIec61360 " +
-              "with element name langStringShortNameTypeIec61360, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryLangStringShortNameTypeIec61360FromSequence(reader, isEmptyElement);
-        });
+        "langStringShortNameTypeIec61360",
+        _DeserializeImplementation::readLangStringShortNameTypeIec61360FromSequence);
     }
 
     /**
@@ -11591,134 +6685,69 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<LangStringDefinitionTypeIec61360> tryLangStringDefinitionTypeIec61360FromSequence(
+    private static Reporting.Result<LangStringDefinitionTypeIec61360> readLangStringDefinitionTypeIec61360FromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       String theLanguage = null;
       String theText = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class LangStringDefinitionTypeIec61360, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class LangStringDefinitionTypeIec61360, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(LangStringDefinitionTypeIec61360.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "language":
-            {
-              if (isEmptyProperty) {
-                theLanguage = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property language of an instance of class LangStringDefinitionTypeIec61360, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
+          Reporting.Error valueError = null;
 
-                try {
-                  theLanguage = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property language of an instance of class LangStringDefinitionTypeIec61360 "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "language"));
-                  return Reporting.Result.failure(error);
-                }
+          switch (elementName) {
+            case "language": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theLanguage = value.getResult();
               }
               break;
             }
-            case "text":
-            {
-              if (isEmptyProperty) {
-                theText = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property text of an instance of class LangStringDefinitionTypeIec61360, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theText = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property text of an instance of class LangStringDefinitionTypeIec61360 "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "text"));
-                  return Reporting.Result.failure(error);
-                }
+            case "text": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theText = value.getResult();
               }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class LangStringDefinitionTypeIec61360, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("LangStringDefinitionTypeIec61360", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "LangStringDefinitionTypeIec61360",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(LangStringDefinitionTypeIec61360.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theLanguage == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property language has not been given " +
-          "in the XML representation of an instance of class LangStringDefinitionTypeIec61360");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("language", "LangStringDefinitionTypeIec61360");
       }
 
       if (theText == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property text has not been given " +
-          "in the XML representation of an instance of class LangStringDefinitionTypeIec61360");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("text", "LangStringDefinitionTypeIec61360");
       }
 
       return Reporting.Result.success(new LangStringDefinitionTypeIec61360(
@@ -11729,21 +6758,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class LangStringDefinitionTypeIec61360 from an XML element.
      */
-    private static Reporting.Result<? extends LangStringDefinitionTypeIec61360> tryLangStringDefinitionTypeIec61360FromElement(
+    private static Reporting.Result<? extends LangStringDefinitionTypeIec61360> readLangStringDefinitionTypeIec61360FromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        LangStringDefinitionTypeIec61360.class,
-        (elementName, isEmptyElement) -> {
-          if (!"langStringDefinitionTypeIec61360".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class LangStringDefinitionTypeIec61360 " +
-              "with element name langStringDefinitionTypeIec61360, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryLangStringDefinitionTypeIec61360FromSequence(reader, isEmptyElement);
-        });
+        "langStringDefinitionTypeIec61360",
+        _DeserializeImplementation::readLangStringDefinitionTypeIec61360FromSequence);
     }
 
     /**
@@ -11753,7 +6773,7 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<DataSpecificationIec61360> tryDataSpecificationIec61360FromSequence(
+    private static Reporting.Result<DataSpecificationIec61360> readDataSpecificationIec61360FromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<ILangStringPreferredNameTypeIec61360> thePreferredName = null;
@@ -11770,361 +6790,158 @@ public class Xmlization {
       ILevelType theLevelType = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class DataSpecificationIec61360, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class DataSpecificationIec61360, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(DataSpecificationIec61360.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "preferredName":
-            {
-              final Reporting.Result<List<ILangStringPreferredNameTypeIec61360>> tryPreferredName = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringPreferredNameTypeIec61360.class,
-                itemReader -> tryLangStringPreferredNameTypeIec61360FromElement(itemReader));
+          Reporting.Error valueError = null;
 
-              if (tryPreferredName.isError()) {
-                tryPreferredName.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "preferredName"));
-                return tryPreferredName.castTo(DataSpecificationIec61360.class);
-              }
-
-              thePreferredName = tryPreferredName.getResult();
-              break;
-            }
-            case "shortName":
-            {
-              final Reporting.Result<List<ILangStringShortNameTypeIec61360>> tryShortName = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringShortNameTypeIec61360.class,
-                itemReader -> tryLangStringShortNameTypeIec61360FromElement(itemReader));
-
-              if (tryShortName.isError()) {
-                tryShortName.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "shortName"));
-                return tryShortName.castTo(DataSpecificationIec61360.class);
-              }
-
-              theShortName = tryShortName.getResult();
-              break;
-            }
-            case "unit":
-            {
-              if (isEmptyProperty) {
-                theUnit = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property unit of an instance of class DataSpecificationIec61360, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theUnit = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property unit of an instance of class DataSpecificationIec61360 "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "unit"));
-                  return Reporting.Result.failure(error);
-                }
-              }
-              break;
-            }
-            case "unitId":
-            {
-              Reporting.Result<Reference> tryUnitId = tryReferenceFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryUnitId.isError()) {
-                tryUnitId.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "unitId"));
-                return tryUnitId.castTo(DataSpecificationIec61360.class);
-              }
-
-              theUnitId = tryUnitId.getResult();
-              break;
-            }
-            case "sourceOfDefinition":
-            {
-              if (isEmptyProperty) {
-                theSourceOfDefinition = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property sourceOfDefinition of an instance of class DataSpecificationIec61360, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theSourceOfDefinition = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property sourceOfDefinition of an instance of class DataSpecificationIec61360 "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "sourceOfDefinition"));
-                  return Reporting.Result.failure(error);
-                }
-              }
-              break;
-            }
-            case "symbol":
-            {
-              if (isEmptyProperty) {
-                theSymbol = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property symbol of an instance of class DataSpecificationIec61360, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theSymbol = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property symbol of an instance of class DataSpecificationIec61360 "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "symbol"));
-                  return Reporting.Result.failure(error);
-                }
-              }
-              break;
-            }
-            case "dataType":
-            {
-              if (isEmptyProperty) {
-                final Reporting.Error error = new Reporting.Error(
-                  "The property dataType of an instance of class DataSpecificationIec61360 " +
-                  "can not be de-serialized from a self-closing element " +
-                  "since it needs content");
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "dataType"));
-                return Reporting.Result.failure(error);
-              }
-
-              if (currentEvent(reader).isEndDocument()) {
-                final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing "
-                        + "the property dataType of an instance of class DataSpecificationIec61360, "
-                        + "but reached the end-of-file");
-                return Reporting.Result.failure(error);
-              }
-
-              String textDataType;
-              try {
-                textDataType = readContentAsString(reader);
-              } catch (Exception e) {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property dataType of an instance of class DataSpecificationIec61360"
-                        + " could not be de-serialized: " + e.getMessage());
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "dataType"));
-                return Reporting.Result.failure(error);
-              }
-
-              final Optional<DataTypeIec61360> optionalDataType =
-                Stringification.dataTypeIec61360FromString(
-                  textDataType);
-
-              if (optionalDataType.isPresent()) {
-                theDataType = optionalDataType.get();
+          switch (elementName) {
+            case "preferredName": {
+              final Reporting.Result<List<ILangStringPreferredNameTypeIec61360>> value =
+                readListOf_ILangStringPreferredNameTypeIec61360(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
               } else {
-                final Reporting.Error error = new Reporting.Error(
-                    "The property dataType of an instance of class DataSpecificationIec61360" +
-                        " could not be de-serialized from an unexpected enumeration literal: " +
-                        textDataType);
-                error.prependSegment(
-                    new Reporting.NameSegment(
-                        "dataType"));
-                return Reporting.Result.failure(error);
+                thePreferredName = value.getResult();
               }
               break;
             }
-            case "definition":
-            {
-              final Reporting.Result<List<ILangStringDefinitionTypeIec61360>> tryDefinition = parseList(
-                reader,
-                isEmptyProperty,
-                ILangStringDefinitionTypeIec61360.class,
-                itemReader -> tryLangStringDefinitionTypeIec61360FromElement(itemReader));
-
-              if (tryDefinition.isError()) {
-                tryDefinition.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "definition"));
-                return tryDefinition.castTo(DataSpecificationIec61360.class);
-              }
-
-              theDefinition = tryDefinition.getResult();
-              break;
-            }
-            case "valueFormat":
-            {
-              if (isEmptyProperty) {
-                theValueFormat = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property valueFormat of an instance of class DataSpecificationIec61360, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theValueFormat = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property valueFormat of an instance of class DataSpecificationIec61360 "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "valueFormat"));
-                  return Reporting.Result.failure(error);
-                }
+            case "shortName": {
+              final Reporting.Result<List<ILangStringShortNameTypeIec61360>> value =
+                readListOf_ILangStringShortNameTypeIec61360(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theShortName = value.getResult();
               }
               break;
             }
-            case "valueList":
-            {
-              Reporting.Result<ValueList> tryValueList = tryValueListFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryValueList.isError()) {
-                tryValueList.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "valueList"));
-                return tryValueList.castTo(DataSpecificationIec61360.class);
-              }
-
-              theValueList = tryValueList.getResult();
-              break;
-            }
-            case "value":
-            {
-              if (isEmptyProperty) {
-                theValue = "";
-              }
-              else {
-                if (currentEvent(reader).isEndDocument()) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "Expected an XML content representing " +
-                    "the property value of an instance of class DataSpecificationIec61360, " +
-                    "but reached the end-of-file");
-                  return Reporting.Result.failure(error);
-                }
-
-                try {
-                  theValue = readContentAsString(reader);
-                } catch (Exception e) {
-                  final Reporting.Error error = new Reporting.Error(
-                    "The property value of an instance of class DataSpecificationIec61360 "
-                      + " could not be de-serialized: " + e.getMessage());
-                  error.prependSegment(
-                    new Reporting.NameSegment(
-                      "value"));
-                  return Reporting.Result.failure(error);
-                }
+            case "unit": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theUnit = value.getResult();
               }
               break;
             }
-            case "levelType":
-            {
-              Reporting.Result<LevelType> tryLevelType = tryLevelTypeFromSequence(
-                reader, isEmptyProperty);
-
-              if (tryLevelType.isError()) {
-                tryLevelType.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "levelType"));
-                return tryLevelType.castTo(DataSpecificationIec61360.class);
+            case "unitId": {
+              final Reporting.Result<Reference> value =
+                readReferenceFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theUnitId = value.getResult();
               }
-
-              theLevelType = tryLevelType.getResult();
+              break;
+            }
+            case "sourceOfDefinition": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSourceOfDefinition = value.getResult();
+              }
+              break;
+            }
+            case "symbol": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSymbol = value.getResult();
+              }
+              break;
+            }
+            case "dataType": {
+              final Reporting.Result<DataTypeIec61360> value =
+                readTextAs_DataTypeIec61360(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDataType = value.getResult();
+              }
+              break;
+            }
+            case "definition": {
+              final Reporting.Result<List<ILangStringDefinitionTypeIec61360>> value =
+                readListOf_ILangStringDefinitionTypeIec61360(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theDefinition = value.getResult();
+              }
+              break;
+            }
+            case "valueFormat": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValueFormat = value.getResult();
+              }
+              break;
+            }
+            case "valueList": {
+              final Reporting.Result<ValueList> value =
+                readValueListFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValueList = value.getResult();
+              }
+              break;
+            }
+            case "value": {
+              final Reporting.Result<String> value =
+                readTextAs_string(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theValue = value.getResult();
+              }
+              break;
+            }
+            case "levelType": {
+              final Reporting.Result<LevelType> value =
+                readLevelTypeFromSequence(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theLevelType = value.getResult();
+              }
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class DataSpecificationIec61360, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("DataSpecificationIec61360", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "DataSpecificationIec61360",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(DataSpecificationIec61360.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (thePreferredName == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property preferredName has not been given " +
-          "in the XML representation of an instance of class DataSpecificationIec61360");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("preferredName", "DataSpecificationIec61360");
       }
 
       return Reporting.Result.success(new DataSpecificationIec61360(
@@ -12145,21 +6962,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class DataSpecificationIec61360 from an XML element.
      */
-    private static Reporting.Result<? extends DataSpecificationIec61360> tryDataSpecificationIec61360FromElement(
+    private static Reporting.Result<? extends DataSpecificationIec61360> readDataSpecificationIec61360FromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        DataSpecificationIec61360.class,
-        (elementName, isEmptyElement) -> {
-          if (!"dataSpecificationIec61360".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class DataSpecificationIec61360 " +
-              "with element name dataSpecificationIec61360, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return tryDataSpecificationIec61360FromSequence(reader, isEmptyElement);
-        });
+        "dataSpecificationIec61360",
+        _DeserializeImplementation::readDataSpecificationIec61360FromSequence);
     }
   }
 
@@ -12199,7 +7007,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends IHasSemantics> result =
-        _DeserializeImplementation.tryIHasSemanticsFromElement(
+        _DeserializeImplementation.readIHasSemanticsFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12222,7 +7030,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends Extension> result =
-        _DeserializeImplementation.tryExtensionFromElement(
+        _DeserializeImplementation.readExtensionFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12245,7 +7053,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends IHasExtensions> result =
-        _DeserializeImplementation.tryIHasExtensionsFromElement(
+        _DeserializeImplementation.readIHasExtensionsFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12268,7 +7076,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends IReferable> result =
-        _DeserializeImplementation.tryIReferableFromElement(
+        _DeserializeImplementation.readIReferableFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12291,7 +7099,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends IIdentifiable> result =
-        _DeserializeImplementation.tryIIdentifiableFromElement(
+        _DeserializeImplementation.readIIdentifiableFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12314,7 +7122,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends IHasKind> result =
-        _DeserializeImplementation.tryIHasKindFromElement(
+        _DeserializeImplementation.readIHasKindFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12337,7 +7145,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends IHasDataSpecification> result =
-        _DeserializeImplementation.tryIHasDataSpecificationFromElement(
+        _DeserializeImplementation.readIHasDataSpecificationFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12360,7 +7168,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends AdministrativeInformation> result =
-        _DeserializeImplementation.tryAdministrativeInformationFromElement(
+        _DeserializeImplementation.readAdministrativeInformationFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12383,7 +7191,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends IQualifiable> result =
-        _DeserializeImplementation.tryIQualifiableFromElement(
+        _DeserializeImplementation.readIQualifiableFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12406,7 +7214,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends Qualifier> result =
-        _DeserializeImplementation.tryQualifierFromElement(
+        _DeserializeImplementation.readQualifierFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12429,7 +7237,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends AssetAdministrationShell> result =
-        _DeserializeImplementation.tryAssetAdministrationShellFromElement(
+        _DeserializeImplementation.readAssetAdministrationShellFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12452,7 +7260,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends AssetInformation> result =
-        _DeserializeImplementation.tryAssetInformationFromElement(
+        _DeserializeImplementation.readAssetInformationFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12475,7 +7283,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends Resource> result =
-        _DeserializeImplementation.tryResourceFromElement(
+        _DeserializeImplementation.readResourceFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12498,7 +7306,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends SpecificAssetId> result =
-        _DeserializeImplementation.trySpecificAssetIdFromElement(
+        _DeserializeImplementation.readSpecificAssetIdFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12521,7 +7329,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends Submodel> result =
-        _DeserializeImplementation.trySubmodelFromElement(
+        _DeserializeImplementation.readSubmodelFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12544,7 +7352,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends ISubmodelElement> result =
-        _DeserializeImplementation.tryISubmodelElementFromElement(
+        _DeserializeImplementation.readISubmodelElementFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12567,7 +7375,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends IRelationshipElement> result =
-        _DeserializeImplementation.tryIRelationshipElementFromElement(
+        _DeserializeImplementation.readIRelationshipElementFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12590,7 +7398,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends RelationshipElement> result =
-        _DeserializeImplementation.tryRelationshipElementFromElement(
+        _DeserializeImplementation.readRelationshipElementFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12613,7 +7421,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends SubmodelElementList> result =
-        _DeserializeImplementation.trySubmodelElementListFromElement(
+        _DeserializeImplementation.readSubmodelElementListFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12636,7 +7444,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends SubmodelElementCollection> result =
-        _DeserializeImplementation.trySubmodelElementCollectionFromElement(
+        _DeserializeImplementation.readSubmodelElementCollectionFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12659,7 +7467,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends IDataElement> result =
-        _DeserializeImplementation.tryIDataElementFromElement(
+        _DeserializeImplementation.readIDataElementFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12682,7 +7490,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends Property> result =
-        _DeserializeImplementation.tryPropertyFromElement(
+        _DeserializeImplementation.readPropertyFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12705,7 +7513,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends MultiLanguageProperty> result =
-        _DeserializeImplementation.tryMultiLanguagePropertyFromElement(
+        _DeserializeImplementation.readMultiLanguagePropertyFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12728,7 +7536,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends Range> result =
-        _DeserializeImplementation.tryRangeFromElement(
+        _DeserializeImplementation.readRangeFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12751,7 +7559,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends ReferenceElement> result =
-        _DeserializeImplementation.tryReferenceElementFromElement(
+        _DeserializeImplementation.readReferenceElementFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12774,7 +7582,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends Blob> result =
-        _DeserializeImplementation.tryBlobFromElement(
+        _DeserializeImplementation.readBlobFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12797,7 +7605,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends File> result =
-        _DeserializeImplementation.tryFileFromElement(
+        _DeserializeImplementation.readFileFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12820,7 +7628,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends AnnotatedRelationshipElement> result =
-        _DeserializeImplementation.tryAnnotatedRelationshipElementFromElement(
+        _DeserializeImplementation.readAnnotatedRelationshipElementFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12843,7 +7651,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends Entity> result =
-        _DeserializeImplementation.tryEntityFromElement(
+        _DeserializeImplementation.readEntityFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12866,7 +7674,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends EventPayload> result =
-        _DeserializeImplementation.tryEventPayloadFromElement(
+        _DeserializeImplementation.readEventPayloadFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12889,7 +7697,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends IEventElement> result =
-        _DeserializeImplementation.tryIEventElementFromElement(
+        _DeserializeImplementation.readIEventElementFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12912,7 +7720,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends BasicEventElement> result =
-        _DeserializeImplementation.tryBasicEventElementFromElement(
+        _DeserializeImplementation.readBasicEventElementFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12935,7 +7743,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends Operation> result =
-        _DeserializeImplementation.tryOperationFromElement(
+        _DeserializeImplementation.readOperationFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12958,7 +7766,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends OperationVariable> result =
-        _DeserializeImplementation.tryOperationVariableFromElement(
+        _DeserializeImplementation.readOperationVariableFromElement(
           reader);
 
       return result.onError(error -> {
@@ -12981,7 +7789,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends Capability> result =
-        _DeserializeImplementation.tryCapabilityFromElement(
+        _DeserializeImplementation.readCapabilityFromElement(
           reader);
 
       return result.onError(error -> {
@@ -13004,7 +7812,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends ConceptDescription> result =
-        _DeserializeImplementation.tryConceptDescriptionFromElement(
+        _DeserializeImplementation.readConceptDescriptionFromElement(
           reader);
 
       return result.onError(error -> {
@@ -13027,7 +7835,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends Reference> result =
-        _DeserializeImplementation.tryReferenceFromElement(
+        _DeserializeImplementation.readReferenceFromElement(
           reader);
 
       return result.onError(error -> {
@@ -13050,7 +7858,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends Key> result =
-        _DeserializeImplementation.tryKeyFromElement(
+        _DeserializeImplementation.readKeyFromElement(
           reader);
 
       return result.onError(error -> {
@@ -13073,7 +7881,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends IAbstractLangString> result =
-        _DeserializeImplementation.tryIAbstractLangStringFromElement(
+        _DeserializeImplementation.readIAbstractLangStringFromElement(
           reader);
 
       return result.onError(error -> {
@@ -13096,7 +7904,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends LangStringNameType> result =
-        _DeserializeImplementation.tryLangStringNameTypeFromElement(
+        _DeserializeImplementation.readLangStringNameTypeFromElement(
           reader);
 
       return result.onError(error -> {
@@ -13119,7 +7927,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends LangStringTextType> result =
-        _DeserializeImplementation.tryLangStringTextTypeFromElement(
+        _DeserializeImplementation.readLangStringTextTypeFromElement(
           reader);
 
       return result.onError(error -> {
@@ -13142,7 +7950,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends Environment> result =
-        _DeserializeImplementation.tryEnvironmentFromElement(
+        _DeserializeImplementation.readEnvironmentFromElement(
           reader);
 
       return result.onError(error -> {
@@ -13165,7 +7973,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends IDataSpecificationContent> result =
-        _DeserializeImplementation.tryIDataSpecificationContentFromElement(
+        _DeserializeImplementation.readIDataSpecificationContentFromElement(
           reader);
 
       return result.onError(error -> {
@@ -13188,7 +7996,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends EmbeddedDataSpecification> result =
-        _DeserializeImplementation.tryEmbeddedDataSpecificationFromElement(
+        _DeserializeImplementation.readEmbeddedDataSpecificationFromElement(
           reader);
 
       return result.onError(error -> {
@@ -13211,7 +8019,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends LevelType> result =
-        _DeserializeImplementation.tryLevelTypeFromElement(
+        _DeserializeImplementation.readLevelTypeFromElement(
           reader);
 
       return result.onError(error -> {
@@ -13234,7 +8042,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends ValueReferencePair> result =
-        _DeserializeImplementation.tryValueReferencePairFromElement(
+        _DeserializeImplementation.readValueReferencePairFromElement(
           reader);
 
       return result.onError(error -> {
@@ -13257,7 +8065,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends ValueList> result =
-        _DeserializeImplementation.tryValueListFromElement(
+        _DeserializeImplementation.readValueListFromElement(
           reader);
 
       return result.onError(error -> {
@@ -13280,7 +8088,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends LangStringPreferredNameTypeIec61360> result =
-        _DeserializeImplementation.tryLangStringPreferredNameTypeIec61360FromElement(
+        _DeserializeImplementation.readLangStringPreferredNameTypeIec61360FromElement(
           reader);
 
       return result.onError(error -> {
@@ -13303,7 +8111,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends LangStringShortNameTypeIec61360> result =
-        _DeserializeImplementation.tryLangStringShortNameTypeIec61360FromElement(
+        _DeserializeImplementation.readLangStringShortNameTypeIec61360FromElement(
           reader);
 
       return result.onError(error -> {
@@ -13326,7 +8134,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends LangStringDefinitionTypeIec61360> result =
-        _DeserializeImplementation.tryLangStringDefinitionTypeIec61360FromElement(
+        _DeserializeImplementation.readLangStringDefinitionTypeIec61360FromElement(
           reader);
 
       return result.onError(error -> {
@@ -13349,7 +8157,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends DataSpecificationIec61360> result =
-        _DeserializeImplementation.tryDataSpecificationIec61360FromElement(
+        _DeserializeImplementation.readDataSpecificationIec61360FromElement(
           reader);
 
       return result.onError(error -> {

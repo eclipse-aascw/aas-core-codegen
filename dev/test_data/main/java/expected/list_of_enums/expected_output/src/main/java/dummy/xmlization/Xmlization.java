@@ -12,7 +12,6 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamWriter;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.List;
 import java.util.Optional;
@@ -147,98 +146,6 @@ public class Xmlization {
       return currentEvent(reader).isEndElement();
     }
 
-    private static Reporting.Result<XMLEvent> verifyClosingTagForClass(
-      String className,
-      XMLEventReader reader,
-      Reporting.Result<String> tryElementName) {
-      final XMLEvent currentEvent = currentEvent(reader);
-      if (currentEvent.isEndDocument()) {
-        final Reporting.Error error = new Reporting.Error(
-            "Expected an XML end element to conclude a property of class " + className
-                + " with the element name " + tryElementName.getResult() + ", "
-                + "but got the end-of-file.");
-        return Reporting.Result.failure(error);
-      }
-
-      if (!currentEvent.isEndElement()) {
-        final Reporting.Error error = new Reporting.Error(
-            "Expected an XML end element to conclude a property of class " + className
-                + " with the element name " + tryElementName.getResult() + ", "
-                + "but got the node of type " + getEventTypeAsString(currentEvent)
-                + " with the value " + currentEvent);
-        return Reporting.Result.failure(error);
-      }
-      final Reporting.Result<String> tryEndElementName = tryElementName(reader);
-      if (tryEndElementName.isError()) {
-        return tryEndElementName.castTo(XMLEvent.class);
-      }
-      if (!tryElementName.getResult().equals(tryEndElementName.getResult())) {
-        final Reporting.Error error = new Reporting.Error(
-            "Expected an XML end element to conclude a property of class " + className
-                + " with the element name " + tryElementName.getResult() + ", "
-                + "but got the end element with the name " + tryEndElementName.getResult());
-        return Reporting.Result.failure(error);
-      }
-      try {
-        return Reporting.Result.success(reader.nextEvent());
-      } catch (XMLStreamException xmlStreamException) {
-        throw new Xmlization.DeserializeException("",
-          "Failed in method verifyClosingTagForClass because of: " +
-          xmlStreamException.getMessage());
-      }
-    }
-
-    /**
-     * Deserialize an instance of {@code T} from an XML element.
-     *
-     * <p>{@code parseAsSequence} is given the element's local name and whether
-     * the element is self-closing, and is expected to consume the properties of
-     * the instance, but not the element's closing tag.
-     */
-    private static <T> Reporting.Result<? extends T> parseInstanceFromElement(
-      XMLEventReader reader,
-      Class<T> type,
-      BiFunction<String, Boolean, Reporting.Result<? extends T>> parseAsSequence) {
-      skipWhitespaceAndComments(reader);
-
-      final XMLEvent currentEvent = currentEvent(reader);
-      if (currentEvent.getEventType() == XMLStreamConstants.END_DOCUMENT) {
-        return Reporting.Result.failure(new Reporting.Error(
-          "Expected an XML element representing an instance of " + type.getSimpleName() + ", " +
-            "but reached the end-of-file"));
-      }
-
-      if (currentEvent.getEventType() != XMLStreamConstants.START_ELEMENT) {
-        return Reporting.Result.failure(new Reporting.Error(
-          "Expected an XML element representing an instance of " + type.getSimpleName() + ", " +
-            "but got a node of type " + getEventTypeAsString(currentEvent) +
-            " with value " + currentEvent));
-      }
-
-      final Reporting.Result<String> tryElementName = tryElementName(reader);
-      if (tryElementName.isError()) {
-        return Reporting.Result.failure(tryElementName.getError());
-      }
-
-      final String elementName = tryElementName.getResult();
-      final boolean isEmptyElement = isEmptyElement(reader);
-
-      final Reporting.Result<? extends T> result = parseAsSequence.apply(elementName, isEmptyElement);
-      if (result.isError()) {
-        return result;
-      }
-
-      final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-        type.getSimpleName(),
-        reader,
-        tryElementName);
-      if (checkEndElement.isError()) {
-        return Reporting.Result.failure(checkEndElement.getError());
-      }
-
-      return result;
-    }
-
     private static void skipWhitespaceAndComments(XMLEventReader reader) {
       while (whiteSpaceOrComment(reader)) {
         reader.next();
@@ -294,6 +201,136 @@ public class Xmlization {
           : currentEvent.asEndElement().getName().getLocalPart());
     }
 
+    /**
+     * Read the content of an element which has already been opened.
+     *
+     * <p>{@code isEmpty} tells whether that element was self-closing.
+     */
+    @FunctionalInterface
+    private interface ContentReader<T> {
+      Reporting.Result<? extends T> read(XMLEventReader reader, boolean isEmpty);
+    }
+
+    /**
+     * Read a whole element, opening and closing it.
+     */
+    @FunctionalInterface
+    private interface ElementReader<T> {
+      Reporting.Result<? extends T> read(XMLEventReader reader);
+    }
+
+    /**
+     * Convert the text content of an element which has already been opened.
+     */
+    @FunctionalInterface
+    private interface ContentConverter<T> {
+      T convert(XMLEventReader reader) throws XMLStreamException;
+    }
+
+    /**
+     * Look up the name of the element which {@code reader} is positioned at.
+     *
+     * <p>This is the single primitive answering "we are at an element, and this is
+     * its name": {@link #readNamedElement} checks that name against the one its
+     * container supplied, a dispatcher switches on it, and a property loop uses it
+     * to select the property. Nothing is consumed, which is what lets a dispatcher
+     * hand the whole element on to the reader it selected.
+     */
+    private static Reporting.Result<String> peekElementName(XMLEventReader reader) {
+      skipWhitespaceAndComments(reader);
+
+      final XMLEvent currentEvent = currentEvent(reader);
+      if (currentEvent.isEndDocument()) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "Expected an XML element, but reached the end-of-file"));
+      }
+
+      if (!currentEvent.isStartElement()) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "Expected an XML element, but got the node of type " +
+          getEventTypeAsString(currentEvent) + " with the value " + currentEvent));
+      }
+
+      return tryElementName(reader);
+    }
+
+    /**
+     * Consume the end tag concluding the element called {@code elementName}.
+     */
+    private static Reporting.Result<XMLEvent> consumeEndElement(
+      XMLEventReader reader, String elementName) {
+      skipWhitespaceAndComments(reader);
+
+      final XMLEvent currentEvent = currentEvent(reader);
+      if (currentEvent.isEndDocument()) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "Expected an XML end element to conclude the element " + elementName +
+          ", but got the end-of-file"));
+      }
+
+      if (!currentEvent.isEndElement()) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "Expected an XML end element to conclude the element " + elementName +
+          ", but got the node of type " + getEventTypeAsString(currentEvent) +
+          " with the value " + currentEvent));
+      }
+
+      final Reporting.Result<String> tryEndElementName = tryElementName(reader);
+      if (tryEndElementName.isError()) {
+        return tryEndElementName.castTo(XMLEvent.class);
+      }
+
+      if (!elementName.equals(tryEndElementName.getResult())) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "Expected an XML end element to conclude the element " + elementName +
+          ", but got the end element with the name " + tryEndElementName.getResult()));
+      }
+
+      try {
+        return Reporting.Result.success(reader.nextEvent());
+      } catch (XMLStreamException xmlStreamException) {
+        throw new Xmlization.DeserializeException("",
+          "Failed in method consumeEndElement because of: " +
+          xmlStreamException.getMessage());
+      }
+    }
+
+    /**
+     * Read a whole element which is expected to be called {@code name}, and read
+     * its content with {@code readContent}.
+     *
+     * <p>The name is data, not a type: an instance reads the XML name of its own
+     * class, a list item reads {@code "v"} and a tuple item reads {@code "v1"},
+     * {@code "v2"}, ... by position. One framer therefore serves them all.
+     */
+    private static <T> Reporting.Result<? extends T> readNamedElement(
+      XMLEventReader reader, String name, ContentReader<T> readContent) {
+      final Reporting.Result<String> tryElementName = peekElementName(reader);
+      if (tryElementName.isError()) {
+        return Reporting.Result.failure(tryElementName.getError());
+      }
+
+      if (!name.equals(tryElementName.getResult())) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "Expected an XML element " + name + ", but got an XML element " +
+          tryElementName.getResult()));
+      }
+
+      final boolean isEmpty = isEmptyElement(reader);
+
+      final Reporting.Result<? extends T> result = readContent.read(reader, isEmpty);
+      if (result.isError()) {
+        return result;
+      }
+
+      final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, name);
+      if (endResult.isError()) {
+        return Reporting.Result.failure(endResult.getError());
+      }
+
+      return result;
+    }
+
     private static String readContentAsString(XMLEventReader reader) throws XMLStreamException {
       final StringBuilder content = new StringBuilder();
 
@@ -307,342 +344,90 @@ public class Xmlization {
       return content.toString();
     }
 
-    private static Boolean readContentAsBool(XMLEventReader reader) throws XMLStreamException {
-      final StringBuilder content = new StringBuilder();
-
-      while (reader.peek().isCharacters() || reader.peek().getEventType() == XMLStreamConstants.COMMENT) {
-        if (reader.peek().isCharacters()) {
-          content.append(reader.peek().asCharacters().getData());
-        }
-        reader.nextEvent();
-      }
-      if(!("true".equals(content.toString()) || "false".equals(content.toString()))){
-        throw new IllegalStateException("Content cannot be converted to the type Boolean.");
-      }
-      return Boolean.valueOf(content.toString());
-    }
-
-    private static Long readContentAsLong(XMLEventReader reader) throws XMLStreamException {
-      final StringBuilder content = new StringBuilder();
-
-      while (reader.peek().isCharacters() || reader.peek().getEventType() == XMLStreamConstants.COMMENT) {
-        if (reader.peek().isCharacters()) {
-          content.append(reader.peek().asCharacters().getData());
-        }
-        reader.nextEvent();
-      }
-
-      return Long.valueOf(content.toString());
-    }
-
-    private static Double readContentAsDouble(XMLEventReader reader) throws XMLStreamException {
-      final StringBuilder content = new StringBuilder();
-
-      while (reader.peek().isCharacters() || reader.peek().getEventType() == XMLStreamConstants.COMMENT) {
-        if (reader.peek().isCharacters()) {
-          content.append(reader.peek().asCharacters().getData());
-        }
-        reader.nextEvent();
-      }
-
-      return Double.valueOf(content.toString());
-    }
-
     /**
-     * Read the whole content of an element into memory.
-     */
-    private static byte[] readContentAsBase64(
-      XMLEventReader reader) throws XMLStreamException {
-      final StringBuilder content = new StringBuilder();
-      while (reader.peek().isCharacters() || reader.peek().getEventType() == XMLStreamConstants.COMMENT) {
-        if (reader.peek().isCharacters()) {
-          content.append(reader.peek().asCharacters().getData());
-        }
-        reader.nextEvent();
-      }
-
-      String encodedData = content.toString();
-      final byte[] decodedData;
-      Base64.Decoder decoder = Base64.getDecoder();
-
-      try {
-        decodedData = decoder.decode(encodedData);
-      } catch (IllegalArgumentException exception) {
-        throw new XMLStreamException(
-          "Failed to read base64 encoded data: " +
-          exception.getMessage());
-      }
-
-      return decodedData;
-    }
-
-    /**
-     * Consume a starting element of the {@code expectedName} from the reader
-     * and return whether it was a self-closing (empty) element.
-     */
-    private static Reporting.Result<Boolean> tryNamedStartElement(
-      XMLEventReader reader, String expectedName) {
-      if (currentEvent(reader).isEndDocument()) {
-        final Reporting.Error error = new Reporting.Error(
-          "Expected a <" + expectedName + "> element, but got an end-of-file.");
-        return Reporting.Result.failure(error);
-      }
-
-      if (!currentEvent(reader).isStartElement()) {
-        final Reporting.Error error = new Reporting.Error(
-          "Expected a <" + expectedName + "> start element, but got the node "
-            + "of type " + getEventTypeAsString(currentEvent(reader)));
-        return Reporting.Result.failure(error);
-      }
-
-      final Reporting.Result<String> tryElementName = tryElementName(reader);
-      if (tryElementName.isError()) {
-        return tryElementName.castTo(Boolean.class);
-      }
-
-      if (!expectedName.equals(tryElementName.getResult())) {
-        final Reporting.Error error = new Reporting.Error(
-          "Expected a <" + expectedName + "> element, but got an element "
-            + tryElementName.getResult());
-        return Reporting.Result.failure(error);
-      }
-
-      final boolean isEmpty = isEmptyElement(reader);
-      return Reporting.Result.success(isEmpty);
-    }
-
-    /**
-     * Consume a closing element of the {@code expectedName} from the reader.
-     */
-    private static Reporting.Result<XMLEvent> tryNamedEndElement(
-      XMLEventReader reader, String expectedName) {
-      skipWhitespaceAndComments(reader);
-
-      if (currentEvent(reader).isEndDocument()) {
-        final Reporting.Error error = new Reporting.Error(
-          "Expected a closing element for " + expectedName + ", "
-            + "but got an end-of-file.");
-        return Reporting.Result.failure(error);
-      }
-
-      if (!currentEvent(reader).isEndElement()) {
-        final Reporting.Error error = new Reporting.Error(
-          "Expected a closing element for " + expectedName + ", "
-            + "but got the node of type " + getEventTypeAsString(currentEvent(reader)));
-        return Reporting.Result.failure(error);
-      }
-
-      final Reporting.Result<String> tryElementName = tryElementName(reader);
-      if (tryElementName.isError()) {
-        return tryElementName.castTo(XMLEvent.class);
-      }
-
-      if (!expectedName.equals(tryElementName.getResult())) {
-        final Reporting.Error error = new Reporting.Error(
-          "Expected a closing element for " + expectedName + ", "
-            + "but got an end element " + tryElementName.getResult());
-        return Reporting.Result.failure(error);
-      }
-
-      try {
-        return Reporting.Result.success(reader.nextEvent());
-      } catch (XMLStreamException xmlStreamException) {
-        throw new Xmlization.DeserializeException("",
-          "Failed in method tryNamedEndElement because of: " +
-            xmlStreamException.getMessage());
-      }
-    }
-
-    /**
-     * Read the content of a named element and parse it as Boolean.
-     */
-    private static Reporting.Result<Boolean> tryNamedElementAsBoolean(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<Boolean> tryStart = tryNamedStartElement(reader, expectedName);
-      if (tryStart.isError()) {
-        return tryStart.castTo(Boolean.class);
-      }
-
-      if (tryStart.getResult()) {
-        final Reporting.Error error = new Reporting.Error(
-          "Expected an XML content representing Boolean, " +
-          "but got a self-closing <" + expectedName + " /> element");
-        return Reporting.Result.failure(error);
-      }
-
-      final Boolean result;
-      try {
-        result = readContentAsBool(reader);
-      } catch (Exception exception) {
-        final Reporting.Error error = new Reporting.Error(
-          "The content of a <" + expectedName + "> element could not be "
-            + "de-serialized as Boolean: " + exception.getMessage());
-        return Reporting.Result.failure(error);
-      }
-
-      final Reporting.Result<XMLEvent> tryEnd = tryNamedEndElement(reader, expectedName);
-      if (tryEnd.isError()) {
-        return tryEnd.castTo(Boolean.class);
-      }
-
-      return Reporting.Result.success(result);
-    }
-
-    /**
-     * Read the content of a named element and parse it as Long.
-     */
-    private static Reporting.Result<Long> tryNamedElementAsLong(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<Boolean> tryStart = tryNamedStartElement(reader, expectedName);
-      if (tryStart.isError()) {
-        return tryStart.castTo(Long.class);
-      }
-
-      if (tryStart.getResult()) {
-        final Reporting.Error error = new Reporting.Error(
-          "Expected an XML content representing Long, " +
-          "but got a self-closing <" + expectedName + " /> element");
-        return Reporting.Result.failure(error);
-      }
-
-      final Long result;
-      try {
-        result = readContentAsLong(reader);
-      } catch (Exception exception) {
-        final Reporting.Error error = new Reporting.Error(
-          "The content of a <" + expectedName + "> element could not be "
-            + "de-serialized as Long: " + exception.getMessage());
-        return Reporting.Result.failure(error);
-      }
-
-      final Reporting.Result<XMLEvent> tryEnd = tryNamedEndElement(reader, expectedName);
-      if (tryEnd.isError()) {
-        return tryEnd.castTo(Long.class);
-      }
-
-      return Reporting.Result.success(result);
-    }
-
-    /**
-     * Read the content of a named element and parse it as Double.
-     */
-    private static Reporting.Result<Double> tryNamedElementAsDouble(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<Boolean> tryStart = tryNamedStartElement(reader, expectedName);
-      if (tryStart.isError()) {
-        return tryStart.castTo(Double.class);
-      }
-
-      if (tryStart.getResult()) {
-        final Reporting.Error error = new Reporting.Error(
-          "Expected an XML content representing Double, " +
-          "but got a self-closing <" + expectedName + " /> element");
-        return Reporting.Result.failure(error);
-      }
-
-      final Double result;
-      try {
-        result = readContentAsDouble(reader);
-      } catch (Exception exception) {
-        final Reporting.Error error = new Reporting.Error(
-          "The content of a <" + expectedName + "> element could not be "
-            + "de-serialized as Double: " + exception.getMessage());
-        return Reporting.Result.failure(error);
-      }
-
-      final Reporting.Result<XMLEvent> tryEnd = tryNamedEndElement(reader, expectedName);
-      if (tryEnd.isError()) {
-        return tryEnd.castTo(Double.class);
-      }
-
-      return Reporting.Result.success(result);
-    }
-
-    /**
-     * Read the content of a named element and parse it as a string.
-     */
-    private static Reporting.Result<String> tryNamedElementAsString(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<Boolean> tryStart = tryNamedStartElement(reader, expectedName);
-      if (tryStart.isError()) {
-        return tryStart.castTo(String.class);
-      }
-
-      final String result;
-      if (tryStart.getResult()) {
-        result = "";
-      } else {
-        try {
-          result = readContentAsString(reader);
-        } catch (Exception exception) {
-          final Reporting.Error error = new Reporting.Error(
-            "The content of a <" + expectedName + "> element could not be "
-              + "de-serialized as String: " + exception.getMessage());
-          return Reporting.Result.failure(error);
-        }
-      }
-
-      // NOTE (mristin):
-      // A self-closing named element is represented as a pair of start and end
-      // events in StAX, so we need to consume the end element even if the
-      // element was empty.
-      final Reporting.Result<XMLEvent> tryEnd = tryNamedEndElement(reader, expectedName);
-      if (tryEnd.isError()) {
-        return tryEnd.castTo(String.class);
-      }
-
-      return Reporting.Result.success(result);
-    }
-
-    /**
-     * Read a named element as base64-encoded bytes.
-     */
-    private static Reporting.Result<byte[]> tryNamedElementAsBytes(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<Boolean> tryStart = tryNamedStartElement(reader, expectedName);
-      if (tryStart.isError()) {
-        return tryStart.castTo(byte[].class);
-      }
-
-      final byte[] result;
-      if (tryStart.getResult()) {
-        result = new byte[0];
-      } else {
-        try {
-          result = readContentAsBase64(reader);
-        } catch (Exception exception) {
-          final Reporting.Error error = new Reporting.Error(
-            "The content of a <" + expectedName + "> element could not be "
-              + "de-serialized as base64-encoded bytes: " + exception.getMessage());
-          return Reporting.Result.failure(error);
-        }
-      }
-
-      // NOTE (mristin):
-      // A self-closing named element is represented as a pair of start and end
-      // events in StAX, so we need to consume the end element even if the
-      // element was empty.
-      final Reporting.Result<XMLEvent> tryEnd = tryNamedEndElement(reader, expectedName);
-      if (tryEnd.isError()) {
-        return tryEnd.castTo(byte[].class);
-      }
-
-      return Reporting.Result.success(result);
-    }
-
-    /**
-     * Parse a list of items, each de-serialized by {@code parseItem}.
+     * Read the text content of an element and convert it with
+     * {@code convert}.
      *
-     * <p>Every start element is considered to mark the start of an item. Parsing
+     * <p>A self-closing element is an error, since there is no text to convert.
+     */
+    private static <T> Reporting.Result<T> readText(
+      XMLEventReader reader,
+      boolean isEmpty,
+      ContentConverter<T> convert,
+      String typeName) {
+      if (isEmpty) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "Expected an XML content representing " + typeName +
+          ", but encountered a self-closing element"));
+      }
+
+      if (currentEvent(reader).isEndDocument()) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "Expected an XML content representing " + typeName +
+          ", but reached the end-of-file"));
+      }
+
+      try {
+        return Reporting.Result.success(convert.convert(reader));
+      } catch (Exception exception) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "The XML content could not be de-serialized as " + typeName + ": " +
+          exception.getMessage()));
+      }
+    }
+
+    /**
+     * Read the text content of an element and convert it with
+     * {@code convert}, giving {@code whenEmpty} for a self-closing element.
+     */
+    private static <T> Reporting.Result<T> readText(
+      XMLEventReader reader,
+      boolean isEmpty,
+      ContentConverter<T> convert,
+      String typeName,
+      T whenEmpty) {
+      if (isEmpty) {
+        return Reporting.Result.success(whenEmpty);
+      }
+
+      return readText(reader, isEmpty, convert, typeName);
+    }
+
+    /**
+     * Read the text content of an element and parse it as a literal of
+     * the enumeration called {@code enumName}.
+     */
+    private static <T> Reporting.Result<T> readEnum(
+      XMLEventReader reader,
+      boolean isEmpty,
+      Function<String, Optional<T>> parseLiteral,
+      String enumName) {
+      final Reporting.Result<String> tryText = readText(
+        reader, isEmpty, _DeserializeImplementation::readContentAsString, enumName);
+      if (tryText.isError()) {
+        return Reporting.Result.failure(tryText.getError());
+      }
+
+      final Optional<T> literal = parseLiteral.apply(tryText.getResult());
+      if (!literal.isPresent()) {
+        return Reporting.Result.failure(new Reporting.Error(
+          "The text could not be parsed as a literal of " + enumName + ": " +
+          tryText.getResult()));
+      }
+
+      return Reporting.Result.success(literal.get());
+    }
+
+    /**
+     * Read the items of a list, each with {@code readItem}.
+     *
+     * <p>Every start element is considered to mark the start of an item. Reading
      * stops as soon as a non-start element is encountered.
      */
-    private static <T> Reporting.Result<List<T>> parseList(
-      XMLEventReader reader,
-      boolean isEmptyProperty,
-      Class<T> itemType,
-      Function<XMLEventReader, Reporting.Result<? extends T>> parseItem) {
+    private static <T> Reporting.Result<List<T>> readList(
+      XMLEventReader reader, boolean isEmpty, ElementReader<T> readItem) {
       final List<T> result = new ArrayList<>();
-      if (isEmptyProperty) {
+      if (isEmpty) {
         return Reporting.Result.success(result);
       }
 
@@ -650,14 +435,14 @@ public class Xmlization {
       int index = 0;
       if (!currentEvent(reader).isStartElement()) {
         final Reporting.Error error = new Reporting.Error(
-          "Expected a start element opening an instance of " + itemType.getSimpleName() +
-            ", but got an XML " + getEventTypeAsString(currentEvent(reader)));
+          "Expected a start element opening an item of the list, " +
+          "but got an XML " + getEventTypeAsString(currentEvent(reader)));
         error.prependSegment(new Reporting.IndexSegment(index));
         return Reporting.Result.failure(error);
       }
 
       while (currentEvent(reader).isStartElement()) {
-        final Reporting.Result<? extends T> itemResult = parseItem.apply(reader);
+        final Reporting.Result<? extends T> itemResult = readItem.read(reader);
         if (itemResult.isError()) {
           itemResult.getError()
             .prependSegment(
@@ -674,27 +459,61 @@ public class Xmlization {
     }
 
     /**
-     * Read a named element and parse its content as a literal
-     * of {@link Result}.
+     * Check whether the sequence of the properties has ended.
+     *
+     * <p>Only the end tag of the enclosing element concludes a sequence. Reaching
+     * the end-of-file does not -- that is an error, which
+     * {@link #peekElementName} reports when the caller goes on to read the next
+     * property.
      */
-    private static Reporting.Result<Result> tryNamedElementAsResult(
-      XMLEventReader reader, String expectedName) {
-      final Reporting.Result<String> tryText = tryNamedElementAsString(reader, expectedName);
-      if (tryText.isError()) {
-        return tryText.castTo(Result.class);
-      }
+    private static boolean atEndOfSequence(XMLEventReader reader) {
+      skipWhitespaceAndComments(reader);
+      return currentEvent(reader).isEndElement();
+    }
 
-      final Optional<Result> result = Stringification.resultFromString(
-        tryText.getResult());
+    /**
+     * Report an element which is not a property of the class {@code className}.
+     */
+    private static <T> Reporting.Result<T> unexpectedProperty(
+      String className, String elementName) {
+      return Reporting.Result.failure(new Reporting.Error(
+        "We expected properties of the class " + className + ", " +
+        "but got an unexpected element " +
+        "with the name " + elementName));
+    }
 
-      if (!result.isPresent()) {
-        final Reporting.Error error = new Reporting.Error(
-          "The text could not be parsed as a literal of Result: " +
-          tryText.getResult());
-        return Reporting.Result.failure(error);
-      }
+    /**
+     * Report a required property of the class {@code className} which the
+     * sequence of the properties did not give.
+     */
+    private static <T> Reporting.Result<T> missingRequiredProperty(
+      String propertyName, String className) {
+      return Reporting.Result.failure(new Reporting.Error(
+        "The required property " + propertyName + " has not been given " +
+        "in the XML representation of an instance of class " + className));
+    }
 
-      return Reporting.Result.success(result.get());
+    private static Reporting.Result<Result> readTextAs_Result(
+      XMLEventReader reader, boolean isEmpty) {
+      return readEnum(
+        reader,
+        isEmpty,
+        Stringification::resultFromString,
+        "Result");
+    }
+
+    private static Reporting.Result<List<Result>> readListOf_Result(
+      XMLEventReader reader, boolean isEmpty) {
+      return readList(
+        reader, isEmpty, _DeserializeImplementation::readAtV_Result);
+    }
+
+    private static Reporting.Result<? extends Result> readAtV_Result(
+      XMLEventReader reader) {
+      return readNamedElement(
+        reader,
+        "v",
+        _DeserializeImplementation::readTextAs_Result);
     }
 
     /**
@@ -704,89 +523,54 @@ public class Xmlization {
      * the instance from an empty sequence. That is, the parent element
      * was a self-closing element.
      */
-    private static Reporting.Result<Something> trySomethingFromSequence(
+    private static Reporting.Result<Something> readSomethingFromSequence(
       XMLEventReader reader,
       boolean isEmptySequence) {
       List<Result> theSomeResults = null;
 
       if (!isEmptySequence) {
-        skipWhitespaceAndComments(reader);
-        if (currentEvent(reader).isEndDocument()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected an XML element representing " +
-            "a property of an instance of class Something, " +
-            "but reached the end-of-file");
-          return Reporting.Result.failure(error);
-        }
-        while (true) {
-          skipWhitespaceAndComments(reader);
-
-          if (currentEvent(reader).isEndElement() || currentEvent(reader).isEndDocument()) {
-            break;
-          }
-
-          if (!currentEvent(reader).isStartElement()) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an XML start element representing " +
-              "a property of an instance of class Something, " +
-              "but got the node of type " + getEventTypeAsString(currentEvent(reader)) +
-              " with the value " + currentEvent(reader));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<String> tryElementName = tryElementName(reader);
+        while (!atEndOfSequence(reader)) {
+          final Reporting.Result<String> tryElementName = peekElementName(reader);
           if (tryElementName.isError()) {
-            return tryElementName.castTo(Something.class);
+            return Reporting.Result.failure(tryElementName.getError());
           }
 
-          final boolean isEmptyProperty = isEmptyElement(reader);
           final String elementName = tryElementName.getResult();
+          final boolean isEmptyProperty = isEmptyElement(reader);
 
-          switch (tryElementName.getResult()) {
-            case "someResults":
-            {
-              final Reporting.Result<List<Result>> trySomeResults = parseList(
-                reader,
-                isEmptyProperty,
-                Result.class,
-                itemReader -> tryNamedElementAsResult(itemReader, "v"));
+          Reporting.Error valueError = null;
 
-              if (trySomeResults.isError()) {
-                trySomeResults.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "someResults"));
-                return trySomeResults.castTo(Something.class);
+          switch (elementName) {
+            case "someResults": {
+              final Reporting.Result<List<Result>> value =
+                readListOf_Result(reader, isEmptyProperty);
+              if (value.isError()) {
+                valueError = value.getError();
+              } else {
+                theSomeResults = value.getResult();
               }
-
-              theSomeResults = trySomeResults.getResult();
               break;
             }
             default:
-              final Reporting.Error error = new Reporting.Error(
-                "We expected properties of the class Something, " +
-                "but got an unexpected element " +
-                "with the name " + elementName);
-              return Reporting.Result.failure(error);
+              return unexpectedProperty("Something", elementName);
           }
 
-          skipWhitespaceAndComments(reader);
+          if (valueError != null) {
+            valueError.prependSegment(
+              new Reporting.NameSegment(
+                elementName));
+            return Reporting.Result.failure(valueError);
+          }
 
-
-          final Reporting.Result<XMLEvent> checkEndElement = verifyClosingTagForClass(
-            "Something",
-            reader,
-            tryElementName);
-          if (checkEndElement.isError()) return checkEndElement.castTo(Something.class);
-
+          final Reporting.Result<XMLEvent> endResult = consumeEndElement(reader, elementName);
+          if (endResult.isError()) {
+            return Reporting.Result.failure(endResult.getError());
+          }
         }
       }
 
       if (theSomeResults == null) {
-        final Reporting.Error error = new Reporting.Error(
-          "The required property someResults has not been given " +
-          "in the XML representation of an instance of class Something");
-        return Reporting.Result.failure(error);
+        return missingRequiredProperty("someResults", "Something");
       }
 
       return Reporting.Result.success(new Something(
@@ -796,21 +580,12 @@ public class Xmlization {
     /**
      * Deserialize an instance of class Something from an XML element.
      */
-    private static Reporting.Result<? extends Something> trySomethingFromElement(
+    private static Reporting.Result<? extends Something> readSomethingFromElement(
       XMLEventReader reader) {
-      return parseInstanceFromElement(
+      return readNamedElement(
         reader,
-        Something.class,
-        (elementName, isEmptyElement) -> {
-          if (!"something".equals(elementName)) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected an element representing an instance of class Something " +
-              "with element name something, but got: " + elementName);
-            return Reporting.Result.failure(error);
-          }
-
-          return trySomethingFromSequence(reader, isEmptyElement);
-        });
+        "something",
+        _DeserializeImplementation::readSomethingFromSequence);
     }
   }
 
@@ -850,7 +625,7 @@ public class Xmlization {
       _DeserializeImplementation.skipWhitespaceAndComments(reader);
 
       Reporting.Result<? extends Something> result =
-        _DeserializeImplementation.trySomethingFromElement(
+        _DeserializeImplementation.readSomethingFromElement(
           reader);
 
       return result.onError(error -> {
