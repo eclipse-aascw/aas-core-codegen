@@ -74,6 +74,30 @@ public class Xmlization {
   }
 
   /**
+   * Signal a failure of the serialization, carrying the path to the culprit.
+   *
+   * <p>The path is built as the stack unwinds -- every container prepends
+   * the one segment it knows, the property its name and the list the index
+   * of the item -- which is why this can not be a
+   * {@link SerializeException} already: that one renders its message in
+   * its constructor, so its path has to be complete by then.
+   * {@link Serialize#to} renders and converts.
+   */
+  @SuppressWarnings("serial")
+  private static class _SerializeFailure extends RuntimeException {
+    private final Reporting.Error error;
+
+    _SerializeFailure(Reporting.Error error) {
+      super(error.getCause());
+      this.error = error;
+    }
+
+    Reporting.Error getError() {
+      return error;
+    }
+  }
+
+  /**
    * The XML namespace of the meta-model
    */
   public static final String AAS_NAME_SPACE =
@@ -2044,491 +2068,540 @@ public class Xmlization {
   static class _VisitorWithWriter
     extends AbstractVisitorWithContext<XMLStreamWriter> {
 
-    private boolean topLevel = true;
+    /**
+     * Declare the XML namespace on the element which this visitor writes.
+     *
+     * <p>Only the outermost element carries the declaration. The obvious
+     * alternative -- a flag cleared once the first element has been written --
+     * would be mutable state, and state forces every method of this class to be
+     * an instance method, which in turn makes every method reference to it
+     * capture {@code this} and allocate. Pinning the flag in the constructor
+     * instead costs one visitor per case, allocated once for the whole program,
+     * and lets everything else here be {@code static}.
+     */
+    private final boolean withNamespace;
 
-    @FunctionalInterface
-    private interface ElementContentSerializer<T> {
-      void serialize(T that, XMLStreamWriter writer) throws XMLStreamException;
+    private _VisitorWithWriter(boolean withNamespace) {
+      this.withNamespace = withNamespace;
     }
 
     /**
-     * Write {@code that} as an XML element named {@code name}, delegating
-     * the content in-between the start and the end tag to
-     * {@code serializeContent}.
-     *
-     * <p>This is shared by all the property kinds (primitive, enumeration,
-     * class, interface, list) as they all wrap their content in exactly the
-     * same way.
+     * Write the outermost element, which declares the XML namespace.
      */
-    private <T> void serializeElement(
+    private static final _VisitorWithWriter ROOT =
+      new _VisitorWithWriter(true);
+
+    /**
+     * Write an element nested in another one, which never re-declares the XML
+     * namespace.
+     */
+    private static final _VisitorWithWriter NESTED =
+      new _VisitorWithWriter(false);
+
+    /**
+     * Write {@code that} where {@code writer} already is.
+     *
+     * <p>Every value is written through this one shape, so that the writing
+     * composes: {@link #writeElement} frames it in a start and an end tag, and
+     * a class's own {@code write...AsSequence} already is one.
+     *
+     * <p>There is deliberately no second shape for a whole element, as there is
+     * on the reading side. An element differs from a content only in what it
+     * writes, never in its shape; the reading needs the distinction because
+     * a content reader has to be told whether its element was self-closing, and
+     * a writer has nothing to be told.
+     *
+     * <p>Use sites take a {@code ContentWriter<? super T>} -- Java's spelling
+     * of the contravariance -- so that the single writer of an {@link IClass}
+     * serves wherever the writer of a more specific interface is expected.
+     */
+    @FunctionalInterface
+    private interface ContentWriter<T> {
+      void write(T that, XMLStreamWriter writer) throws XMLStreamException;
+    }
+
+    /**
+     * Write {@code that} as an XML element named {@code name}, its content
+     * written by {@code writeContent}.
+     *
+     * <p>An element is nothing but a start and an end tag around a content, so
+     * there is no writer per property kind: only the content writer differs,
+     * and the type of the value alone decides which one it is.
+     *
+     * <p>{@code withNamespace} declares the XML namespace on the element,
+     * which only the outermost element does.
+     */
+    private static <T> void writeElement(
       String name,
       T that,
       XMLStreamWriter writer,
-      ElementContentSerializer<T> serializeContent) {
+      boolean withNamespace,
+      ContentWriter<? super T> writeContent) {
       try {
         writer.writeStartElement(name);
-        if (topLevel) {
+        if (withNamespace) {
           writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
         }
-        serializeContent.serialize(that, writer);
+        writeContent.write(that, writer);
         writer.writeEndElement();
       } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
+        throw new _SerializeFailure(
+          new Reporting.Error(exception.getMessage()));
       }
     }
 
     /**
-     * Adapt {@code writeItem} to serialize every item of an iterable.
+     * Write {@code that} as an XML element named {@code name} nested in
+     * another element, so that the XML namespace is not re-declared.
      *
-     * <p>This is shared by all the list-typed properties, which only need to
-     * supply how a single item is written.
+     * <p>This is what an item of a list or of a tuple is written with. It
+     * contributes no segment to the error path: its container has already
+     * contributed the item's index, and the index selects this very element
+     * (see {@link #writeListOf} in the generated writers).
      */
-    private <T> ElementContentSerializer<Iterable<T>> serializeItems(
-      ElementContentSerializer<T> writeItem) {
-      return (items, w) -> {
-        for (T item : items) {
-          writeItem.serialize(item, w);
-        }
-      };
+    private static <T> void writeElement(
+      String name,
+      T that,
+      XMLStreamWriter writer,
+      ContentWriter<? super T> writeContent) {
+      writeElement(name, that, writer, false, writeContent);
     }
 
     /**
-     * Adapt {@code writeContent} to serialize a value wrapped in its own
-     * {@code name} element.
+     * Write {@code that} as the XML element of a property called
+     * {@code name}.
      *
-     * <p>This is only needed for a scalar item (a primitive or an enumeration
-     * literal), which is wrapped in a positional {@code v}/{@code v1}/
-     * {@code v2} *etc.* element; a class item is dispatched through its own
-     * natural element tag by {@code this::visit} already, so it needs no
-     * such wrapping.
-     *
-     * <p>{@code name} is a plain runtime string, not a type, so it can not be
-     * pinned via a generic type parameter -- binding it requires an actual
-     * closure, built once here.
+     * <p>This is {@link #writeElement} plus the one thing a property knows
+     * which nothing below it does: its own name. Prepending it here, once,
+     * saves a {@code try} around every one of the property writes.
      */
-    private <T> ElementContentSerializer<T> asNamedElementSerializer(
-      String name, ElementContentSerializer<T> writeContent) {
-      return (that, w) -> serializeElement(name, that, w, writeContent);
+    private static <T> void writeProperty(
+      String name,
+      T that,
+      XMLStreamWriter writer,
+      ContentWriter<? super T> writeContent) {
+      try {
+        writeElement(name, that, writer, false, writeContent);
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.NameSegment(name));
+        throw failure;
+      }
+    }
+
+    /**
+     * Write {@code that} as the XML element of a property called
+     * {@code name} if it has been given, and write nothing at all otherwise.
+     *
+     * <p>The {@link Optional} is taken apart here, once, instead of at every
+     * optional property: asking it and then unwrapping it at the call site
+     * would call the getter twice, and every call allocates an
+     * {@link Optional} of its own.
+     */
+    private static <T> void writeOptionalProperty(
+      String name,
+      Optional<T> that,
+      XMLStreamWriter writer,
+      ContentWriter<? super T> writeContent) {
+      final T value = that.orElse(null);
+      if (value != null) {
+        writeProperty(name, value, writer, writeContent);
+      }
+    }
+
+    /**
+     * Write {@code that} as its own, self-describing XML element.
+     *
+     * <p>Which element that is, is decided by the run-time type of
+     * {@code that}, so this one writer serves every abstract class, every
+     * concrete class with descendants, and the item of a list or of a tuple of
+     * any class at all. The reading, which has to decide what to construct
+     * before it has read anything, needs a dispatcher per interface instead.
+     *
+     * <p>An element written from here is nested in another one by
+     * construction, so it goes through the visitor which does not re-declare
+     * the XML namespace.
+     */
+    private static void writeClass(
+      IClass that,
+      XMLStreamWriter writer) {
+      NESTED.visit(that, writer);
+    }
+
+    /**
+     * Write the underlying instance of {@code that} as its own XML element.
+     *
+     * <p>A named union is not itself an {@link IClass}, so it can not be
+     * written by {@link #writeClass} directly. Dispatching over the common
+     * {@code IUnion<?>} instead of the union's own type means a single writer
+     * for *all* the named unions, not one per union.
+     *
+     * <p>Should a named union ever be allowed to flatten a primitive or an
+     * enumeration alternative, only this body has to change -- every call site
+     * stays the same.
+     */
+    private static void writeUnion(
+      IUnion<?> that,
+      XMLStreamWriter writer) {
+      writeClass(that.getUnderlying(), writer);
     }
 
     /**
      * Write {@code that.toString()} as XML content.
      *
-     * <p>This is shared by every {@code boolean}/{@code long}/{@code double}/
-     * {@code String}-typed property or list item, standing in for the property-
-     * or item-specific {@link ElementContentSerializer}.
+     * <p>This is the {@link ContentWriter} of every {@code boolean}/
+     * {@code long}/{@code double}/{@code String}-typed value, be it
+     * a property, a list item or a tuple item.
      */
-    private <T> void writeStringifiedContent(T that, XMLStreamWriter writer)
-      throws XMLStreamException {
+    private static <T> void writeStringifiedContent(
+      T that,
+      XMLStreamWriter writer) throws XMLStreamException {
       writer.writeCharacters(that.toString());
     }
 
-    /**
-     * Write {@code that} as base64-encoded XML content.
-     *
-     * <p>This is shared by every {@code byte[]}-typed property or list item,
-     * standing in for the property- or item-specific
-     * {@link ElementContentSerializer}.
-     */
-    private void writeByteArrayContent(byte[] that, XMLStreamWriter writer)
-      throws XMLStreamException {
-      writer.writeCharacters(
-        Base64.getEncoder().encodeToString(that));
+    private static void writeListOf_StructuralUnion(
+      List<StructuralUnion> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (StructuralUnion item : that) {
+          writeUnion(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
     }
 
-    /**
-     * Adapt {@code writeItem1}, ..., {@code writeItem3} to serialize a
-     * tuple of 3 item(s), each writing itself (whether wrapped in its own
-     * positional element or dispatched through its own natural element tag, as
-     * decided by the caller -- see {@link #asNamedElementSerializer}).
-     */
-    private <T1, T2, T3> ElementContentSerializer<Tuple3<T1, T2, T3>> serializeTuple3(
-      ElementContentSerializer<T1> writeItem1,
-      ElementContentSerializer<T2> writeItem2,
-      ElementContentSerializer<T3> writeItem3) {
-      return (value, w) -> {
-        writeItem1.serialize(value.item1(), w);
-        writeItem2.serialize(value.item2(), w);
-        writeItem3.serialize(value.item3(), w);
-      };
+    private static void writeListOf_MixedUnion(
+      List<MixedUnion> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (MixedUnion item : that) {
+          writeUnion(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
     }
 
-    private void structuralFirstToSequence(
+    private static void writeListOf_ModelTypedUnion(
+      List<ModelTypedUnion> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (ModelTypedUnion item : that) {
+          writeUnion(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeTupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(
+      Tuple3<StructuralUnion, MixedUnion, ModelTypedUnion> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        writeUnion(that.item1(), writer);
+        index = 1;
+        writeUnion(that.item2(), writer);
+        index = 2;
+        writeUnion(that.item3(), writer);
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeStructuralFirstAsSequence(
       IStructuralFirst that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "uniqueToFirst",
         that.getUniqueToFirst(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitStructuralFirst(
       IStructuralFirst that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "structuralFirst");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.structuralFirstToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "structuralFirst",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeStructuralFirstAsSequence);
     }
 
-    private void structuralSecondToSequence(
+    private static void writeStructuralSecondAsSequence(
       IStructuralSecond that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "uniqueToSecond",
         that.getUniqueToSecond(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitStructuralSecond(
       IStructuralSecond that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "structuralSecond");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.structuralSecondToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "structuralSecond",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeStructuralSecondAsSequence);
     }
 
-    private void mixedAbstractDescendantOneToSequence(
+    private static void writeMixedAbstractDescendantOneAsSequence(
       IMixedAbstractDescendantOne that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "uniqueToAbstractDescendantOne",
         that.getUniqueToAbstractDescendantOne(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitMixedAbstractDescendantOne(
       IMixedAbstractDescendantOne that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "mixedAbstractDescendantOne");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.mixedAbstractDescendantOneToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "mixedAbstractDescendantOne",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeMixedAbstractDescendantOneAsSequence);
     }
 
-    private void mixedAbstractDescendantTwoToSequence(
+    private static void writeMixedAbstractDescendantTwoAsSequence(
       IMixedAbstractDescendantTwo that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "uniqueToAbstractDescendantTwo",
         that.getUniqueToAbstractDescendantTwo(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitMixedAbstractDescendantTwo(
       IMixedAbstractDescendantTwo that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "mixedAbstractDescendantTwo");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.mixedAbstractDescendantTwoToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "mixedAbstractDescendantTwo",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeMixedAbstractDescendantTwoAsSequence);
     }
 
-    private void mixedConcreteWithDescendantsToSequence(
+    private static void writeMixedConcreteWithDescendantsAsSequence(
       IMixedConcreteWithDescendants that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "someBaseProperty",
         that.getSomeBaseProperty(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitMixedConcreteWithDescendants(
       IMixedConcreteWithDescendants that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "mixedConcreteWithDescendants");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.mixedConcreteWithDescendantsToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "mixedConcreteWithDescendants",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeMixedConcreteWithDescendantsAsSequence);
     }
 
-    private void mixedConcreteWithDescendantsChildToSequence(
+    private static void writeMixedConcreteWithDescendantsChildAsSequence(
       IMixedConcreteWithDescendantsChild that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "someBaseProperty",
         that.getSomeBaseProperty(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
 
-      serializeElement(
+      writeProperty(
         "someChildProperty",
         that.getSomeChildProperty(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitMixedConcreteWithDescendantsChild(
       IMixedConcreteWithDescendantsChild that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "mixedConcreteWithDescendantsChild");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.mixedConcreteWithDescendantsChildToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "mixedConcreteWithDescendantsChild",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeMixedConcreteWithDescendantsChildAsSequence);
     }
 
-    private void mixedConcreteLeafToSequence(
+    private static void writeMixedConcreteLeafAsSequence(
       IMixedConcreteLeaf that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "uniqueToConcreteLeaf",
         that.getUniqueToConcreteLeaf(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitMixedConcreteLeaf(
       IMixedConcreteLeaf that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "mixedConcreteLeaf");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.mixedConcreteLeafToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "mixedConcreteLeaf",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeMixedConcreteLeafAsSequence);
     }
 
-    private void modelTypedFirstToSequence(
+    private static void writeModelTypedFirstAsSequence(
       IModelTypedFirst that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "someProperty",
         that.getSomeProperty(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitModelTypedFirst(
       IModelTypedFirst that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "modelTypedFirst");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.modelTypedFirstToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "modelTypedFirst",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeModelTypedFirstAsSequence);
     }
 
-    private void modelTypedSecondToSequence(
+    private static void writeModelTypedSecondAsSequence(
       IModelTypedSecond that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "someProperty",
         that.getSomeProperty(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitModelTypedSecond(
       IModelTypedSecond that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "modelTypedSecond");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.modelTypedSecondToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "modelTypedSecond",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeModelTypedSecondAsSequence);
     }
 
-    private void somethingToSequence(
+    private static void writeSomethingAsSequence(
       ISomething that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "structuralProperty",
         that.getStructuralProperty(),
         writer,
-        this::visit);
+        _VisitorWithWriter::writeUnion);
 
-      serializeElement(
+      writeProperty(
         "mixedProperty",
         that.getMixedProperty(),
         writer,
-        this::visit);
+        _VisitorWithWriter::writeUnion);
 
-      serializeElement(
+      writeProperty(
         "modelTypedProperty",
         that.getModelTypedProperty(),
         writer,
-        this::visit);
+        _VisitorWithWriter::writeUnion);
 
-      serializeElement(
+      writeProperty(
         "listStructuralProperty",
         that.getListStructuralProperty(),
         writer,
-        serializeItems(this::visit));
+        _VisitorWithWriter::writeListOf_StructuralUnion);
 
-      serializeElement(
+      writeProperty(
         "listMixedProperty",
         that.getListMixedProperty(),
         writer,
-        serializeItems(this::visit));
+        _VisitorWithWriter::writeListOf_MixedUnion);
 
-      serializeElement(
+      writeProperty(
         "listModelTypedProperty",
         that.getListModelTypedProperty(),
         writer,
-        serializeItems(this::visit));
+        _VisitorWithWriter::writeListOf_ModelTypedUnion);
 
-      serializeElement(
+      writeProperty(
         "tupleProperty",
         that.getTupleProperty(),
         writer,
-        serializeTuple3(
-          this::visit,
-          this::visit,
-          this::visit));
+        _VisitorWithWriter::writeTupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion);
 
-      if (that.getOptionalStructuralProperty().isPresent()) {
-        serializeElement(
-          "optionalStructuralProperty",
-          that.getOptionalStructuralProperty().get(),
-          writer,
-          this::visit);
-      }
+      writeOptionalProperty(
+        "optionalStructuralProperty",
+        that.getOptionalStructuralProperty(),
+        writer,
+        _VisitorWithWriter::writeUnion);
 
-      if (that.getOptionalMixedProperty().isPresent()) {
-        serializeElement(
-          "optionalMixedProperty",
-          that.getOptionalMixedProperty().get(),
-          writer,
-          this::visit);
-      }
+      writeOptionalProperty(
+        "optionalMixedProperty",
+        that.getOptionalMixedProperty(),
+        writer,
+        _VisitorWithWriter::writeUnion);
 
-      if (that.getOptionalModelTypedProperty().isPresent()) {
-        serializeElement(
-          "optionalModelTypedProperty",
-          that.getOptionalModelTypedProperty().get(),
-          writer,
-          this::visit);
-      }
+      writeOptionalProperty(
+        "optionalModelTypedProperty",
+        that.getOptionalModelTypedProperty(),
+        writer,
+        _VisitorWithWriter::writeUnion);
     }
 
     @Override
     public void visitSomething(
       ISomething that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "something");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.somethingToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
-    }
-
-    private void visit(
-      IUnion<?> that,
-      XMLStreamWriter writer) {
-      this.visit(
-        that.getUnderlying(),
-        writer);
+      writeElement(
+        "something",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeSomethingAsSequence);
     }
   }
 
@@ -2553,13 +2626,42 @@ public class Xmlization {
   {
     /**
      * Serialize an instance of the meta-model to XML.
+     *
+     * <p>{@code writer} is flushed exactly once, here at the end. Nothing is
+     * flushed in-between, which is what lets {@link XMLStreamWriter} buffer,
+     * and the single flush at the end is what lets a failure of the underlying
+     * stream be reported as a {@link SerializeException} from this method --
+     * were it left to the caller, the failure would surface at their own flush,
+     * after the serialization has long returned.
+     *
+     * <p>The path of a {@link SerializeException} is rendered as a relative
+     * XPath, the same spelling the de-serialization reports, and names
+     * the properties and the list indices leading to the culprit --
+     * {@code submodelElements/*[0]/value}. Two things it deliberately does not
+     * name: the outermost element, since this method takes any
+     * {@link IClass} and the name would say nothing the caller does not
+     * already know; and the discriminator element of a polymorphic property,
+     * which the de-serialization does prepend. The de-serialization is pointing
+     * into a document it is reading, where that element is a real extra level;
+     * this is pointing into the instance the caller handed over, where it is
+     * not -- {@code value/idShort} here is exactly
+     * {@code getValue().getIdShort()}.
      */
     public static void to(
       IClass that,
       XMLStreamWriter writer) throws SerializeException {
-      _VisitorWithWriter visitor = new _VisitorWithWriter();
-      visitor.visit(
-        that, writer);
+      try {
+        _VisitorWithWriter.ROOT.visit(
+          that, writer);
+        writer.flush();
+      } catch (XMLStreamException exception) {
+        throw new SerializeException("", exception.getMessage());
+      } catch (_SerializeFailure failure) {
+        final Reporting.Error error = failure.getError();
+        throw new SerializeException(
+          Reporting.generateRelativeXPath(error.getPathSegments()),
+          error.getCause());
+      }
     }
   }
 }
