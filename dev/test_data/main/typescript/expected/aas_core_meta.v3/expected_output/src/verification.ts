@@ -1614,44 +1614,47 @@ export function isXsUnsignedByte(value: string): boolean {
 }
 
 
-const DATA_TYPE_DEF_XSD_TO_VALUE_CONSISTENCY =
-  new Map<AasTypes.DataTypeDefXsd, (string) => boolean>(
-  [
-    [AasTypes.DataTypeDefXsd.AnyUri, matchesXsAnyUri],
-    [AasTypes.DataTypeDefXsd.Base64Binary, matchesXsBase64Binary],
-    [AasTypes.DataTypeDefXsd.Boolean, matchesXsBoolean],
-    [AasTypes.DataTypeDefXsd.Byte, isXsByte],
-    [AasTypes.DataTypeDefXsd.Date, isXsDate],
-    [AasTypes.DataTypeDefXsd.DateTime, isXsDateTime],
-    [AasTypes.DataTypeDefXsd.Decimal, matchesXsDecimal],
-    [AasTypes.DataTypeDefXsd.Double, isXsDouble],
-    [AasTypes.DataTypeDefXsd.Duration, matchesXsDuration],
-    [AasTypes.DataTypeDefXsd.Float, isXsFloat],
-    [AasTypes.DataTypeDefXsd.GDay, matchesXsGDay],
-    [AasTypes.DataTypeDefXsd.GMonth, matchesXsGMonth],
-    [AasTypes.DataTypeDefXsd.GMonthDay, isXsGMonthDay],
-    [AasTypes.DataTypeDefXsd.GYear, matchesXsGYear],
-    [AasTypes.DataTypeDefXsd.GYearMonth, matchesXsGYearMonth],
-    [AasTypes.DataTypeDefXsd.HexBinary, matchesXsHexBinary],
-    [AasTypes.DataTypeDefXsd.Int, isXsInt],
-    [AasTypes.DataTypeDefXsd.Integer, matchesXsInteger],
-    [AasTypes.DataTypeDefXsd.Long, isXsLong],
-    [AasTypes.DataTypeDefXsd.NegativeInteger, matchesXsNegativeInteger],
-    [AasTypes.DataTypeDefXsd.NonNegativeInteger, matchesXsNonNegativeInteger],
-    [AasTypes.DataTypeDefXsd.NonPositiveInteger, matchesXsNonPositiveInteger],
-    [AasTypes.DataTypeDefXsd.PositiveInteger, matchesXsPositiveInteger],
-    [AasTypes.DataTypeDefXsd.Short, isXsShort],
-    [AasTypes.DataTypeDefXsd.String, matchesXsString],
-    [AasTypes.DataTypeDefXsd.Time, matchesXsTime],
-    [AasTypes.DataTypeDefXsd.UnsignedByte, isXsUnsignedByte],
-    [AasTypes.DataTypeDefXsd.UnsignedInt, isXsUnsignedInt],
-    [AasTypes.DataTypeDefXsd.UnsignedLong, isXsUnsignedLong],
-    [AasTypes.DataTypeDefXsd.UnsignedShort, isXsUnsignedShort],
-  ]);
+// NOTE (mristin):
+// The literals of AasTypes.DataTypeDefXsd are consecutive integers starting
+// at 0, so we index into an array instead of looking the check up in a map.
+const DATA_TYPE_DEF_XSD_TO_VALUE_CONSISTENCY: ReadonlyArray<
+  (value: string) => boolean
+> = [
+  matchesXsAnyUri, // AnyUri
+  matchesXsBase64Binary, // Base64Binary
+  matchesXsBoolean, // Boolean
+  isXsByte, // Byte
+  isXsDate, // Date
+  isXsDateTime, // DateTime
+  matchesXsDecimal, // Decimal
+  isXsDouble, // Double
+  matchesXsDuration, // Duration
+  isXsFloat, // Float
+  matchesXsGDay, // GDay
+  matchesXsGMonth, // GMonth
+  isXsGMonthDay, // GMonthDay
+  matchesXsGYear, // GYear
+  matchesXsGYearMonth, // GYearMonth
+  matchesXsHexBinary, // HexBinary
+  isXsInt, // Int
+  matchesXsInteger, // Integer
+  isXsLong, // Long
+  matchesXsNegativeInteger, // NegativeInteger
+  matchesXsNonNegativeInteger, // NonNegativeInteger
+  matchesXsNonPositiveInteger, // NonPositiveInteger
+  matchesXsPositiveInteger, // PositiveInteger
+  isXsShort, // Short
+  matchesXsString, // String
+  matchesXsTime, // Time
+  isXsUnsignedByte, // UnsignedByte
+  isXsUnsignedInt, // UnsignedInt
+  isXsUnsignedLong, // UnsignedLong
+  isXsUnsignedShort // UnsignedShort
+];
 
 function assertAllDataTypeDefXsdCovered() {
   for (const literal of AasTypes.overDataTypeDefXsd()) {
-    if (!DATA_TYPE_DEF_XSD_TO_VALUE_CONSISTENCY.has(literal)) {
+    if (DATA_TYPE_DEF_XSD_TO_VALUE_CONSISTENCY[literal] === undefined) {
       throw new Error(
         `The enumeration key ${literal} of AasTypes.DataTypeDefXsd ` +
           "is not covered in DATA_TYPE_DEF_XSD_TO_VALUE_CONSISTENCY"
@@ -1672,7 +1675,7 @@ export function valueConsistentWithXsdType(
   value: string,
   valueType: AasTypes.DataTypeDefXsd
 ): boolean {
-  const verifier = DATA_TYPE_DEF_XSD_TO_VALUE_CONSISTENCY.get(valueType);
+  const verifier = DATA_TYPE_DEF_XSD_TO_VALUE_CONSISTENCY[valueType];
   if (verifier === undefined) {
     throw new Error(
       "The value type is invalid. Expected a literal of DataTypeDefXsd, " +
@@ -1850,82 +1853,34 @@ export function submodelElementsHaveIdenticalSemanticIds(
   return true;
 }
 
-const AAS_SUBMODEL_ELEMENTS_TO_IS =
-  new Map<AasTypes.AasSubmodelElements, (that: AasTypes.Class) => boolean>(
-    [
-      [
-        AasTypes.AasSubmodelElements.AnnotatedRelationshipElement,
-        AasTypes.isAnnotatedRelationshipElement
-      ],
-      [
-        AasTypes.AasSubmodelElements.BasicEventElement,
-        AasTypes.isBasicEventElement
-      ],
-      [
-        AasTypes.AasSubmodelElements.Blob,
-        AasTypes.isBlob
-      ],
-      [
-        AasTypes.AasSubmodelElements.Capability,
-        AasTypes.isCapability
-      ],
-      [
-        AasTypes.AasSubmodelElements.DataElement,
-        AasTypes.isDataElement
-      ],
-      [
-        AasTypes.AasSubmodelElements.Entity,
-        AasTypes.isEntity
-      ],
-      [
-        AasTypes.AasSubmodelElements.EventElement,
-        AasTypes.isEventElement
-      ],
-      [
-        AasTypes.AasSubmodelElements.File,
-        AasTypes.isFile
-      ],
-      [
-        AasTypes.AasSubmodelElements.MultiLanguageProperty,
-        AasTypes.isMultiLanguageProperty
-      ],
-      [
-        AasTypes.AasSubmodelElements.Operation,
-        AasTypes.isOperation
-      ],
-      [
-        AasTypes.AasSubmodelElements.Property,
-        AasTypes.isProperty
-      ],
-      [
-        AasTypes.AasSubmodelElements.Range,
-        AasTypes.isRange
-      ],
-      [
-        AasTypes.AasSubmodelElements.ReferenceElement,
-        AasTypes.isReferenceElement
-      ],
-      [
-        AasTypes.AasSubmodelElements.RelationshipElement,
-        AasTypes.isRelationshipElement
-      ],
-      [
-        AasTypes.AasSubmodelElements.SubmodelElement,
-        AasTypes.isSubmodelElement
-      ],
-      [
-        AasTypes.AasSubmodelElements.SubmodelElementList,
-        AasTypes.isSubmodelElementList
-      ],
-      [
-        AasTypes.AasSubmodelElements.SubmodelElementCollection,
-        AasTypes.isSubmodelElementCollection
-      ]
-    ]);
+// NOTE (mristin):
+// The literals of AasTypes.AasSubmodelElements are consecutive integers starting
+// at 0, so we index into an array instead of looking the check up in a map.
+const AAS_SUBMODEL_ELEMENTS_TO_IS: ReadonlyArray<
+  (that: AasTypes.Class) => boolean
+> = [
+  AasTypes.isAnnotatedRelationshipElement,
+  AasTypes.isBasicEventElement,
+  AasTypes.isBlob,
+  AasTypes.isCapability,
+  AasTypes.isDataElement,
+  AasTypes.isEntity,
+  AasTypes.isEventElement,
+  AasTypes.isFile,
+  AasTypes.isMultiLanguageProperty,
+  AasTypes.isOperation,
+  AasTypes.isProperty,
+  AasTypes.isRange,
+  AasTypes.isReferenceElement,
+  AasTypes.isRelationshipElement,
+  AasTypes.isSubmodelElement,
+  AasTypes.isSubmodelElementList,
+  AasTypes.isSubmodelElementCollection
+];
 
 function assertAllTypesCoveredInAasSubmodelElementsToIs() {
   for (const literal of AasTypes.overAasSubmodelElements()) {
-    if (!AAS_SUBMODEL_ELEMENTS_TO_IS.has(literal)) {
+    if (AAS_SUBMODEL_ELEMENTS_TO_IS[literal] === undefined) {
       throw new Error(
         `The enumeration literal ${literal} of AasTypes.AasSubmodelElements ` +
           "is not covered in AAS_SUBMODEL_ELEMENTS_TO_IS"
@@ -1947,7 +1902,7 @@ export function submodelElementIsOfType(
   element: AasTypes.ISubmodelElement,
   expectedType: AasTypes.AasSubmodelElements
 ): boolean {
-  const isFunc = AAS_SUBMODEL_ELEMENTS_TO_IS.get(expectedType);
+  const isFunc = AAS_SUBMODEL_ELEMENTS_TO_IS[expectedType];
   return isFunc(element);
 }
 
