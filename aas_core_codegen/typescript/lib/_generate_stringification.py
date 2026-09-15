@@ -88,8 +88,8 @@ def _generate_model_type_to_string(
     """Generate the function to serialize a runtime model type to a string."""
     model_type_enum = typescript_naming.enum_name(Identifier("Model_type"))
 
-    keys_values = []  # type: List[Stripped]
-    for concrete_cls in symbol_table.concrete_classes:
+    texts = []  # type: List[Stripped]
+    for i, concrete_cls in enumerate(symbol_table.concrete_classes):
         json_model_type = naming.json_model_type(concrete_cls.name)
         model_type_literal = typescript_naming.enum_literal_name(concrete_cls.name)
 
@@ -105,18 +105,12 @@ def _generate_model_type_to_string(
 
         json_model_type_literal = typescript_common.string_literal(json_model_type)
 
-        keys_values.append(
-            Stripped(
-                f"""\
-[
-{I}AasTypes.{model_type_enum}.{model_type_literal},
-{I}{json_model_type_literal}
-]"""
-            )
-        )
+        comma = "," if i < len(symbol_table.concrete_classes) - 1 else ""
 
-    map_name = typescript_naming.constant_name(Identifier("model_type_to_string"))
-    keys_values_joined = ",\n".join(keys_values)
+        texts.append(Stripped(f"{json_model_type_literal}{comma}"))
+
+    array_name = typescript_naming.constant_name(Identifier("model_type_to_string"))
+    texts_joined = "\n".join(texts)
 
     to_string = typescript_naming.function_name(Identifier("model_type_to_string"))
     must_to_string = typescript_naming.function_name(
@@ -126,9 +120,12 @@ def _generate_model_type_to_string(
     return [
         Stripped(
             f"""\
-const {map_name} = new Map<AasTypes.{model_type_enum}, string>([
-{I}{indent_but_first_line(keys_values_joined, I)}
-]);"""
+// NOTE (mristin):
+// The literals of {model_type_enum} are consecutive integers starting at 0,
+// so we index into an array instead of looking the text up in a map.
+const {array_name}: readonly string[] = [
+{I}{indent_but_first_line(texts_joined, I)}
+];"""
         ),
         Stripped(
             f"""\
@@ -142,7 +139,7 @@ const {map_name} = new Map<AasTypes.{model_type_enum}, string>([
 export function {to_string}(
 {I}value: AasTypes.{model_type_enum}
 ): string | null {{
-{I}const result = {map_name}.get(value);
+{I}const result = {array_name}[value];
 {I}return result !== undefined ? result : null;
 }}"""
         ),
@@ -160,7 +157,7 @@ export function {to_string}(
 export function {must_to_string}(
 {I}value: AasTypes.{model_type_enum}
 ): string {{
-{I}const result = {map_name}.get(value);
+{I}const result = {array_name}[value];
 {I}if (result === undefined) {{
 {II}throw new Error(
 {III}`Invalid literal of {model_type_enum}: ${{value}}`
@@ -234,34 +231,48 @@ export function {from_str_name}(
 
 
 def _generate_enum_to_string(enumeration: intermediate.Enumeration) -> Stripped:
-    """Generate TypeScript code for de/serialization of enumerations."""
+    """Generate the functions for serializing an enumeration literal to a string."""
     blocks = []  # type: List[Stripped]
 
     name = typescript_naming.enum_name(enumeration.name)
 
-    # region To-string-map
+    # region To-string-array
 
     items = []  # type: List[str]
-    for literal in enumeration.literals:
+    for i, literal in enumerate(enumeration.literals):
         literal_name = typescript_naming.enum_literal_name(literal.name)
         literal_value = typescript_common.string_literal(literal.value)
 
-        items.append(f"[AasTypes.{name}.{literal_name}, {literal_value}]")
+        comma = "," if i < len(enumeration.literals) - 1 else ""
 
-    to_str_map_name = typescript_naming.constant_name(
+        # NOTE (mristin):
+        # We spell out the name of the literal only where the text does not already
+        # give it away, so that the reader can check that the array and
+        # the enumeration line up.
+        comment = f" // {literal_name}" if literal.value != literal_name else ""
+
+        items.append(f"{literal_value}{comma}{comment}")
+
+    to_str_array_name = typescript_naming.constant_name(
         Identifier(f"{enumeration.name}_to_string")
     )
 
-    items_joined = ",\n".join(items)
+    if len(items) == 0:
+        blocks.append(Stripped(f"const {to_str_array_name}: readonly string[] = [];"))
+    else:
+        items_joined = "\n".join(items)
 
-    blocks.append(
-        Stripped(
-            f"""\
-const {to_str_map_name} = new Map<AasTypes.{name}, string>([
+        blocks.append(
+            Stripped(
+                f"""\
+// NOTE (mristin):
+// The literals of {name} are consecutive integers starting at 0,
+// so we index into an array instead of looking the text up in a map.
+const {to_str_array_name}: readonly string[] = [
 {I}{indent_but_first_line(items_joined, I)}
-]);"""
+];"""
+            )
         )
-    )
 
     # endregion
 
@@ -283,7 +294,7 @@ const {to_str_map_name} = new Map<AasTypes.{name}, string>([
 export function {to_str_name}(
 {I}value: AasTypes.{name}
 ): string | null {{
-{I}const result = {to_str_map_name}.get(value);
+{I}const result = {to_str_array_name}[value];
 {I}return result !== undefined ? result : null;
 }}"""
         )
@@ -308,7 +319,7 @@ export function {to_str_name}(
 export function {must_to_str_name}(
 {I}value: AasTypes.{name}
 ): string {{
-{I}const result = {to_str_map_name}.get(value);
+{I}const result = {to_str_array_name}[value];
 {I}if (result === undefined) {{
 {II}throw new Error(
 {III}`Invalid literal of {name}: ${{value}}`

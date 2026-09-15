@@ -27,12 +27,12 @@ export function modelTypeFromString(
   return result !== undefined ? result : null;
 }
 
-const MODEL_TYPE_TO_STRING = new Map<AasTypes.ModelType, string>([
-  [
-    AasTypes.ModelType.Something,
-    "Something"
-  ]
-]);
+// NOTE (mristin):
+// The literals of ModelType are consecutive integers starting at 0,
+// so we index into an array instead of looking the text up in a map.
+const MODEL_TYPE_TO_STRING: readonly string[] = [
+  "Something"
+];
 
 /**
  * Translate {@link types!ModelType} to a string.
@@ -44,7 +44,7 @@ const MODEL_TYPE_TO_STRING = new Map<AasTypes.ModelType, string>([
 export function modelTypeToString(
   value: AasTypes.ModelType
 ): string | null {
-  const result = MODEL_TYPE_TO_STRING.get(value);
+  const result = MODEL_TYPE_TO_STRING[value];
   return result !== undefined ? result : null;
 }
 
@@ -60,7 +60,7 @@ export function modelTypeToString(
 export function mustModelTypeToString(
   value: AasTypes.ModelType
 ): string {
-  const result = MODEL_TYPE_TO_STRING.get(value);
+  const result = MODEL_TYPE_TO_STRING[value];
   if (result === undefined) {
     throw new Error(
       `Invalid literal of ModelType: ${value}`
@@ -87,10 +87,13 @@ export function resultFromString(
   return result !== undefined ? result : null;
 }
 
-const RESULT_TO_STRING = new Map<AasTypes.Result, string>([
-  [AasTypes.Result.Ok, "ok"],
-  [AasTypes.Result.Fail, "fail"]
-]);
+// NOTE (mristin):
+// The literals of Result are consecutive integers starting at 0,
+// so we index into an array instead of looking the text up in a map.
+const RESULT_TO_STRING: readonly string[] = [
+  "ok", // Ok
+  "fail" // Fail
+];
 
 /**
  * Translate {@link types!Result} to a string.
@@ -101,7 +104,7 @@ const RESULT_TO_STRING = new Map<AasTypes.Result, string>([
 export function resultToString(
   value: AasTypes.Result
 ): string | null {
-  const result = RESULT_TO_STRING.get(value);
+  const result = RESULT_TO_STRING[value];
   return result !== undefined ? result : null;
 }
 
@@ -117,7 +120,7 @@ export function resultToString(
 export function mustResultToString(
   value: AasTypes.Result
 ): string {
-  const result = RESULT_TO_STRING.get(value);
+  const result = RESULT_TO_STRING[value];
   if (result === undefined) {
     throw new Error(
       `Invalid literal of Result: ${value}`
