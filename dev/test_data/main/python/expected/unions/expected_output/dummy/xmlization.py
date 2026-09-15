@@ -76,6 +76,7 @@ import sys
 from typing import (
     Any,
     Callable,
+    Dict,
     Iterator,
     List,
     Mapping,
@@ -315,30 +316,11 @@ def structural_first_from_iterparse(
         Instance of :py:class:`.types.StructuralFirst` read from
         :paramref:`iterator`
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            # fmt: off
-            "Expected the start element for StructuralFirst, "
-            "but got the end-of-input"
-            # fmt: on
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element for StructuralFirst, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    try:
-        return _read_structural_first_as_element(
-            next_element,
-            iterator
-        )
-    except DeserializationException as exception:
-        exception.path._prepend(ElementSegment(next_element))
-        raise exception
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_structural_first_as_element,
+        'StructuralFirst'
+    )
 
 
 def structural_first_from_stream(
@@ -513,30 +495,11 @@ def structural_second_from_iterparse(
         Instance of :py:class:`.types.StructuralSecond` read from
         :paramref:`iterator`
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            # fmt: off
-            "Expected the start element for StructuralSecond, "
-            "but got the end-of-input"
-            # fmt: on
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element for StructuralSecond, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    try:
-        return _read_structural_second_as_element(
-            next_element,
-            iterator
-        )
-    except DeserializationException as exception:
-        exception.path._prepend(ElementSegment(next_element))
-        raise exception
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_structural_second_as_element,
+        'StructuralSecond'
+    )
 
 
 def structural_second_from_stream(
@@ -711,30 +674,11 @@ def mixed_abstract_member_from_iterparse(
         Instance of :py:class:`.types.MixedAbstractMember` read from
         :paramref:`iterator`
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            # fmt: off
-            "Expected the start element for MixedAbstractMember, "
-            "but got the end-of-input"
-            # fmt: on
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element for MixedAbstractMember, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    try:
-        return _read_mixed_abstract_member_as_element(
-            next_element,
-            iterator
-        )
-    except DeserializationException as exception:
-        exception.path._prepend(ElementSegment(next_element))
-        raise exception
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_mixed_abstract_member_as_element,
+        'MixedAbstractMember'
+    )
 
 
 def mixed_abstract_member_from_stream(
@@ -909,30 +853,11 @@ def mixed_abstract_descendant_one_from_iterparse(
         Instance of :py:class:`.types.MixedAbstractDescendantOne` read from
         :paramref:`iterator`
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            # fmt: off
-            "Expected the start element for MixedAbstractDescendantOne, "
-            "but got the end-of-input"
-            # fmt: on
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element for MixedAbstractDescendantOne, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    try:
-        return _read_mixed_abstract_descendant_one_as_element(
-            next_element,
-            iterator
-        )
-    except DeserializationException as exception:
-        exception.path._prepend(ElementSegment(next_element))
-        raise exception
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_mixed_abstract_descendant_one_as_element,
+        'MixedAbstractDescendantOne'
+    )
 
 
 def mixed_abstract_descendant_one_from_stream(
@@ -1107,30 +1032,11 @@ def mixed_abstract_descendant_two_from_iterparse(
         Instance of :py:class:`.types.MixedAbstractDescendantTwo` read from
         :paramref:`iterator`
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            # fmt: off
-            "Expected the start element for MixedAbstractDescendantTwo, "
-            "but got the end-of-input"
-            # fmt: on
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element for MixedAbstractDescendantTwo, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    try:
-        return _read_mixed_abstract_descendant_two_as_element(
-            next_element,
-            iterator
-        )
-    except DeserializationException as exception:
-        exception.path._prepend(ElementSegment(next_element))
-        raise exception
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_mixed_abstract_descendant_two_as_element,
+        'MixedAbstractDescendantTwo'
+    )
 
 
 def mixed_abstract_descendant_two_from_stream(
@@ -1305,30 +1211,11 @@ def mixed_concrete_with_descendants_from_iterparse(
         Instance of :py:class:`.types.MixedConcreteWithDescendants` read from
         :paramref:`iterator`
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            # fmt: off
-            "Expected the start element for MixedConcreteWithDescendants, "
-            "but got the end-of-input"
-            # fmt: on
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element for MixedConcreteWithDescendants, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    try:
-        return _read_mixed_concrete_with_descendants_as_element(
-            next_element,
-            iterator
-        )
-    except DeserializationException as exception:
-        exception.path._prepend(ElementSegment(next_element))
-        raise exception
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_mixed_concrete_with_descendants_as_element,
+        'MixedConcreteWithDescendants'
+    )
 
 
 def mixed_concrete_with_descendants_from_stream(
@@ -1503,30 +1390,11 @@ def mixed_concrete_with_descendants_child_from_iterparse(
         Instance of :py:class:`.types.MixedConcreteWithDescendantsChild` read from
         :paramref:`iterator`
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            # fmt: off
-            "Expected the start element for MixedConcreteWithDescendantsChild, "
-            "but got the end-of-input"
-            # fmt: on
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element for MixedConcreteWithDescendantsChild, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    try:
-        return _read_mixed_concrete_with_descendants_child_as_element(
-            next_element,
-            iterator
-        )
-    except DeserializationException as exception:
-        exception.path._prepend(ElementSegment(next_element))
-        raise exception
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_mixed_concrete_with_descendants_child_as_element,
+        'MixedConcreteWithDescendantsChild'
+    )
 
 
 def mixed_concrete_with_descendants_child_from_stream(
@@ -1701,30 +1569,11 @@ def mixed_concrete_leaf_from_iterparse(
         Instance of :py:class:`.types.MixedConcreteLeaf` read from
         :paramref:`iterator`
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            # fmt: off
-            "Expected the start element for MixedConcreteLeaf, "
-            "but got the end-of-input"
-            # fmt: on
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element for MixedConcreteLeaf, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    try:
-        return _read_mixed_concrete_leaf_as_element(
-            next_element,
-            iterator
-        )
-    except DeserializationException as exception:
-        exception.path._prepend(ElementSegment(next_element))
-        raise exception
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_mixed_concrete_leaf_as_element,
+        'MixedConcreteLeaf'
+    )
 
 
 def mixed_concrete_leaf_from_stream(
@@ -1899,30 +1748,11 @@ def model_typed_first_from_iterparse(
         Instance of :py:class:`.types.ModelTypedFirst` read from
         :paramref:`iterator`
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            # fmt: off
-            "Expected the start element for ModelTypedFirst, "
-            "but got the end-of-input"
-            # fmt: on
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element for ModelTypedFirst, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    try:
-        return _read_model_typed_first_as_element(
-            next_element,
-            iterator
-        )
-    except DeserializationException as exception:
-        exception.path._prepend(ElementSegment(next_element))
-        raise exception
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_model_typed_first_as_element,
+        'ModelTypedFirst'
+    )
 
 
 def model_typed_first_from_stream(
@@ -2097,30 +1927,11 @@ def model_typed_second_from_iterparse(
         Instance of :py:class:`.types.ModelTypedSecond` read from
         :paramref:`iterator`
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            # fmt: off
-            "Expected the start element for ModelTypedSecond, "
-            "but got the end-of-input"
-            # fmt: on
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element for ModelTypedSecond, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    try:
-        return _read_model_typed_second_as_element(
-            next_element,
-            iterator
-        )
-    except DeserializationException as exception:
-        exception.path._prepend(ElementSegment(next_element))
-        raise exception
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_model_typed_second_as_element,
+        'ModelTypedSecond'
+    )
 
 
 def model_typed_second_from_stream(
@@ -2295,30 +2106,11 @@ def something_from_iterparse(
         Instance of :py:class:`.types.Something` read from
         :paramref:`iterator`
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            # fmt: off
-            "Expected the start element for Something, "
-            "but got the end-of-input"
-            # fmt: on
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element for Something, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    try:
-        return _read_something_as_element(
-            next_element,
-            iterator
-        )
-    except DeserializationException as exception:
-        exception.path._prepend(ElementSegment(next_element))
-        raise exception
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_something_as_element,
+        'Something'
+    )
 
 
 def something_from_stream(
@@ -2493,30 +2285,11 @@ def from_iterparse(
     :return:
         Instance of :py:class:`.types.Class` read from the :paramref:`iterator`
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            # fmt: off
-            "Expected the start element of an instance, "
-            "but got the end-of-input"
-            # fmt: on
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element of an instance, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    try:
-        return _read_as_element(
-            next_element,
-            iterator
-        )
-    except DeserializationException as exception:
-        exception.path._prepend(ElementSegment(next_element))
-        raise exception
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_as_element,
+        'an instance'
+    )
 
 
 def from_stream(
@@ -2676,6 +2449,16 @@ def from_str(
 # the *callee*.
 
 
+_ValueT = TypeVar("_ValueT")
+
+#: Read the content of an element which has already been opened, and read
+#: the corresponding end element as well
+_ContentReader = Callable[
+    [Element, Iterator[Tuple[str, Element]]],
+    _ValueT
+]
+
+
 def _parse_element_tag(element: Element) -> str:
     """
     Extract the tag name without the namespace prefix from :paramref:`element`.
@@ -2762,25 +2545,19 @@ def _read_end_element(
     return next_element
 
 
-_ItemT = TypeVar("_ItemT")
-
-
-def _read_v_element(
+def _read_named_element(
     element: Element,
     iterator: Iterator[Tuple[str, Element]],
     expected_tag: str,
-    read_content: Callable[
-        [Element, Iterator[Tuple[str, Element]]],
-        _ItemT
-    ]
-) -> _ItemT:
+    read_content: _ContentReader[_ValueT]
+) -> _ValueT:
     """
     Verify that :paramref:`element` bears the :paramref:`expected_tag`, and
     delegate the reading of its content to :paramref:`read_content`.
 
-    This is used to read a single positional item wrapped in a named element,
-    such as ``<v>`` for a list item, or ``<v1>``, ``<v2>``, *etc.* for
-    a tuple item.
+    This is the only place where an element's tag is checked against the tag which
+    its container prescribes -- the XML name of a class, ``<v>`` for a list item, or
+    ``<v1>``, ``<v2>``, *etc.* for a tuple item.
 
     :param element: look-ahead element
     :param iterator:
@@ -2802,20 +2579,182 @@ def _read_v_element(
     return read_content(element, iterator)
 
 
+def _read_nested_element(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]],
+    read_element: _ContentReader[_ValueT],
+    expected_what: str
+) -> _ValueT:
+    """
+    Read the instance nested in :paramref:`element` as a discriminator element.
+
+    This looks redundant next to reading a list item, and it is not. A property
+    wraps its instance in an element of its own, so the discriminator's name has to
+    be prepended to the error path, which then reads ``value/property/idShort``.
+    A list item is not wrapped -- the item element *is* the indexed child -- so the
+    same prepend would give ``annotations/*[0]/property/idShort``, which walks one
+    level past the element that ``*[0]`` already selects, and resolves to nothing.
+
+    The end element corresponding to :paramref:`element` will be read as well.
+
+    :param element: start element enclosing the discriminator element
+    :param iterator:
+        Input stream of ``(event, element)`` coming from
+        :py:func:`xml.etree.ElementTree.iterparse` with the argument
+        ``events=["start", "end"]``
+    :param read_element: to read the nested element, dispatching on its tag
+    :param expected_what: name of the expected type, for the error messages
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return: parsed instance
+    """
+    next_event_element = next(iterator, None)
+    if next_event_element is None:
+        raise DeserializationException(
+            f"Expected a discriminator start element corresponding "
+            f"to {expected_what}, but got end-of-input"
+        )
+
+    next_event, nested_element = next_event_element
+    if next_event != 'start':
+        raise DeserializationException(
+            f"Expected a discriminator start element corresponding "
+            f"to {expected_what}, "
+            f"but got event {next_event!r} and element {nested_element.tag!r}"
+        )
+
+    try:
+        result = read_element(nested_element, iterator)
+    except DeserializationException as exception:
+        exception.path._prepend(ElementSegment(nested_element))
+        raise
+
+    _read_end_element(element, iterator)
+
+    return result
+
+
+def _read_dispatched(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]],
+    dispatch: Mapping[str, _ContentReader[_ValueT]],
+    expected_what: str
+) -> _ValueT:
+    """
+    Read the instance of :paramref:`element` by dispatching on its own tag.
+
+    An instance element is self-describing: its tag *is* its model type.
+
+    The end element corresponding to :paramref:`element` will be read as well.
+
+    :param element: start element of the instance
+    :param iterator:
+        Input stream of ``(event, element)`` coming from
+        :py:func:`xml.etree.ElementTree.iterparse` with the argument
+        ``events=["start", "end"]``
+    :param dispatch: to read the instance as a sequence, by its model type
+    :param expected_what: what we expected to read, for the error messages
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return: parsed instance
+    """
+    tag_wo_ns = _parse_element_tag(element)
+
+    read_as_sequence = dispatch.get(tag_wo_ns, None)
+    if read_as_sequence is None:
+        raise DeserializationException(
+            f"Expected the element tag to be a valid model type "
+            f"of {expected_what}, "
+            f"but got tag {tag_wo_ns!r}"
+        )
+
+    return read_as_sequence(element, iterator)
+
+
+def _read_properties(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]],
+    readers: Mapping[str, _ContentReader[Any]]
+) -> Mapping[str, Any]:
+    """
+    Read the properties of an instance as the children of :paramref:`element`.
+
+    The end element corresponding to :paramref:`element` will be read as well.
+
+    The property is marked on the error path here, once for all the properties,
+    instead of in every reader: the tag of the child element *is* the XML name of
+    the property which we are reading.
+
+    :param element: start element, parent of the properties
+    :param iterator:
+        Input stream of ``(event, element)`` coming from
+        :py:func:`xml.etree.ElementTree.iterparse` with the argument
+        ``events=["start", "end"]``
+    :param readers: to read the content of a property, by its XML name
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return: parsed values, by the XML name of the property
+    """
+    if element.text is not None and len(element.text.strip()) != 0:
+        raise DeserializationException(
+            f"Expected only XML elements representing the properties "
+            f"and whitespace text, but got text: {element.text!r}"
+        )
+
+    _raise_if_has_tail_or_attrib(element)
+
+    values = dict()  # type: Dict[str, Any]
+
+    while True:
+        # NOTE (mristin):
+        # We pull the next property element here instead of delegating it to
+        # a helper. A call is not free in Python, and this loop runs once for
+        # every property of every instance.
+        next_event_element = next(iterator, None)
+        if next_event_element is None:
+            raise DeserializationException(
+                f"Expected a property element or the end element corresponding "
+                f"to {element.tag}, but got the end-of-input"
+            )
+
+        next_event, prop_element = next_event_element
+        if next_event == 'end' and prop_element.tag == element.tag:
+            # We reached the end element enclosing the properties.
+            break
+
+        if next_event != 'start':
+            raise DeserializationException(
+                f"Expected a start element corresponding to a property, "
+                f"but got event {next_event!r} "
+                f"and element {prop_element.tag!r}"
+            )
+
+        try:
+            tag_wo_ns = _parse_element_tag(prop_element)
+
+            reader = readers.get(tag_wo_ns, None)
+            if reader is None:
+                raise DeserializationException(
+                    f"Expected an element representing a property, "
+                    f"but got an element with unexpected tag: {tag_wo_ns!r}"
+                )
+
+            values[tag_wo_ns] = reader(prop_element, iterator)
+        except DeserializationException as exception:
+            exception.path._prepend(ElementSegment(prop_element))
+            raise
+
+    return values
+
+
 def _read_list_of_items(
     element: Element,
     iterator: Iterator[Tuple[str, Element]],
-    read_item: Callable[
-        [Element, Iterator[Tuple[str, Element]]],
-        _ItemT
-    ]
-) -> List[_ItemT]:
+    read_item: _ContentReader[_ValueT]
+) -> List[_ValueT]:
     """
-    Read a list of items from :paramref:`iterator`.
+    Read the children of :paramref:`element` as a list of items.
 
     :paramref:`read_item` is responsible for verifying the tag of each item
     element itself -- *e.g.*, by wrapping a scalar/enumeration reader with
-    :py:func:`_read_v_element`, or by relying on a class's own dispatch by
+    :py:func:`_read_named_element`, or by relying on a class's own dispatch by
     its natural element tag.
 
     The end element corresponding to :paramref:`element` will be read as well.
@@ -2835,189 +2774,119 @@ def _read_list_of_items(
             f"but got text: {element.text!r}"
         )
 
-    result = []  # type: List[_ItemT]
-    item_i = 0
+    result = []  # type: List[_ValueT]
 
     while True:
+        # NOTE (mristin):
+        # We pull the next item element here instead of delegating it to a helper,
+        # as this loop runs once for every item of every list.
         next_event_element = next(iterator, None)
         if next_event_element is None:
             raise DeserializationException(
-                "Expected one or more items from a list or the end element, "
-                "but got end-of-input"
+                f"Expected an item element or the end element corresponding "
+                f"to {element.tag}, but got the end-of-input"
             )
 
-        next_event, next_element = next_event_element
-        if next_event == 'end' and next_element.tag == element.tag:
-            # We reached the end of the list.
+        next_event, item_element = next_event_element
+        if next_event == 'end' and item_element.tag == element.tag:
+            # We reached the end element enclosing the items.
             break
 
         if next_event != 'start':
             raise DeserializationException(
-                "Expected a start element corresponding to an item, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
+                f"Expected a start element corresponding to an item, "
+                f"but got event {next_event!r} "
+                f"and element {item_element.tag!r}"
             )
 
         try:
-            item = read_item(next_element, iterator)
+            item = read_item(item_element, iterator)
         except DeserializationException as exception:
-            exception.path._prepend(IndexSegment(next_element, item_i))
+            exception.path._prepend(IndexSegment(item_element, len(result)))
             raise
 
         result.append(item)
-        item_i += 1
 
     return result
 
 
-def _read_text_from_element(
+def _read_tuple_item(
     element: Element,
-    iterator: Iterator[Tuple[str, Element]]
-) -> str:
+    iterator: Iterator[Tuple[str, Element]],
+    index: int,
+    read_item: _ContentReader[_ValueT]
+) -> _ValueT:
     """
-    Extract the text from the :paramref:`element`, and read
-    the end element from :paramref:`iterator`.
+    Read the item at :paramref:`index` of the tuple enclosed in :paramref:`element`.
 
-    The :paramref:`element` is expected to contain text. Otherwise,
-    it is considered as unexpected input.
-
-    :param element: start element enclosing the text
+    :param element: start element enclosing the tuple
     :param iterator:
         Input stream of ``(event, element)`` coming from
         :py:func:`xml.etree.ElementTree.iterparse` with the argument
         ``events=["start", "end"]``
+    :param index: index of the item in the tuple
+    :param read_item: to read the item, including its own end element
     :raise: :py:class:`DeserializationException` if unexpected input
+    :return: parsed item
     """
-    _raise_if_has_tail_or_attrib(element)
-
-    text = element.text
-
-    end_element = _read_end_element(
-        element,
-        iterator,
-    )
-
-    if text is None:
-        if end_element.text is None:
-            raise DeserializationException(
-                "Expected an element with text, but got an element with no text."
-            )
-
-        text = end_element.text
-
-    return text
-
-
-_XS_BOOLEAN_LITERAL_SET = {
-    "1",
-    "true",
-    "0",
-    "false",
-}
-
-
-def _read_bool_from_element_text(
-    element: Element,
-    iterator: Iterator[Tuple[str, Element]]
-) -> bool:
-    """
-    Parse the text of :paramref:`element` as a boolean, and
-    read the corresponding end element from :paramref:`iterator`.
-
-    :param element: start element
-    :param iterator:
-        Input stream of ``(event, element)`` coming from
-        :py:func:`xml.etree.ElementTree.iterparse` with the argument
-        ``events=["start", "end"]``
-    :raise: :py:class:`DeserializationException` if unexpected input
-    :return: parsed value
-    """
-    text = _read_text_from_element(
-        element,
-        iterator
-    )
-
-    if text not in _XS_BOOLEAN_LITERAL_SET:
+    next_event_element = next(iterator, None)
+    if next_event_element is None:
         raise DeserializationException(
-            f"Expected a boolean, "
-            f"but got an element with text: {text!r}"
+            f"Expected the item {index} of the tuple, "
+            f"but got end-of-input"
         )
 
-    return text in ('1', 'true')
-
-
-def _read_int_from_element_text(
-    element: Element,
-    iterator: Iterator[Tuple[str, Element]]
-) -> int:
-    """
-    Parse the text of :paramref:`element` as an integer, and
-    read the corresponding end element from :paramref:`iterator`.
-
-    :param element: start element
-    :param iterator:
-        Input stream of ``(event, element)`` coming from
-        :py:func:`xml.etree.ElementTree.iterparse` with the argument
-        ``events=["start", "end"]``
-    :raise: :py:class:`DeserializationException` if unexpected input
-    :return: parsed value
-    """
-    text = _read_text_from_element(
-        element,
-        iterator
-    )
+    next_event, item_element = next_event_element
+    if next_event != 'start':
+        raise DeserializationException(
+            f"Expected a start element corresponding to the item {index} "
+            f"of the tuple, but got event {next_event!r} "
+            f"and element {item_element.tag!r}"
+        )
 
     try:
-        value = int(text)
-    except ValueError:
-        # pylint: disable=raise-missing-from
-        raise DeserializationException(
-            f"Expected an integer, "
-            f"but got an element with text: {text!r}"
-        )
-
-    return value
+        return read_item(item_element, iterator)
+    except DeserializationException as exception:
+        exception.path._prepend(IndexSegment(item_element, index))
+        raise
 
 
-_TEXT_TO_XS_DOUBLE_LITERALS = {
-    "NaN": math.nan,
-    "INF": math.inf,
-    "-INF": -math.inf,
-}
-
-
-def _read_float_from_element_text(
-    element: Element,
-    iterator: Iterator[Tuple[str, Element]]
-) -> float:
+def _read_instance_from_iterparse(
+    iterator: Iterator[Tuple[str, Element]],
+    read_as_element: _ContentReader[_ValueT],
+    expected_what: str
+) -> _ValueT:
     """
-    Parse the text of :paramref:`element` as a floating-point number, and
-    read the corresponding end element from :paramref:`iterator`.
+    Read an instance from :paramref:`iterator`, starting at its start element.
 
-    :param element: start element
     :param iterator:
         Input stream of ``(event, element)`` coming from
         :py:func:`xml.etree.ElementTree.iterparse` with the argument
         ``events=["start", "end"]``
+    :param read_as_element: to read the instance, including its end element
+    :param expected_what: what we expected to read, for the error messages
     :raise: :py:class:`DeserializationException` if unexpected input
-    :return: parsed value
+    :return: parsed instance
     """
-    text = _read_text_from_element(
-        element,
-        iterator
-    )
+    next_event_element = next(iterator, None)
+    if next_event_element is None:
+        raise DeserializationException(
+            f"Expected the start element for {expected_what}, "
+            f"but got the end-of-input"
+        )
 
-    value = _TEXT_TO_XS_DOUBLE_LITERALS.get(text, None)
-    if value is None:
-        try:
-            value = float(text)
-        except ValueError:
-            # pylint: disable=raise-missing-from
-            raise DeserializationException(
-                f"Expected a floating-point number, "
-                f"but got an element with text: {text!r}"
-            )
+    next_event, next_element = next_event_element
+    if next_event != 'start':
+        raise DeserializationException(
+            f"Expected the start element for {expected_what}, "
+            f"but got event {next_event!r} and element {next_element.tag!r}"
+        )
 
-    return value
+    try:
+        return read_as_element(next_element, iterator)
+    except DeserializationException as exception:
+        exception.path._prepend(ElementSegment(next_element))
+        raise exception
 
 
 def _read_str_from_element_text(
@@ -3063,39 +2932,6 @@ def _read_str_from_element_text(
     return result
 
 
-def _read_bytes_from_element_text(
-    element: Element,
-    iterator: Iterator[Tuple[str, Element]]
-) -> bytes:
-    """
-    Parse the text of :paramref:`element` as base64-encoded bytes, and
-    read the corresponding end element from :paramref:`iterator`.
-
-    :param element: look-ahead element
-    :param iterator:
-        Input stream of ``(event, element)`` coming from
-        :py:func:`xml.etree.ElementTree.iterparse` with the argument
-        ``events=["start", "end"]``
-    :raise: :py:class:`DeserializationException` if unexpected input
-    :return: parsed value
-    """
-    text = _read_text_from_element(
-        element,
-        iterator
-    )
-
-    try:
-        value = base64.b64decode(text)
-    except Exception:
-        # pylint: disable=raise-missing-from
-        raise DeserializationException(
-            f"Expected a text as base64-encoded bytes, "
-            f"but got an element with text: {text!r}"
-        )
-
-    return value
-
-
 _TupleItem1T = TypeVar("_TupleItem1T")
 _TupleItem2T = TypeVar("_TupleItem2T")
 _TupleItem3T = TypeVar("_TupleItem3T")
@@ -3104,25 +2940,16 @@ _TupleItem3T = TypeVar("_TupleItem3T")
 def _tuple3_from_element(
     element: Element,
     iterator: Iterator[Tuple[str, Element]],
-    read_item_1: Callable[
-        [Element, Iterator[Tuple[str, Element]]],
-        _TupleItem1T
-    ],
-    read_item_2: Callable[
-        [Element, Iterator[Tuple[str, Element]]],
-        _TupleItem2T
-    ],
-    read_item_3: Callable[
-        [Element, Iterator[Tuple[str, Element]]],
-        _TupleItem3T
-    ]
+    read_item_1: _ContentReader[_TupleItem1T],
+    read_item_2: _ContentReader[_TupleItem2T],
+    read_item_3: _ContentReader[_TupleItem3T]
 ) -> Tuple[_TupleItem1T, _TupleItem2T, _TupleItem3T]:
     """
     Read a tuple of 3 item(s) from :paramref:`iterator`.
 
     Each ``read_item_*`` function is responsible for verifying the tag of its
     own item element -- *e.g.*, by wrapping a scalar/enumeration reader with
-    :py:func:`_read_v_element`, or by relying on a class's own dispatch by
+    :py:func:`_read_named_element`, or by relying on a class's own dispatch by
     its natural element tag.
 
     The end element corresponding to :paramref:`element` will be read as well.
@@ -3144,65 +2971,26 @@ def _tuple3_from_element(
             f"but got text: {element.text!r}"
         )
 
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            "Expected the item 0 of the tuple, but got end-of-input"
-        )
+    item_1 = _read_tuple_item(
+        element,
+        iterator,
+        0,
+        read_item_1
+    )
 
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected a start element corresponding to the item 0 "
-            f"of the tuple, but got event {next_event!r} "
-            f"and element {next_element.tag!r}"
-        )
+    item_2 = _read_tuple_item(
+        element,
+        iterator,
+        1,
+        read_item_2
+    )
 
-    try:
-        item_1 = read_item_1(next_element, iterator)
-    except DeserializationException as exception:
-        exception.path._prepend(IndexSegment(next_element, 0))
-        raise
-
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            "Expected the item 1 of the tuple, but got end-of-input"
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected a start element corresponding to the item 1 "
-            f"of the tuple, but got event {next_event!r} "
-            f"and element {next_element.tag!r}"
-        )
-
-    try:
-        item_2 = read_item_2(next_element, iterator)
-    except DeserializationException as exception:
-        exception.path._prepend(IndexSegment(next_element, 1))
-        raise
-
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            "Expected the item 2 of the tuple, but got end-of-input"
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected a start element corresponding to the item 2 "
-            f"of the tuple, but got event {next_event!r} "
-            f"and element {next_element.tag!r}"
-        )
-
-    try:
-        item_3 = read_item_3(next_element, iterator)
-    except DeserializationException as exception:
-        exception.path._prepend(IndexSegment(next_element, 2))
-        raise
+    item_3 = _read_tuple_item(
+        element,
+        iterator,
+        2,
+        read_item_3
+    )
 
     _read_end_element(element, iterator)
 
@@ -3213,33 +3001,113 @@ def _tuple3_from_element(
     )
 
 
-class _ReaderAndSetterForStructuralFirst:
+def _read_list_of__mixed_union(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]]
+) -> List[aas_types.MixedUnion]:
     """
-    Provide a buffer for reading and setting the properties for the class
-    :py:class:`StructuralFirst`.
-
-    The properties correspond to the constructor arguments of
-    :py:class:`StructuralFirst`. We use this buffer to facilitate dispatching when
-    parsing the properties in a streaming fashion.
+    Read the items of :paramref:`element` as a list of
+    :py:class:`.types.MixedUnion`.
     """
+    return _read_list_of_items(
+        element,
+        iterator,
+        _read_mixed_union_as_element
+    )
 
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.unique_to_first: Optional[str] = None
 
-    def read_and_set_unique_to_first(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.StructuralFirst.unique_to_first` and set it.
-        """
-        self.unique_to_first = _read_str_from_element_text(
-            element,
-            iterator
-        )
+def _read_list_of__model_typed_union(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]]
+) -> List[aas_types.ModelTypedUnion]:
+    """
+    Read the items of :paramref:`element` as a list of
+    :py:class:`.types.ModelTypedUnion`.
+    """
+    return _read_list_of_items(
+        element,
+        iterator,
+        _read_model_typed_union_as_element
+    )
+
+
+def _read_list_of__structural_union(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]]
+) -> List[aas_types.StructuralUnion]:
+    """
+    Read the items of :paramref:`element` as a list of
+    :py:class:`.types.StructuralUnion`.
+    """
+    return _read_list_of_items(
+        element,
+        iterator,
+        _read_structural_union_as_element
+    )
+
+
+def _read_nested__mixed_union(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]]
+) -> aas_types.MixedUnion:
+    """
+    Read an instance of :py:class:`.types.MixedUnion` nested in
+    :paramref:`element` as a discriminator element.
+    """
+    return _read_nested_element(
+        element,
+        iterator,
+        _read_mixed_union_as_element,
+        'MixedUnion'
+    )
+
+
+def _read_nested__model_typed_union(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]]
+) -> aas_types.ModelTypedUnion:
+    """
+    Read an instance of :py:class:`.types.ModelTypedUnion` nested in
+    :paramref:`element` as a discriminator element.
+    """
+    return _read_nested_element(
+        element,
+        iterator,
+        _read_model_typed_union_as_element,
+        'ModelTypedUnion'
+    )
+
+
+def _read_nested__structural_union(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]]
+) -> aas_types.StructuralUnion:
+    """
+    Read an instance of :py:class:`.types.StructuralUnion` nested in
+    :paramref:`element` as a discriminator element.
+    """
+    return _read_nested_element(
+        element,
+        iterator,
+        _read_structural_union_as_element,
+        'StructuralUnion'
+    )
+
+
+def _read_tuple3_of__structural_union__mixed_union__model_typed_union(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]]
+) -> Tuple[aas_types.StructuralUnion, aas_types.MixedUnion, aas_types.ModelTypedUnion]:
+    """
+    Read the items of :paramref:`element` as a tuple of 3 item(s).
+    """
+    return _tuple3_from_element(
+        element,
+        iterator,
+        _read_structural_union_as_element,
+        _read_mixed_union_as_element,
+        _read_model_typed_union_as_element
+    )
 
 
 def _read_structural_first_as_sequence(
@@ -3261,72 +3129,21 @@ def _read_structural_first_as_sequence(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    if element.text is not None and len(element.text.strip()) != 0:
-        raise DeserializationException(
-            f"Expected only XML elements representing the properties and whitespace text, "
-            f"but got text: {element.text!r}"
-        )
-
-    _raise_if_has_tail_or_attrib(element)
-
-    reader_and_setter = (
-        _ReaderAndSetterForStructuralFirst()
+    values = _read_properties(
+        element,
+        iterator,
+        _READERS_FOR_STRUCTURAL_FIRST
     )
 
-    while True:
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected one or more XML-encoded properties or the end element, "
-                "but got the end-of-input"
-            )
+    the_unique_to_first: Optional[str] = values.get('uniqueToFirst')
 
-        next_event, next_element = next_event_element
-        if next_event == 'end' and next_element.tag == element.tag:
-            # We reached the end element enclosing the sequence.
-            break
-
-        if next_event != 'start':
-            raise DeserializationException(
-                "Expected a start element corresponding to a property, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            tag_wo_ns = _parse_element_tag(next_element)
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        read_and_set_method = _READ_AND_SET_DISPATCH_FOR_STRUCTURAL_FIRST.get(
-            tag_wo_ns,
-            None
-        )
-        if read_and_set_method is None:
-            an_exception = DeserializationException(
-                f"Expected an element representing a property, "
-                f"but got an element with unexpected tag: {tag_wo_ns!r}"
-            )
-            an_exception.path._prepend(ElementSegment(next_element))
-            raise an_exception
-
-        try:
-            read_and_set_method(
-                reader_and_setter,
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-    if reader_and_setter.unique_to_first is None:
+    if the_unique_to_first is None:
         raise DeserializationException(
             "The required property 'uniqueToFirst' is missing"
         )
 
     return aas_types.StructuralFirst(
-        reader_and_setter.unique_to_first
+        the_unique_to_first
     )
 
 
@@ -3346,47 +3163,12 @@ def _read_structural_first_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-
-    if tag_wo_ns != 'structuralFirst':
-        raise DeserializationException(
-            f"Expected the element with the tag 'structuralFirst', "
-            f"but got tag: {tag_wo_ns}"
-        )
-
-    return _read_structural_first_as_sequence(
+    return _read_named_element(
         element,
-        iterator
+        iterator,
+        'structuralFirst',
+        _read_structural_first_as_sequence
     )
-
-
-class _ReaderAndSetterForStructuralSecond:
-    """
-    Provide a buffer for reading and setting the properties for the class
-    :py:class:`StructuralSecond`.
-
-    The properties correspond to the constructor arguments of
-    :py:class:`StructuralSecond`. We use this buffer to facilitate dispatching when
-    parsing the properties in a streaming fashion.
-    """
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.unique_to_second: Optional[str] = None
-
-    def read_and_set_unique_to_second(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.StructuralSecond.unique_to_second` and set it.
-        """
-        self.unique_to_second = _read_str_from_element_text(
-            element,
-            iterator
-        )
 
 
 def _read_structural_second_as_sequence(
@@ -3408,72 +3190,21 @@ def _read_structural_second_as_sequence(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    if element.text is not None and len(element.text.strip()) != 0:
-        raise DeserializationException(
-            f"Expected only XML elements representing the properties and whitespace text, "
-            f"but got text: {element.text!r}"
-        )
-
-    _raise_if_has_tail_or_attrib(element)
-
-    reader_and_setter = (
-        _ReaderAndSetterForStructuralSecond()
+    values = _read_properties(
+        element,
+        iterator,
+        _READERS_FOR_STRUCTURAL_SECOND
     )
 
-    while True:
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected one or more XML-encoded properties or the end element, "
-                "but got the end-of-input"
-            )
+    the_unique_to_second: Optional[str] = values.get('uniqueToSecond')
 
-        next_event, next_element = next_event_element
-        if next_event == 'end' and next_element.tag == element.tag:
-            # We reached the end element enclosing the sequence.
-            break
-
-        if next_event != 'start':
-            raise DeserializationException(
-                "Expected a start element corresponding to a property, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            tag_wo_ns = _parse_element_tag(next_element)
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        read_and_set_method = _READ_AND_SET_DISPATCH_FOR_STRUCTURAL_SECOND.get(
-            tag_wo_ns,
-            None
-        )
-        if read_and_set_method is None:
-            an_exception = DeserializationException(
-                f"Expected an element representing a property, "
-                f"but got an element with unexpected tag: {tag_wo_ns!r}"
-            )
-            an_exception.path._prepend(ElementSegment(next_element))
-            raise an_exception
-
-        try:
-            read_and_set_method(
-                reader_and_setter,
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-    if reader_and_setter.unique_to_second is None:
+    if the_unique_to_second is None:
         raise DeserializationException(
             "The required property 'uniqueToSecond' is missing"
         )
 
     return aas_types.StructuralSecond(
-        reader_and_setter.unique_to_second
+        the_unique_to_second
     )
 
 
@@ -3493,17 +3224,11 @@ def _read_structural_second_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-
-    if tag_wo_ns != 'structuralSecond':
-        raise DeserializationException(
-            f"Expected the element with the tag 'structuralSecond', "
-            f"but got tag: {tag_wo_ns}"
-        )
-
-    return _read_structural_second_as_sequence(
+    return _read_named_element(
         element,
-        iterator
+        iterator,
+        'structuralSecond',
+        _read_structural_second_as_sequence
     )
 
 
@@ -3523,22 +3248,11 @@ def _read_structural_union_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-    read_as_sequence = _DISPATCH_FOR_STRUCTURAL_UNION.get(
-        tag_wo_ns,
-        None
-    )
-
-    if read_as_sequence is None:
-        raise DeserializationException(
-            f"Expected the element tag to be a valid model type "
-            f"of a concrete instance of 'StructuralUnion', "
-            f"but got tag {tag_wo_ns!r}"
-        )
-
-    return read_as_sequence(
+    return _read_dispatched(
         element,
-        iterator
+        iterator,
+        _DISPATCH_FOR_STRUCTURAL_UNION,
+        "a concrete instance of 'StructuralUnion'"
     )
 
 
@@ -3558,52 +3272,12 @@ def _read_mixed_abstract_member_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-    read_as_sequence = _DISPATCH_FOR_MIXED_ABSTRACT_MEMBER.get(
-        tag_wo_ns,
-        None
-    )
-
-    if read_as_sequence is None:
-        raise DeserializationException(
-            f"Expected the element tag to be a valid model type "
-            f"of a concrete instance of 'MixedAbstractMember', "
-            f"but got tag {tag_wo_ns!r}"
-        )
-
-    return read_as_sequence(
+    return _read_dispatched(
         element,
-        iterator
+        iterator,
+        _DISPATCH_FOR_MIXED_ABSTRACT_MEMBER,
+        "a concrete instance of 'MixedAbstractMember'"
     )
-
-
-class _ReaderAndSetterForMixedAbstractDescendantOne:
-    """
-    Provide a buffer for reading and setting the properties for the class
-    :py:class:`MixedAbstractDescendantOne`.
-
-    The properties correspond to the constructor arguments of
-    :py:class:`MixedAbstractDescendantOne`. We use this buffer to facilitate dispatching when
-    parsing the properties in a streaming fashion.
-    """
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.unique_to_abstract_descendant_one: Optional[str] = None
-
-    def read_and_set_unique_to_abstract_descendant_one(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.MixedAbstractDescendantOne.unique_to_abstract_descendant_one` and set it.
-        """
-        self.unique_to_abstract_descendant_one = _read_str_from_element_text(
-            element,
-            iterator
-        )
 
 
 def _read_mixed_abstract_descendant_one_as_sequence(
@@ -3625,72 +3299,23 @@ def _read_mixed_abstract_descendant_one_as_sequence(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    if element.text is not None and len(element.text.strip()) != 0:
-        raise DeserializationException(
-            f"Expected only XML elements representing the properties and whitespace text, "
-            f"but got text: {element.text!r}"
-        )
-
-    _raise_if_has_tail_or_attrib(element)
-
-    reader_and_setter = (
-        _ReaderAndSetterForMixedAbstractDescendantOne()
+    values = _read_properties(
+        element,
+        iterator,
+        _READERS_FOR_MIXED_ABSTRACT_DESCENDANT_ONE
     )
 
-    while True:
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected one or more XML-encoded properties or the end element, "
-                "but got the end-of-input"
-            )
+    the_unique_to_abstract_descendant_one: Optional[str] = values.get(
+        'uniqueToAbstractDescendantOne'
+    )
 
-        next_event, next_element = next_event_element
-        if next_event == 'end' and next_element.tag == element.tag:
-            # We reached the end element enclosing the sequence.
-            break
-
-        if next_event != 'start':
-            raise DeserializationException(
-                "Expected a start element corresponding to a property, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            tag_wo_ns = _parse_element_tag(next_element)
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        read_and_set_method = _READ_AND_SET_DISPATCH_FOR_MIXED_ABSTRACT_DESCENDANT_ONE.get(
-            tag_wo_ns,
-            None
-        )
-        if read_and_set_method is None:
-            an_exception = DeserializationException(
-                f"Expected an element representing a property, "
-                f"but got an element with unexpected tag: {tag_wo_ns!r}"
-            )
-            an_exception.path._prepend(ElementSegment(next_element))
-            raise an_exception
-
-        try:
-            read_and_set_method(
-                reader_and_setter,
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-    if reader_and_setter.unique_to_abstract_descendant_one is None:
+    if the_unique_to_abstract_descendant_one is None:
         raise DeserializationException(
             "The required property 'uniqueToAbstractDescendantOne' is missing"
         )
 
     return aas_types.MixedAbstractDescendantOne(
-        reader_and_setter.unique_to_abstract_descendant_one
+        the_unique_to_abstract_descendant_one
     )
 
 
@@ -3710,47 +3335,12 @@ def _read_mixed_abstract_descendant_one_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-
-    if tag_wo_ns != 'mixedAbstractDescendantOne':
-        raise DeserializationException(
-            f"Expected the element with the tag 'mixedAbstractDescendantOne', "
-            f"but got tag: {tag_wo_ns}"
-        )
-
-    return _read_mixed_abstract_descendant_one_as_sequence(
+    return _read_named_element(
         element,
-        iterator
+        iterator,
+        'mixedAbstractDescendantOne',
+        _read_mixed_abstract_descendant_one_as_sequence
     )
-
-
-class _ReaderAndSetterForMixedAbstractDescendantTwo:
-    """
-    Provide a buffer for reading and setting the properties for the class
-    :py:class:`MixedAbstractDescendantTwo`.
-
-    The properties correspond to the constructor arguments of
-    :py:class:`MixedAbstractDescendantTwo`. We use this buffer to facilitate dispatching when
-    parsing the properties in a streaming fashion.
-    """
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.unique_to_abstract_descendant_two: Optional[str] = None
-
-    def read_and_set_unique_to_abstract_descendant_two(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.MixedAbstractDescendantTwo.unique_to_abstract_descendant_two` and set it.
-        """
-        self.unique_to_abstract_descendant_two = _read_str_from_element_text(
-            element,
-            iterator
-        )
 
 
 def _read_mixed_abstract_descendant_two_as_sequence(
@@ -3772,72 +3362,23 @@ def _read_mixed_abstract_descendant_two_as_sequence(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    if element.text is not None and len(element.text.strip()) != 0:
-        raise DeserializationException(
-            f"Expected only XML elements representing the properties and whitespace text, "
-            f"but got text: {element.text!r}"
-        )
-
-    _raise_if_has_tail_or_attrib(element)
-
-    reader_and_setter = (
-        _ReaderAndSetterForMixedAbstractDescendantTwo()
+    values = _read_properties(
+        element,
+        iterator,
+        _READERS_FOR_MIXED_ABSTRACT_DESCENDANT_TWO
     )
 
-    while True:
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected one or more XML-encoded properties or the end element, "
-                "but got the end-of-input"
-            )
+    the_unique_to_abstract_descendant_two: Optional[str] = values.get(
+        'uniqueToAbstractDescendantTwo'
+    )
 
-        next_event, next_element = next_event_element
-        if next_event == 'end' and next_element.tag == element.tag:
-            # We reached the end element enclosing the sequence.
-            break
-
-        if next_event != 'start':
-            raise DeserializationException(
-                "Expected a start element corresponding to a property, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            tag_wo_ns = _parse_element_tag(next_element)
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        read_and_set_method = _READ_AND_SET_DISPATCH_FOR_MIXED_ABSTRACT_DESCENDANT_TWO.get(
-            tag_wo_ns,
-            None
-        )
-        if read_and_set_method is None:
-            an_exception = DeserializationException(
-                f"Expected an element representing a property, "
-                f"but got an element with unexpected tag: {tag_wo_ns!r}"
-            )
-            an_exception.path._prepend(ElementSegment(next_element))
-            raise an_exception
-
-        try:
-            read_and_set_method(
-                reader_and_setter,
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-    if reader_and_setter.unique_to_abstract_descendant_two is None:
+    if the_unique_to_abstract_descendant_two is None:
         raise DeserializationException(
             "The required property 'uniqueToAbstractDescendantTwo' is missing"
         )
 
     return aas_types.MixedAbstractDescendantTwo(
-        reader_and_setter.unique_to_abstract_descendant_two
+        the_unique_to_abstract_descendant_two
     )
 
 
@@ -3857,47 +3398,12 @@ def _read_mixed_abstract_descendant_two_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-
-    if tag_wo_ns != 'mixedAbstractDescendantTwo':
-        raise DeserializationException(
-            f"Expected the element with the tag 'mixedAbstractDescendantTwo', "
-            f"but got tag: {tag_wo_ns}"
-        )
-
-    return _read_mixed_abstract_descendant_two_as_sequence(
+    return _read_named_element(
         element,
-        iterator
+        iterator,
+        'mixedAbstractDescendantTwo',
+        _read_mixed_abstract_descendant_two_as_sequence
     )
-
-
-class _ReaderAndSetterForMixedConcreteWithDescendants:
-    """
-    Provide a buffer for reading and setting the properties for the class
-    :py:class:`MixedConcreteWithDescendants`.
-
-    The properties correspond to the constructor arguments of
-    :py:class:`MixedConcreteWithDescendants`. We use this buffer to facilitate dispatching when
-    parsing the properties in a streaming fashion.
-    """
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.some_base_property: Optional[str] = None
-
-    def read_and_set_some_base_property(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.MixedConcreteWithDescendants.some_base_property` and set it.
-        """
-        self.some_base_property = _read_str_from_element_text(
-            element,
-            iterator
-        )
 
 
 def _read_mixed_concrete_with_descendants_as_sequence(
@@ -3919,72 +3425,21 @@ def _read_mixed_concrete_with_descendants_as_sequence(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    if element.text is not None and len(element.text.strip()) != 0:
-        raise DeserializationException(
-            f"Expected only XML elements representing the properties and whitespace text, "
-            f"but got text: {element.text!r}"
-        )
-
-    _raise_if_has_tail_or_attrib(element)
-
-    reader_and_setter = (
-        _ReaderAndSetterForMixedConcreteWithDescendants()
+    values = _read_properties(
+        element,
+        iterator,
+        _READERS_FOR_MIXED_CONCRETE_WITH_DESCENDANTS
     )
 
-    while True:
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected one or more XML-encoded properties or the end element, "
-                "but got the end-of-input"
-            )
+    the_some_base_property: Optional[str] = values.get('someBaseProperty')
 
-        next_event, next_element = next_event_element
-        if next_event == 'end' and next_element.tag == element.tag:
-            # We reached the end element enclosing the sequence.
-            break
-
-        if next_event != 'start':
-            raise DeserializationException(
-                "Expected a start element corresponding to a property, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            tag_wo_ns = _parse_element_tag(next_element)
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        read_and_set_method = _READ_AND_SET_DISPATCH_FOR_MIXED_CONCRETE_WITH_DESCENDANTS.get(
-            tag_wo_ns,
-            None
-        )
-        if read_and_set_method is None:
-            an_exception = DeserializationException(
-                f"Expected an element representing a property, "
-                f"but got an element with unexpected tag: {tag_wo_ns!r}"
-            )
-            an_exception.path._prepend(ElementSegment(next_element))
-            raise an_exception
-
-        try:
-            read_and_set_method(
-                reader_and_setter,
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-    if reader_and_setter.some_base_property is None:
+    if the_some_base_property is None:
         raise DeserializationException(
             "The required property 'someBaseProperty' is missing"
         )
 
     return aas_types.MixedConcreteWithDescendants(
-        reader_and_setter.some_base_property
+        the_some_base_property
     )
 
 
@@ -4004,67 +3459,12 @@ def _read_mixed_concrete_with_descendants_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-    read_as_sequence = _DISPATCH_FOR_MIXED_CONCRETE_WITH_DESCENDANTS.get(
-        tag_wo_ns,
-        None
-    )
-
-    if read_as_sequence is None:
-        raise DeserializationException(
-            f"Expected the element tag to be a valid model type "
-            f"of a concrete instance of 'MixedConcreteWithDescendants', "
-            f"but got tag {tag_wo_ns!r}"
-        )
-
-    return read_as_sequence(
+    return _read_dispatched(
         element,
-        iterator
+        iterator,
+        _DISPATCH_FOR_MIXED_CONCRETE_WITH_DESCENDANTS,
+        "a concrete instance of 'MixedConcreteWithDescendants'"
     )
-
-
-class _ReaderAndSetterForMixedConcreteWithDescendantsChild:
-    """
-    Provide a buffer for reading and setting the properties for the class
-    :py:class:`MixedConcreteWithDescendantsChild`.
-
-    The properties correspond to the constructor arguments of
-    :py:class:`MixedConcreteWithDescendantsChild`. We use this buffer to facilitate dispatching when
-    parsing the properties in a streaming fashion.
-    """
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.some_base_property: Optional[str] = None
-        self.some_child_property: Optional[str] = None
-
-    def read_and_set_some_base_property(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.MixedConcreteWithDescendantsChild.some_base_property` and set it.
-        """
-        self.some_base_property = _read_str_from_element_text(
-            element,
-            iterator
-        )
-
-    def read_and_set_some_child_property(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.MixedConcreteWithDescendantsChild.some_child_property` and set it.
-        """
-        self.some_child_property = _read_str_from_element_text(
-            element,
-            iterator
-        )
 
 
 def _read_mixed_concrete_with_descendants_child_as_sequence(
@@ -4086,78 +3486,28 @@ def _read_mixed_concrete_with_descendants_child_as_sequence(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    if element.text is not None and len(element.text.strip()) != 0:
-        raise DeserializationException(
-            f"Expected only XML elements representing the properties and whitespace text, "
-            f"but got text: {element.text!r}"
-        )
-
-    _raise_if_has_tail_or_attrib(element)
-
-    reader_and_setter = (
-        _ReaderAndSetterForMixedConcreteWithDescendantsChild()
+    values = _read_properties(
+        element,
+        iterator,
+        _READERS_FOR_MIXED_CONCRETE_WITH_DESCENDANTS_CHILD
     )
 
-    while True:
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected one or more XML-encoded properties or the end element, "
-                "but got the end-of-input"
-            )
+    the_some_base_property: Optional[str] = values.get('someBaseProperty')
+    the_some_child_property: Optional[str] = values.get('someChildProperty')
 
-        next_event, next_element = next_event_element
-        if next_event == 'end' and next_element.tag == element.tag:
-            # We reached the end element enclosing the sequence.
-            break
-
-        if next_event != 'start':
-            raise DeserializationException(
-                "Expected a start element corresponding to a property, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            tag_wo_ns = _parse_element_tag(next_element)
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        read_and_set_method = _READ_AND_SET_DISPATCH_FOR_MIXED_CONCRETE_WITH_DESCENDANTS_CHILD.get(
-            tag_wo_ns,
-            None
-        )
-        if read_and_set_method is None:
-            an_exception = DeserializationException(
-                f"Expected an element representing a property, "
-                f"but got an element with unexpected tag: {tag_wo_ns!r}"
-            )
-            an_exception.path._prepend(ElementSegment(next_element))
-            raise an_exception
-
-        try:
-            read_and_set_method(
-                reader_and_setter,
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-    if reader_and_setter.some_base_property is None:
+    if the_some_base_property is None:
         raise DeserializationException(
             "The required property 'someBaseProperty' is missing"
         )
 
-    if reader_and_setter.some_child_property is None:
+    if the_some_child_property is None:
         raise DeserializationException(
             "The required property 'someChildProperty' is missing"
         )
 
     return aas_types.MixedConcreteWithDescendantsChild(
-        reader_and_setter.some_base_property,
-        reader_and_setter.some_child_property
+        the_some_base_property,
+        the_some_child_property
     )
 
 
@@ -4177,47 +3527,12 @@ def _read_mixed_concrete_with_descendants_child_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-
-    if tag_wo_ns != 'mixedConcreteWithDescendantsChild':
-        raise DeserializationException(
-            f"Expected the element with the tag 'mixedConcreteWithDescendantsChild', "
-            f"but got tag: {tag_wo_ns}"
-        )
-
-    return _read_mixed_concrete_with_descendants_child_as_sequence(
+    return _read_named_element(
         element,
-        iterator
+        iterator,
+        'mixedConcreteWithDescendantsChild',
+        _read_mixed_concrete_with_descendants_child_as_sequence
     )
-
-
-class _ReaderAndSetterForMixedConcreteLeaf:
-    """
-    Provide a buffer for reading and setting the properties for the class
-    :py:class:`MixedConcreteLeaf`.
-
-    The properties correspond to the constructor arguments of
-    :py:class:`MixedConcreteLeaf`. We use this buffer to facilitate dispatching when
-    parsing the properties in a streaming fashion.
-    """
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.unique_to_concrete_leaf: Optional[str] = None
-
-    def read_and_set_unique_to_concrete_leaf(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.MixedConcreteLeaf.unique_to_concrete_leaf` and set it.
-        """
-        self.unique_to_concrete_leaf = _read_str_from_element_text(
-            element,
-            iterator
-        )
 
 
 def _read_mixed_concrete_leaf_as_sequence(
@@ -4239,72 +3554,21 @@ def _read_mixed_concrete_leaf_as_sequence(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    if element.text is not None and len(element.text.strip()) != 0:
-        raise DeserializationException(
-            f"Expected only XML elements representing the properties and whitespace text, "
-            f"but got text: {element.text!r}"
-        )
-
-    _raise_if_has_tail_or_attrib(element)
-
-    reader_and_setter = (
-        _ReaderAndSetterForMixedConcreteLeaf()
+    values = _read_properties(
+        element,
+        iterator,
+        _READERS_FOR_MIXED_CONCRETE_LEAF
     )
 
-    while True:
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected one or more XML-encoded properties or the end element, "
-                "but got the end-of-input"
-            )
+    the_unique_to_concrete_leaf: Optional[str] = values.get('uniqueToConcreteLeaf')
 
-        next_event, next_element = next_event_element
-        if next_event == 'end' and next_element.tag == element.tag:
-            # We reached the end element enclosing the sequence.
-            break
-
-        if next_event != 'start':
-            raise DeserializationException(
-                "Expected a start element corresponding to a property, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            tag_wo_ns = _parse_element_tag(next_element)
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        read_and_set_method = _READ_AND_SET_DISPATCH_FOR_MIXED_CONCRETE_LEAF.get(
-            tag_wo_ns,
-            None
-        )
-        if read_and_set_method is None:
-            an_exception = DeserializationException(
-                f"Expected an element representing a property, "
-                f"but got an element with unexpected tag: {tag_wo_ns!r}"
-            )
-            an_exception.path._prepend(ElementSegment(next_element))
-            raise an_exception
-
-        try:
-            read_and_set_method(
-                reader_and_setter,
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-    if reader_and_setter.unique_to_concrete_leaf is None:
+    if the_unique_to_concrete_leaf is None:
         raise DeserializationException(
             "The required property 'uniqueToConcreteLeaf' is missing"
         )
 
     return aas_types.MixedConcreteLeaf(
-        reader_and_setter.unique_to_concrete_leaf
+        the_unique_to_concrete_leaf
     )
 
 
@@ -4324,17 +3588,11 @@ def _read_mixed_concrete_leaf_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-
-    if tag_wo_ns != 'mixedConcreteLeaf':
-        raise DeserializationException(
-            f"Expected the element with the tag 'mixedConcreteLeaf', "
-            f"but got tag: {tag_wo_ns}"
-        )
-
-    return _read_mixed_concrete_leaf_as_sequence(
+    return _read_named_element(
         element,
-        iterator
+        iterator,
+        'mixedConcreteLeaf',
+        _read_mixed_concrete_leaf_as_sequence
     )
 
 
@@ -4354,52 +3612,12 @@ def _read_mixed_union_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-    read_as_sequence = _DISPATCH_FOR_MIXED_UNION.get(
-        tag_wo_ns,
-        None
-    )
-
-    if read_as_sequence is None:
-        raise DeserializationException(
-            f"Expected the element tag to be a valid model type "
-            f"of a concrete instance of 'MixedUnion', "
-            f"but got tag {tag_wo_ns!r}"
-        )
-
-    return read_as_sequence(
+    return _read_dispatched(
         element,
-        iterator
+        iterator,
+        _DISPATCH_FOR_MIXED_UNION,
+        "a concrete instance of 'MixedUnion'"
     )
-
-
-class _ReaderAndSetterForModelTypedFirst:
-    """
-    Provide a buffer for reading and setting the properties for the class
-    :py:class:`ModelTypedFirst`.
-
-    The properties correspond to the constructor arguments of
-    :py:class:`ModelTypedFirst`. We use this buffer to facilitate dispatching when
-    parsing the properties in a streaming fashion.
-    """
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.some_property: Optional[str] = None
-
-    def read_and_set_some_property(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.ModelTypedFirst.some_property` and set it.
-        """
-        self.some_property = _read_str_from_element_text(
-            element,
-            iterator
-        )
 
 
 def _read_model_typed_first_as_sequence(
@@ -4421,72 +3639,21 @@ def _read_model_typed_first_as_sequence(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    if element.text is not None and len(element.text.strip()) != 0:
-        raise DeserializationException(
-            f"Expected only XML elements representing the properties and whitespace text, "
-            f"but got text: {element.text!r}"
-        )
-
-    _raise_if_has_tail_or_attrib(element)
-
-    reader_and_setter = (
-        _ReaderAndSetterForModelTypedFirst()
+    values = _read_properties(
+        element,
+        iterator,
+        _READERS_FOR_MODEL_TYPED_FIRST
     )
 
-    while True:
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected one or more XML-encoded properties or the end element, "
-                "but got the end-of-input"
-            )
+    the_some_property: Optional[str] = values.get('someProperty')
 
-        next_event, next_element = next_event_element
-        if next_event == 'end' and next_element.tag == element.tag:
-            # We reached the end element enclosing the sequence.
-            break
-
-        if next_event != 'start':
-            raise DeserializationException(
-                "Expected a start element corresponding to a property, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            tag_wo_ns = _parse_element_tag(next_element)
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        read_and_set_method = _READ_AND_SET_DISPATCH_FOR_MODEL_TYPED_FIRST.get(
-            tag_wo_ns,
-            None
-        )
-        if read_and_set_method is None:
-            an_exception = DeserializationException(
-                f"Expected an element representing a property, "
-                f"but got an element with unexpected tag: {tag_wo_ns!r}"
-            )
-            an_exception.path._prepend(ElementSegment(next_element))
-            raise an_exception
-
-        try:
-            read_and_set_method(
-                reader_and_setter,
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-    if reader_and_setter.some_property is None:
+    if the_some_property is None:
         raise DeserializationException(
             "The required property 'someProperty' is missing"
         )
 
     return aas_types.ModelTypedFirst(
-        reader_and_setter.some_property
+        the_some_property
     )
 
 
@@ -4506,47 +3673,12 @@ def _read_model_typed_first_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-
-    if tag_wo_ns != 'modelTypedFirst':
-        raise DeserializationException(
-            f"Expected the element with the tag 'modelTypedFirst', "
-            f"but got tag: {tag_wo_ns}"
-        )
-
-    return _read_model_typed_first_as_sequence(
+    return _read_named_element(
         element,
-        iterator
+        iterator,
+        'modelTypedFirst',
+        _read_model_typed_first_as_sequence
     )
-
-
-class _ReaderAndSetterForModelTypedSecond:
-    """
-    Provide a buffer for reading and setting the properties for the class
-    :py:class:`ModelTypedSecond`.
-
-    The properties correspond to the constructor arguments of
-    :py:class:`ModelTypedSecond`. We use this buffer to facilitate dispatching when
-    parsing the properties in a streaming fashion.
-    """
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.some_property: Optional[str] = None
-
-    def read_and_set_some_property(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.ModelTypedSecond.some_property` and set it.
-        """
-        self.some_property = _read_str_from_element_text(
-            element,
-            iterator
-        )
 
 
 def _read_model_typed_second_as_sequence(
@@ -4568,72 +3700,21 @@ def _read_model_typed_second_as_sequence(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    if element.text is not None and len(element.text.strip()) != 0:
-        raise DeserializationException(
-            f"Expected only XML elements representing the properties and whitespace text, "
-            f"but got text: {element.text!r}"
-        )
-
-    _raise_if_has_tail_or_attrib(element)
-
-    reader_and_setter = (
-        _ReaderAndSetterForModelTypedSecond()
+    values = _read_properties(
+        element,
+        iterator,
+        _READERS_FOR_MODEL_TYPED_SECOND
     )
 
-    while True:
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected one or more XML-encoded properties or the end element, "
-                "but got the end-of-input"
-            )
+    the_some_property: Optional[str] = values.get('someProperty')
 
-        next_event, next_element = next_event_element
-        if next_event == 'end' and next_element.tag == element.tag:
-            # We reached the end element enclosing the sequence.
-            break
-
-        if next_event != 'start':
-            raise DeserializationException(
-                "Expected a start element corresponding to a property, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            tag_wo_ns = _parse_element_tag(next_element)
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        read_and_set_method = _READ_AND_SET_DISPATCH_FOR_MODEL_TYPED_SECOND.get(
-            tag_wo_ns,
-            None
-        )
-        if read_and_set_method is None:
-            an_exception = DeserializationException(
-                f"Expected an element representing a property, "
-                f"but got an element with unexpected tag: {tag_wo_ns!r}"
-            )
-            an_exception.path._prepend(ElementSegment(next_element))
-            raise an_exception
-
-        try:
-            read_and_set_method(
-                reader_and_setter,
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-    if reader_and_setter.some_property is None:
+    if the_some_property is None:
         raise DeserializationException(
             "The required property 'someProperty' is missing"
         )
 
     return aas_types.ModelTypedSecond(
-        reader_and_setter.some_property
+        the_some_property
     )
 
 
@@ -4653,17 +3734,11 @@ def _read_model_typed_second_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-
-    if tag_wo_ns != 'modelTypedSecond':
-        raise DeserializationException(
-            f"Expected the element with the tag 'modelTypedSecond', "
-            f"but got tag: {tag_wo_ns}"
-        )
-
-    return _read_model_typed_second_as_sequence(
+    return _read_named_element(
         element,
-        iterator
+        iterator,
+        'modelTypedSecond',
+        _read_model_typed_second_as_sequence
     )
 
 
@@ -4683,337 +3758,12 @@ def _read_model_typed_union_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-    read_as_sequence = _DISPATCH_FOR_MODEL_TYPED_UNION.get(
-        tag_wo_ns,
-        None
-    )
-
-    if read_as_sequence is None:
-        raise DeserializationException(
-            f"Expected the element tag to be a valid model type "
-            f"of a concrete instance of 'ModelTypedUnion', "
-            f"but got tag {tag_wo_ns!r}"
-        )
-
-    return read_as_sequence(
+    return _read_dispatched(
         element,
-        iterator
+        iterator,
+        _DISPATCH_FOR_MODEL_TYPED_UNION,
+        "a concrete instance of 'ModelTypedUnion'"
     )
-
-
-class _ReaderAndSetterForSomething:
-    """
-    Provide a buffer for reading and setting the properties for the class
-    :py:class:`Something`.
-
-    The properties correspond to the constructor arguments of
-    :py:class:`Something`. We use this buffer to facilitate dispatching when
-    parsing the properties in a streaming fashion.
-    """
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.structural_property: Optional[aas_types.StructuralUnion] = None
-        self.mixed_property: Optional[aas_types.MixedUnion] = None
-        self.model_typed_property: Optional[aas_types.ModelTypedUnion] = None
-        self.list_structural_property: Optional[List[aas_types.StructuralUnion]] = None
-        self.list_mixed_property: Optional[List[aas_types.MixedUnion]] = None
-        self.list_model_typed_property: Optional[List[aas_types.ModelTypedUnion]] = None
-        self.tuple_property: Optional[
-            Tuple[
-                aas_types.StructuralUnion,
-                aas_types.MixedUnion,
-                aas_types.ModelTypedUnion,
-            ]
-        ] = None
-        self.optional_structural_property: Optional[aas_types.StructuralUnion] = None
-        self.optional_mixed_property: Optional[aas_types.MixedUnion] = None
-        self.optional_model_typed_property: Optional[aas_types.ModelTypedUnion] = None
-
-    def read_and_set_structural_property(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.Something.structural_property` and set it.
-        """
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected a discriminator start element corresponding "
-                "to StructuralUnion, but got end-of-input"
-            )
-
-        next_event, next_element = next_event_element
-        if next_event != 'start':
-            raise DeserializationException(
-                f"Expected a discriminator start element corresponding "
-                f"to StructuralUnion, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            result = _read_structural_union_as_element(
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        _read_end_element(element, iterator)
-
-        self.structural_property = result
-
-    def read_and_set_mixed_property(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.Something.mixed_property` and set it.
-        """
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected a discriminator start element corresponding "
-                "to MixedUnion, but got end-of-input"
-            )
-
-        next_event, next_element = next_event_element
-        if next_event != 'start':
-            raise DeserializationException(
-                f"Expected a discriminator start element corresponding "
-                f"to MixedUnion, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            result = _read_mixed_union_as_element(
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        _read_end_element(element, iterator)
-
-        self.mixed_property = result
-
-    def read_and_set_model_typed_property(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.Something.model_typed_property` and set it.
-        """
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected a discriminator start element corresponding "
-                "to ModelTypedUnion, but got end-of-input"
-            )
-
-        next_event, next_element = next_event_element
-        if next_event != 'start':
-            raise DeserializationException(
-                f"Expected a discriminator start element corresponding "
-                f"to ModelTypedUnion, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            result = _read_model_typed_union_as_element(
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        _read_end_element(element, iterator)
-
-        self.model_typed_property = result
-
-    def read_and_set_list_structural_property(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.Something.list_structural_property` and set it.
-        """
-        self.list_structural_property = _read_list_of_items(
-            element,
-            iterator,
-            _read_structural_union_as_element
-        )
-
-    def read_and_set_list_mixed_property(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.Something.list_mixed_property` and set it.
-        """
-        self.list_mixed_property = _read_list_of_items(
-            element,
-            iterator,
-            _read_mixed_union_as_element
-        )
-
-    def read_and_set_list_model_typed_property(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.Something.list_model_typed_property` and set it.
-        """
-        self.list_model_typed_property = _read_list_of_items(
-            element,
-            iterator,
-            _read_model_typed_union_as_element
-        )
-
-    def read_and_set_tuple_property(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.Something.tuple_property` and set it.
-        """
-        self.tuple_property = _tuple3_from_element(
-            element,
-            iterator,
-            _read_structural_union_as_element,
-            _read_mixed_union_as_element,
-            _read_model_typed_union_as_element
-        )
-
-    def read_and_set_optional_structural_property(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.Something.optional_structural_property` and set it.
-        """
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected a discriminator start element corresponding "
-                "to StructuralUnion, but got end-of-input"
-            )
-
-        next_event, next_element = next_event_element
-        if next_event != 'start':
-            raise DeserializationException(
-                f"Expected a discriminator start element corresponding "
-                f"to StructuralUnion, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            result = _read_structural_union_as_element(
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        _read_end_element(element, iterator)
-
-        self.optional_structural_property = result
-
-    def read_and_set_optional_mixed_property(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.Something.optional_mixed_property` and set it.
-        """
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected a discriminator start element corresponding "
-                "to MixedUnion, but got end-of-input"
-            )
-
-        next_event, next_element = next_event_element
-        if next_event != 'start':
-            raise DeserializationException(
-                f"Expected a discriminator start element corresponding "
-                f"to MixedUnion, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            result = _read_mixed_union_as_element(
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        _read_end_element(element, iterator)
-
-        self.optional_mixed_property = result
-
-    def read_and_set_optional_model_typed_property(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.Something.optional_model_typed_property` and set it.
-        """
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected a discriminator start element corresponding "
-                "to ModelTypedUnion, but got end-of-input"
-            )
-
-        next_event, next_element = next_event_element
-        if next_event != 'start':
-            raise DeserializationException(
-                f"Expected a discriminator start element corresponding "
-                f"to ModelTypedUnion, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            result = _read_model_typed_union_as_element(
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        _read_end_element(element, iterator)
-
-        self.optional_model_typed_property = result
 
 
 def _read_something_as_sequence(
@@ -5035,111 +3785,93 @@ def _read_something_as_sequence(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    if element.text is not None and len(element.text.strip()) != 0:
-        raise DeserializationException(
-            f"Expected only XML elements representing the properties and whitespace text, "
-            f"but got text: {element.text!r}"
-        )
-
-    _raise_if_has_tail_or_attrib(element)
-
-    reader_and_setter = (
-        _ReaderAndSetterForSomething()
+    values = _read_properties(
+        element,
+        iterator,
+        _READERS_FOR_SOMETHING
     )
 
-    while True:
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected one or more XML-encoded properties or the end element, "
-                "but got the end-of-input"
-            )
+    the_structural_property: Optional[aas_types.StructuralUnion] = values.get(
+        'structuralProperty'
+    )
+    the_mixed_property: Optional[aas_types.MixedUnion] = values.get('mixedProperty')
+    the_model_typed_property: Optional[aas_types.ModelTypedUnion] = values.get(
+        'modelTypedProperty'
+    )
+    the_list_structural_property: Optional[List[aas_types.StructuralUnion]] = values.get(
+        'listStructuralProperty'
+    )
+    the_list_mixed_property: Optional[List[aas_types.MixedUnion]] = values.get(
+        'listMixedProperty'
+    )
+    the_list_model_typed_property: Optional[List[aas_types.ModelTypedUnion]] = values.get(
+        'listModelTypedProperty'
+    )
+    the_tuple_property: Optional[
+        Tuple[
+            aas_types.StructuralUnion,
+            aas_types.MixedUnion,
+            aas_types.ModelTypedUnion,
+        ]
+    ] = values.get(
+        'tupleProperty'
+    )
+    the_optional_structural_property: Optional[aas_types.StructuralUnion] = values.get(
+        'optionalStructuralProperty'
+    )
+    the_optional_mixed_property: Optional[aas_types.MixedUnion] = values.get(
+        'optionalMixedProperty'
+    )
+    the_optional_model_typed_property: Optional[aas_types.ModelTypedUnion] = values.get(
+        'optionalModelTypedProperty'
+    )
 
-        next_event, next_element = next_event_element
-        if next_event == 'end' and next_element.tag == element.tag:
-            # We reached the end element enclosing the sequence.
-            break
-
-        if next_event != 'start':
-            raise DeserializationException(
-                "Expected a start element corresponding to a property, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            tag_wo_ns = _parse_element_tag(next_element)
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        read_and_set_method = _READ_AND_SET_DISPATCH_FOR_SOMETHING.get(
-            tag_wo_ns,
-            None
-        )
-        if read_and_set_method is None:
-            an_exception = DeserializationException(
-                f"Expected an element representing a property, "
-                f"but got an element with unexpected tag: {tag_wo_ns!r}"
-            )
-            an_exception.path._prepend(ElementSegment(next_element))
-            raise an_exception
-
-        try:
-            read_and_set_method(
-                reader_and_setter,
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-    if reader_and_setter.structural_property is None:
+    if the_structural_property is None:
         raise DeserializationException(
             "The required property 'structuralProperty' is missing"
         )
 
-    if reader_and_setter.mixed_property is None:
+    if the_mixed_property is None:
         raise DeserializationException(
             "The required property 'mixedProperty' is missing"
         )
 
-    if reader_and_setter.model_typed_property is None:
+    if the_model_typed_property is None:
         raise DeserializationException(
             "The required property 'modelTypedProperty' is missing"
         )
 
-    if reader_and_setter.list_structural_property is None:
+    if the_list_structural_property is None:
         raise DeserializationException(
             "The required property 'listStructuralProperty' is missing"
         )
 
-    if reader_and_setter.list_mixed_property is None:
+    if the_list_mixed_property is None:
         raise DeserializationException(
             "The required property 'listMixedProperty' is missing"
         )
 
-    if reader_and_setter.list_model_typed_property is None:
+    if the_list_model_typed_property is None:
         raise DeserializationException(
             "The required property 'listModelTypedProperty' is missing"
         )
 
-    if reader_and_setter.tuple_property is None:
+    if the_tuple_property is None:
         raise DeserializationException(
             "The required property 'tupleProperty' is missing"
         )
 
     return aas_types.Something(
-        reader_and_setter.structural_property,
-        reader_and_setter.mixed_property,
-        reader_and_setter.model_typed_property,
-        reader_and_setter.list_structural_property,
-        reader_and_setter.list_mixed_property,
-        reader_and_setter.list_model_typed_property,
-        reader_and_setter.tuple_property,
-        reader_and_setter.optional_structural_property,
-        reader_and_setter.optional_mixed_property,
-        reader_and_setter.optional_model_typed_property
+        the_structural_property,
+        the_mixed_property,
+        the_model_typed_property,
+        the_list_structural_property,
+        the_list_mixed_property,
+        the_list_model_typed_property,
+        the_tuple_property,
+        the_optional_structural_property,
+        the_optional_mixed_property,
+        the_optional_model_typed_property
     )
 
 
@@ -5159,17 +3891,11 @@ def _read_something_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-
-    if tag_wo_ns != 'something':
-        raise DeserializationException(
-            f"Expected the element with the tag 'something', "
-            f"but got tag: {tag_wo_ns}"
-        )
-
-    return _read_something_as_sequence(
+    return _read_named_element(
         element,
-        iterator
+        iterator,
+        'something',
+        _read_something_as_sequence
     )
 
 
@@ -5188,59 +3914,12 @@ def _read_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-    read_as_sequence = _GENERAL_DISPATCH.get(
-        tag_wo_ns,
-        None
-    )
-
-    if read_as_sequence is None:
-        raise DeserializationException(
-            f"Expected the element tag to be a valid model type "
-            f"of a concrete instance, "
-            f"but got tag {tag_wo_ns!r}"
-        )
-
-    return read_as_sequence(
+    return _read_dispatched(
         element,
-        iterator
+        iterator,
+        _GENERAL_DISPATCH,
+        'a concrete instance'
     )
-
-
-#: Dispatch XML property name to read & set method in
-#: :py:class:`_ReaderAndSetterForStructuralFirst`
-_READ_AND_SET_DISPATCH_FOR_STRUCTURAL_FIRST: Mapping[
-    str,
-    Callable[
-        [
-            _ReaderAndSetterForStructuralFirst,
-            Element,
-            Iterator[Tuple[str, Element]]
-        ],
-        None
-    ]
-] = {
-    'uniqueToFirst':
-        _ReaderAndSetterForStructuralFirst.read_and_set_unique_to_first,
-}
-
-
-#: Dispatch XML property name to read & set method in
-#: :py:class:`_ReaderAndSetterForStructuralSecond`
-_READ_AND_SET_DISPATCH_FOR_STRUCTURAL_SECOND: Mapping[
-    str,
-    Callable[
-        [
-            _ReaderAndSetterForStructuralSecond,
-            Element,
-            Iterator[Tuple[str, Element]]
-        ],
-        None
-    ]
-] = {
-    'uniqueToSecond':
-        _ReaderAndSetterForStructuralSecond.read_and_set_unique_to_second,
-}
 
 
 #: Dispatch XML class names to read-as-sequence functions
@@ -5260,42 +3939,6 @@ _DISPATCH_FOR_MIXED_ABSTRACT_MEMBER: Mapping[
 }
 
 
-#: Dispatch XML property name to read & set method in
-#: :py:class:`_ReaderAndSetterForMixedAbstractDescendantOne`
-_READ_AND_SET_DISPATCH_FOR_MIXED_ABSTRACT_DESCENDANT_ONE: Mapping[
-    str,
-    Callable[
-        [
-            _ReaderAndSetterForMixedAbstractDescendantOne,
-            Element,
-            Iterator[Tuple[str, Element]]
-        ],
-        None
-    ]
-] = {
-    'uniqueToAbstractDescendantOne':
-        _ReaderAndSetterForMixedAbstractDescendantOne.read_and_set_unique_to_abstract_descendant_one,
-}
-
-
-#: Dispatch XML property name to read & set method in
-#: :py:class:`_ReaderAndSetterForMixedAbstractDescendantTwo`
-_READ_AND_SET_DISPATCH_FOR_MIXED_ABSTRACT_DESCENDANT_TWO: Mapping[
-    str,
-    Callable[
-        [
-            _ReaderAndSetterForMixedAbstractDescendantTwo,
-            Element,
-            Iterator[Tuple[str, Element]]
-        ],
-        None
-    ]
-] = {
-    'uniqueToAbstractDescendantTwo':
-        _ReaderAndSetterForMixedAbstractDescendantTwo.read_and_set_unique_to_abstract_descendant_two,
-}
-
-
 #: Dispatch XML class names to read-as-sequence functions
 #: corresponding to MixedConcreteWithDescendants and its concrete descendants
 _DISPATCH_FOR_MIXED_CONCRETE_WITH_DESCENDANTS: Mapping[
@@ -5310,134 +3953,6 @@ _DISPATCH_FOR_MIXED_CONCRETE_WITH_DESCENDANTS: Mapping[
 ] = {
     'mixedConcreteWithDescendants': _read_mixed_concrete_with_descendants_as_sequence,
     'mixedConcreteWithDescendantsChild': _read_mixed_concrete_with_descendants_child_as_sequence,
-}
-
-
-#: Dispatch XML property name to read & set method in
-#: :py:class:`_ReaderAndSetterForMixedConcreteWithDescendants`
-_READ_AND_SET_DISPATCH_FOR_MIXED_CONCRETE_WITH_DESCENDANTS: Mapping[
-    str,
-    Callable[
-        [
-            _ReaderAndSetterForMixedConcreteWithDescendants,
-            Element,
-            Iterator[Tuple[str, Element]]
-        ],
-        None
-    ]
-] = {
-    'someBaseProperty':
-        _ReaderAndSetterForMixedConcreteWithDescendants.read_and_set_some_base_property,
-}
-
-
-#: Dispatch XML property name to read & set method in
-#: :py:class:`_ReaderAndSetterForMixedConcreteWithDescendantsChild`
-_READ_AND_SET_DISPATCH_FOR_MIXED_CONCRETE_WITH_DESCENDANTS_CHILD: Mapping[
-    str,
-    Callable[
-        [
-            _ReaderAndSetterForMixedConcreteWithDescendantsChild,
-            Element,
-            Iterator[Tuple[str, Element]]
-        ],
-        None
-    ]
-] = {
-    'someBaseProperty':
-        _ReaderAndSetterForMixedConcreteWithDescendantsChild.read_and_set_some_base_property,
-    'someChildProperty':
-        _ReaderAndSetterForMixedConcreteWithDescendantsChild.read_and_set_some_child_property,
-}
-
-
-#: Dispatch XML property name to read & set method in
-#: :py:class:`_ReaderAndSetterForMixedConcreteLeaf`
-_READ_AND_SET_DISPATCH_FOR_MIXED_CONCRETE_LEAF: Mapping[
-    str,
-    Callable[
-        [
-            _ReaderAndSetterForMixedConcreteLeaf,
-            Element,
-            Iterator[Tuple[str, Element]]
-        ],
-        None
-    ]
-] = {
-    'uniqueToConcreteLeaf':
-        _ReaderAndSetterForMixedConcreteLeaf.read_and_set_unique_to_concrete_leaf,
-}
-
-
-#: Dispatch XML property name to read & set method in
-#: :py:class:`_ReaderAndSetterForModelTypedFirst`
-_READ_AND_SET_DISPATCH_FOR_MODEL_TYPED_FIRST: Mapping[
-    str,
-    Callable[
-        [
-            _ReaderAndSetterForModelTypedFirst,
-            Element,
-            Iterator[Tuple[str, Element]]
-        ],
-        None
-    ]
-] = {
-    'someProperty':
-        _ReaderAndSetterForModelTypedFirst.read_and_set_some_property,
-}
-
-
-#: Dispatch XML property name to read & set method in
-#: :py:class:`_ReaderAndSetterForModelTypedSecond`
-_READ_AND_SET_DISPATCH_FOR_MODEL_TYPED_SECOND: Mapping[
-    str,
-    Callable[
-        [
-            _ReaderAndSetterForModelTypedSecond,
-            Element,
-            Iterator[Tuple[str, Element]]
-        ],
-        None
-    ]
-] = {
-    'someProperty':
-        _ReaderAndSetterForModelTypedSecond.read_and_set_some_property,
-}
-
-
-#: Dispatch XML property name to read & set method in
-#: :py:class:`_ReaderAndSetterForSomething`
-_READ_AND_SET_DISPATCH_FOR_SOMETHING: Mapping[
-    str,
-    Callable[
-        [
-            _ReaderAndSetterForSomething,
-            Element,
-            Iterator[Tuple[str, Element]]
-        ],
-        None
-    ]
-] = {
-    'structuralProperty':
-        _ReaderAndSetterForSomething.read_and_set_structural_property,
-    'mixedProperty':
-        _ReaderAndSetterForSomething.read_and_set_mixed_property,
-    'modelTypedProperty':
-        _ReaderAndSetterForSomething.read_and_set_model_typed_property,
-    'listStructuralProperty':
-        _ReaderAndSetterForSomething.read_and_set_list_structural_property,
-    'listMixedProperty':
-        _ReaderAndSetterForSomething.read_and_set_list_mixed_property,
-    'listModelTypedProperty':
-        _ReaderAndSetterForSomething.read_and_set_list_model_typed_property,
-    'tupleProperty':
-        _ReaderAndSetterForSomething.read_and_set_tuple_property,
-    'optionalStructuralProperty':
-        _ReaderAndSetterForSomething.read_and_set_optional_structural_property,
-    'optionalMixedProperty':
-        _ReaderAndSetterForSomething.read_and_set_optional_mixed_property,
-    'optionalModelTypedProperty':
-        _ReaderAndSetterForSomething.read_and_set_optional_model_typed_property,
 }
 
 
@@ -5520,10 +4035,123 @@ _GENERAL_DISPATCH: Mapping[
 }
 
 
+#: Read the content of a property of
+#: :py:class:`.types.StructuralFirst`, by the XML name of the property
+_READERS_FOR_STRUCTURAL_FIRST: Mapping[
+    str,
+    _ContentReader[Any]
+] = {
+    'uniqueToFirst': _read_str_from_element_text,
+}
+
+
+#: Read the content of a property of
+#: :py:class:`.types.StructuralSecond`, by the XML name of the property
+_READERS_FOR_STRUCTURAL_SECOND: Mapping[
+    str,
+    _ContentReader[Any]
+] = {
+    'uniqueToSecond': _read_str_from_element_text,
+}
+
+
+#: Read the content of a property of
+#: :py:class:`.types.MixedAbstractDescendantOne`, by the XML name of the property
+_READERS_FOR_MIXED_ABSTRACT_DESCENDANT_ONE: Mapping[
+    str,
+    _ContentReader[Any]
+] = {
+    'uniqueToAbstractDescendantOne': _read_str_from_element_text,
+}
+
+
+#: Read the content of a property of
+#: :py:class:`.types.MixedAbstractDescendantTwo`, by the XML name of the property
+_READERS_FOR_MIXED_ABSTRACT_DESCENDANT_TWO: Mapping[
+    str,
+    _ContentReader[Any]
+] = {
+    'uniqueToAbstractDescendantTwo': _read_str_from_element_text,
+}
+
+
+#: Read the content of a property of
+#: :py:class:`.types.MixedConcreteWithDescendants`, by the XML name of the property
+_READERS_FOR_MIXED_CONCRETE_WITH_DESCENDANTS: Mapping[
+    str,
+    _ContentReader[Any]
+] = {
+    'someBaseProperty': _read_str_from_element_text,
+}
+
+
+#: Read the content of a property of
+#: :py:class:`.types.MixedConcreteWithDescendantsChild`, by the XML name of the property
+_READERS_FOR_MIXED_CONCRETE_WITH_DESCENDANTS_CHILD: Mapping[
+    str,
+    _ContentReader[Any]
+] = {
+    'someBaseProperty': _read_str_from_element_text,
+    'someChildProperty': _read_str_from_element_text,
+}
+
+
+#: Read the content of a property of
+#: :py:class:`.types.MixedConcreteLeaf`, by the XML name of the property
+_READERS_FOR_MIXED_CONCRETE_LEAF: Mapping[
+    str,
+    _ContentReader[Any]
+] = {
+    'uniqueToConcreteLeaf': _read_str_from_element_text,
+}
+
+
+#: Read the content of a property of
+#: :py:class:`.types.ModelTypedFirst`, by the XML name of the property
+_READERS_FOR_MODEL_TYPED_FIRST: Mapping[
+    str,
+    _ContentReader[Any]
+] = {
+    'someProperty': _read_str_from_element_text,
+}
+
+
+#: Read the content of a property of
+#: :py:class:`.types.ModelTypedSecond`, by the XML name of the property
+_READERS_FOR_MODEL_TYPED_SECOND: Mapping[
+    str,
+    _ContentReader[Any]
+] = {
+    'someProperty': _read_str_from_element_text,
+}
+
+
+#: Read the content of a property of
+#: :py:class:`.types.Something`, by the XML name of the property
+_READERS_FOR_SOMETHING: Mapping[
+    str,
+    _ContentReader[Any]
+] = {
+    'structuralProperty': _read_nested__structural_union,
+    'mixedProperty': _read_nested__mixed_union,
+    'modelTypedProperty': _read_nested__model_typed_union,
+    'listStructuralProperty': _read_list_of__structural_union,
+    'listMixedProperty': _read_list_of__mixed_union,
+    'listModelTypedProperty': _read_list_of__model_typed_union,
+    'tupleProperty': _read_tuple3_of__structural_union__mixed_union__model_typed_union,
+    'optionalStructuralProperty': _read_nested__structural_union,
+    'optionalMixedProperty': _read_nested__mixed_union,
+    'optionalModelTypedProperty': _read_nested__model_typed_union,
+}
+
+
 # endregion
 
 
 # region Serialization
+
+
+_ItemT = TypeVar("_ItemT")
 
 
 class _Serializer(aas_types.AbstractVisitor):

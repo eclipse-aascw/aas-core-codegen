@@ -76,6 +76,7 @@ import sys
 from typing import (
     Any,
     Callable,
+    Dict,
     Iterator,
     List,
     Mapping,
@@ -315,30 +316,11 @@ def abstract_item_from_iterparse(
         Instance of :py:class:`.types.AbstractItem` read from
         :paramref:`iterator`
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            # fmt: off
-            "Expected the start element for AbstractItem, "
-            "but got the end-of-input"
-            # fmt: on
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element for AbstractItem, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    try:
-        return _read_abstract_item_as_element(
-            next_element,
-            iterator
-        )
-    except DeserializationException as exception:
-        exception.path._prepend(ElementSegment(next_element))
-        raise exception
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_abstract_item_as_element,
+        'AbstractItem'
+    )
 
 
 def abstract_item_from_stream(
@@ -513,30 +495,11 @@ def some_item_from_iterparse(
         Instance of :py:class:`.types.SomeItem` read from
         :paramref:`iterator`
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            # fmt: off
-            "Expected the start element for SomeItem, "
-            "but got the end-of-input"
-            # fmt: on
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element for SomeItem, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    try:
-        return _read_some_item_as_element(
-            next_element,
-            iterator
-        )
-    except DeserializationException as exception:
-        exception.path._prepend(ElementSegment(next_element))
-        raise exception
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_some_item_as_element,
+        'SomeItem'
+    )
 
 
 def some_item_from_stream(
@@ -711,30 +674,11 @@ def another_item_from_iterparse(
         Instance of :py:class:`.types.AnotherItem` read from
         :paramref:`iterator`
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            # fmt: off
-            "Expected the start element for AnotherItem, "
-            "but got the end-of-input"
-            # fmt: on
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element for AnotherItem, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    try:
-        return _read_another_item_as_element(
-            next_element,
-            iterator
-        )
-    except DeserializationException as exception:
-        exception.path._prepend(ElementSegment(next_element))
-        raise exception
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_another_item_as_element,
+        'AnotherItem'
+    )
 
 
 def another_item_from_stream(
@@ -909,30 +853,11 @@ def simple_from_iterparse(
         Instance of :py:class:`.types.Simple` read from
         :paramref:`iterator`
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            # fmt: off
-            "Expected the start element for Simple, "
-            "but got the end-of-input"
-            # fmt: on
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element for Simple, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    try:
-        return _read_simple_as_element(
-            next_element,
-            iterator
-        )
-    except DeserializationException as exception:
-        exception.path._prepend(ElementSegment(next_element))
-        raise exception
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_simple_as_element,
+        'Simple'
+    )
 
 
 def simple_from_stream(
@@ -1107,30 +1032,11 @@ def something_from_iterparse(
         Instance of :py:class:`.types.Something` read from
         :paramref:`iterator`
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            # fmt: off
-            "Expected the start element for Something, "
-            "but got the end-of-input"
-            # fmt: on
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element for Something, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    try:
-        return _read_something_as_element(
-            next_element,
-            iterator
-        )
-    except DeserializationException as exception:
-        exception.path._prepend(ElementSegment(next_element))
-        raise exception
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_something_as_element,
+        'Something'
+    )
 
 
 def something_from_stream(
@@ -1305,30 +1211,11 @@ def from_iterparse(
     :return:
         Instance of :py:class:`.types.Class` read from the :paramref:`iterator`
     """
-    next_event_element = next(iterator, None)
-    if next_event_element is None:
-        raise DeserializationException(
-            # fmt: off
-            "Expected the start element of an instance, "
-            "but got the end-of-input"
-            # fmt: on
-        )
-
-    next_event, next_element = next_event_element
-    if next_event != 'start':
-        raise DeserializationException(
-            f"Expected the start element of an instance, "
-            f"but got event {next_event!r} and element {next_element.tag!r}"
-        )
-
-    try:
-        return _read_as_element(
-            next_element,
-            iterator
-        )
-    except DeserializationException as exception:
-        exception.path._prepend(ElementSegment(next_element))
-        raise exception
+    return _read_instance_from_iterparse(
+        iterator,
+        _read_as_element,
+        'an instance'
+    )
 
 
 def from_stream(
@@ -1488,6 +1375,16 @@ def from_str(
 # the *callee*.
 
 
+_ValueT = TypeVar("_ValueT")
+
+#: Read the content of an element which has already been opened, and read
+#: the corresponding end element as well
+_ContentReader = Callable[
+    [Element, Iterator[Tuple[str, Element]]],
+    _ValueT
+]
+
+
 def _parse_element_tag(element: Element) -> str:
     """
     Extract the tag name without the namespace prefix from :paramref:`element`.
@@ -1574,25 +1471,19 @@ def _read_end_element(
     return next_element
 
 
-_ItemT = TypeVar("_ItemT")
-
-
-def _read_v_element(
+def _read_named_element(
     element: Element,
     iterator: Iterator[Tuple[str, Element]],
     expected_tag: str,
-    read_content: Callable[
-        [Element, Iterator[Tuple[str, Element]]],
-        _ItemT
-    ]
-) -> _ItemT:
+    read_content: _ContentReader[_ValueT]
+) -> _ValueT:
     """
     Verify that :paramref:`element` bears the :paramref:`expected_tag`, and
     delegate the reading of its content to :paramref:`read_content`.
 
-    This is used to read a single positional item wrapped in a named element,
-    such as ``<v>`` for a list item, or ``<v1>``, ``<v2>``, *etc.* for
-    a tuple item.
+    This is the only place where an element's tag is checked against the tag which
+    its container prescribes -- the XML name of a class, ``<v>`` for a list item, or
+    ``<v1>``, ``<v2>``, *etc.* for a tuple item.
 
     :param element: look-ahead element
     :param iterator:
@@ -1614,20 +1505,128 @@ def _read_v_element(
     return read_content(element, iterator)
 
 
+def _read_dispatched(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]],
+    dispatch: Mapping[str, _ContentReader[_ValueT]],
+    expected_what: str
+) -> _ValueT:
+    """
+    Read the instance of :paramref:`element` by dispatching on its own tag.
+
+    An instance element is self-describing: its tag *is* its model type.
+
+    The end element corresponding to :paramref:`element` will be read as well.
+
+    :param element: start element of the instance
+    :param iterator:
+        Input stream of ``(event, element)`` coming from
+        :py:func:`xml.etree.ElementTree.iterparse` with the argument
+        ``events=["start", "end"]``
+    :param dispatch: to read the instance as a sequence, by its model type
+    :param expected_what: what we expected to read, for the error messages
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return: parsed instance
+    """
+    tag_wo_ns = _parse_element_tag(element)
+
+    read_as_sequence = dispatch.get(tag_wo_ns, None)
+    if read_as_sequence is None:
+        raise DeserializationException(
+            f"Expected the element tag to be a valid model type "
+            f"of {expected_what}, "
+            f"but got tag {tag_wo_ns!r}"
+        )
+
+    return read_as_sequence(element, iterator)
+
+
+def _read_properties(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]],
+    readers: Mapping[str, _ContentReader[Any]]
+) -> Mapping[str, Any]:
+    """
+    Read the properties of an instance as the children of :paramref:`element`.
+
+    The end element corresponding to :paramref:`element` will be read as well.
+
+    The property is marked on the error path here, once for all the properties,
+    instead of in every reader: the tag of the child element *is* the XML name of
+    the property which we are reading.
+
+    :param element: start element, parent of the properties
+    :param iterator:
+        Input stream of ``(event, element)`` coming from
+        :py:func:`xml.etree.ElementTree.iterparse` with the argument
+        ``events=["start", "end"]``
+    :param readers: to read the content of a property, by its XML name
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return: parsed values, by the XML name of the property
+    """
+    if element.text is not None and len(element.text.strip()) != 0:
+        raise DeserializationException(
+            f"Expected only XML elements representing the properties "
+            f"and whitespace text, but got text: {element.text!r}"
+        )
+
+    _raise_if_has_tail_or_attrib(element)
+
+    values = dict()  # type: Dict[str, Any]
+
+    while True:
+        # NOTE (mristin):
+        # We pull the next property element here instead of delegating it to
+        # a helper. A call is not free in Python, and this loop runs once for
+        # every property of every instance.
+        next_event_element = next(iterator, None)
+        if next_event_element is None:
+            raise DeserializationException(
+                f"Expected a property element or the end element corresponding "
+                f"to {element.tag}, but got the end-of-input"
+            )
+
+        next_event, prop_element = next_event_element
+        if next_event == 'end' and prop_element.tag == element.tag:
+            # We reached the end element enclosing the properties.
+            break
+
+        if next_event != 'start':
+            raise DeserializationException(
+                f"Expected a start element corresponding to a property, "
+                f"but got event {next_event!r} "
+                f"and element {prop_element.tag!r}"
+            )
+
+        try:
+            tag_wo_ns = _parse_element_tag(prop_element)
+
+            reader = readers.get(tag_wo_ns, None)
+            if reader is None:
+                raise DeserializationException(
+                    f"Expected an element representing a property, "
+                    f"but got an element with unexpected tag: {tag_wo_ns!r}"
+                )
+
+            values[tag_wo_ns] = reader(prop_element, iterator)
+        except DeserializationException as exception:
+            exception.path._prepend(ElementSegment(prop_element))
+            raise
+
+    return values
+
+
 def _read_list_of_items(
     element: Element,
     iterator: Iterator[Tuple[str, Element]],
-    read_item: Callable[
-        [Element, Iterator[Tuple[str, Element]]],
-        _ItemT
-    ]
-) -> List[_ItemT]:
+    read_item: _ContentReader[_ValueT]
+) -> List[_ValueT]:
     """
-    Read a list of items from :paramref:`iterator`.
+    Read the children of :paramref:`element` as a list of items.
 
     :paramref:`read_item` is responsible for verifying the tag of each item
     element itself -- *e.g.*, by wrapping a scalar/enumeration reader with
-    :py:func:`_read_v_element`, or by relying on a class's own dispatch by
+    :py:func:`_read_named_element`, or by relying on a class's own dispatch by
     its natural element tag.
 
     The end element corresponding to :paramref:`element` will be read as well.
@@ -1647,38 +1646,78 @@ def _read_list_of_items(
             f"but got text: {element.text!r}"
         )
 
-    result = []  # type: List[_ItemT]
-    item_i = 0
+    result = []  # type: List[_ValueT]
 
     while True:
+        # NOTE (mristin):
+        # We pull the next item element here instead of delegating it to a helper,
+        # as this loop runs once for every item of every list.
         next_event_element = next(iterator, None)
         if next_event_element is None:
             raise DeserializationException(
-                "Expected one or more items from a list or the end element, "
-                "but got end-of-input"
+                f"Expected an item element or the end element corresponding "
+                f"to {element.tag}, but got the end-of-input"
             )
 
-        next_event, next_element = next_event_element
-        if next_event == 'end' and next_element.tag == element.tag:
-            # We reached the end of the list.
+        next_event, item_element = next_event_element
+        if next_event == 'end' and item_element.tag == element.tag:
+            # We reached the end element enclosing the items.
             break
 
         if next_event != 'start':
             raise DeserializationException(
-                "Expected a start element corresponding to an item, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
+                f"Expected a start element corresponding to an item, "
+                f"but got event {next_event!r} "
+                f"and element {item_element.tag!r}"
             )
 
         try:
-            item = read_item(next_element, iterator)
+            item = read_item(item_element, iterator)
         except DeserializationException as exception:
-            exception.path._prepend(IndexSegment(next_element, item_i))
+            exception.path._prepend(IndexSegment(item_element, len(result)))
             raise
 
         result.append(item)
-        item_i += 1
 
     return result
+
+
+def _read_instance_from_iterparse(
+    iterator: Iterator[Tuple[str, Element]],
+    read_as_element: _ContentReader[_ValueT],
+    expected_what: str
+) -> _ValueT:
+    """
+    Read an instance from :paramref:`iterator`, starting at its start element.
+
+    :param iterator:
+        Input stream of ``(event, element)`` coming from
+        :py:func:`xml.etree.ElementTree.iterparse` with the argument
+        ``events=["start", "end"]``
+    :param read_as_element: to read the instance, including its end element
+    :param expected_what: what we expected to read, for the error messages
+    :raise: :py:class:`DeserializationException` if unexpected input
+    :return: parsed instance
+    """
+    next_event_element = next(iterator, None)
+    if next_event_element is None:
+        raise DeserializationException(
+            f"Expected the start element for {expected_what}, "
+            f"but got the end-of-input"
+        )
+
+    next_event, next_element = next_event_element
+    if next_event != 'start':
+        raise DeserializationException(
+            f"Expected the start element for {expected_what}, "
+            f"but got event {next_event!r} and element {next_element.tag!r}"
+        )
+
+    try:
+        return read_as_element(next_element, iterator)
+    except DeserializationException as exception:
+        exception.path._prepend(ElementSegment(next_element))
+        raise exception
 
 
 def _read_text_from_element(
@@ -1719,44 +1758,6 @@ def _read_text_from_element(
     return text
 
 
-_XS_BOOLEAN_LITERAL_SET = {
-    "1",
-    "true",
-    "0",
-    "false",
-}
-
-
-def _read_bool_from_element_text(
-    element: Element,
-    iterator: Iterator[Tuple[str, Element]]
-) -> bool:
-    """
-    Parse the text of :paramref:`element` as a boolean, and
-    read the corresponding end element from :paramref:`iterator`.
-
-    :param element: start element
-    :param iterator:
-        Input stream of ``(event, element)`` coming from
-        :py:func:`xml.etree.ElementTree.iterparse` with the argument
-        ``events=["start", "end"]``
-    :raise: :py:class:`DeserializationException` if unexpected input
-    :return: parsed value
-    """
-    text = _read_text_from_element(
-        element,
-        iterator
-    )
-
-    if text not in _XS_BOOLEAN_LITERAL_SET:
-        raise DeserializationException(
-            f"Expected a boolean, "
-            f"but got an element with text: {text!r}"
-        )
-
-    return text in ('1', 'true')
-
-
 def _read_int_from_element_text(
     element: Element,
     iterator: Iterator[Tuple[str, Element]]
@@ -1786,48 +1787,6 @@ def _read_int_from_element_text(
             f"Expected an integer, "
             f"but got an element with text: {text!r}"
         )
-
-    return value
-
-
-_TEXT_TO_XS_DOUBLE_LITERALS = {
-    "NaN": math.nan,
-    "INF": math.inf,
-    "-INF": -math.inf,
-}
-
-
-def _read_float_from_element_text(
-    element: Element,
-    iterator: Iterator[Tuple[str, Element]]
-) -> float:
-    """
-    Parse the text of :paramref:`element` as a floating-point number, and
-    read the corresponding end element from :paramref:`iterator`.
-
-    :param element: start element
-    :param iterator:
-        Input stream of ``(event, element)`` coming from
-        :py:func:`xml.etree.ElementTree.iterparse` with the argument
-        ``events=["start", "end"]``
-    :raise: :py:class:`DeserializationException` if unexpected input
-    :return: parsed value
-    """
-    text = _read_text_from_element(
-        element,
-        iterator
-    )
-
-    value = _TEXT_TO_XS_DOUBLE_LITERALS.get(text, None)
-    if value is None:
-        try:
-            value = float(text)
-        except ValueError:
-            # pylint: disable=raise-missing-from
-            raise DeserializationException(
-                f"Expected a floating-point number, "
-                f"but got an element with text: {text!r}"
-            )
 
     return value
 
@@ -1875,37 +1834,34 @@ def _read_str_from_element_text(
     return result
 
 
-def _read_bytes_from_element_text(
+def _read_list_of__abstract_item(
     element: Element,
     iterator: Iterator[Tuple[str, Element]]
-) -> bytes:
+) -> List[aas_types.AbstractItem]:
     """
-    Parse the text of :paramref:`element` as base64-encoded bytes, and
-    read the corresponding end element from :paramref:`iterator`.
-
-    :param element: look-ahead element
-    :param iterator:
-        Input stream of ``(event, element)`` coming from
-        :py:func:`xml.etree.ElementTree.iterparse` with the argument
-        ``events=["start", "end"]``
-    :raise: :py:class:`DeserializationException` if unexpected input
-    :return: parsed value
+    Read the items of :paramref:`element` as a list of
+    :py:class:`.types.AbstractItem`.
     """
-    text = _read_text_from_element(
+    return _read_list_of_items(
         element,
-        iterator
+        iterator,
+        _read_abstract_item_as_element
     )
 
-    try:
-        value = base64.b64decode(text)
-    except Exception:
-        # pylint: disable=raise-missing-from
-        raise DeserializationException(
-            f"Expected a text as base64-encoded bytes, "
-            f"but got an element with text: {text!r}"
-        )
 
-    return value
+def _read_list_of__simple(
+    element: Element,
+    iterator: Iterator[Tuple[str, Element]]
+) -> List[aas_types.Simple]:
+    """
+    Read the items of :paramref:`element` as a list of
+    :py:class:`.types.Simple`.
+    """
+    return _read_list_of_items(
+        element,
+        iterator,
+        _read_simple_as_element
+    )
 
 
 def _read_abstract_item_as_element(
@@ -1924,52 +1880,12 @@ def _read_abstract_item_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-    read_as_sequence = _DISPATCH_FOR_ABSTRACT_ITEM.get(
-        tag_wo_ns,
-        None
-    )
-
-    if read_as_sequence is None:
-        raise DeserializationException(
-            f"Expected the element tag to be a valid model type "
-            f"of a concrete instance of 'AbstractItem', "
-            f"but got tag {tag_wo_ns!r}"
-        )
-
-    return read_as_sequence(
+    return _read_dispatched(
         element,
-        iterator
+        iterator,
+        _DISPATCH_FOR_ABSTRACT_ITEM,
+        "a concrete instance of 'AbstractItem'"
     )
-
-
-class _ReaderAndSetterForSomeItem:
-    """
-    Provide a buffer for reading and setting the properties for the class
-    :py:class:`SomeItem`.
-
-    The properties correspond to the constructor arguments of
-    :py:class:`SomeItem`. We use this buffer to facilitate dispatching when
-    parsing the properties in a streaming fashion.
-    """
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.name: Optional[str] = None
-
-    def read_and_set_name(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.SomeItem.name` and set it.
-        """
-        self.name = _read_str_from_element_text(
-            element,
-            iterator
-        )
 
 
 def _read_some_item_as_sequence(
@@ -1991,72 +1907,21 @@ def _read_some_item_as_sequence(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    if element.text is not None and len(element.text.strip()) != 0:
-        raise DeserializationException(
-            f"Expected only XML elements representing the properties and whitespace text, "
-            f"but got text: {element.text!r}"
-        )
-
-    _raise_if_has_tail_or_attrib(element)
-
-    reader_and_setter = (
-        _ReaderAndSetterForSomeItem()
+    values = _read_properties(
+        element,
+        iterator,
+        _READERS_FOR_SOME_ITEM
     )
 
-    while True:
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected one or more XML-encoded properties or the end element, "
-                "but got the end-of-input"
-            )
+    the_name: Optional[str] = values.get('name')
 
-        next_event, next_element = next_event_element
-        if next_event == 'end' and next_element.tag == element.tag:
-            # We reached the end element enclosing the sequence.
-            break
-
-        if next_event != 'start':
-            raise DeserializationException(
-                "Expected a start element corresponding to a property, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            tag_wo_ns = _parse_element_tag(next_element)
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        read_and_set_method = _READ_AND_SET_DISPATCH_FOR_SOME_ITEM.get(
-            tag_wo_ns,
-            None
-        )
-        if read_and_set_method is None:
-            an_exception = DeserializationException(
-                f"Expected an element representing a property, "
-                f"but got an element with unexpected tag: {tag_wo_ns!r}"
-            )
-            an_exception.path._prepend(ElementSegment(next_element))
-            raise an_exception
-
-        try:
-            read_and_set_method(
-                reader_and_setter,
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-    if reader_and_setter.name is None:
+    if the_name is None:
         raise DeserializationException(
             "The required property 'name' is missing"
         )
 
     return aas_types.SomeItem(
-        reader_and_setter.name
+        the_name
     )
 
 
@@ -2076,47 +1941,12 @@ def _read_some_item_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-
-    if tag_wo_ns != 'someItem':
-        raise DeserializationException(
-            f"Expected the element with the tag 'someItem', "
-            f"but got tag: {tag_wo_ns}"
-        )
-
-    return _read_some_item_as_sequence(
+    return _read_named_element(
         element,
-        iterator
+        iterator,
+        'someItem',
+        _read_some_item_as_sequence
     )
-
-
-class _ReaderAndSetterForAnotherItem:
-    """
-    Provide a buffer for reading and setting the properties for the class
-    :py:class:`AnotherItem`.
-
-    The properties correspond to the constructor arguments of
-    :py:class:`AnotherItem`. We use this buffer to facilitate dispatching when
-    parsing the properties in a streaming fashion.
-    """
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.serial_number: Optional[int] = None
-
-    def read_and_set_serial_number(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.AnotherItem.serial_number` and set it.
-        """
-        self.serial_number = _read_int_from_element_text(
-            element,
-            iterator
-        )
 
 
 def _read_another_item_as_sequence(
@@ -2138,72 +1968,21 @@ def _read_another_item_as_sequence(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    if element.text is not None and len(element.text.strip()) != 0:
-        raise DeserializationException(
-            f"Expected only XML elements representing the properties and whitespace text, "
-            f"but got text: {element.text!r}"
-        )
-
-    _raise_if_has_tail_or_attrib(element)
-
-    reader_and_setter = (
-        _ReaderAndSetterForAnotherItem()
+    values = _read_properties(
+        element,
+        iterator,
+        _READERS_FOR_ANOTHER_ITEM
     )
 
-    while True:
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected one or more XML-encoded properties or the end element, "
-                "but got the end-of-input"
-            )
+    the_serial_number: Optional[int] = values.get('serialNumber')
 
-        next_event, next_element = next_event_element
-        if next_event == 'end' and next_element.tag == element.tag:
-            # We reached the end element enclosing the sequence.
-            break
-
-        if next_event != 'start':
-            raise DeserializationException(
-                "Expected a start element corresponding to a property, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            tag_wo_ns = _parse_element_tag(next_element)
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        read_and_set_method = _READ_AND_SET_DISPATCH_FOR_ANOTHER_ITEM.get(
-            tag_wo_ns,
-            None
-        )
-        if read_and_set_method is None:
-            an_exception = DeserializationException(
-                f"Expected an element representing a property, "
-                f"but got an element with unexpected tag: {tag_wo_ns!r}"
-            )
-            an_exception.path._prepend(ElementSegment(next_element))
-            raise an_exception
-
-        try:
-            read_and_set_method(
-                reader_and_setter,
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-    if reader_and_setter.serial_number is None:
+    if the_serial_number is None:
         raise DeserializationException(
             "The required property 'serialNumber' is missing"
         )
 
     return aas_types.AnotherItem(
-        reader_and_setter.serial_number
+        the_serial_number
     )
 
 
@@ -2223,47 +2002,12 @@ def _read_another_item_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-
-    if tag_wo_ns != 'anotherItem':
-        raise DeserializationException(
-            f"Expected the element with the tag 'anotherItem', "
-            f"but got tag: {tag_wo_ns}"
-        )
-
-    return _read_another_item_as_sequence(
+    return _read_named_element(
         element,
-        iterator
+        iterator,
+        'anotherItem',
+        _read_another_item_as_sequence
     )
-
-
-class _ReaderAndSetterForSimple:
-    """
-    Provide a buffer for reading and setting the properties for the class
-    :py:class:`Simple`.
-
-    The properties correspond to the constructor arguments of
-    :py:class:`Simple`. We use this buffer to facilitate dispatching when
-    parsing the properties in a streaming fashion.
-    """
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.name: Optional[str] = None
-
-    def read_and_set_name(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.Simple.name` and set it.
-        """
-        self.name = _read_str_from_element_text(
-            element,
-            iterator
-        )
 
 
 def _read_simple_as_sequence(
@@ -2285,72 +2029,21 @@ def _read_simple_as_sequence(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    if element.text is not None and len(element.text.strip()) != 0:
-        raise DeserializationException(
-            f"Expected only XML elements representing the properties and whitespace text, "
-            f"but got text: {element.text!r}"
-        )
-
-    _raise_if_has_tail_or_attrib(element)
-
-    reader_and_setter = (
-        _ReaderAndSetterForSimple()
+    values = _read_properties(
+        element,
+        iterator,
+        _READERS_FOR_SIMPLE
     )
 
-    while True:
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected one or more XML-encoded properties or the end element, "
-                "but got the end-of-input"
-            )
+    the_name: Optional[str] = values.get('name')
 
-        next_event, next_element = next_event_element
-        if next_event == 'end' and next_element.tag == element.tag:
-            # We reached the end element enclosing the sequence.
-            break
-
-        if next_event != 'start':
-            raise DeserializationException(
-                "Expected a start element corresponding to a property, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            tag_wo_ns = _parse_element_tag(next_element)
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        read_and_set_method = _READ_AND_SET_DISPATCH_FOR_SIMPLE.get(
-            tag_wo_ns,
-            None
-        )
-        if read_and_set_method is None:
-            an_exception = DeserializationException(
-                f"Expected an element representing a property, "
-                f"but got an element with unexpected tag: {tag_wo_ns!r}"
-            )
-            an_exception.path._prepend(ElementSegment(next_element))
-            raise an_exception
-
-        try:
-            read_and_set_method(
-                reader_and_setter,
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-    if reader_and_setter.name is None:
+    if the_name is None:
         raise DeserializationException(
             "The required property 'name' is missing"
         )
 
     return aas_types.Simple(
-        reader_and_setter.name
+        the_name
     )
 
 
@@ -2370,64 +2063,12 @@ def _read_simple_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-
-    if tag_wo_ns != 'simple':
-        raise DeserializationException(
-            f"Expected the element with the tag 'simple', "
-            f"but got tag: {tag_wo_ns}"
-        )
-
-    return _read_simple_as_sequence(
+    return _read_named_element(
         element,
-        iterator
+        iterator,
+        'simple',
+        _read_simple_as_sequence
     )
-
-
-class _ReaderAndSetterForSomething:
-    """
-    Provide a buffer for reading and setting the properties for the class
-    :py:class:`Something`.
-
-    The properties correspond to the constructor arguments of
-    :py:class:`Something`. We use this buffer to facilitate dispatching when
-    parsing the properties in a streaming fashion.
-    """
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.some_items: Optional[List[aas_types.AbstractItem]] = None
-        self.some_simples: Optional[List[aas_types.Simple]] = None
-
-    def read_and_set_some_items(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.Something.some_items` and set it.
-        """
-        self.some_items = _read_list_of_items(
-            element,
-            iterator,
-            _read_abstract_item_as_element
-        )
-
-    def read_and_set_some_simples(
-        self,
-        element: Element,
-        iterator: Iterator[Tuple[str, Element]]
-    ) -> None:
-        """
-        Read :paramref:`element` as the property
-        :py:attr:`.types.Something.some_simples` and set it.
-        """
-        self.some_simples = _read_list_of_items(
-            element,
-            iterator,
-            _read_simple_as_element
-        )
 
 
 def _read_something_as_sequence(
@@ -2449,78 +2090,28 @@ def _read_something_as_sequence(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    if element.text is not None and len(element.text.strip()) != 0:
-        raise DeserializationException(
-            f"Expected only XML elements representing the properties and whitespace text, "
-            f"but got text: {element.text!r}"
-        )
-
-    _raise_if_has_tail_or_attrib(element)
-
-    reader_and_setter = (
-        _ReaderAndSetterForSomething()
+    values = _read_properties(
+        element,
+        iterator,
+        _READERS_FOR_SOMETHING
     )
 
-    while True:
-        next_event_element = next(iterator, None)
-        if next_event_element is None:
-            raise DeserializationException(
-                "Expected one or more XML-encoded properties or the end element, "
-                "but got the end-of-input"
-            )
+    the_some_items: Optional[List[aas_types.AbstractItem]] = values.get('someItems')
+    the_some_simples: Optional[List[aas_types.Simple]] = values.get('someSimples')
 
-        next_event, next_element = next_event_element
-        if next_event == 'end' and next_element.tag == element.tag:
-            # We reached the end element enclosing the sequence.
-            break
-
-        if next_event != 'start':
-            raise DeserializationException(
-                "Expected a start element corresponding to a property, "
-                f"but got event {next_event!r} and element {next_element.tag!r}"
-            )
-
-        try:
-            tag_wo_ns = _parse_element_tag(next_element)
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-        read_and_set_method = _READ_AND_SET_DISPATCH_FOR_SOMETHING.get(
-            tag_wo_ns,
-            None
-        )
-        if read_and_set_method is None:
-            an_exception = DeserializationException(
-                f"Expected an element representing a property, "
-                f"but got an element with unexpected tag: {tag_wo_ns!r}"
-            )
-            an_exception.path._prepend(ElementSegment(next_element))
-            raise an_exception
-
-        try:
-            read_and_set_method(
-                reader_and_setter,
-                next_element,
-                iterator
-            )
-        except DeserializationException as exception:
-            exception.path._prepend(ElementSegment(next_element))
-            raise
-
-    if reader_and_setter.some_items is None:
+    if the_some_items is None:
         raise DeserializationException(
             "The required property 'someItems' is missing"
         )
 
-    if reader_and_setter.some_simples is None:
+    if the_some_simples is None:
         raise DeserializationException(
             "The required property 'someSimples' is missing"
         )
 
     return aas_types.Something(
-        reader_and_setter.some_items,
-        reader_and_setter.some_simples
+        the_some_items,
+        the_some_simples
     )
 
 
@@ -2540,17 +2131,11 @@ def _read_something_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-
-    if tag_wo_ns != 'something':
-        raise DeserializationException(
-            f"Expected the element with the tag 'something', "
-            f"but got tag: {tag_wo_ns}"
-        )
-
-    return _read_something_as_sequence(
+    return _read_named_element(
         element,
-        iterator
+        iterator,
+        'something',
+        _read_something_as_sequence
     )
 
 
@@ -2569,22 +2154,11 @@ def _read_as_element(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed instance
     """
-    tag_wo_ns = _parse_element_tag(element)
-    read_as_sequence = _GENERAL_DISPATCH.get(
-        tag_wo_ns,
-        None
-    )
-
-    if read_as_sequence is None:
-        raise DeserializationException(
-            f"Expected the element tag to be a valid model type "
-            f"of a concrete instance, "
-            f"but got tag {tag_wo_ns!r}"
-        )
-
-    return read_as_sequence(
+    return _read_dispatched(
         element,
-        iterator
+        iterator,
+        _GENERAL_DISPATCH,
+        'a concrete instance'
     )
 
 
@@ -2602,80 +2176,6 @@ _DISPATCH_FOR_ABSTRACT_ITEM: Mapping[
 ] = {
     'anotherItem': _read_another_item_as_sequence,
     'someItem': _read_some_item_as_sequence,
-}
-
-
-#: Dispatch XML property name to read & set method in
-#: :py:class:`_ReaderAndSetterForSomeItem`
-_READ_AND_SET_DISPATCH_FOR_SOME_ITEM: Mapping[
-    str,
-    Callable[
-        [
-            _ReaderAndSetterForSomeItem,
-            Element,
-            Iterator[Tuple[str, Element]]
-        ],
-        None
-    ]
-] = {
-    'name':
-        _ReaderAndSetterForSomeItem.read_and_set_name,
-}
-
-
-#: Dispatch XML property name to read & set method in
-#: :py:class:`_ReaderAndSetterForAnotherItem`
-_READ_AND_SET_DISPATCH_FOR_ANOTHER_ITEM: Mapping[
-    str,
-    Callable[
-        [
-            _ReaderAndSetterForAnotherItem,
-            Element,
-            Iterator[Tuple[str, Element]]
-        ],
-        None
-    ]
-] = {
-    'serialNumber':
-        _ReaderAndSetterForAnotherItem.read_and_set_serial_number,
-}
-
-
-#: Dispatch XML property name to read & set method in
-#: :py:class:`_ReaderAndSetterForSimple`
-_READ_AND_SET_DISPATCH_FOR_SIMPLE: Mapping[
-    str,
-    Callable[
-        [
-            _ReaderAndSetterForSimple,
-            Element,
-            Iterator[Tuple[str, Element]]
-        ],
-        None
-    ]
-] = {
-    'name':
-        _ReaderAndSetterForSimple.read_and_set_name,
-}
-
-
-#: Dispatch XML property name to read & set method in
-#: :py:class:`_ReaderAndSetterForSomething`
-_READ_AND_SET_DISPATCH_FOR_SOMETHING: Mapping[
-    str,
-    Callable[
-        [
-            _ReaderAndSetterForSomething,
-            Element,
-            Iterator[Tuple[str, Element]]
-        ],
-        None
-    ]
-] = {
-    'someItems':
-        _ReaderAndSetterForSomething.read_and_set_some_items,
-    'someSimples':
-        _ReaderAndSetterForSomething.read_and_set_some_simples,
 }
 
 
@@ -2698,10 +2198,54 @@ _GENERAL_DISPATCH: Mapping[
 }
 
 
+#: Read the content of a property of
+#: :py:class:`.types.SomeItem`, by the XML name of the property
+_READERS_FOR_SOME_ITEM: Mapping[
+    str,
+    _ContentReader[Any]
+] = {
+    'name': _read_str_from_element_text,
+}
+
+
+#: Read the content of a property of
+#: :py:class:`.types.AnotherItem`, by the XML name of the property
+_READERS_FOR_ANOTHER_ITEM: Mapping[
+    str,
+    _ContentReader[Any]
+] = {
+    'serialNumber': _read_int_from_element_text,
+}
+
+
+#: Read the content of a property of
+#: :py:class:`.types.Simple`, by the XML name of the property
+_READERS_FOR_SIMPLE: Mapping[
+    str,
+    _ContentReader[Any]
+] = {
+    'name': _read_str_from_element_text,
+}
+
+
+#: Read the content of a property of
+#: :py:class:`.types.Something`, by the XML name of the property
+_READERS_FOR_SOMETHING: Mapping[
+    str,
+    _ContentReader[Any]
+] = {
+    'someItems': _read_list_of__abstract_item,
+    'someSimples': _read_list_of__simple,
+}
+
+
 # endregion
 
 
 # region Serialization
+
+
+_ItemT = TypeVar("_ItemT")
 
 
 class _Serializer(aas_types.AbstractVisitor):
