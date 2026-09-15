@@ -2,7 +2,17 @@
 
 import io
 import textwrap
-from typing import Tuple, Optional, List, Union
+from typing import (
+    AbstractSet,
+    List,
+    Mapping,
+    MutableMapping,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Union,
+)
 
 from icontract import ensure, require
 
@@ -20,6 +30,7 @@ from aas_core_codegen.python.common import (
     INDENT2 as II,
     INDENT3 as III,
     INDENT4 as IIII,
+    INDENT5 as IIIII,
 )
 
 
@@ -156,19 +167,12 @@ def {function_name}(
 {I}:raise: :py:class:`DeserializationException` if unexpected input
 {I}:return: parsed value
 {I}\"\"\"
-{I}text = _read_text_from_element(
+{I}return _read_enum_from_element_text(
 {II}element,
-{II}iterator
-{I})
-
-{I}literal = aas_stringification.{enum_from_str}(text)
-{I}if literal is None:
-{II}raise DeserializationException(
-{III}f"Not a valid string representation of "
-{III}f"a literal of {enum_name}: {{text}}"
-{II})
-
-{I}return literal"""
+{II}iterator,
+{II}aas_stringification.{enum_from_str},
+{II}{python_common.string_literal(enum_name)}
+{I})"""
     )
 
 
@@ -226,30 +230,11 @@ def {function_name}(
 {II}Instance of :py:class:`.types.{cls_name}` read from
 {II}:paramref:`iterator`
 {I}\"\"\"
-{I}next_event_element = next(iterator, None)
-{I}if next_event_element is None:
-{II}raise DeserializationException(
-{III}# fmt: off
-{III}"Expected the start element for {cls_name}, "
-{III}"but got the end-of-input"
-{III}# fmt: on
-{II})
-
-{I}next_event, next_element = next_event_element
-{I}if next_event != 'start':
-{II}raise DeserializationException(
-{III}f"Expected the start element for {cls_name}, "
-{III}f"but got event {{next_event!r}} and element {{next_element.tag!r}}"
-{II})
-
-{I}try:
-{II}return {wrapped_function_name}(
-{III}next_element,
-{III}iterator
-{II})
-{I}except DeserializationException as exception:
-{II}exception.path._prepend(ElementSegment(next_element))
-{II}raise exception"""
+{I}return _read_instance_from_iterparse(
+{II}iterator,
+{II}{wrapped_function_name},
+{II}{python_common.string_literal(cls_name)}
+{I})"""
     )
 
 
@@ -456,29 +441,21 @@ def _generate_read_cls_as_element(
 
         cls_name = python_naming.class_name(cls.name)
 
+        expected_what = python_common.string_literal(
+            f"a concrete instance of {cls_name!r}"
+        )
+
         body = Stripped(
             f"""\
-tag_wo_ns = _parse_element_tag(element)
-read_as_sequence = {dispatch_map}.get(
-{I}tag_wo_ns,
-{I}None
-)
-
-if read_as_sequence is None:
-{I}raise DeserializationException(
-{II}f"Expected the element tag to be a valid model type "
-{II}f"of a concrete instance of '{cls_name}', "
-{II}f"but got tag {{tag_wo_ns!r}}"
-{I})
-
-return read_as_sequence(
+return _read_dispatched(
 {I}element,
-{I}iterator
+{I}iterator,
+{I}{dispatch_map},
+{I}{expected_what}
 )"""
         )
     else:
-        xml_cls = naming.xml_class_name(cls.name)
-        xml_cls_literal = python_common.string_literal(xml_cls)
+        xml_cls_literal = python_common.string_literal(naming.xml_class_name(cls.name))
 
         read_as_sequence_function_name = python_naming.function_name(
             Identifier(f"_read_{cls.name}_as_sequence")
@@ -486,17 +463,11 @@ return read_as_sequence(
 
         body = Stripped(
             f"""\
-tag_wo_ns = _parse_element_tag(element)
-
-if tag_wo_ns != {xml_cls_literal}:
-{I}raise DeserializationException(
-{II}f"Expected the element with the tag '{xml_cls}', "
-{II}f"but got tag: {{tag_wo_ns}}"
-{I})
-
-return {read_as_sequence_function_name}(
+return _read_named_element(
 {I}element,
-{I}iterator
+{I}iterator,
+{I}{xml_cls_literal},
+{I}{read_as_sequence_function_name}
 )"""
         )
 
@@ -595,22 +566,11 @@ def _generate_read_named_union_as_element(
 
     body = Stripped(
         f"""\
-tag_wo_ns = _parse_element_tag(element)
-read_as_sequence = {dispatch_map}.get(
-{I}tag_wo_ns,
-{I}None
-)
-
-if read_as_sequence is None:
-{I}raise DeserializationException(
-{II}f"Expected the element tag to be a valid model type "
-{II}f"of a concrete instance of '{union_name}', "
-{II}f"but got tag {{tag_wo_ns!r}}"
-{I})
-
-return read_as_sequence(
+return _read_dispatched(
 {I}element,
-{I}iterator
+{I}iterator,
+{I}{dispatch_map},
+{I}{python_common.string_literal(f"a concrete instance of {union_name!r}")}
 )"""
     )
 
@@ -685,30 +645,11 @@ def {function_name}(
 {I}:return:
 {II}Instance of :py:class:`.types.Class` read from the :paramref:`iterator`
 {I}\"\"\"
-{I}next_event_element = next(iterator, None)
-{I}if next_event_element is None:
-{II}raise DeserializationException(
-{III}# fmt: off
-{III}"Expected the start element of an instance, "
-{III}"but got the end-of-input"
-{III}# fmt: on
-{II})
-
-{I}next_event, next_element = next_event_element
-{I}if next_event != 'start':
-{II}raise DeserializationException(
-{III}f"Expected the start element of an instance, "
-{III}f"but got event {{next_event!r}} and element {{next_element.tag!r}}"
-{II})
-
-{I}try:
-{II}return _read_as_element(
-{III}next_element,
-{III}iterator
-{II})
-{I}except DeserializationException as exception:
-{II}exception.path._prepend(ElementSegment(next_element))
-{II}raise exception"""
+{I}return _read_instance_from_iterparse(
+{II}iterator,
+{II}_read_as_element,
+{II}'an instance'
+{I})"""
     )
 
 
@@ -875,22 +816,11 @@ def _generate_general_read_as_element(
 
     body = Stripped(
         f"""\
-tag_wo_ns = _parse_element_tag(element)
-read_as_sequence = {dispatch_map}.get(
-{I}tag_wo_ns,
-{I}None
-)
-
-if read_as_sequence is None:
-{I}raise DeserializationException(
-{II}f"Expected the element tag to be a valid model type "
-{II}f"of a concrete instance, "
-{II}f"but got tag {{tag_wo_ns!r}}"
-{I})
-
-return read_as_sequence(
+return _read_dispatched(
 {I}element,
-{I}iterator
+{I}iterator,
+{I}{dispatch_map},
+{I}'a concrete instance'
 )"""
     )
 
@@ -936,11 +866,7 @@ def _generate_tuple_from_element(arity: int) -> Stripped:
     type_vars = [f"_TupleItem{i}T" for i in range(1, arity + 1)]
 
     parameters = ",\n".join(
-        f"""\
-read_item_{i}: Callable[
-{I}[Element, Iterator[Tuple[str, Element]]],
-{I}{type_var}
-]"""
+        f"read_item_{i}: _ContentReader[{type_var}]"
         for i, type_var in enumerate(type_vars, start=1)
     )
 
@@ -952,25 +878,12 @@ read_item_{i}: Callable[
 
     item_reads = "\n\n".join(
         f"""\
-next_event_element = next(iterator, None)
-if next_event_element is None:
-{I}raise DeserializationException(
-{II}"Expected the item {i - 1} of the tuple, but got end-of-input"
-{I})
-
-next_event, next_element = next_event_element
-if next_event != 'start':
-{I}raise DeserializationException(
-{II}f"Expected a start element corresponding to the item {i - 1} "
-{II}f"of the tuple, but got event {{next_event!r}} "
-{II}f"and element {{next_element.tag!r}}"
-{I})
-
-try:
-{I}item_{i} = read_item_{i}(next_element, iterator)
-except DeserializationException as exception:
-{I}exception.path._prepend(IndexSegment(next_element, {i - 1}))
-{I}raise"""
+item_{i} = _read_tuple_item(
+{I}element,
+{I}iterator,
+{I}{i - 1},
+{I}read_item_{i}
+)"""
         for i in range(1, arity + 1)
     )
 
@@ -990,7 +903,7 @@ def {function_name}(
 
 {I}Each ``read_item_*`` function is responsible for verifying the tag of its
 {I}own item element -- *e.g.*, by wrapping a scalar/enumeration reader with
-{I}:py:func:`_read_v_element`, or by relying on a class's own dispatch by
+{I}:py:func:`_read_named_element`, or by relying on a class's own dispatch by
 {I}its natural element tag.
 
 {I}The end element corresponding to :paramref:`element` will be read as well.
@@ -1020,433 +933,536 @@ def {function_name}(
     )
 
 
-def _generate_reader_and_setter(cls: intermediate.ConcreteClass) -> Stripped:
-    """Generate the ``ReaderAndSetterFor{cls}``."""
-    methods = []  # type: List[Stripped]
+_MONIKER_BY_PRIMITIVE_TYPE = {
+    intermediate.PrimitiveType.BOOL: "bool",
+    intermediate.PrimitiveType.INT: "int",
+    intermediate.PrimitiveType.FLOAT: "float",
+    intermediate.PrimitiveType.STR: "str",
+    intermediate.PrimitiveType.BYTEARRAY: "bytes",
+}
+assert all(
+    literal in _MONIKER_BY_PRIMITIVE_TYPE for literal in intermediate.PrimitiveType
+)
 
-    cls_name = python_naming.class_name(cls.name)
 
-    init_writer = io.StringIO()
-    for i, prop in enumerate(cls.properties):
-        prop_name = python_naming.property_name(prop.name)
-        prop_type = python_common.generate_type(
-            prop.type_annotation, types_module=Identifier("aas_types")
-        )
+# fmt: off
+@ensure(
+    lambda result:
+    "__" not in result,
+    "A moniker contains no double underscore, as the double underscore separates "
+    "the parts of a composed reader's name"
+)
+# fmt: on
+def _atomic_moniker(type_annotation: intermediate.TypeAnnotationUnion) -> Identifier:
+    """
+    Determine the moniker of the atomic ``type_annotation``.
 
-        # NOTE (mristin, 2022-07-22):
-        # We make all the properties optional since we switch over the properties
-        # during the de-serialization.
-        if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-            if "\n" not in prop_type:
-                prop_type = Stripped(f"Optional[{prop_type}]")
-            else:
-                # NOTE (mristin):
-                # ``prop_type`` is already broken over multiple lines (see,
-                # *e.g.*, the ``TupleTypeAnnotation`` case
-                # in :py:func:`python_common.generate_type`), so we follow the
-                # same bracket-per-line style here instead of squeezing it
-                # onto one line.
-                prop_type = Stripped(
-                    f"""\
-Optional[
-{I}{indent_but_first_line(prop_type, I)}
-]"""
-                )
+    The monikers are the parts out of which we build the names of the composed
+    readers. The parts are separated by a double underscore, and a moniker never
+    contains one, so that a name can always be split back into its parts. The arity
+    is spelled out in a tuple's name for the same reason. The names are thus unique
+    by construction, and we need no check for collisions.
+    """
+    primitive_type = intermediate.try_primitive_type(type_annotation)
+    if primitive_type is not None:
+        return Identifier(_MONIKER_BY_PRIMITIVE_TYPE[primitive_type])
 
-        if i > 0:
-            init_writer.write("\n")
-        init_writer.write(f"self.{prop_name}: {prop_type} = None")
+    assert isinstance(
+        type_annotation, intermediate.OurTypeAnnotation
+    ), f"Expected an atomic type annotation, but got: {type_annotation}"
 
-    init_body = (
-        Stripped(init_writer.getvalue())
-        if len(cls.properties) > 0
-        else Stripped("pass")
+    return Identifier(naming.lower_snake_case(type_annotation.our_type.name))
+
+
+def _describe_type(type_annotation: intermediate.TypeAnnotationUnion) -> Stripped:
+    """Describe the atomic ``type_annotation`` for a docstring."""
+    primitive_type = intermediate.try_primitive_type(type_annotation)
+    if primitive_type is not None and isinstance(
+        type_annotation, intermediate.PrimitiveTypeAnnotation
+    ):
+        return Stripped(f"``{_MONIKER_BY_PRIMITIVE_TYPE[primitive_type]}``")
+
+    assert isinstance(
+        type_annotation, intermediate.OurTypeAnnotation
+    ), f"Expected an atomic type annotation, but got: {type_annotation}"
+
+    our_type = type_annotation.our_type
+
+    if isinstance(our_type, intermediate.NamedUnion):
+        type_name = python_naming.union_name(our_type.name)  # type: Identifier
+    elif isinstance(our_type, intermediate.Enumeration):
+        type_name = python_naming.enum_name(our_type.name)
+    else:
+        type_name = python_naming.class_name(our_type.name)
+
+    return Stripped(f":py:class:`.types.{type_name}`")
+
+
+def _is_encoded_as_text(type_annotation: intermediate.TypeAnnotationUnion) -> bool:
+    """
+    Check whether a value of the ``type_annotation`` is encoded as an element's text.
+
+    The primitives and the enumerations are; the instances are encoded as child
+    elements instead.
+    """
+    if intermediate.try_primitive_type(type_annotation) is not None:
+        return True
+
+    return isinstance(type_annotation, intermediate.OurTypeAnnotation) and isinstance(
+        type_annotation.our_type, intermediate.Enumeration
     )
 
-    methods.append(
-        Stripped(
-            f"""\
-def __init__(self) -> None:
-{I}\"\"\"Initialize with all the properties unset.\"\"\"
-{I}{indent_but_first_line(init_body, I)}"""
-        )
-    )
 
-    for prop in cls.properties:
-        type_anno = intermediate.beneath_optional(prop.type_annotation)
+def _content_reader_name(
+    type_annotation: intermediate.TypeAnnotationUnion,
+) -> Identifier:
+    """
+    Give out the name of the reader of the content of an element of
+    the ``type_annotation``.
 
-        prop_name = python_naming.property_name(prop.name)
+    The element has already been opened, and its tag was prescribed by whatever
+    encloses it, so the tag says nothing about the value. An instance with concrete
+    descendants is therefore nested in a discriminator element of its own.
 
-        method_body: Stripped
+    This is a pure function of the type annotation. The code of the readers which have
+    to be composed is generated by :py:class:`_ReaderRegistry`.
+    """
+    type_anno = intermediate.beneath_optional(type_annotation)
 
-        if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation) or (
-            isinstance(type_anno, intermediate.OurTypeAnnotation)
-            and isinstance(type_anno.our_type, intermediate.ConstrainedPrimitive)
-        ):
-            primitive_type = intermediate.try_primitive_type(type_anno)
-            assert primitive_type is not None
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        return Identifier(_READ_FUNCTION_BY_PRIMITIVE_TYPE[primitive_type])
 
-            read_function = _READ_FUNCTION_BY_PRIMITIVE_TYPE[primitive_type]
+    if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
+        raise AssertionError("Expected to handle this case before")
 
-            method_body = Stripped(
-                f"""\
-self.{prop_name} = {read_function}(
-{I}element,
-{I}iterator
-)"""
+    elif isinstance(type_anno, intermediate.OurTypeAnnotation):
+        our_type = type_anno.our_type
+
+        if isinstance(our_type, intermediate.Enumeration):
+            return python_naming.private_function_name(
+                Identifier(f"read_{our_type.name}_from_element_text")
             )
+
+        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+            raise AssertionError("Expected to handle this case before")
+
+        elif isinstance(
+            our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+        ):
+            if len(our_type.concrete_descendants) > 0:
+                return Identifier(f"_read_nested__{_atomic_moniker(type_anno)}")
+
+            return python_naming.private_function_name(
+                Identifier(f"read_{our_type.name}_as_sequence")
+            )
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # We keep this as its own branch, separate from the polymorphic-class case
+            # above, even though the code is identical at the moment. We might want to
+            # support unions of primitives in the future, at which point this branch
+            # would need to diverge. Unlike a plain class, a named union always takes
+            # the discriminator-nesting path, regardless of how many implementers it
+            # flattens to.
+            return Identifier(f"_read_nested__{_atomic_moniker(type_anno)}")
+
+        else:
+            assert_never(our_type)
+
+    elif isinstance(type_anno, intermediate.ListTypeAnnotation):
+        items_type_anno = intermediate.beneath_optional(type_anno.items)
+
+        return Identifier(f"_read_list_of__{_atomic_moniker(items_type_anno)}")
+
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        monikers = [_atomic_moniker(item) for item in type_anno.items]
+
+        return Identifier(
+            f"_read_tuple{len(type_anno.items)}_of__" + "__".join(monikers)
+        )
+
+    else:
+        assert_never(type_anno)
+
+
+def _element_reader_name(
+    type_annotation: intermediate.TypeAnnotationUnion, expected_tag: str
+) -> Identifier:
+    """
+    Give out the name of the reader of a whole element of the ``type_annotation``,
+    expected to be tagged ``expected_tag``.
+
+    The wire format is asymmetric here. An instance element is self-describing -- its
+    tag *is* its model type -- so it is read by dispatching on that tag, and
+    the ``expected_tag`` plays no role. An element whose value is encoded as text is
+    not self-describing: its tag gives only the position, ``v`` in a list and ``v1``,
+    ``v2``, *etc.* in a tuple, so its reader has to check the tag which the enclosing
+    element prescribes.
+
+    This is a pure function of its arguments. The code of the readers which have to be
+    composed is generated by :py:class:`_ReaderRegistry`.
+    """
+    type_anno = intermediate.beneath_optional(type_annotation)
+
+    if _is_encoded_as_text(type_anno):
+        return Identifier(f"_read_{_atomic_moniker(type_anno)}__at_{expected_tag}")
+
+    assert isinstance(
+        type_anno, intermediate.OurTypeAnnotation
+    ), f"Expected an atomic type annotation, but got: {type_anno}"
+
+    return python_naming.function_name(
+        Identifier(f"_read_{type_anno.our_type.name}_as_element")
+    )
+
+
+class _ReaderRegistry:
+    """
+    Generate the code of the readers which a meta-model needs to be composed.
+
+    All the readers share the same shape, ``(element, iterator) 🠒 value``: read the
+    content of an element which has already been opened, including the corresponding
+    end element. As the shape is uniform, a reader can be passed to another reader as
+    its item reader, so that a list of tuples -- or anything deeper that a meta-model
+    might grow -- falls out of the pieces which are already there instead of needing
+    a helper generated for that particular combination.
+
+    The composed readers are de-duplicated by the type which they read, so that all
+    the classes share them, and they are named by :py:func:`_content_reader_name` and
+    :py:func:`_element_reader_name`. Nothing is composed at the time of the reading:
+    a reader is a module-level function, and the maps of the readers are built once,
+    when the module is loaded.
+
+    The methods come grouped: first the queries, which give out what has been
+    registered so far and change nothing, and then the commands, which register and
+    give out nothing.
+    """
+
+    def __init__(self) -> None:
+        """Initialize with nothing registered."""
+        self._blocks_by_name = dict()  # type: MutableMapping[Identifier, Stripped]
+        self._needed_helpers = set()  # type: Set[str]
+
+    @property
+    def blocks(self) -> List[Stripped]:
+        """Give out the code of the registered readers, ordered by the reader name."""
+        return [self._blocks_by_name[name] for name in sorted(self._blocks_by_name)]
+
+    @property
+    def needed_helpers(self) -> AbstractSet[str]:
+        """Give out the names of the shared helpers which the readers need."""
+        return self._needed_helpers
+
+    def note_needed_helper(self, name: str) -> None:
+        """Note that the shared helper ``name`` is needed."""
+        self._needed_helpers.add(name)
+
+    def _add(self, name: Identifier, block: Stripped) -> None:
+        """Register the ``block`` which defines the reader ``name``."""
+        self._blocks_by_name[name] = block
+
+    def _register_at_tag_reader(
+        self, type_annotation: intermediate.TypeAnnotationUnion, expected_tag: str
+    ) -> None:
+        """Register the reader of a text-encoded value tagged ``expected_tag``."""
+        self.note_needed_helper("_read_named_element")
+        self.register_content_reader(type_annotation)
+
+        name = _element_reader_name(type_annotation, expected_tag=expected_tag)
+
+        value_type = python_common.generate_type(
+            type_annotation, types_module=Identifier("aas_types")
+        )
+
+        content_reader = _content_reader_name(type_annotation)
+
+        self._add(
+            name,
+            Stripped(
+                f"""\
+def {name}(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> {value_type}:
+{I}\"\"\"
+{I}Read the content of :paramref:`element`, which must be tagged
+{I}``{expected_tag}``, as {_describe_type(type_annotation)}.
+{I}\"\"\"
+{I}return _read_named_element(
+{II}element,
+{II}iterator,
+{II}{python_common.string_literal(expected_tag)},
+{II}{content_reader}
+{I})"""
+            ),
+        )
+
+    def _register_element_reader(
+        self, type_annotation: intermediate.TypeAnnotationUnion, expected_tag: str
+    ) -> None:
+        """
+        Register the readers needed to read a whole element of
+        the ``type_annotation`` at the position tagged ``expected_tag``.
+        """
+        # NOTE (mristin):
+        # An instance element is self-describing, so it is read by the function which
+        # is generated together with the class, and there is nothing to register.
+        if _is_encoded_as_text(type_annotation):
+            self._register_at_tag_reader(type_annotation, expected_tag=expected_tag)
+
+    def _register_list_reader(
+        self, type_annotation: intermediate.ListTypeAnnotation
+    ) -> None:
+        """Register the reader of a list with the items of the ``type_annotation``."""
+        self.note_needed_helper("_read_list_of_items")
+
+        items_type_anno = intermediate.beneath_optional(type_annotation.items)
+
+        if isinstance(
+            items_type_anno,
+            (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
+        ):
+            raise AssertionError(
+                "(mristin) We handle only lists of primitive types and of our types "
+                "in the XML de-serialization at the moment. The meta-model does not "
+                "contain any other lists, so we wanted to keep the code as simple as "
+                "possible, and avoid unrolling. Please contact the developers if you "
+                "need this feature."
+            )
+
+        self._register_element_reader(items_type_anno, expected_tag="v")
+
+        name = _content_reader_name(type_annotation)
+
+        item_type = python_common.generate_type(
+            items_type_anno, types_module=Identifier("aas_types")
+        )
+
+        read_item = _element_reader_name(items_type_anno, expected_tag="v")
+
+        self._add(
+            name,
+            Stripped(
+                f"""\
+def {name}(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> List[{item_type}]:
+{I}\"\"\"
+{I}Read the items of :paramref:`element` as a list of
+{I}{_describe_type(items_type_anno)}.
+{I}\"\"\"
+{I}return _read_list_of_items(
+{II}element,
+{II}iterator,
+{II}{read_item}
+{I})"""
+            ),
+        )
+
+    def _register_tuple_reader(
+        self, type_annotation: intermediate.TupleTypeAnnotation
+    ) -> None:
+        """Register the reader of a tuple with the items of the ``type_annotation``."""
+        arity = len(type_annotation.items)
+
+        self.note_needed_helper("_read_tuple_item")
+
+        read_items = []  # type: List[Identifier]
+        item_types = []  # type: List[Stripped]
+
+        for i, item_type_anno in enumerate(type_annotation.items):
+            assert isinstance(
+                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
+                "Tuple items are restricted to atomic types (primitives, constrained "
+                "primitives, classes and enumerations) by "
+                "intermediate._translate._verify_only_simple_type_patterns, so "
+                "no nested optionals, lists or tuples are expected here."
+            )
+
+            expected_tag = f"v{i + 1}"
+
+            self._register_element_reader(item_type_anno, expected_tag=expected_tag)
+
+            read_items.append(
+                _element_reader_name(item_type_anno, expected_tag=expected_tag)
+            )
+            item_types.append(
+                python_common.generate_type(
+                    item_type_anno, types_module=Identifier("aas_types")
+                )
+            )
+
+        name = _content_reader_name(type_annotation)
+
+        tuple_type = "Tuple[" + ", ".join(item_types) + "]"
+        if len(tuple_type) > 88:
+            joined_item_types = ",\n".join(item_types)
+            tuple_type = f"""\
+Tuple[
+{I}{indent_but_first_line(joined_item_types, I)}
+]"""
+
+        joined_read_items = ",\n".join(read_items)
+
+        self._add(
+            name,
+            Stripped(
+                f"""\
+def {name}(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> {tuple_type}:
+{I}\"\"\"
+{I}Read the items of :paramref:`element` as a tuple of {arity} item(s).
+{I}\"\"\"
+{I}return _tuple{arity}_from_element(
+{II}element,
+{II}iterator,
+{II}{indent_but_first_line(joined_read_items, II)}
+{I})"""
+            ),
+        )
+
+    def _register_nested_reader(
+        self, type_annotation: intermediate.OurTypeAnnotation
+    ) -> None:
+        """Register the reader of an instance nested in a discriminator element."""
+        self.note_needed_helper("_read_nested_element")
+
+        our_type = type_annotation.our_type
+
+        name = _content_reader_name(type_annotation)
+
+        value_type = python_common.generate_type(
+            type_annotation, types_module=Identifier("aas_types")
+        )
+
+        read_as_element = python_naming.function_name(
+            Identifier(f"_read_{our_type.name}_as_element")
+        )
+
+        type_name = (
+            python_naming.union_name(our_type.name)
+            if isinstance(our_type, intermediate.NamedUnion)
+            else python_naming.class_name(our_type.name)
+        )
+
+        self._add(
+            name,
+            Stripped(
+                f"""\
+def {name}(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> {value_type}:
+{I}\"\"\"
+{I}Read an instance of :py:class:`.types.{type_name}` nested in
+{I}:paramref:`element` as a discriminator element.
+{I}\"\"\"
+{I}return _read_nested_element(
+{II}element,
+{II}iterator,
+{II}{read_as_element},
+{II}{python_common.string_literal(type_name)}
+{I})"""
+            ),
+        )
+
+    def register_content_reader(
+        self, type_annotation: intermediate.TypeAnnotationUnion
+    ) -> None:
+        """
+        Register the readers, and note the shared helpers, needed to read the content
+        of an element of the ``type_annotation``.
+        """
+        type_anno = intermediate.beneath_optional(type_annotation)
+
+        primitive_type = intermediate.try_primitive_type(type_anno)
+        if primitive_type is not None:
+            self.note_needed_helper(_READ_FUNCTION_BY_PRIMITIVE_TYPE[primitive_type])
+            return
+
+        if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
+            raise AssertionError("Expected to handle this case before")
 
         elif isinstance(type_anno, intermediate.OurTypeAnnotation):
             our_type = type_anno.our_type
-            if isinstance(our_type, intermediate.Enumeration):
-                read_function = python_naming.private_function_name(
-                    Identifier(f"read_{our_type.name}_from_element_text")
-                )
 
-                method_body = Stripped(
-                    f"""\
-self.{prop_name} = {read_function}(
-{I}element,
-{I}iterator
-)"""
-                )
+            if isinstance(our_type, intermediate.Enumeration):
+                self.note_needed_helper("_read_enum_from_element_text")
+
+                # NOTE (mristin):
+                # The reader of an enumeration is generated in the loop over our types,
+                # so we only note here that the meta-model reaches it.
+                self.note_needed_helper(_content_reader_name(type_anno))
 
             elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-                raise AssertionError(
-                    f"Expected {intermediate.ConstrainedPrimitive.__name__} "
-                    f"to have been handled before"
-                )
+                raise AssertionError("Expected to handle this case before")
 
             elif isinstance(
                 our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
             ):
-                prop_cls_name = python_naming.class_name(our_type.name)
-
+                # NOTE (mristin):
+                # A class without concrete descendants is read by the function which is
+                # generated together with the class, so there is nothing to register.
                 if len(our_type.concrete_descendants) > 0:
-                    read_prop_cls_as_element = python_naming.function_name(
-                        Identifier(f"_read_{our_type.name}_as_element")
-                    )
-
-                    method_body = Stripped(
-                        f"""\
-next_event_element = next(iterator, None)
-if next_event_element is None:
-{I}raise DeserializationException(
-{II}"Expected a discriminator start element corresponding "
-{II}"to {prop_cls_name}, but got end-of-input"
-{I})
-
-next_event, next_element = next_event_element
-if next_event != 'start':
-{I}raise DeserializationException(
-{II}f"Expected a discriminator start element corresponding "
-{II}f"to {prop_cls_name}, "
-{II}f"but got event {{next_event!r}} and element {{next_element.tag!r}}"
-{I})
-
-try:
-{I}result = {read_prop_cls_as_element}(
-{II}next_element,
-{II}iterator
-{I})
-except DeserializationException as exception:
-{I}exception.path._prepend(ElementSegment(next_element))
-{I}raise
-
-_read_end_element(element, iterator)
-
-self.{prop_name} = result"""
-                    )
-                else:
-                    read_prop_cls_as_sequence = python_naming.function_name(
-                        Identifier(f"_read_{our_type.name}_as_sequence")
-                    )
-
-                    method_body = Stripped(
-                        f"""\
-self.{prop_name} = {read_prop_cls_as_sequence}(
-{I}element,
-{I}iterator
-)"""
-                    )
+                    self._register_nested_reader(type_anno)
 
             elif isinstance(our_type, intermediate.NamedUnion):
                 # NOTE (mristin):
-                # We keep this as its own branch, separate from the
-                # polymorphic-class case above, even though the code is
-                # identical at the moment. We might want to support unions
-                # of primitives in the future, at which point this branch
-                # would need to diverge. Unlike a plain class, a named union
-                # always takes the discriminator-nesting path, regardless of
-                # how many implementers it flattens to.
-                prop_cls_name = python_naming.class_name(our_type.name)
+                # See the note in :py:func:`_content_reader_name` on why a named union
+                # is kept in a branch of its own.
+                self._register_nested_reader(type_anno)
 
-                read_prop_cls_as_element = python_naming.function_name(
-                    Identifier(f"_read_{our_type.name}_as_element")
-                )
-
-                method_body = Stripped(
-                    f"""\
-next_event_element = next(iterator, None)
-if next_event_element is None:
-{I}raise DeserializationException(
-{II}"Expected a discriminator start element corresponding "
-{II}"to {prop_cls_name}, but got end-of-input"
-{I})
-
-next_event, next_element = next_event_element
-if next_event != 'start':
-{I}raise DeserializationException(
-{II}f"Expected a discriminator start element corresponding "
-{II}f"to {prop_cls_name}, "
-{II}f"but got event {{next_event!r}} and element {{next_element.tag!r}}"
-{I})
-
-try:
-{I}result = {read_prop_cls_as_element}(
-{II}next_element,
-{II}iterator
-{I})
-except DeserializationException as exception:
-{I}exception.path._prepend(ElementSegment(next_element))
-{I}raise
-
-_read_end_element(element, iterator)
-
-self.{prop_name} = result"""
-                )
+            else:
+                assert_never(our_type)
 
         elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-            items_primitive_type = intermediate.try_primitive_type(type_anno.items)
-
-            if items_primitive_type is not None:
-                read_item = Identifier(
-                    _READ_FUNCTION_BY_PRIMITIVE_TYPE[items_primitive_type]
-                )
-                read_item_callable = Stripped(
-                    f"""\
-lambda el, it: _read_v_element(
-{I}el, it, 'v', {read_item}
-)"""
-                )
-            else:
-                if isinstance(type_anno.items, intermediate.PrimitiveTypeAnnotation):
-                    raise AssertionError("Expected to handle this case before")
-
-                elif isinstance(type_anno.items, intermediate.OurTypeAnnotation):
-                    if isinstance(type_anno.items.our_type, intermediate.Enumeration):
-                        read_item = python_naming.private_function_name(
-                            Identifier(
-                                f"read_{type_anno.items.our_type.name}_from_element_text"
-                            )
-                        )
-                        read_item_callable = Stripped(
-                            f"""\
-lambda el, it: _read_v_element(
-{I}el, it, 'v', {read_item}
-)"""
-                        )
-
-                    elif isinstance(
-                        type_anno.items.our_type, intermediate.ConstrainedPrimitive
-                    ):
-                        raise AssertionError("Expected to handle this case before")
-
-                    elif isinstance(
-                        type_anno.items.our_type,
-                        (intermediate.AbstractClass, intermediate.ConcreteClass),
-                    ):
-                        read_item = python_naming.function_name(
-                            Identifier(
-                                f"_read_{type_anno.items.our_type.name}_as_element"
-                            )
-                        )
-                        read_item_callable = Stripped(read_item)
-
-                    elif isinstance(type_anno.items.our_type, intermediate.NamedUnion):
-                        # NOTE (mristin):
-                        # We keep this as its own branch, separate from the
-                        # class case above, even though the code is
-                        # identical at the moment. We might want to support
-                        # unions of primitives in the future, at which point
-                        # this branch would need to diverge.
-                        read_item = python_naming.function_name(
-                            Identifier(
-                                f"_read_{type_anno.items.our_type.name}_as_element"
-                            )
-                        )
-                        read_item_callable = Stripped(read_item)
-                    else:
-                        # noinspection PyTypeChecker
-                        assert_never(type_anno.items.our_type)
-
-                else:
-                    raise AssertionError(
-                        "(mristin) We handle only lists of primitives types and "
-                        "our types in the XML de-serialization at the moment. "
-                        "The meta-model does not contain any other lists, so we wanted "
-                        "to keep the code as simple as possible, and avoid unrolling. "
-                        "Please contact the developers if you need this feature."
-                    )
-
-            method_body = Stripped(
-                f"""\
-self.{prop_name} = _read_list_of_items(
-{I}element,
-{I}iterator,
-{I}{indent_but_first_line(read_item_callable, I)}
-)"""
-            )
+            self._register_list_reader(type_anno)
 
         elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-            arity = len(type_anno.items)
-
-            read_item_callables = []  # type: List[Stripped]
-            for item_i, item_type_anno in enumerate(type_anno.items):
-                assert isinstance(
-                    item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
-                ), (
-                    "Tuple items are restricted to atomic types (primitives, "
-                    "constrained primitives, classes and enumerations) by "
-                    "intermediate._translate._verify_only_simple_type_patterns, so "
-                    "no nested optionals, lists or tuples are expected here."
-                )
-
-                item_primitive_type = intermediate.try_primitive_type(item_type_anno)
-
-                # NOTE (mristin):
-                # Class items are dispatched through their own natural element tag, so
-                # their read function already verifies the tag. Atomic (primitive or
-                # enumeration) items, on the other hand, are always wrapped in
-                # a positional ``<v1>``, ``<v2>``, *etc.* element, so we have to
-                # verify that tag ourselves.
-                item_is_v_element = True
-
-                if item_primitive_type is not None:
-                    read_item = Identifier(
-                        _READ_FUNCTION_BY_PRIMITIVE_TYPE[item_primitive_type]
-                    )
-                elif isinstance(item_type_anno, intermediate.PrimitiveTypeAnnotation):
-                    raise AssertionError("Expected to handle this case before")
-
-                elif isinstance(item_type_anno, intermediate.OurTypeAnnotation):
-                    if isinstance(item_type_anno.our_type, intermediate.Enumeration):
-                        read_item = python_naming.private_function_name(
-                            Identifier(
-                                f"read_{item_type_anno.our_type.name}"
-                                f"_from_element_text"
-                            )
-                        )
-
-                    elif isinstance(
-                        item_type_anno.our_type, intermediate.ConstrainedPrimitive
-                    ):
-                        raise AssertionError("Expected to handle this case before")
-
-                    elif isinstance(
-                        item_type_anno.our_type,
-                        (intermediate.AbstractClass, intermediate.ConcreteClass),
-                    ):
-                        item_is_v_element = False
-                        read_item = python_naming.function_name(
-                            Identifier(
-                                f"_read_{item_type_anno.our_type.name}_as_element"
-                            )
-                        )
-
-                    elif isinstance(item_type_anno.our_type, intermediate.NamedUnion):
-                        # NOTE (mristin):
-                        # We keep this as its own branch, separate from the
-                        # class case above, even though the code is
-                        # identical at the moment. We might want to support
-                        # unions of primitives in the future, at which point
-                        # this branch would need to diverge.
-                        item_is_v_element = False
-                        read_item = python_naming.function_name(
-                            Identifier(
-                                f"_read_{item_type_anno.our_type.name}_as_element"
-                            )
-                        )
-
-                    else:
-                        # noinspection PyTypeChecker
-                        assert_never(item_type_anno.our_type)
-                else:
-                    # noinspection PyTypeChecker
-                    assert_never(item_type_anno)
-
-                if item_is_v_element:
-                    v_name = f"v{item_i + 1}"
-                    read_item_callables.append(
-                        Stripped(
-                            f"""\
-lambda el, it: _read_v_element(
-{I}el, it, "{v_name}", {read_item}
-)"""
-                        )
-                    )
-                else:
-                    read_item_callables.append(Stripped(read_item))
-
-            joined_read_item_callables = ",\n".join(read_item_callables)
-
-            method_body = Stripped(
-                f"""\
-self.{prop_name} = _tuple{arity}_from_element(
-{I}element,
-{I}iterator,
-{I}{indent_but_first_line(joined_read_item_callables, I)}
-)"""
-            )
+            self._register_tuple_reader(type_anno)
 
         else:
             assert_never(type_anno)
 
-        method_name = python_naming.method_name(Identifier(f"read_and_set_{prop.name}"))
-        methods.append(
-            Stripped(
-                f"""\
-def {method_name}(
-{I}self,
-{I}element: Element,
-{I}iterator: Iterator[Tuple[str, Element]]
-) -> None:
-{I}\"\"\"
-{I}Read :paramref:`element` as the property
-{I}:py:attr:`.types.{cls_name}.{prop_name}` and set it.
-{I}\"\"\"
-{I}{indent_but_first_line(method_body, I)}"""
-            )
-        )
 
-    reader_and_setter_name = python_naming.private_class_name(
-        Identifier(f"Reader_and_setter_for_{cls.name}")
+def _generate_readers_map(cls: intermediate.ConcreteClass) -> Stripped:
+    """Generate the mapping XML property name 🠒 reader of the property's content."""
+    cls_name = python_naming.class_name(cls.name)
+
+    mapping_name = python_naming.private_constant_name(
+        Identifier(f"readers_for_{cls.name}")
     )
 
     writer = io.StringIO()
     writer.write(
         f"""\
-class {reader_and_setter_name}:
-{I}\"\"\"
-{I}Provide a buffer for reading and setting the properties for the class
-{I}:py:class:`{cls_name}`.
-
-{I}The properties correspond to the constructor arguments of
-{I}:py:class:`{cls_name}`. We use this buffer to facilitate dispatching when
-{I}parsing the properties in a streaming fashion.
-{I}\"\"\""""
+#: Read the content of a property of
+#: :py:class:`.types.{cls_name}`, by the XML name of the property
+{mapping_name}: Mapping[
+{I}str,
+{I}_ContentReader[Any]
+] = {{
+"""
     )
 
-    for method in methods:
-        writer.write("\n\n")
-        writer.write(textwrap.indent(method, I))
+    for prop in cls.properties:
+        reader = _content_reader_name(prop.type_annotation)
+
+        writer.write(f"{I}{python_common.string_literal(prop.xml_name)}: {reader},\n")
+
+    writer.write("}")
 
     return Stripped(writer.getvalue())
 
 
 def _generate_read_as_sequence(cls: intermediate.ConcreteClass) -> Stripped:
     """
-    Generate the method to read the instance as sequence of XML-encoded properties.
+    Generate the function to read the instance as sequence of XML-encoded properties.
 
     This function performs no dispatch! The dispatch is expected to have been
     performed already based on the discriminator element.
@@ -1470,121 +1486,109 @@ def _generate_read_as_sequence(cls: intermediate.ConcreteClass) -> Stripped:
     )
     # fmt: on
 
-    blocks = [
-        Stripped(
-            f"""\
-if element.text is not None and len(element.text.strip()) != 0:
-{I}raise DeserializationException(
-{II}f"Expected only XML elements representing the properties and whitespace text, "
-{II}f"but got text: {{element.text!r}}"
-{I})"""
-        ),
-        Stripped("_raise_if_has_tail_or_attrib(element)"),
-    ]  # type: List[Stripped]
-
-    # region Body
-
     cls_name = python_naming.class_name(cls.name)
 
-    if len(cls.constructor.arguments) == 0:
+    readers_map_name = python_naming.private_constant_name(
+        Identifier(f"readers_for_{cls.name}")
+    )
+
+    blocks = []  # type: List[Stripped]
+
+    if len(cls.properties) == 0:
         blocks.append(
             Stripped(
                 f"""\
-next_event_element = next(iterator, None)
-if next_event_element is None:
-{I}raise DeserializationException(
-{II}f"Expected the end element corresponding to {{element.tag}}, "
-{II}f"but got the end-of-input"
-{I})
-
-next_event, next_element = next_event_element
-if next_event != 'end' or next_element.tag != element.tag:
-{I}raise DeserializationException(
-{II}f"Expected the end element corresponding to {{element.tag}}, "
-{II}f"but got event {{next_event!r}} and element {{next_element.tag!r}}"
-{I})"""
+_read_properties(
+{I}element,
+{I}iterator,
+{I}{readers_map_name}
+)"""
             )
         )
 
         blocks.append(Stripped(f"return aas_types.{cls_name}()"))
     else:
-        reader_and_setter_name = python_naming.private_class_name(
-            Identifier(f"Reader_and_setter_for_{cls.name}")
-        )
-
-        read_and_set_dispatch_name = python_naming.private_constant_name(
-            Identifier(f"read_and_set_dispatch_for_{cls.name}")
-        )
-
         blocks.append(
             Stripped(
                 f"""\
-reader_and_setter = (
-{I}{reader_and_setter_name}()
-)
-
-while True:
-{I}next_event_element = next(iterator, None)
-{I}if next_event_element is None:
-{II}raise DeserializationException(
-{III}"Expected one or more XML-encoded properties or the end element, "
-{III}"but got the end-of-input"
-{II})
-
-{I}next_event, next_element = next_event_element
-{I}if next_event == 'end' and next_element.tag == element.tag:
-{II}# We reached the end element enclosing the sequence.
-{II}break
-
-{I}if next_event != 'start':
-{II}raise DeserializationException(
-{III}"Expected a start element corresponding to a property, "
-{III}f"but got event {{next_event!r}} and element {{next_element.tag!r}}"
-{II})
-
-{I}try:
-{II}tag_wo_ns = _parse_element_tag(next_element)
-{I}except DeserializationException as exception:
-{II}exception.path._prepend(ElementSegment(next_element))
-{II}raise
-
-{I}read_and_set_method = {read_and_set_dispatch_name}.get(
-{II}tag_wo_ns,
-{II}None
-{I})
-{I}if read_and_set_method is None:
-{II}an_exception = DeserializationException(
-{III}f"Expected an element representing a property, "
-{III}f"but got an element with unexpected tag: {{tag_wo_ns!r}}"
-{II})
-{II}an_exception.path._prepend(ElementSegment(next_element))
-{II}raise an_exception
-
-{I}try:
-{II}read_and_set_method(
-{III}reader_and_setter,
-{III}next_element,
-{III}iterator
-{II})
-{I}except DeserializationException as exception:
-{II}exception.path._prepend(ElementSegment(next_element))
-{II}raise"""
+values = _read_properties(
+{I}element,
+{I}iterator,
+{I}{readers_map_name}
+)"""
             )
         )
 
-        for i, prop in enumerate(cls.properties):
+        # region Pick the values out, so that the constructor call is type-checked
+
+        variable_by_prop_name = dict()  # type: MutableMapping[Identifier, Identifier]
+
+        extractions = []  # type: List[Stripped]
+        for prop in cls.properties:
+            variable = python_naming.variable_name(Identifier(f"the_{prop.name}"))
+            variable_by_prop_name[prop.name] = variable
+
+            prop_type = python_common.generate_type(
+                prop.type_annotation, types_module=Identifier("aas_types")
+            )
+
+            # NOTE (mristin, 2022-07-22):
+            # A property is unset until we read it, so all the variables are optional
+            # regardless of whether the property itself is.
+            if not isinstance(
+                prop.type_annotation, intermediate.OptionalTypeAnnotation
+            ):
+                if "\n" not in prop_type:
+                    prop_type = Stripped(f"Optional[{prop_type}]")
+                else:
+                    # NOTE (mristin):
+                    # ``prop_type`` is already broken over multiple lines (see,
+                    # *e.g.*, the ``TupleTypeAnnotation`` case
+                    # in :py:func:`python_common.generate_type`), so we follow the
+                    # same bracket-per-line style here instead of squeezing it
+                    # onto one line.
+                    prop_type = Stripped(
+                        f"""\
+Optional[
+{I}{indent_but_first_line(prop_type, I)}
+]"""
+                    )
+
+            xml_name_literal = python_common.string_literal(prop.xml_name)
+
+            one_liner = f"{variable}: {prop_type} = values.get({xml_name_literal})"
+
+            # NOTE (mristin):
+            # We break the extraction over multiple lines only if it does not fit
+            # on a single line, as most of the extractions comfortably do.
+            if "\n" not in one_liner and len(one_liner) <= 88:
+                extractions.append(Stripped(one_liner))
+            else:
+                extractions.append(
+                    Stripped(
+                        f"""\
+{variable}: {prop_type} = values.get(
+{I}{xml_name_literal}
+)"""
+                    )
+                )
+
+        blocks.append(Stripped("\n".join(extractions)))
+
+        # endregion
+
+        for prop in cls.properties:
             if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
                 continue
-
-            prop_name = python_naming.property_name(prop.name)
 
             cause_literal = python_common.string_literal(
                 f"The required property {prop.xml_name!r} is missing"
             )
+
             blocks.append(
                 Stripped(
                     f"""\
-if reader_and_setter.{prop_name} is None:
+if {variable_by_prop_name[prop.name]} is None:
 {I}raise DeserializationException(
 {II}{cause_literal}
 {I})"""
@@ -1595,11 +1599,7 @@ if reader_and_setter.{prop_name} is None:
         init_writer.write(f"return aas_types.{cls_name}(\n")
 
         for i, arg in enumerate(cls.constructor.arguments):
-            prop = cls.properties_by_name[arg.name]
-
-            prop_name = python_naming.property_name(prop.name)
-
-            init_writer.write(f"{I}reader_and_setter.{prop_name}")
+            init_writer.write(f"{I}{variable_by_prop_name[arg.name]}")
 
             if i < len(cls.constructor.arguments) - 1:
                 init_writer.write(",\n")
@@ -1609,8 +1609,6 @@ if reader_and_setter.{prop_name} is None:
         init_writer.write(")")
 
         blocks.append(Stripped(init_writer.getvalue()))
-
-    # endregion
 
     function_name = python_naming.private_function_name(
         Identifier(f"read_{cls.name}_as_sequence")
@@ -1772,72 +1770,6 @@ def _generate_general_dispatch_map(symbol_table: intermediate.SymbolTable) -> St
     mapping_writer.write("}")
 
     return Stripped(mapping_writer.getvalue())
-
-
-def _generate_reader_and_setter_map(cls: intermediate.ConcreteClass) -> Stripped:
-    """Generate the mapping property name 🠒 read function."""
-    # fmt: off
-    assert (
-            sorted(
-                (arg.name, str(arg.type_annotation))
-                for arg in cls.constructor.arguments
-            ) == sorted(
-                (prop.name, str(prop.type_annotation))
-                for prop in cls.properties
-            )
-    ), (
-        "(mristin, 2022-10-11) We assume that the properties and constructor arguments "
-        "are identical at this point. If this is not the case, we have to re-write the "
-        "logic substantially! Please contact the developers if you see this."
-    )
-    # fmt: on
-
-    identifiers_expressions = []  # type: List[Tuple[str, Stripped]]
-
-    reader_and_setter_cls_name = python_naming.private_class_name(
-        Identifier(f"Reader_and_setter_for_{cls.name}")
-    )
-
-    for prop in cls.properties:
-        xml_identifier = prop.xml_name
-        method_name = python_naming.method_name(Identifier(f"read_and_set_{prop.name}"))
-
-        identifiers_expressions.append(
-            (xml_identifier, Stripped(f"{reader_and_setter_cls_name}.{method_name}"))
-        )
-
-    map_name = python_naming.private_constant_name(
-        Identifier(f"read_and_set_dispatch_for_{cls.name}")
-    )
-
-    writer = io.StringIO()
-    writer.write(
-        f"""\
-#: Dispatch XML property name to read & set method in
-#: :py:class:`{reader_and_setter_cls_name}`
-{map_name}: Mapping[
-{I}str,
-{I}Callable[
-{II}[
-{III}{reader_and_setter_cls_name},
-{III}Element,
-{III}Iterator[Tuple[str, Element]]
-{II}],
-{II}None
-{I}]
-] = {{
-"""
-    )
-    for identifier, expression in identifiers_expressions:
-        writer.write(
-            f"""\
-{I}{python_common.string_literal(identifier)}:
-{II}{indent_but_first_line(expression, II)},
-"""
-        )
-
-    writer.write("}")
-    return Stripped(writer.getvalue())
 
 
 _WRITE_METHOD_BY_PRIMITIVE_TYPE = {
@@ -2856,6 +2788,828 @@ def write(instance: aas_types.Class, stream: TextIO) -> None:
     )
 
 
+_READING_PATTERN_NOTE = Stripped(
+    """\
+# NOTE (mristin, 2022-10-08):
+# Directly using the iterator turned out to result in very complex function
+# designs. The design became much simpler as soon as we considered one look-ahead
+# element. We came up finally with the following pattern which all the protected
+# reading functions below roughly follow:
+#
+# ..code-block::
+#
+#    _read_*(
+#       look-ahead element,
+#       iterator
+#    ) -> result
+#
+# The reading functions all read from the ``iterator`` coming from
+# :py:func:`xml.etree.ElementTree.iterparse` with the argument
+# ``events=["start", "end"]``. The exception :py:class:`.DeserializationException`
+# is raised in case of unexpected input.
+#
+# The reading functions are responsible to read the end element corresponding to the
+# start look-ahead element.
+#
+# When it comes to error reporting, we use exceptions. The exceptions are raised in
+# the *callee*, as usual. However, the context of the exception, such as the error path,
+# is added in the *caller*, as only the caller knows the context of
+# the lookahead-element. In particular, prepending the path segment corresponding to
+# the lookahead-element is the responsibility of the *caller*, and not of
+# the *callee*."""
+)
+
+
+#: Note the shared reading helpers which a helper itself needs, so that we can
+#: generate only the helpers which a meta-model actually reaches
+_HELPER_DEPENDENCIES = {
+    "_parse_element_tag": [],
+    "_raise_if_has_tail_or_attrib": [],
+    "_read_end_element": ["_raise_if_has_tail_or_attrib"],
+    "_read_named_element": ["_parse_element_tag"],
+    "_read_nested_element": ["_read_end_element"],
+    "_read_dispatched": ["_parse_element_tag"],
+    "_read_properties": ["_parse_element_tag", "_raise_if_has_tail_or_attrib"],
+    "_read_list_of_items": [],
+    "_read_tuple_item": [],
+    "_read_instance_from_iterparse": [],
+    "_read_text_from_element": ["_raise_if_has_tail_or_attrib", "_read_end_element"],
+    "_read_bool_from_element_text": ["_read_text_from_element"],
+    "_read_int_from_element_text": ["_read_text_from_element"],
+    "_read_float_from_element_text": ["_read_text_from_element"],
+    "_read_str_from_element_text": [
+        "_read_end_element",
+        "_raise_if_has_tail_or_attrib",
+    ],
+    "_read_bytes_from_element_text": ["_read_text_from_element"],
+    "_read_enum_from_element_text": ["_read_text_from_element"],
+}  # type: Mapping[str, Sequence[str]]
+
+
+def _generate_reading_helpers() -> Mapping[str, Stripped]:
+    """
+    Generate the code of the shared reading helpers, by the name of the helper.
+
+    Only the helpers which a meta-model reaches are finally generated, see
+    :py:func:`_collect_needed_helpers`, so that a small meta-model does not pay for
+    the readers which it never calls.
+    """
+    return {
+        "_parse_element_tag": Stripped(
+            f"""\
+def _parse_element_tag(element: Element) -> str:
+{I}\"\"\"
+{I}Extract the tag name without the namespace prefix from :paramref:`element`.
+
+{I}:param element: whose tag without namespace we want to extract
+{I}:return: tag name without the namespace prefix
+{I}:raise: :py:class:`DeserializationException` if unexpected :paramref:`element`
+{I}\"\"\"
+{I}if not element.tag.startswith(_NAMESPACE_IN_CURLY_BRACKETS):
+{II}namespace, got_namespace, tag_wo_ns = (
+{III}element.tag.rpartition('}}')
+{II})
+{II}if got_namespace:
+{III}if namespace.startswith('{{'):
+{IIII}namespace = namespace[1:]
+
+{III}raise DeserializationException(
+{IIII}f"Expected the element in the namespace {{NAMESPACE!r}}, "
+{IIII}f"but got the element {{tag_wo_ns!r}} in the namespace {{namespace!r}}"
+{III})
+{II}else:
+{III}raise DeserializationException(
+{IIII}f"Expected the element in the namespace {{NAMESPACE!r}}, "
+{IIII}f"but got the element {{tag_wo_ns!r}} without the namespace prefix"
+{III})
+
+{I}return element.tag[len(_NAMESPACE_IN_CURLY_BRACKETS):]"""
+        ),
+        "_raise_if_has_tail_or_attrib": Stripped(
+            f"""\
+def _raise_if_has_tail_or_attrib(
+{II}element: Element
+) -> None:
+{I}\"\"\"
+{I}Check that :paramref:`element` has no trailing text and no attributes.
+
+{I}:param element: to be verified
+{I}:raise:
+{II}:py:class:`.DeserializationException` if trailing text or attributes;
+{II}conforming to the convention about handling error paths,
+{II}the exception path is left empty.
+{I}\"\"\"
+{I}if element.tail is not None and len(element.tail.strip()) != 0:
+{II}raise DeserializationException(
+{III}f"Expected no trailing text, but got: {{element.tail!r}}"
+{II})
+
+{I}if element.attrib is not None and len(element.attrib) > 0:
+{II}raise DeserializationException(
+{III}f"Expected no attributes, but got: {{element.attrib}}"
+{II})"""
+        ),
+        "_read_end_element": Stripped(
+            f"""\
+def _read_end_element(
+{II}element: Element,
+{II}iterator: Iterator[Tuple[str, Element]]
+) -> Element:
+{I}\"\"\"
+{I}Read the end element corresponding to the start :paramref:`element`
+{I}from :paramref:`iterator`.
+
+{I}:param element: corresponding start element
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}\"\"\"
+{I}next_event_element = next(iterator, None)
+{I}if next_event_element is None:
+{II}raise DeserializationException(
+{III}f"Expected the end element for {{element.tag}}, "
+{III}f"but got the end-of-input"
+{II})
+
+{I}next_event, next_element = next_event_element
+{I}if next_event != "end" or next_element.tag != element.tag:
+{II}raise DeserializationException(
+{III}f"Expected the end element for {{element.tag!r}}, "
+{III}f"but got the event {{next_event!r}} and element {{next_element.tag!r}}"
+{II})
+
+{I}_raise_if_has_tail_or_attrib(next_element)
+
+{I}return next_element"""
+        ),
+        "_read_named_element": Stripped(
+            f"""\
+def _read_named_element(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]],
+{I}expected_tag: str,
+{I}read_content: _ContentReader[_ValueT]
+) -> _ValueT:
+{I}\"\"\"
+{I}Verify that :paramref:`element` bears the :paramref:`expected_tag`, and
+{I}delegate the reading of its content to :paramref:`read_content`.
+
+{I}This is the only place where an element's tag is checked against the tag which
+{I}its container prescribes -- the XML name of a class, ``<v>`` for a list item, or
+{I}``<v1>``, ``<v2>``, *etc.* for a tuple item.
+
+{I}:param element: look-ahead element
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:param expected_tag: expected tag of :paramref:`element`
+{I}:param read_content: to read the content of :paramref:`element`
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed value
+{I}\"\"\"
+{I}tag_wo_ns = _parse_element_tag(element)
+{I}if tag_wo_ns != expected_tag:
+{II}raise DeserializationException(
+{III}f"Expected an element with the tag {{expected_tag!r}}, "
+{III}f"but got an element with tag: {{tag_wo_ns!r}}"
+{II})
+
+{I}return read_content(element, iterator)"""
+        ),
+        "_read_nested_element": Stripped(
+            f"""\
+def _read_nested_element(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]],
+{I}read_element: _ContentReader[_ValueT],
+{I}expected_what: str
+) -> _ValueT:
+{I}\"\"\"
+{I}Read the instance nested in :paramref:`element` as a discriminator element.
+
+{I}This looks redundant next to reading a list item, and it is not. A property
+{I}wraps its instance in an element of its own, so the discriminator's name has to
+{I}be prepended to the error path, which then reads ``value/property/idShort``.
+{I}A list item is not wrapped -- the item element *is* the indexed child -- so the
+{I}same prepend would give ``annotations/*[0]/property/idShort``, which walks one
+{I}level past the element that ``*[0]`` already selects, and resolves to nothing.
+
+{I}The end element corresponding to :paramref:`element` will be read as well.
+
+{I}:param element: start element enclosing the discriminator element
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:param read_element: to read the nested element, dispatching on its tag
+{I}:param expected_what: name of the expected type, for the error messages
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed instance
+{I}\"\"\"
+{I}next_event_element = next(iterator, None)
+{I}if next_event_element is None:
+{II}raise DeserializationException(
+{III}f"Expected a discriminator start element corresponding "
+{III}f"to {{expected_what}}, but got end-of-input"
+{II})
+
+{I}next_event, nested_element = next_event_element
+{I}if next_event != 'start':
+{II}raise DeserializationException(
+{III}f"Expected a discriminator start element corresponding "
+{III}f"to {{expected_what}}, "
+{III}f"but got event {{next_event!r}} and element {{nested_element.tag!r}}"
+{II})
+
+{I}try:
+{II}result = read_element(nested_element, iterator)
+{I}except DeserializationException as exception:
+{II}exception.path._prepend(ElementSegment(nested_element))
+{II}raise
+
+{I}_read_end_element(element, iterator)
+
+{I}return result"""
+        ),
+        "_read_dispatched": Stripped(
+            f"""\
+def _read_dispatched(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]],
+{I}dispatch: Mapping[str, _ContentReader[_ValueT]],
+{I}expected_what: str
+) -> _ValueT:
+{I}\"\"\"
+{I}Read the instance of :paramref:`element` by dispatching on its own tag.
+
+{I}An instance element is self-describing: its tag *is* its model type.
+
+{I}The end element corresponding to :paramref:`element` will be read as well.
+
+{I}:param element: start element of the instance
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:param dispatch: to read the instance as a sequence, by its model type
+{I}:param expected_what: what we expected to read, for the error messages
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed instance
+{I}\"\"\"
+{I}tag_wo_ns = _parse_element_tag(element)
+
+{I}read_as_sequence = dispatch.get(tag_wo_ns, None)
+{I}if read_as_sequence is None:
+{II}raise DeserializationException(
+{III}f"Expected the element tag to be a valid model type "
+{III}f"of {{expected_what}}, "
+{III}f"but got tag {{tag_wo_ns!r}}"
+{II})
+
+{I}return read_as_sequence(element, iterator)"""
+        ),
+        "_read_properties": Stripped(
+            f"""\
+def _read_properties(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]],
+{I}readers: Mapping[str, _ContentReader[Any]]
+) -> Mapping[str, Any]:
+{I}\"\"\"
+{I}Read the properties of an instance as the children of :paramref:`element`.
+
+{I}The end element corresponding to :paramref:`element` will be read as well.
+
+{I}The property is marked on the error path here, once for all the properties,
+{I}instead of in every reader: the tag of the child element *is* the XML name of
+{I}the property which we are reading.
+
+{I}:param element: start element, parent of the properties
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:param readers: to read the content of a property, by its XML name
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed values, by the XML name of the property
+{I}\"\"\"
+{I}if element.text is not None and len(element.text.strip()) != 0:
+{II}raise DeserializationException(
+{III}f"Expected only XML elements representing the properties "
+{III}f"and whitespace text, but got text: {{element.text!r}}"
+{II})
+
+{I}_raise_if_has_tail_or_attrib(element)
+
+{I}values = dict()  # type: Dict[str, Any]
+
+{I}while True:
+{II}# NOTE (mristin):
+{II}# We pull the next property element here instead of delegating it to
+{II}# a helper. A call is not free in Python, and this loop runs once for
+{II}# every property of every instance.
+{II}next_event_element = next(iterator, None)
+{II}if next_event_element is None:
+{III}raise DeserializationException(
+{IIII}f"Expected a property element or the end element corresponding "
+{IIII}f"to {{element.tag}}, but got the end-of-input"
+{III})
+
+{II}next_event, prop_element = next_event_element
+{II}if next_event == 'end' and prop_element.tag == element.tag:
+{III}# We reached the end element enclosing the properties.
+{III}break
+
+{II}if next_event != 'start':
+{III}raise DeserializationException(
+{IIII}f"Expected a start element corresponding to a property, "
+{IIII}f"but got event {{next_event!r}} "
+{IIII}f"and element {{prop_element.tag!r}}"
+{III})
+
+{II}try:
+{III}tag_wo_ns = _parse_element_tag(prop_element)
+
+{III}reader = readers.get(tag_wo_ns, None)
+{III}if reader is None:
+{IIII}raise DeserializationException(
+{IIIII}f"Expected an element representing a property, "
+{IIIII}f"but got an element with unexpected tag: {{tag_wo_ns!r}}"
+{IIII})
+
+{III}values[tag_wo_ns] = reader(prop_element, iterator)
+{II}except DeserializationException as exception:
+{III}exception.path._prepend(ElementSegment(prop_element))
+{III}raise
+
+{I}return values"""
+        ),
+        "_read_list_of_items": Stripped(
+            f"""\
+def _read_list_of_items(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]],
+{I}read_item: _ContentReader[_ValueT]
+) -> List[_ValueT]:
+{I}\"\"\"
+{I}Read the children of :paramref:`element` as a list of items.
+
+{I}:paramref:`read_item` is responsible for verifying the tag of each item
+{I}element itself -- *e.g.*, by wrapping a scalar/enumeration reader with
+{I}:py:func:`_read_named_element`, or by relying on a class's own dispatch by
+{I}its natural element tag.
+
+{I}The end element corresponding to :paramref:`element` will be read as well.
+
+{I}:param element: start element enclosing the list
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:param read_item: to read a single item, including its own end element
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed items
+{I}\"\"\"
+{I}if element.text is not None and len(element.text.strip()) != 0:
+{II}raise DeserializationException(
+{III}f"Expected only item elements and whitespace text, "
+{III}f"but got text: {{element.text!r}}"
+{II})
+
+{I}result = []  # type: List[_ValueT]
+
+{I}while True:
+{II}# NOTE (mristin):
+{II}# We pull the next item element here instead of delegating it to a helper,
+{II}# as this loop runs once for every item of every list.
+{II}next_event_element = next(iterator, None)
+{II}if next_event_element is None:
+{III}raise DeserializationException(
+{IIII}f"Expected an item element or the end element corresponding "
+{IIII}f"to {{element.tag}}, but got the end-of-input"
+{III})
+
+{II}next_event, item_element = next_event_element
+{II}if next_event == 'end' and item_element.tag == element.tag:
+{III}# We reached the end element enclosing the items.
+{III}break
+
+{II}if next_event != 'start':
+{III}raise DeserializationException(
+{IIII}f"Expected a start element corresponding to an item, "
+{IIII}f"but got event {{next_event!r}} "
+{IIII}f"and element {{item_element.tag!r}}"
+{III})
+
+{II}try:
+{III}item = read_item(item_element, iterator)
+{II}except DeserializationException as exception:
+{III}exception.path._prepend(IndexSegment(item_element, len(result)))
+{III}raise
+
+{II}result.append(item)
+
+{I}return result"""
+        ),
+        "_read_tuple_item": Stripped(
+            f"""\
+def _read_tuple_item(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]],
+{I}index: int,
+{I}read_item: _ContentReader[_ValueT]
+) -> _ValueT:
+{I}\"\"\"
+{I}Read the item at :paramref:`index` of the tuple enclosed in :paramref:`element`.
+
+{I}:param element: start element enclosing the tuple
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:param index: index of the item in the tuple
+{I}:param read_item: to read the item, including its own end element
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed item
+{I}\"\"\"
+{I}next_event_element = next(iterator, None)
+{I}if next_event_element is None:
+{II}raise DeserializationException(
+{III}f"Expected the item {{index}} of the tuple, "
+{III}f"but got end-of-input"
+{II})
+
+{I}next_event, item_element = next_event_element
+{I}if next_event != 'start':
+{II}raise DeserializationException(
+{III}f"Expected a start element corresponding to the item {{index}} "
+{III}f"of the tuple, but got event {{next_event!r}} "
+{III}f"and element {{item_element.tag!r}}"
+{II})
+
+{I}try:
+{II}return read_item(item_element, iterator)
+{I}except DeserializationException as exception:
+{II}exception.path._prepend(IndexSegment(item_element, index))
+{II}raise"""
+        ),
+        "_read_instance_from_iterparse": Stripped(
+            f"""\
+def _read_instance_from_iterparse(
+{I}iterator: Iterator[Tuple[str, Element]],
+{I}read_as_element: _ContentReader[_ValueT],
+{I}expected_what: str
+) -> _ValueT:
+{I}\"\"\"
+{I}Read an instance from :paramref:`iterator`, starting at its start element.
+
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:param read_as_element: to read the instance, including its end element
+{I}:param expected_what: what we expected to read, for the error messages
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed instance
+{I}\"\"\"
+{I}next_event_element = next(iterator, None)
+{I}if next_event_element is None:
+{II}raise DeserializationException(
+{III}f"Expected the start element for {{expected_what}}, "
+{III}f"but got the end-of-input"
+{II})
+
+{I}next_event, next_element = next_event_element
+{I}if next_event != 'start':
+{II}raise DeserializationException(
+{III}f"Expected the start element for {{expected_what}}, "
+{III}f"but got event {{next_event!r}} and element {{next_element.tag!r}}"
+{II})
+
+{I}try:
+{II}return read_as_element(next_element, iterator)
+{I}except DeserializationException as exception:
+{II}exception.path._prepend(ElementSegment(next_element))
+{II}raise exception"""
+        ),
+        "_read_text_from_element": Stripped(
+            f"""\
+def _read_text_from_element(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> str:
+{I}\"\"\"
+{I}Extract the text from the :paramref:`element`, and read
+{I}the end element from :paramref:`iterator`.
+
+{I}The :paramref:`element` is expected to contain text. Otherwise,
+{I}it is considered as unexpected input.
+
+{I}:param element: start element enclosing the text
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}\"\"\"
+{I}_raise_if_has_tail_or_attrib(element)
+
+{I}text = element.text
+
+{I}end_element = _read_end_element(
+{II}element,
+{II}iterator,
+{I})
+
+{I}if text is None:
+{II}if end_element.text is None:
+{III}raise DeserializationException(
+{IIII}"Expected an element with text, but got an element with no text."
+{III})
+
+{II}text = end_element.text
+
+{I}return text"""
+        ),
+        "_read_bool_from_element_text": Stripped(
+            f"""\
+_XS_BOOLEAN_LITERAL_SET = {{
+{I}"1",
+{I}"true",
+{I}"0",
+{I}"false",
+}}
+
+
+def _read_bool_from_element_text(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> bool:
+{I}\"\"\"
+{I}Parse the text of :paramref:`element` as a boolean, and
+{I}read the corresponding end element from :paramref:`iterator`.
+
+{I}:param element: start element
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed value
+{I}\"\"\"
+{I}text = _read_text_from_element(
+{II}element,
+{II}iterator
+{I})
+
+{I}if text not in _XS_BOOLEAN_LITERAL_SET:
+{II}raise DeserializationException(
+{III}f"Expected a boolean, "
+{III}f"but got an element with text: {{text!r}}"
+{II})
+
+{I}return text in ('1', 'true')"""
+        ),
+        "_read_int_from_element_text": Stripped(
+            f"""\
+def _read_int_from_element_text(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> int:
+{I}\"\"\"
+{I}Parse the text of :paramref:`element` as an integer, and
+{I}read the corresponding end element from :paramref:`iterator`.
+
+{I}:param element: start element
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed value
+{I}\"\"\"
+{I}text = _read_text_from_element(
+{II}element,
+{II}iterator
+{I})
+
+{I}try:
+{II}value = int(text)
+{I}except ValueError:
+{II}# pylint: disable=raise-missing-from
+{II}raise DeserializationException(
+{III}f"Expected an integer, "
+{III}f"but got an element with text: {{text!r}}"
+{II})
+
+{I}return value"""
+        ),
+        "_read_float_from_element_text": Stripped(
+            f"""\
+_TEXT_TO_XS_DOUBLE_LITERALS = {{
+{I}"NaN": math.nan,
+{I}"INF": math.inf,
+{I}"-INF": -math.inf,
+}}
+
+
+def _read_float_from_element_text(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> float:
+{I}\"\"\"
+{I}Parse the text of :paramref:`element` as a floating-point number, and
+{I}read the corresponding end element from :paramref:`iterator`.
+
+{I}:param element: start element
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed value
+{I}\"\"\"
+{I}text = _read_text_from_element(
+{II}element,
+{II}iterator
+{I})
+
+{I}value = _TEXT_TO_XS_DOUBLE_LITERALS.get(text, None)
+{I}if value is None:
+{II}try:
+{III}value = float(text)
+{II}except ValueError:
+{III}# pylint: disable=raise-missing-from
+{III}raise DeserializationException(
+{IIII}f"Expected a floating-point number, "
+{IIII}f"but got an element with text: {{text!r}}"
+{III})
+
+{I}return value"""
+        ),
+        "_read_str_from_element_text": Stripped(
+            f"""\
+def _read_str_from_element_text(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> str:
+{I}\"\"\"
+{I}Parse the text of :paramref:`element` as a string, and
+{I}read the corresponding end element from :paramref:`iterator`.
+
+{I}If there is no text, empty string is returned.
+
+{I}:param element: start element
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed value
+{I}\"\"\"
+{I}# NOTE (mristin, 2022-10-26):
+{I}# We do not use ``_read_text_from_element`` as that function expects
+{I}# the ``element`` to contain *some* text. In contrast, this function
+{I}# can also deal with empty text, in which case it returns an empty string.
+
+{I}text = element.text
+
+{I}end_element = _read_end_element(
+{II}element,
+{II}iterator
+{I})
+
+{I}if text is None:
+{II}text = end_element.text
+
+{I}_raise_if_has_tail_or_attrib(element)
+{I}result = (
+{II}text
+{II}if text is not None
+{II}else ""
+{I})
+
+{I}return result"""
+        ),
+        "_read_bytes_from_element_text": Stripped(
+            f"""\
+def _read_bytes_from_element_text(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]]
+) -> bytes:
+{I}\"\"\"
+{I}Parse the text of :paramref:`element` as base64-encoded bytes, and
+{I}read the corresponding end element from :paramref:`iterator`.
+
+{I}:param element: look-ahead element
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed value
+{I}\"\"\"
+{I}text = _read_text_from_element(
+{II}element,
+{II}iterator
+{I})
+
+{I}try:
+{II}value = base64.b64decode(text)
+{I}except Exception:
+{II}# pylint: disable=raise-missing-from
+{II}raise DeserializationException(
+{III}f"Expected a text as base64-encoded bytes, "
+{III}f"but got an element with text: {{text!r}}"
+{II})
+
+{I}return value"""
+        ),
+        "_read_enum_from_element_text": Stripped(
+            f"""\
+def _read_enum_from_element_text(
+{I}element: Element,
+{I}iterator: Iterator[Tuple[str, Element]],
+{I}literal_from_str: Callable[[str], Optional[_ValueT]],
+{I}enum_name: str
+) -> _ValueT:
+{I}\"\"\"
+{I}Parse the text of :paramref:`element` as an enumeration literal, and read
+{I}the corresponding end element from :paramref:`iterator`.
+
+{I}:param element: start element
+{I}:param iterator:
+{II}Input stream of ``(event, element)`` coming from
+{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
+{II}``events=["start", "end"]``
+{I}:param literal_from_str: to parse the literal from its string representation
+{I}:param enum_name: name of the enumeration, for the error messages
+{I}:raise: :py:class:`DeserializationException` if unexpected input
+{I}:return: parsed literal
+{I}\"\"\"
+{I}text = _read_text_from_element(
+{II}element,
+{II}iterator
+{I})
+
+{I}literal = literal_from_str(text)
+{I}if literal is None:
+{II}raise DeserializationException(
+{III}f"Not a valid string representation of "
+{III}f"a literal of {{enum_name}}: {{text}}"
+{II})
+
+{I}return literal"""
+        ),
+    }
+
+
+assert sorted(_HELPER_DEPENDENCIES.keys()) == sorted(
+    _generate_reading_helpers().keys()
+), (
+    "Expected the dependencies to be noted for exactly the generated helpers, "
+    "but got: "
+    f"{sorted(_HELPER_DEPENDENCIES.keys())} and "
+    f"{sorted(_generate_reading_helpers().keys())}"
+)
+
+
+def _collect_needed_helpers(seeds: AbstractSet[str]) -> Set[str]:
+    """
+    Collect the shared reading helpers which have to be generated for the ``seeds``.
+
+    The result is the ``seeds`` closed over :py:attr:`_HELPER_DEPENDENCIES`: a helper
+    is in it if a seed needs it, directly or through another helper. Generating exactly
+    these helpers therefore leaves no dangling name in the generated module -- an
+    enumeration is read on top of the text path, and a list of enumerations needs the
+    enumeration reader even when no property is one.
+
+    The ``seeds`` are noted by :py:class:`_ReaderRegistry` as it walks the meta-model,
+    and they also carry the names of the readers which are generated elsewhere: the
+    reader of an enumeration comes with the enumeration itself. Such a name is not
+    a shared helper, so it is left out, and the result contains only names which
+    :py:func:`_generate_reading_helpers` gives out.
+
+    :param seeds: names of the helpers, and of other readers, which are needed
+    :return: names of the shared helpers to be generated
+    """
+    result = set()  # type: Set[str]
+
+    stack = [seed for seed in seeds if seed in _HELPER_DEPENDENCIES]
+    while len(stack) > 0:
+        helper = stack.pop()
+        if helper in result:
+            continue
+
+        result.add(helper)
+        stack.extend(_HELPER_DEPENDENCIES[helper])
+
+    return result
+
+
 # fmt: off
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 @ensure(
@@ -2894,6 +3648,7 @@ import sys
 from typing import (
 {I}Any,
 {I}Callable,
+{I}Dict,
 {I}Iterator,
 {I}List,
 {I}Mapping,
@@ -3145,475 +3900,57 @@ def _with_elements_cleared_after_yield(
         ]
     )
 
-    blocks.extend(
-        [
-            Stripped(
-                """\
-# NOTE (mristin, 2022-10-08):
-# Directly using the iterator turned out to result in very complex function
-# designs. The design became much simpler as soon as we considered one look-ahead
-# element. We came up finally with the following pattern which all the protected
-# reading functions below roughly follow:
-#
-# ..code-block::
-#
-#    _read_*(
-#       look-ahead element,
-#       iterator
-#    ) -> result
-#
-# The reading functions all read from the ``iterator`` coming from
-# :py:func:`xml.etree.ElementTree.iterparse` with the argument
-# ``events=["start", "end"]``. The exception :py:class:`.DeserializationException`
-# is raised in case of unexpected input.
-#
-# The reading functions are responsible to read the end element corresponding to the
-# start look-ahead element.
-#
-# When it comes to error reporting, we use exceptions. The exceptions are raised in
-# the *callee*, as usual. However, the context of the exception, such as the error path,
-# is added in the *caller*, as only the caller knows the context of
-# the lookahead-element. In particular, prepending the path segment corresponding to
-# the lookahead-element is the responsibility of the *caller*, and not of
-# the *callee*."""
-            ),
-            Stripped(
-                f"""\
-def _parse_element_tag(element: Element) -> str:
-{I}\"\"\"
-{I}Extract the tag name without the namespace prefix from :paramref:`element`.
+    # region Compose the readers
 
-{I}:param element: whose tag without namespace we want to extract
-{I}:return: tag name without the namespace prefix
-{I}:raise: :py:class:`DeserializationException` if unexpected :paramref:`element`
-{I}\"\"\"
-{I}if not element.tag.startswith(_NAMESPACE_IN_CURLY_BRACKETS):
-{II}namespace, got_namespace, tag_wo_ns = (
-{III}element.tag.rpartition('}}')
-{II})
-{II}if got_namespace:
-{III}if namespace.startswith('{{'):
-{IIII}namespace = namespace[1:]
+    # NOTE (mristin):
+    # We compose the readers first so that we know which of them, and which of
+    # the shared helpers, a meta-model actually reaches. Only those are finally
+    # generated, gated along the call graph.
 
-{III}raise DeserializationException(
-{IIII}f"Expected the element in the namespace {{NAMESPACE!r}}, "
-{IIII}f"but got the element {{tag_wo_ns!r}} in the namespace {{namespace!r}}"
-{III})
-{II}else:
-{III}raise DeserializationException(
-{IIII}f"Expected the element in the namespace {{NAMESPACE!r}}, "
-{IIII}f"but got the element {{tag_wo_ns!r}} without the namespace prefix"
-{III})
+    for our_type in symbol_table.our_types:
+        if isinstance(our_type, intermediate.ConstrainedPrimitive):
+            continue
 
-{I}return element.tag[len(_NAMESPACE_IN_CURLY_BRACKETS):]"""
-            ),
-            Stripped(
-                f"""\
-def _raise_if_has_tail_or_attrib(
-{II}element: Element
-) -> None:
-{I}\"\"\"
-{I}Check that :paramref:`element` has no trailing text and no attributes.
+        if (
+            naming.lower_snake_case(our_type.name)
+            in _MONIKER_BY_PRIMITIVE_TYPE.values()
+        ):
+            errors.append(
+                Error(
+                    our_type.parsed.node,
+                    f"The name of the type {our_type.name!r} gives the same moniker "
+                    f"as one of the primitive types, so the readers of the two would "
+                    f"be given the same name. Please rename the type, or contact "
+                    f"the developers if you need this feature.",
+                )
+            )
 
-{I}:param element: to be verified
-{I}:raise:
-{II}:py:class:`.DeserializationException` if trailing text or attributes;
-{II}conforming to the convention about handling error paths,
-{II}the exception path is left empty.
-{I}\"\"\"
-{I}if element.tail is not None and len(element.tail.strip()) != 0:
-{II}raise DeserializationException(
-{III}f"Expected no trailing text, but got: {{element.tail!r}}"
-{II})
+    if len(errors) > 0:
+        return None, errors
 
-{I}if element.attrib is not None and len(element.attrib) > 0:
-{II}raise DeserializationException(
-{III}f"Expected no attributes, but got: {{element.attrib}}"
-{II})"""
-            ),
-            Stripped(
-                f"""\
-def _read_end_element(
-{II}element: Element,
-{II}iterator: Iterator[Tuple[str, Element]]
-) -> Element:
-{I}\"\"\"
-{I}Read the end element corresponding to the start :paramref:`element`
-{I}from :paramref:`iterator`.
+    registry = _ReaderRegistry()
 
-{I}:param element: corresponding start element
-{I}:param iterator:
-{II}Input stream of ``(event, element)`` coming from
-{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
-{II}``events=["start", "end"]``
-{I}:raise: :py:class:`DeserializationException` if unexpected input
-{I}\"\"\"
-{I}next_event_element = next(iterator, None)
-{I}if next_event_element is None:
-{II}raise DeserializationException(
-{III}f"Expected the end element for {{element.tag}}, "
-{III}f"but got the end-of-input"
-{II})
+    reader_blocks = []  # type: List[Stripped]
+    readers_map_blocks = []  # type: List[Stripped]
 
-{I}next_event, next_element = next_event_element
-{I}if next_event != "end" or next_element.tag != element.tag:
-{II}raise DeserializationException(
-{III}f"Expected the end element for {{element.tag!r}}, "
-{III}f"but got the event {{next_event!r}} and element {{next_element.tag!r}}"
-{II})
+    for concrete_cls in symbol_table.concrete_classes:
+        if concrete_cls.is_implementation_specific:
+            continue
 
-{I}_raise_if_has_tail_or_attrib(next_element)
+        for prop in concrete_cls.properties:
+            registry.register_content_reader(prop.type_annotation)
 
-{I}return next_element"""
-            ),
-            Stripped('_ItemT = TypeVar("_ItemT")'),
-            Stripped(
-                f"""\
-def _read_v_element(
-{I}element: Element,
-{I}iterator: Iterator[Tuple[str, Element]],
-{I}expected_tag: str,
-{I}read_content: Callable[
-{II}[Element, Iterator[Tuple[str, Element]]],
-{II}_ItemT
-{I}]
-) -> _ItemT:
-{I}\"\"\"
-{I}Verify that :paramref:`element` bears the :paramref:`expected_tag`, and
-{I}delegate the reading of its content to :paramref:`read_content`.
+        readers_map_blocks.append(_generate_readers_map(cls=concrete_cls))
 
-{I}This is used to read a single positional item wrapped in a named element,
-{I}such as ``<v>`` for a list item, or ``<v1>``, ``<v2>``, *etc.* for
-{I}a tuple item.
+    # endregion
 
-{I}:param element: look-ahead element
-{I}:param iterator:
-{II}Input stream of ``(event, element)`` coming from
-{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
-{II}``events=["start", "end"]``
-{I}:param expected_tag: expected tag of :paramref:`element`
-{I}:param read_content: to read the content of :paramref:`element`
-{I}:raise: :py:class:`DeserializationException` if unexpected input
-{I}:return: parsed value
-{I}\"\"\"
-{I}tag_wo_ns = _parse_element_tag(element)
-{I}if tag_wo_ns != expected_tag:
-{II}raise DeserializationException(
-{III}f"Expected an element with the tag {{expected_tag!r}}, "
-{III}f"but got an element with tag: {{tag_wo_ns!r}}"
-{II})
-
-{I}return read_content(element, iterator)"""
-            ),
-            Stripped(
-                f"""\
-def _read_list_of_items(
-{I}element: Element,
-{I}iterator: Iterator[Tuple[str, Element]],
-{I}read_item: Callable[
-{II}[Element, Iterator[Tuple[str, Element]]],
-{II}_ItemT
-{I}]
-) -> List[_ItemT]:
-{I}\"\"\"
-{I}Read a list of items from :paramref:`iterator`.
-
-{I}:paramref:`read_item` is responsible for verifying the tag of each item
-{I}element itself -- *e.g.*, by wrapping a scalar/enumeration reader with
-{I}:py:func:`_read_v_element`, or by relying on a class's own dispatch by
-{I}its natural element tag.
-
-{I}The end element corresponding to :paramref:`element` will be read as well.
-
-{I}:param element: start element enclosing the list
-{I}:param iterator:
-{II}Input stream of ``(event, element)`` coming from
-{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
-{II}``events=["start", "end"]``
-{I}:param read_item: to read a single item, including its own end element
-{I}:raise: :py:class:`DeserializationException` if unexpected input
-{I}:return: parsed items
-{I}\"\"\"
-{I}if element.text is not None and len(element.text.strip()) != 0:
-{II}raise DeserializationException(
-{III}f"Expected only item elements and whitespace text, "
-{III}f"but got text: {{element.text!r}}"
-{II})
-
-{I}result = []  # type: List[_ItemT]
-{I}item_i = 0
-
-{I}while True:
-{II}next_event_element = next(iterator, None)
-{II}if next_event_element is None:
-{III}raise DeserializationException(
-{IIII}"Expected one or more items from a list or the end element, "
-{IIII}"but got end-of-input"
-{III})
-
-{II}next_event, next_element = next_event_element
-{II}if next_event == 'end' and next_element.tag == element.tag:
-{III}# We reached the end of the list.
-{III}break
-
-{II}if next_event != 'start':
-{III}raise DeserializationException(
-{IIII}"Expected a start element corresponding to an item, "
-{IIII}f"but got event {{next_event!r}} and element {{next_element.tag!r}}"
-{III})
-
-{II}try:
-{III}item = read_item(next_element, iterator)
-{II}except DeserializationException as exception:
-{III}exception.path._prepend(IndexSegment(next_element, item_i))
-{III}raise
-
-{II}result.append(item)
-{II}item_i += 1
-
-{I}return result"""
-            ),
-            Stripped(
-                f"""\
-def _read_text_from_element(
-{I}element: Element,
-{I}iterator: Iterator[Tuple[str, Element]]
-) -> str:
-{I}\"\"\"
-{I}Extract the text from the :paramref:`element`, and read
-{I}the end element from :paramref:`iterator`.
-
-{I}The :paramref:`element` is expected to contain text. Otherwise,
-{I}it is considered as unexpected input.
-
-{I}:param element: start element enclosing the text
-{I}:param iterator:
-{II}Input stream of ``(event, element)`` coming from
-{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
-{II}``events=["start", "end"]``
-{I}:raise: :py:class:`DeserializationException` if unexpected input
-{I}\"\"\"
-{I}_raise_if_has_tail_or_attrib(element)
-
-{I}text = element.text
-
-{I}end_element = _read_end_element(
-{II}element,
-{II}iterator,
-{I})
-
-{I}if text is None:
-{II}if end_element.text is None:
-{III}raise DeserializationException(
-{IIII}"Expected an element with text, but got an element with no text."
-{III})
-
-{II}text = end_element.text
-
-{I}return text"""
-            ),
-            Stripped(
-                f"""\
-_XS_BOOLEAN_LITERAL_SET = {{
-{I}"1",
-{I}"true",
-{I}"0",
-{I}"false",
-}}"""
-            ),
-            Stripped(
-                f"""\
-def _read_bool_from_element_text(
-{I}element: Element,
-{I}iterator: Iterator[Tuple[str, Element]]
-) -> bool:
-{I}\"\"\"
-{I}Parse the text of :paramref:`element` as a boolean, and
-{I}read the corresponding end element from :paramref:`iterator`.
-
-{I}:param element: start element
-{I}:param iterator:
-{II}Input stream of ``(event, element)`` coming from
-{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
-{II}``events=["start", "end"]``
-{I}:raise: :py:class:`DeserializationException` if unexpected input
-{I}:return: parsed value
-{I}\"\"\"
-{I}text = _read_text_from_element(
-{II}element,
-{II}iterator
-{I})
-
-{I}if text not in _XS_BOOLEAN_LITERAL_SET:
-{II}raise DeserializationException(
-{III}f"Expected a boolean, "
-{III}f"but got an element with text: {{text!r}}"
-{II})
-
-{I}return text in ('1', 'true')"""
-            ),
-            Stripped(
-                f"""\
-def _read_int_from_element_text(
-{I}element: Element,
-{I}iterator: Iterator[Tuple[str, Element]]
-) -> int:
-{I}\"\"\"
-{I}Parse the text of :paramref:`element` as an integer, and
-{I}read the corresponding end element from :paramref:`iterator`.
-
-{I}:param element: start element
-{I}:param iterator:
-{II}Input stream of ``(event, element)`` coming from
-{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
-{II}``events=["start", "end"]``
-{I}:raise: :py:class:`DeserializationException` if unexpected input
-{I}:return: parsed value
-{I}\"\"\"
-{I}text = _read_text_from_element(
-{II}element,
-{II}iterator
-{I})
-
-{I}try:
-{II}value = int(text)
-{I}except ValueError:
-{II}# pylint: disable=raise-missing-from
-{II}raise DeserializationException(
-{III}f"Expected an integer, "
-{III}f"but got an element with text: {{text!r}}"
-{II})
-
-{I}return value"""
-            ),
-            Stripped(
-                f"""\
-_TEXT_TO_XS_DOUBLE_LITERALS = {{
-{I}"NaN": math.nan,
-{I}"INF": math.inf,
-{I}"-INF": -math.inf,
-}}"""
-            ),
-            Stripped(
-                f"""\
-def _read_float_from_element_text(
-{I}element: Element,
-{I}iterator: Iterator[Tuple[str, Element]]
-) -> float:
-{I}\"\"\"
-{I}Parse the text of :paramref:`element` as a floating-point number, and
-{I}read the corresponding end element from :paramref:`iterator`.
-
-{I}:param element: start element
-{I}:param iterator:
-{II}Input stream of ``(event, element)`` coming from
-{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
-{II}``events=["start", "end"]``
-{I}:raise: :py:class:`DeserializationException` if unexpected input
-{I}:return: parsed value
-{I}\"\"\"
-{I}text = _read_text_from_element(
-{II}element,
-{II}iterator
-{I})
-
-{I}value = _TEXT_TO_XS_DOUBLE_LITERALS.get(text, None)
-{I}if value is None:
-{II}try:
-{III}value = float(text)
-{II}except ValueError:
-{III}# pylint: disable=raise-missing-from
-{III}raise DeserializationException(
-{IIII}f"Expected a floating-point number, "
-{IIII}f"but got an element with text: {{text!r}}"
-{III})
-
-{I}return value"""
-            ),
-            Stripped(
-                f"""\
-def _read_str_from_element_text(
-{I}element: Element,
-{I}iterator: Iterator[Tuple[str, Element]]
-) -> str:
-{I}\"\"\"
-{I}Parse the text of :paramref:`element` as a string, and
-{I}read the corresponding end element from :paramref:`iterator`.
-
-{I}If there is no text, empty string is returned.
-
-{I}:param element: start element
-{I}:param iterator:
-{II}Input stream of ``(event, element)`` coming from
-{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
-{II}``events=["start", "end"]``
-{I}:raise: :py:class:`DeserializationException` if unexpected input
-{I}:return: parsed value
-{I}\"\"\"
-{I}# NOTE (mristin, 2022-10-26):
-{I}# We do not use ``_read_text_from_element`` as that function expects
-{I}# the ``element`` to contain *some* text. In contrast, this function
-{I}# can also deal with empty text, in which case it returns an empty string.
-
-{I}text = element.text
-
-{I}end_element = _read_end_element(
-{II}element,
-{II}iterator
-{I})
-
-{I}if text is None:
-{II}text = end_element.text
-
-{I}_raise_if_has_tail_or_attrib(element)
-{I}result = (
-{II}text
-{II}if text is not None
-{II}else ""
-{I})
-
-{I}return result"""
-            ),
-            Stripped(
-                f"""\
-def _read_bytes_from_element_text(
-{I}element: Element,
-{I}iterator: Iterator[Tuple[str, Element]]
-) -> bytes:
-{I}\"\"\"
-{I}Parse the text of :paramref:`element` as base64-encoded bytes, and
-{I}read the corresponding end element from :paramref:`iterator`.
-
-{I}:param element: look-ahead element
-{I}:param iterator:
-{II}Input stream of ``(event, element)`` coming from
-{II}:py:func:`xml.etree.ElementTree.iterparse` with the argument
-{II}``events=["start", "end"]``
-{I}:raise: :py:class:`DeserializationException` if unexpected input
-{I}:return: parsed value
-{I}\"\"\"
-{I}text = _read_text_from_element(
-{II}element,
-{II}iterator
-{I})
-
-{I}try:
-{II}value = base64.b64decode(text)
-{I}except Exception:
-{II}# pylint: disable=raise-missing-from
-{II}raise DeserializationException(
-{III}f"Expected a text as base64-encoded bytes, "
-{III}f"but got an element with text: {{text!r}}"
-{II})
-
-{I}return value"""
-            ),
-        ]
-    )
+    # region Generate the readers
 
     tuple_arities = intermediate.tuple_arities(symbol_table)
     if len(tuple_arities) > 0:
-        blocks.append(
+        registry.note_needed_helper("_read_tuple_item")
+
+        reader_blocks.append(
             Stripped(
                 "\n".join(
                     f'_TupleItem{i}T = TypeVar("_TupleItem{i}T")'
@@ -3622,15 +3959,26 @@ def _read_bytes_from_element_text(
             )
         )
         for arity in tuple_arities:
-            blocks.append(_generate_tuple_from_element(arity=arity))
+            reader_blocks.append(_generate_tuple_from_element(arity=arity))
+
+    reader_blocks.extend(registry.blocks)
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
-            blocks.append(_generate_read_enum_from_element_text(enumeration=our_type))
+            enum_reader = python_naming.private_function_name(
+                Identifier(f"read_{our_type.name}_from_element_text")
+            )
+
+            if enum_reader in registry.needed_helpers:
+                reader_blocks.append(
+                    _generate_read_enum_from_element_text(enumeration=our_type)
+                )
+
         elif isinstance(our_type, intermediate.ConstrainedPrimitive):
             continue
+
         elif isinstance(our_type, intermediate.AbstractClass):
-            blocks.append(_generate_read_cls_as_element(cls=our_type))
+            reader_blocks.append(_generate_read_cls_as_element(cls=our_type))
 
         elif isinstance(our_type, intermediate.ConcreteClass):
             if our_type.is_implementation_specific:
@@ -3649,45 +3997,104 @@ def _read_bytes_from_element_text(
                         )
                     )
                     continue
-            else:
-                blocks.extend(
-                    [
-                        _generate_reader_and_setter(cls=our_type),
-                        _generate_read_as_sequence(cls=our_type),
-                    ]
-                )
 
-                blocks.append(_generate_read_cls_as_element(cls=our_type))
+                # NOTE (mristin):
+                # The snippet is expected to define the function which reads
+                # the instance as a sequence of the XML-encoded properties. Everything
+                # around it -- the dispatch on the element tag and the public
+                # functions -- is generated as for any other class.
+                reader_blocks.append(implementation)
+            else:
+                reader_blocks.append(_generate_read_as_sequence(cls=our_type))
+
+            reader_blocks.append(_generate_read_cls_as_element(cls=our_type))
 
         elif isinstance(our_type, intermediate.NamedUnion):
-            blocks.append(_generate_read_named_union_as_element(named_union=our_type))
+            reader_blocks.append(
+                _generate_read_named_union_as_element(named_union=our_type)
+            )
 
         else:
             assert_never(our_type)
 
-    blocks.append(_generate_general_read_as_element(symbol_table=symbol_table))
+    reader_blocks.append(_generate_general_read_as_element(symbol_table=symbol_table))
 
     for cls in symbol_table.classes:
         if isinstance(cls, intermediate.AbstractClass):
-            blocks.append(_generate_dispatch_map_for_class(cls=cls))
+            reader_blocks.append(_generate_dispatch_map_for_class(cls=cls))
         elif isinstance(cls, intermediate.ConcreteClass):
             if len(cls.concrete_descendants) > 0:
-                blocks.append(_generate_dispatch_map_for_class(cls=cls))
-
-            if not cls.is_implementation_specific:
-                blocks.append(_generate_reader_and_setter_map(cls=cls))
-
+                reader_blocks.append(_generate_dispatch_map_for_class(cls=cls))
         else:
             assert_never(cls)
 
     for named_union in symbol_table.named_unions:
-        blocks.append(_generate_dispatch_map_for_named_union(named_union=named_union))
+        reader_blocks.append(
+            _generate_dispatch_map_for_named_union(named_union=named_union)
+        )
 
-    blocks.append(_generate_general_dispatch_map(symbol_table=symbol_table))
+    reader_blocks.append(_generate_general_dispatch_map(symbol_table=symbol_table))
+
+    reader_blocks.extend(readers_map_blocks)
+
+    if len(errors) > 0:
+        return None, errors
+
+    # endregion
+
+    # region Generate the shared helpers which the readers need
+
+    # NOTE (mristin):
+    # The public functions start every reading, and an instance is always dispatched
+    # on its own tag, so these two are needed for any meta-model.
+    registry.note_needed_helper("_read_dispatched")
+    registry.note_needed_helper("_read_instance_from_iterparse")
+
+    if any(
+        not concrete_cls.is_implementation_specific
+        for concrete_cls in symbol_table.concrete_classes
+    ):
+        registry.note_needed_helper("_read_properties")
+
+    if any(
+        len(concrete_cls.concrete_descendants) == 0
+        for concrete_cls in symbol_table.concrete_classes
+    ):
+        registry.note_needed_helper("_read_named_element")
+
+    needed_helpers = _collect_needed_helpers(registry.needed_helpers)
+
+    helper_blocks = _generate_reading_helpers()
+
+    blocks.append(_READING_PATTERN_NOTE)
+
+    blocks.append(
+        Stripped(
+            f"""\
+_ValueT = TypeVar("_ValueT")
+
+#: Read the content of an element which has already been opened, and read
+#: the corresponding end element as well
+_ContentReader = Callable[
+{I}[Element, Iterator[Tuple[str, Element]]],
+{I}_ValueT
+]"""
+        )
+    )
+
+    blocks.extend(
+        block for name, block in helper_blocks.items() if name in needed_helpers
+    )
+
+    # endregion
+
+    blocks.extend(reader_blocks)
 
     blocks.append(Stripped("# endregion"))
 
     blocks.append(Stripped("# region Serialization"))
+
+    blocks.append(Stripped('_ItemT = TypeVar("_ItemT")'))
 
     blocks.append(_generate_serializer(symbol_table=symbol_table))
 
