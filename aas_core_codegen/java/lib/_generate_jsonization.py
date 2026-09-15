@@ -1690,20 +1690,52 @@ public static JsonNode toJsonObject(IClass that) {{
         ),
     ]  # type: List[Stripped]
 
-    for enum in symbol_table.enumerations:
-        name = java_naming.enum_name(enum.name)
-        method_name = java_naming.method_name(Identifier(f"{enum.name}_to_json_value"))
+    if len(symbol_table.enumerations) > 0:
+        # NOTE (mristin):
+        # A literal carries its own text, so a single non-generic method
+        # serializes a literal of any enumeration. The methods which follow
+        # are kept for the sake of the type safety at the call site -- each
+        # one admits only the literals of its own enumeration -- but they all
+        # delegate here, so the serialization itself lives in one place.
+        #
+        # The name cannot collide with any of them: they are all named
+        # ``{enumeration}ToJsonValue``, and an enumeration is never nameless.
+        enum_to_json_value_name = java_naming.method_name(Identifier("to_json_value"))
+
         blocks.append(
             Stripped(
                 f"""\
 /**
- * Serialize a literal of {name} into a JSON string.
+ * Serialize a literal of any enumeration of the meta-model
+ * into a JSON string.
+ *
+ * @throws IllegalArgumentException if {{@code that}} is not a valid literal
  */
-public static JsonNode {method_name}({name} that) {{
-{I}return JsonNodeFactory.instance.textNode(Stringification.mustToString(that));
+public static JsonNode {enum_to_json_value_name}(IEnum that) {{
+{I}if (that == null) {{
+{II}throw new IllegalArgumentException("Invalid literal: " + that);
+{I}}}
+{I}return JsonNodeFactory.instance.textNode(that.literalText());
 }}"""
             )
         )
+
+        for enum in symbol_table.enumerations:
+            name = java_naming.enum_name(enum.name)
+            method_name = java_naming.method_name(
+                Identifier(f"{enum.name}_to_json_value")
+            )
+            blocks.append(
+                Stripped(
+                    f"""\
+/**
+ * Serialize a literal of {name} into a JSON string.
+ */
+public static JsonNode {method_name}({name} that) {{
+{I}return {enum_to_json_value_name}(that);
+}}"""
+                )
+            )
 
     writer = io.StringIO()
 

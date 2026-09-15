@@ -12118,80 +12118,93 @@ public class Jsonization {
       }
 
       /**
+       * Serialize a literal of any enumeration of the meta-model
+       * into a JSON string.
+       *
+       * @throws IllegalArgumentException if {@code that} is not a valid literal
+       */
+      public static JsonNode toJsonValue(IEnum that) {
+        if (that == null) {
+          throw new IllegalArgumentException("Invalid literal: " + that);
+        }
+        return JsonNodeFactory.instance.textNode(that.literalText());
+      }
+
+      /**
        * Serialize a literal of ModellingKind into a JSON string.
        */
       public static JsonNode modellingKindToJsonValue(ModellingKind that) {
-        return JsonNodeFactory.instance.textNode(Stringification.mustToString(that));
+        return toJsonValue(that);
       }
 
       /**
        * Serialize a literal of QualifierKind into a JSON string.
        */
       public static JsonNode qualifierKindToJsonValue(QualifierKind that) {
-        return JsonNodeFactory.instance.textNode(Stringification.mustToString(that));
+        return toJsonValue(that);
       }
 
       /**
        * Serialize a literal of AssetKind into a JSON string.
        */
       public static JsonNode assetKindToJsonValue(AssetKind that) {
-        return JsonNodeFactory.instance.textNode(Stringification.mustToString(that));
+        return toJsonValue(that);
       }
 
       /**
        * Serialize a literal of AasSubmodelElements into a JSON string.
        */
       public static JsonNode aasSubmodelElementsToJsonValue(AasSubmodelElements that) {
-        return JsonNodeFactory.instance.textNode(Stringification.mustToString(that));
+        return toJsonValue(that);
       }
 
       /**
        * Serialize a literal of EntityType into a JSON string.
        */
       public static JsonNode entityTypeToJsonValue(EntityType that) {
-        return JsonNodeFactory.instance.textNode(Stringification.mustToString(that));
+        return toJsonValue(that);
       }
 
       /**
        * Serialize a literal of Direction into a JSON string.
        */
       public static JsonNode directionToJsonValue(Direction that) {
-        return JsonNodeFactory.instance.textNode(Stringification.mustToString(that));
+        return toJsonValue(that);
       }
 
       /**
        * Serialize a literal of StateOfEvent into a JSON string.
        */
       public static JsonNode stateOfEventToJsonValue(StateOfEvent that) {
-        return JsonNodeFactory.instance.textNode(Stringification.mustToString(that));
+        return toJsonValue(that);
       }
 
       /**
        * Serialize a literal of ReferenceTypes into a JSON string.
        */
       public static JsonNode referenceTypesToJsonValue(ReferenceTypes that) {
-        return JsonNodeFactory.instance.textNode(Stringification.mustToString(that));
+        return toJsonValue(that);
       }
 
       /**
        * Serialize a literal of KeyTypes into a JSON string.
        */
       public static JsonNode keyTypesToJsonValue(KeyTypes that) {
-        return JsonNodeFactory.instance.textNode(Stringification.mustToString(that));
+        return toJsonValue(that);
       }
 
       /**
        * Serialize a literal of DataTypeDefXsd into a JSON string.
        */
       public static JsonNode dataTypeDefXsdToJsonValue(DataTypeDefXsd that) {
-        return JsonNodeFactory.instance.textNode(Stringification.mustToString(that));
+        return toJsonValue(that);
       }
 
       /**
        * Serialize a literal of DataTypeIec61360 into a JSON string.
        */
       public static JsonNode dataTypeIec61360ToJsonValue(DataTypeIec61360 that) {
-        return JsonNodeFactory.instance.textNode(Stringification.mustToString(that));
+        return toJsonValue(that);
       }
     }
 }

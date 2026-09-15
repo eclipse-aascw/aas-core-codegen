@@ -8385,6 +8385,21 @@ public class Xmlization {
         Base64.getEncoder().encodeToString(that));
     }
 
+    /**
+     * Write the text of {@code that} as XML content.
+     *
+     * <p>This is the {@link ContentWriter} of every enumeration-typed value, be
+     * it a property, a list item or a tuple item. There is one writer, and not
+     * one per enumeration, since a literal carries its own text -- see
+     * {@link IEnum#literalText()} -- so nothing here is specific to
+     * an enumeration.
+     */
+    private static void writeEnum(
+      IEnum that,
+      XMLStreamWriter writer) throws XMLStreamException {
+      writer.writeCharacters(that.literalText());
+    }
+
     private static void writeListOf_IReference(
       List<IReference> that,
       XMLStreamWriter writer) {
@@ -8401,12 +8416,6 @@ public class Xmlization {
       }
     }
 
-    private static void writeTextAs_DataTypeDefXsd(
-      DataTypeDefXsd that,
-      XMLStreamWriter writer) throws XMLStreamException {
-      writer.writeCharacters(Stringification.mustToString(that));
-    }
-
     private static void writeListOf_IEmbeddedDataSpecification(
       List<IEmbeddedDataSpecification> that,
       XMLStreamWriter writer) {
@@ -8421,12 +8430,6 @@ public class Xmlization {
           new Reporting.IndexSegment(index));
         throw failure;
       }
-    }
-
-    private static void writeTextAs_QualifierKind(
-      QualifierKind that,
-      XMLStreamWriter writer) throws XMLStreamException {
-      writer.writeCharacters(Stringification.mustToString(that));
     }
 
     private static void writeListOf_IExtension(
@@ -8477,12 +8480,6 @@ public class Xmlization {
       }
     }
 
-    private static void writeTextAs_AssetKind(
-      AssetKind that,
-      XMLStreamWriter writer) throws XMLStreamException {
-      writer.writeCharacters(Stringification.mustToString(that));
-    }
-
     private static void writeListOf_ISpecificAssetId(
       List<ISpecificAssetId> that,
       XMLStreamWriter writer) {
@@ -8497,12 +8494,6 @@ public class Xmlization {
           new Reporting.IndexSegment(index));
         throw failure;
       }
-    }
-
-    private static void writeTextAs_ModellingKind(
-      ModellingKind that,
-      XMLStreamWriter writer) throws XMLStreamException {
-      writer.writeCharacters(Stringification.mustToString(that));
     }
 
     private static void writeListOf_IQualifier(
@@ -8537,12 +8528,6 @@ public class Xmlization {
       }
     }
 
-    private static void writeTextAs_AasSubmodelElements(
-      AasSubmodelElements that,
-      XMLStreamWriter writer) throws XMLStreamException {
-      writer.writeCharacters(Stringification.mustToString(that));
-    }
-
     private static void writeListOf_IDataElement(
       List<IDataElement> that,
       XMLStreamWriter writer) {
@@ -8557,24 +8542,6 @@ public class Xmlization {
           new Reporting.IndexSegment(index));
         throw failure;
       }
-    }
-
-    private static void writeTextAs_EntityType(
-      EntityType that,
-      XMLStreamWriter writer) throws XMLStreamException {
-      writer.writeCharacters(Stringification.mustToString(that));
-    }
-
-    private static void writeTextAs_Direction(
-      Direction that,
-      XMLStreamWriter writer) throws XMLStreamException {
-      writer.writeCharacters(Stringification.mustToString(that));
-    }
-
-    private static void writeTextAs_StateOfEvent(
-      StateOfEvent that,
-      XMLStreamWriter writer) throws XMLStreamException {
-      writer.writeCharacters(Stringification.mustToString(that));
     }
 
     private static void writeListOf_IOperationVariable(
@@ -8593,12 +8560,6 @@ public class Xmlization {
       }
     }
 
-    private static void writeTextAs_ReferenceTypes(
-      ReferenceTypes that,
-      XMLStreamWriter writer) throws XMLStreamException {
-      writer.writeCharacters(Stringification.mustToString(that));
-    }
-
     private static void writeListOf_IKey(
       List<IKey> that,
       XMLStreamWriter writer) {
@@ -8613,12 +8574,6 @@ public class Xmlization {
           new Reporting.IndexSegment(index));
         throw failure;
       }
-    }
-
-    private static void writeTextAs_KeyTypes(
-      KeyTypes that,
-      XMLStreamWriter writer) throws XMLStreamException {
-      writer.writeCharacters(Stringification.mustToString(that));
     }
 
     private static void writeListOf_IAssetAdministrationShell(
@@ -8717,12 +8672,6 @@ public class Xmlization {
       }
     }
 
-    private static void writeTextAs_DataTypeIec61360(
-      DataTypeIec61360 that,
-      XMLStreamWriter writer) throws XMLStreamException {
-      writer.writeCharacters(Stringification.mustToString(that));
-    }
-
     private static void writeListOf_ILangStringDefinitionTypeIec61360(
       List<ILangStringDefinitionTypeIec61360> that,
       XMLStreamWriter writer) {
@@ -8764,7 +8713,7 @@ public class Xmlization {
         "valueType",
         that.getValueType(),
         writer,
-        _VisitorWithWriter::writeTextAs_DataTypeDefXsd);
+        _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "value",
@@ -8856,7 +8805,7 @@ public class Xmlization {
         "kind",
         that.getKind(),
         writer,
-        _VisitorWithWriter::writeTextAs_QualifierKind);
+        _VisitorWithWriter::writeEnum);
 
       writeProperty(
         "type",
@@ -8868,7 +8817,7 @@ public class Xmlization {
         "valueType",
         that.getValueType(),
         writer,
-        _VisitorWithWriter::writeTextAs_DataTypeDefXsd);
+        _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "value",
@@ -8984,7 +8933,7 @@ public class Xmlization {
         "assetKind",
         that.getAssetKind(),
         writer,
-        _VisitorWithWriter::writeTextAs_AssetKind);
+        _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "globalAssetId",
@@ -9146,7 +9095,7 @@ public class Xmlization {
         "kind",
         that.getKind(),
         writer,
-        _VisitorWithWriter::writeTextAs_ModellingKind);
+        _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "semanticId",
@@ -9346,13 +9295,13 @@ public class Xmlization {
         "typeValueListElement",
         that.getTypeValueListElement(),
         writer,
-        _VisitorWithWriter::writeTextAs_AasSubmodelElements);
+        _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "valueTypeListElement",
         that.getValueTypeListElement(),
         writer,
-        _VisitorWithWriter::writeTextAs_DataTypeDefXsd);
+        _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "value",
@@ -9510,7 +9459,7 @@ public class Xmlization {
         "valueType",
         that.getValueType(),
         writer,
-        _VisitorWithWriter::writeTextAs_DataTypeDefXsd);
+        _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "value",
@@ -9680,7 +9629,7 @@ public class Xmlization {
         "valueType",
         that.getValueType(),
         writer,
-        _VisitorWithWriter::writeTextAs_DataTypeDefXsd);
+        _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "min",
@@ -10102,7 +10051,7 @@ public class Xmlization {
         "entityType",
         that.getEntityType(),
         writer,
-        _VisitorWithWriter::writeTextAs_EntityType);
+        _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "globalAssetId",
@@ -10260,13 +10209,13 @@ public class Xmlization {
         "direction",
         that.getDirection(),
         writer,
-        _VisitorWithWriter::writeTextAs_Direction);
+        _VisitorWithWriter::writeEnum);
 
       writeProperty(
         "state",
         that.getState(),
         writer,
-        _VisitorWithWriter::writeTextAs_StateOfEvent);
+        _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "messageTopic",
@@ -10568,7 +10517,7 @@ public class Xmlization {
         "type",
         that.getType(),
         writer,
-        _VisitorWithWriter::writeTextAs_ReferenceTypes);
+        _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "referredSemanticId",
@@ -10602,7 +10551,7 @@ public class Xmlization {
         "type",
         that.getType(),
         writer,
-        _VisitorWithWriter::writeTextAs_KeyTypes);
+        _VisitorWithWriter::writeEnum);
 
       writeProperty(
         "value",
@@ -10958,7 +10907,7 @@ public class Xmlization {
         "dataType",
         that.getDataType(),
         writer,
-        _VisitorWithWriter::writeTextAs_DataTypeIec61360);
+        _VisitorWithWriter::writeEnum);
 
       writeOptionalProperty(
         "definition",

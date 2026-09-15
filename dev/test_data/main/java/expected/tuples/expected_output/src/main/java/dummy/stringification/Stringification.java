@@ -13,20 +13,6 @@ import java.util.Optional;
 import dummy.types.enums.*;
 
 public class Stringification {
-  private static final Map<Result, String> resultToString;
-  static {
-    final Map<Result, String> temp = new HashMap<>();
-
-    temp.put(Result.OK, "ok");
-    temp.put(Result.NOT_OK, "not-ok");
-
-    if (!temp.keySet().containsAll(Arrays.asList(Result.values()))) {
-      throw new IllegalStateException("Unmapped Result");
-    }
-
-    resultToString = Collections.unmodifiableMap(temp);
-  }
-
   /**
    * Retrieve the string representation of {@code that}.
    *
@@ -34,7 +20,9 @@ public class Stringification {
    */
   public static Optional<String> toString(Result that)
   {
-    return Optional.ofNullable(that).map(resultToString::get);
+    return (that == null)
+      ? Optional.empty()
+      : Optional.of(that.literalText());
   }
 
   /**
@@ -44,11 +32,10 @@ public class Stringification {
    */
   public static String mustToString(Result that)
   {
-    final Optional<String> text = toString(that);
-    if (!text.isPresent()) {
+    if (that == null) {
       throw new IllegalArgumentException("Invalid literal of Result: " + that);
     }
-    return text.get();
+    return that.literalText();
   }
 
   private static final Map<String, Result> resultFromString;

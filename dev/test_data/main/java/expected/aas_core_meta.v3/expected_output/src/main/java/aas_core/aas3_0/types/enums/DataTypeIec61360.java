@@ -5,61 +5,61 @@
 
 package aas_core.aas3_0.types.enums;
 
-public enum DataTypeIec61360 {
+public enum DataTypeIec61360 implements IEnum {
   /**
    * values containing a calendar date, conformant to ISO 8601:2004 Format yyyy-mm-dd
    * Example from IEC 61360-1:2017: "1999-05-31" is the [DATE] representation of:
    * "31 May 1999".
    */
-  DATE,
+  DATE("DATE"),
   /**
    * values consisting of sequence of characters but cannot be translated into other
    * languages
    */
-  STRING,
+  STRING("STRING"),
   /**
    * values containing string but shall be represented as different string in different
    * languages
    */
-  STRING_TRANSLATABLE,
+  STRING_TRANSLATABLE("STRING_TRANSLATABLE"),
   /**
    * values containing values that are measure of type INTEGER. In addition such a value
    * comes with a physical unit.
    */
-  INTEGER_MEASURE,
+  INTEGER_MEASURE("INTEGER_MEASURE"),
   /**
    * values containing values of type INTEGER but are no currencies or measures
    */
-  INTEGER_COUNT,
+  INTEGER_COUNT("INTEGER_COUNT"),
   /**
    * values containing values of type INTEGER that are currencies
    */
-  INTEGER_CURRENCY,
+  INTEGER_CURRENCY("INTEGER_CURRENCY"),
   /**
    * values containing values that are measures of type REAL. In addition such a value
    * comes with a physical unit.
    */
-  REAL_MEASURE,
+  REAL_MEASURE("REAL_MEASURE"),
   /**
    * values containing numbers that can be written as a terminating or non-terminating
    * decimal; a rational or irrational number but are no currencies or measures
    */
-  REAL_COUNT,
+  REAL_COUNT("REAL_COUNT"),
   /**
    * values containing values of type REAL that are currencies
    */
-  REAL_CURRENCY,
+  REAL_CURRENCY("REAL_CURRENCY"),
   /**
    * values representing truth of logic or Boolean algebra (TRUE, FALSE)
    */
-  BOOLEAN,
+  BOOLEAN("BOOLEAN"),
   /**
    * values containing values of type STRING conformant to Rfc 3987
    *
    * <p>In IEC61360-1 (2017) only URI is supported.
    * An IRI type allows in particular to express an URL or an URI.
    */
-  IRI,
+  IRI("IRI"),
   /**
    * values conforming to ISO/IEC 11179 series global identifier sequences
    *
@@ -74,16 +74,16 @@ public enum DataTypeIec61360 {
    * requirements specified in ISO/TS 29002-5 for an "international registration data
    * identifier" (IRDI).
    */
-  IRDI,
+  IRDI("IRDI"),
   /**
    * values containing values of type rational
    */
-  RATIONAL,
+  RATIONAL("RATIONAL"),
   /**
    * values containing values of type rational. In addition such a value comes with a
    * physical unit.
    */
-  RATIONAL_MEASURE,
+  RATIONAL_MEASURE("RATIONAL_MEASURE"),
   /**
    * values containing a time, conformant to ISO 8601:2004 but restricted to what is
    * allowed in the corresponding type in xml.
@@ -94,26 +94,26 @@ public enum DataTypeIec61360 {
    * 1.20 p.m. for Eastern Standard Time, which is 5 hours behind Coordinated
    * Universal Time (UTC).
    */
-  TIME,
+  TIME("TIME"),
   /**
    * values containing a time, conformant to ISO 8601:2004 but restricted to what is
    * allowed in the corresponding type in xml.
    *
    * <p>Format yyyy-mm-dd hh:mm (ECLASS)
    */
-  TIMESTAMP,
+  TIMESTAMP("TIMESTAMP"),
   /**
    * values containing an address to a file. The values are of type URI and can represent
    * an absolute or relative path.
    *
    * <p>IEC61360 does not support the file type.
    */
-  FILE,
+  FILE("FILE"),
   /**
    * Values containing string with any sequence of characters, using the syntax of HTML5
    * (see W3C Recommendation 28:2014)
    */
-  HTML,
+  HTML("HTML"),
   /**
    * values containing the content of a file. Values may be binaries.
    *
@@ -122,7 +122,18 @@ public enum DataTypeIec61360 {
    * <p>In IEC61360 binary is for a sequence of bits, each bit being represented by “0” and
    * “1” only. A binary is a blob but a blob may also contain other source code.
    */
-  BLOB
+  BLOB("BLOB");
+
+  private final String literalText;
+
+  DataTypeIec61360(String literalText) {
+    this.literalText = literalText;
+  }
+
+  @Override
+  public String literalText() {
+    return literalText;
+  }
 }
 
 /*

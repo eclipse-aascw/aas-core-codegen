@@ -8,17 +8,28 @@ package aas_core.aas3_0.types.enums;
 /**
  * Enumeration for denoting whether an element is a template or an instance.
  */
-public enum ModellingKind {
+public enum ModellingKind implements IEnum {
   /**
    * Specification of the common features of a structured element in sufficient detail
    * that such a instance can be instantiated using it
    */
-  TEMPLATE,
+  TEMPLATE("Template"),
   /**
    * Concrete, clearly identifiable element instance. Its creation and validation
    * may be guided by a corresponding element template.
    */
-  INSTANCE
+  INSTANCE("Instance");
+
+  private final String literalText;
+
+  ModellingKind(String literalText) {
+    this.literalText = literalText;
+  }
+
+  @Override
+  public String literalText() {
+    return literalText;
+  }
 }
 
 /*

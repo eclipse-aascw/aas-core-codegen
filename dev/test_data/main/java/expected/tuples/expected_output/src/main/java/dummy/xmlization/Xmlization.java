@@ -1270,6 +1270,21 @@ public class Xmlization {
       writer.writeCharacters(that.toString());
     }
 
+    /**
+     * Write the text of {@code that} as XML content.
+     *
+     * <p>This is the {@link ContentWriter} of every enumeration-typed value, be
+     * it a property, a list item or a tuple item. There is one writer, and not
+     * one per enumeration, since a literal carries its own text -- see
+     * {@link IEnum#literalText()} -- so nothing here is specific to
+     * an enumeration.
+     */
+    private static void writeEnum(
+      IEnum that,
+      XMLStreamWriter writer) throws XMLStreamException {
+      writer.writeCharacters(that.literalText());
+    }
+
     private static void writeTupleOf2_string_long(
       Tuple2<String, Long> that,
       XMLStreamWriter writer) {
@@ -1298,12 +1313,6 @@ public class Xmlization {
           new Reporting.IndexSegment(index));
         throw failure;
       }
-    }
-
-    private static void writeTextAs_Result(
-      Result that,
-      XMLStreamWriter writer) throws XMLStreamException {
-      writer.writeCharacters(Stringification.mustToString(that));
     }
 
     private static void writeTupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result(
@@ -1382,7 +1391,7 @@ public class Xmlization {
         "v6",
         that,
         writer,
-        _VisitorWithWriter::writeTextAs_Result);
+        _VisitorWithWriter::writeEnum);
     }
 
     private static void writeSomeItemAsSequence(

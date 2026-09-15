@@ -13,21 +13,6 @@ import java.util.Optional;
 import dummy.types.enums.*;
 
 public class Stringification {
-  private static final Map<SomeEnum, String> someEnumToString;
-  static {
-    final Map<SomeEnum, String> temp = new HashMap<>();
-
-    temp.put(SomeEnum.FIRST, "first");
-    temp.put(SomeEnum.SECOND, "second");
-    temp.put(SomeEnum.THIRD, "third");
-
-    if (!temp.keySet().containsAll(Arrays.asList(SomeEnum.values()))) {
-      throw new IllegalStateException("Unmapped SomeEnum");
-    }
-
-    someEnumToString = Collections.unmodifiableMap(temp);
-  }
-
   /**
    * Retrieve the string representation of {@code that}.
    *
@@ -35,7 +20,9 @@ public class Stringification {
    */
   public static Optional<String> toString(SomeEnum that)
   {
-    return Optional.ofNullable(that).map(someEnumToString::get);
+    return (that == null)
+      ? Optional.empty()
+      : Optional.of(that.literalText());
   }
 
   /**
@@ -45,11 +32,10 @@ public class Stringification {
    */
   public static String mustToString(SomeEnum that)
   {
-    final Optional<String> text = toString(that);
-    if (!text.isPresent()) {
+    if (that == null) {
       throw new IllegalArgumentException("Invalid literal of SomeEnum: " + that);
     }
-    return text.get();
+    return that.literalText();
   }
 
   private static final Map<String, SomeEnum> someEnumFromString;

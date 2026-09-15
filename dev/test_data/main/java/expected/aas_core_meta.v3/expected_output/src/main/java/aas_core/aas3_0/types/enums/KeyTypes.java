@@ -8,76 +8,87 @@ package aas_core.aas3_0.types.enums;
 /**
  * Enumeration of different key value types within a key.
  */
-public enum KeyTypes {
-  ANNOTATED_RELATIONSHIP_ELEMENT,
-  ASSET_ADMINISTRATION_SHELL,
-  BASIC_EVENT_ELEMENT,
-  BLOB,
-  CAPABILITY,
-  CONCEPT_DESCRIPTION,
+public enum KeyTypes implements IEnum {
+  ANNOTATED_RELATIONSHIP_ELEMENT("AnnotatedRelationshipElement"),
+  ASSET_ADMINISTRATION_SHELL("AssetAdministrationShell"),
+  BASIC_EVENT_ELEMENT("BasicEventElement"),
+  BLOB("Blob"),
+  CAPABILITY("Capability"),
+  CONCEPT_DESCRIPTION("ConceptDescription"),
   /**
    * Data element.
    *
    * <p>Data Element is abstract, <em>i.e.</em> if a key uses {@link #DATA_ELEMENT}
    * the reference may be a Property, a File etc.
    */
-  DATA_ELEMENT,
-  ENTITY,
+  DATA_ELEMENT("DataElement"),
+  ENTITY("Entity"),
   /**
    * Event.
    *
    * <p>{@link aas_core.aas3_0.types.model.IEventElement} is abstract.
    */
-  EVENT_ELEMENT,
-  FILE,
+  EVENT_ELEMENT("EventElement"),
+  FILE("File"),
   /**
    * Bookmark or a similar local identifier of a subordinate part of
    * a primary resource
    */
-  FRAGMENT_REFERENCE,
-  GLOBAL_REFERENCE,
+  FRAGMENT_REFERENCE("FragmentReference"),
+  GLOBAL_REFERENCE("GlobalReference"),
   /**
    * Identifiable.
    *
    * <p>Identifiable is abstract, i.e. if a key uses “Identifiable” the reference
    * may be an Asset Administration Shell, a Submodel or a Concept Description.
    */
-  IDENTIFIABLE,
+  IDENTIFIABLE("Identifiable"),
   /**
    * Property with a value that can be provided in multiple languages
    */
-  MULTI_LANGUAGE_PROPERTY,
-  OPERATION,
-  PROPERTY,
+  MULTI_LANGUAGE_PROPERTY("MultiLanguageProperty"),
+  OPERATION("Operation"),
+  PROPERTY("Property"),
   /**
    * Range with min and max
    */
-  RANGE,
-  REFERABLE,
+  RANGE("Range"),
+  REFERABLE("Referable"),
   /**
    * Reference
    */
-  REFERENCE_ELEMENT,
+  REFERENCE_ELEMENT("ReferenceElement"),
   /**
    * Relationship
    */
-  RELATIONSHIP_ELEMENT,
-  SUBMODEL,
+  RELATIONSHIP_ELEMENT("RelationshipElement"),
+  SUBMODEL("Submodel"),
   /**
    * Submodel Element
    *
    * <p>Submodel Element is abstract, <em>i.e.</em> if a key uses {@link #SUBMODEL_ELEMENT}
    * the reference may be a {@link aas_core.aas3_0.types.impl.Property}, an {@link aas_core.aas3_0.types.impl.Operation} etc.
    */
-  SUBMODEL_ELEMENT,
+  SUBMODEL_ELEMENT("SubmodelElement"),
   /**
    * Struct of Submodel Elements
    */
-  SUBMODEL_ELEMENT_COLLECTION,
+  SUBMODEL_ELEMENT_COLLECTION("SubmodelElementCollection"),
   /**
    * List of Submodel Elements
    */
-  SUBMODEL_ELEMENT_LIST
+  SUBMODEL_ELEMENT_LIST("SubmodelElementList");
+
+  private final String literalText;
+
+  KeyTypes(String literalText) {
+    this.literalText = literalText;
+  }
+
+  @Override
+  public String literalText() {
+    return literalText;
+  }
 }
 
 /*

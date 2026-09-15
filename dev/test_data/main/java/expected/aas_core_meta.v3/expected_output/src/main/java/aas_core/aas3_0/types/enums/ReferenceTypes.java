@@ -8,15 +8,26 @@ package aas_core.aas3_0.types.enums;
 /**
  * Reference types
  */
-public enum ReferenceTypes {
+public enum ReferenceTypes implements IEnum {
   /**
    * External reference.
    */
-  EXTERNAL_REFERENCE,
+  EXTERNAL_REFERENCE("ExternalReference"),
   /**
    * Model reference.
    */
-  MODEL_REFERENCE
+  MODEL_REFERENCE("ModelReference");
+
+  private final String literalText;
+
+  ReferenceTypes(String literalText) {
+    this.literalText = literalText;
+  }
+
+  @Override
+  public String literalText() {
+    return literalText;
+  }
 }
 
 /*

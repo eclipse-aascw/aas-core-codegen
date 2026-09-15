@@ -933,10 +933,23 @@ public class Jsonization {
       }
 
       /**
+       * Serialize a literal of any enumeration of the meta-model
+       * into a JSON string.
+       *
+       * @throws IllegalArgumentException if {@code that} is not a valid literal
+       */
+      public static JsonNode toJsonValue(IEnum that) {
+        if (that == null) {
+          throw new IllegalArgumentException("Invalid literal: " + that);
+        }
+        return JsonNodeFactory.instance.textNode(that.literalText());
+      }
+
+      /**
        * Serialize a literal of Result into a JSON string.
        */
       public static JsonNode resultToJsonValue(Result that) {
-        return JsonNodeFactory.instance.textNode(Stringification.mustToString(that));
+        return toJsonValue(that);
       }
     }
 }

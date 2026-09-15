@@ -11,15 +11,26 @@ package aas_core.aas3_0.types.enums;
  * <p>This element is experimental and therefore may be subject to change or may be
  * removed completely in future versions of the meta-model.
  */
-public enum Direction {
+public enum Direction implements IEnum {
   /**
    * Input direction.
    */
-  INPUT,
+  INPUT("input"),
   /**
    * Output direction
    */
-  OUTPUT
+  OUTPUT("output");
+
+  private final String literalText;
+
+  Direction(String literalText) {
+    this.literalText = literalText;
+  }
+
+  @Override
+  public String literalText() {
+    return literalText;
+  }
 }
 
 /*

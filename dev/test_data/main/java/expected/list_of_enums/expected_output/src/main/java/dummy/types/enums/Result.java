@@ -5,9 +5,20 @@
 
 package dummy.types.enums;
 
-public enum Result {
-  OK,
-  FAIL
+public enum Result implements IEnum {
+  OK("ok"),
+  FAIL("fail");
+
+  private final String literalText;
+
+  Result(String literalText) {
+    this.literalText = literalText;
+  }
+
+  @Override
+  public String literalText() {
+    return literalText;
+  }
 }
 
 /*
