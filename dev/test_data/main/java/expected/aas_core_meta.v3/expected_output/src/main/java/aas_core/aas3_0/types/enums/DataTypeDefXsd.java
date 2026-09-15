@@ -8,37 +8,48 @@ package aas_core.aas3_0.types.enums;
 /**
  * Enumeration listing all XSD anySimpleTypes
  */
-public enum DataTypeDefXsd {
-  ANY_URI,
-  BASE_64_BINARY,
-  BOOLEAN,
-  BYTE,
-  DATE,
-  DATE_TIME,
-  DECIMAL,
-  DOUBLE,
-  DURATION,
-  FLOAT,
-  G_DAY,
-  G_MONTH,
-  G_MONTH_DAY,
-  G_YEAR,
-  G_YEAR_MONTH,
-  HEX_BINARY,
-  INT,
-  INTEGER,
-  LONG,
-  NEGATIVE_INTEGER,
-  NON_NEGATIVE_INTEGER,
-  NON_POSITIVE_INTEGER,
-  POSITIVE_INTEGER,
-  SHORT,
-  STRING,
-  TIME,
-  UNSIGNED_BYTE,
-  UNSIGNED_INT,
-  UNSIGNED_LONG,
-  UNSIGNED_SHORT
+public enum DataTypeDefXsd implements IEnum {
+  ANY_URI("xs:anyURI"),
+  BASE_64_BINARY("xs:base64Binary"),
+  BOOLEAN("xs:boolean"),
+  BYTE("xs:byte"),
+  DATE("xs:date"),
+  DATE_TIME("xs:dateTime"),
+  DECIMAL("xs:decimal"),
+  DOUBLE("xs:double"),
+  DURATION("xs:duration"),
+  FLOAT("xs:float"),
+  G_DAY("xs:gDay"),
+  G_MONTH("xs:gMonth"),
+  G_MONTH_DAY("xs:gMonthDay"),
+  G_YEAR("xs:gYear"),
+  G_YEAR_MONTH("xs:gYearMonth"),
+  HEX_BINARY("xs:hexBinary"),
+  INT("xs:int"),
+  INTEGER("xs:integer"),
+  LONG("xs:long"),
+  NEGATIVE_INTEGER("xs:negativeInteger"),
+  NON_NEGATIVE_INTEGER("xs:nonNegativeInteger"),
+  NON_POSITIVE_INTEGER("xs:nonPositiveInteger"),
+  POSITIVE_INTEGER("xs:positiveInteger"),
+  SHORT("xs:short"),
+  STRING("xs:string"),
+  TIME("xs:time"),
+  UNSIGNED_BYTE("xs:unsignedByte"),
+  UNSIGNED_INT("xs:unsignedInt"),
+  UNSIGNED_LONG("xs:unsignedLong"),
+  UNSIGNED_SHORT("xs:unsignedShort");
+
+  private final String literalText;
+
+  DataTypeDefXsd(String literalText) {
+    this.literalText = literalText;
+  }
+
+  @Override
+  public String literalText() {
+    return literalText;
+  }
 }
 
 /*

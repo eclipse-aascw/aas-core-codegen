@@ -11,15 +11,26 @@ package aas_core.aas3_0.types.enums;
  * <p>This element is experimental and therefore may be subject to change or may be
  * removed completely in future versions of the meta-model.
  */
-public enum StateOfEvent {
+public enum StateOfEvent implements IEnum {
   /**
    * Event is on
    */
-  ON,
+  ON("on"),
   /**
    * Event is off.
    */
-  OFF
+  OFF("off");
+
+  private final String literalText;
+
+  StateOfEvent(String literalText) {
+    this.literalText = literalText;
+  }
+
+  @Override
+  public String literalText() {
+    return literalText;
+  }
 }
 
 /*

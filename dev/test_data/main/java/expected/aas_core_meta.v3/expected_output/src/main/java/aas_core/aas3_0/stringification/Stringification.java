@@ -13,20 +13,6 @@ import java.util.Optional;
 import aas_core.aas3_0.types.enums.*;
 
 public class Stringification {
-  private static final Map<ModellingKind, String> modellingKindToString;
-  static {
-    final Map<ModellingKind, String> temp = new HashMap<>();
-
-    temp.put(ModellingKind.TEMPLATE, "Template");
-    temp.put(ModellingKind.INSTANCE, "Instance");
-
-    if (!temp.keySet().containsAll(Arrays.asList(ModellingKind.values()))) {
-      throw new IllegalStateException("Unmapped ModellingKind");
-    }
-
-    modellingKindToString = Collections.unmodifiableMap(temp);
-  }
-
   /**
    * Retrieve the string representation of {@code that}.
    *
@@ -34,7 +20,9 @@ public class Stringification {
    */
   public static Optional<String> toString(ModellingKind that)
   {
-    return Optional.ofNullable(that).map(modellingKindToString::get);
+    return (that == null)
+      ? Optional.empty()
+      : Optional.of(that.literalText());
   }
 
   /**
@@ -44,11 +32,10 @@ public class Stringification {
    */
   public static String mustToString(ModellingKind that)
   {
-    final Optional<String> text = toString(that);
-    if (!text.isPresent()) {
+    if (that == null) {
       throw new IllegalArgumentException("Invalid literal of ModellingKind: " + that);
     }
-    return text.get();
+    return that.literalText();
   }
 
   private static final Map<String, ModellingKind> modellingKindFromString;
@@ -82,21 +69,6 @@ public class Stringification {
     }
   }
 
-  private static final Map<QualifierKind, String> qualifierKindToString;
-  static {
-    final Map<QualifierKind, String> temp = new HashMap<>();
-
-    temp.put(QualifierKind.VALUE_QUALIFIER, "ValueQualifier");
-    temp.put(QualifierKind.CONCEPT_QUALIFIER, "ConceptQualifier");
-    temp.put(QualifierKind.TEMPLATE_QUALIFIER, "TemplateQualifier");
-
-    if (!temp.keySet().containsAll(Arrays.asList(QualifierKind.values()))) {
-      throw new IllegalStateException("Unmapped QualifierKind");
-    }
-
-    qualifierKindToString = Collections.unmodifiableMap(temp);
-  }
-
   /**
    * Retrieve the string representation of {@code that}.
    *
@@ -104,7 +76,9 @@ public class Stringification {
    */
   public static Optional<String> toString(QualifierKind that)
   {
-    return Optional.ofNullable(that).map(qualifierKindToString::get);
+    return (that == null)
+      ? Optional.empty()
+      : Optional.of(that.literalText());
   }
 
   /**
@@ -114,11 +88,10 @@ public class Stringification {
    */
   public static String mustToString(QualifierKind that)
   {
-    final Optional<String> text = toString(that);
-    if (!text.isPresent()) {
+    if (that == null) {
       throw new IllegalArgumentException("Invalid literal of QualifierKind: " + that);
     }
-    return text.get();
+    return that.literalText();
   }
 
   private static final Map<String, QualifierKind> qualifierKindFromString;
@@ -153,21 +126,6 @@ public class Stringification {
     }
   }
 
-  private static final Map<AssetKind, String> assetKindToString;
-  static {
-    final Map<AssetKind, String> temp = new HashMap<>();
-
-    temp.put(AssetKind.TYPE, "Type");
-    temp.put(AssetKind.INSTANCE, "Instance");
-    temp.put(AssetKind.NOT_APPLICABLE, "NotApplicable");
-
-    if (!temp.keySet().containsAll(Arrays.asList(AssetKind.values()))) {
-      throw new IllegalStateException("Unmapped AssetKind");
-    }
-
-    assetKindToString = Collections.unmodifiableMap(temp);
-  }
-
   /**
    * Retrieve the string representation of {@code that}.
    *
@@ -175,7 +133,9 @@ public class Stringification {
    */
   public static Optional<String> toString(AssetKind that)
   {
-    return Optional.ofNullable(that).map(assetKindToString::get);
+    return (that == null)
+      ? Optional.empty()
+      : Optional.of(that.literalText());
   }
 
   /**
@@ -185,11 +145,10 @@ public class Stringification {
    */
   public static String mustToString(AssetKind that)
   {
-    final Optional<String> text = toString(that);
-    if (!text.isPresent()) {
+    if (that == null) {
       throw new IllegalArgumentException("Invalid literal of AssetKind: " + that);
     }
-    return text.get();
+    return that.literalText();
   }
 
   private static final Map<String, AssetKind> assetKindFromString;
@@ -224,35 +183,6 @@ public class Stringification {
     }
   }
 
-  private static final Map<AasSubmodelElements, String> aasSubmodelElementsToString;
-  static {
-    final Map<AasSubmodelElements, String> temp = new HashMap<>();
-
-    temp.put(AasSubmodelElements.ANNOTATED_RELATIONSHIP_ELEMENT, "AnnotatedRelationshipElement");
-    temp.put(AasSubmodelElements.BASIC_EVENT_ELEMENT, "BasicEventElement");
-    temp.put(AasSubmodelElements.BLOB, "Blob");
-    temp.put(AasSubmodelElements.CAPABILITY, "Capability");
-    temp.put(AasSubmodelElements.DATA_ELEMENT, "DataElement");
-    temp.put(AasSubmodelElements.ENTITY, "Entity");
-    temp.put(AasSubmodelElements.EVENT_ELEMENT, "EventElement");
-    temp.put(AasSubmodelElements.FILE, "File");
-    temp.put(AasSubmodelElements.MULTI_LANGUAGE_PROPERTY, "MultiLanguageProperty");
-    temp.put(AasSubmodelElements.OPERATION, "Operation");
-    temp.put(AasSubmodelElements.PROPERTY, "Property");
-    temp.put(AasSubmodelElements.RANGE, "Range");
-    temp.put(AasSubmodelElements.REFERENCE_ELEMENT, "ReferenceElement");
-    temp.put(AasSubmodelElements.RELATIONSHIP_ELEMENT, "RelationshipElement");
-    temp.put(AasSubmodelElements.SUBMODEL_ELEMENT, "SubmodelElement");
-    temp.put(AasSubmodelElements.SUBMODEL_ELEMENT_LIST, "SubmodelElementList");
-    temp.put(AasSubmodelElements.SUBMODEL_ELEMENT_COLLECTION, "SubmodelElementCollection");
-
-    if (!temp.keySet().containsAll(Arrays.asList(AasSubmodelElements.values()))) {
-      throw new IllegalStateException("Unmapped AasSubmodelElements");
-    }
-
-    aasSubmodelElementsToString = Collections.unmodifiableMap(temp);
-  }
-
   /**
    * Retrieve the string representation of {@code that}.
    *
@@ -260,7 +190,9 @@ public class Stringification {
    */
   public static Optional<String> toString(AasSubmodelElements that)
   {
-    return Optional.ofNullable(that).map(aasSubmodelElementsToString::get);
+    return (that == null)
+      ? Optional.empty()
+      : Optional.of(that.literalText());
   }
 
   /**
@@ -270,11 +202,10 @@ public class Stringification {
    */
   public static String mustToString(AasSubmodelElements that)
   {
-    final Optional<String> text = toString(that);
-    if (!text.isPresent()) {
+    if (that == null) {
       throw new IllegalArgumentException("Invalid literal of AasSubmodelElements: " + that);
     }
-    return text.get();
+    return that.literalText();
   }
 
   private static final Map<String, AasSubmodelElements> aasSubmodelElementsFromString;
@@ -323,20 +254,6 @@ public class Stringification {
     }
   }
 
-  private static final Map<EntityType, String> entityTypeToString;
-  static {
-    final Map<EntityType, String> temp = new HashMap<>();
-
-    temp.put(EntityType.CO_MANAGED_ENTITY, "CoManagedEntity");
-    temp.put(EntityType.SELF_MANAGED_ENTITY, "SelfManagedEntity");
-
-    if (!temp.keySet().containsAll(Arrays.asList(EntityType.values()))) {
-      throw new IllegalStateException("Unmapped EntityType");
-    }
-
-    entityTypeToString = Collections.unmodifiableMap(temp);
-  }
-
   /**
    * Retrieve the string representation of {@code that}.
    *
@@ -344,7 +261,9 @@ public class Stringification {
    */
   public static Optional<String> toString(EntityType that)
   {
-    return Optional.ofNullable(that).map(entityTypeToString::get);
+    return (that == null)
+      ? Optional.empty()
+      : Optional.of(that.literalText());
   }
 
   /**
@@ -354,11 +273,10 @@ public class Stringification {
    */
   public static String mustToString(EntityType that)
   {
-    final Optional<String> text = toString(that);
-    if (!text.isPresent()) {
+    if (that == null) {
       throw new IllegalArgumentException("Invalid literal of EntityType: " + that);
     }
-    return text.get();
+    return that.literalText();
   }
 
   private static final Map<String, EntityType> entityTypeFromString;
@@ -392,20 +310,6 @@ public class Stringification {
     }
   }
 
-  private static final Map<Direction, String> directionToString;
-  static {
-    final Map<Direction, String> temp = new HashMap<>();
-
-    temp.put(Direction.INPUT, "input");
-    temp.put(Direction.OUTPUT, "output");
-
-    if (!temp.keySet().containsAll(Arrays.asList(Direction.values()))) {
-      throw new IllegalStateException("Unmapped Direction");
-    }
-
-    directionToString = Collections.unmodifiableMap(temp);
-  }
-
   /**
    * Retrieve the string representation of {@code that}.
    *
@@ -413,7 +317,9 @@ public class Stringification {
    */
   public static Optional<String> toString(Direction that)
   {
-    return Optional.ofNullable(that).map(directionToString::get);
+    return (that == null)
+      ? Optional.empty()
+      : Optional.of(that.literalText());
   }
 
   /**
@@ -423,11 +329,10 @@ public class Stringification {
    */
   public static String mustToString(Direction that)
   {
-    final Optional<String> text = toString(that);
-    if (!text.isPresent()) {
+    if (that == null) {
       throw new IllegalArgumentException("Invalid literal of Direction: " + that);
     }
-    return text.get();
+    return that.literalText();
   }
 
   private static final Map<String, Direction> directionFromString;
@@ -461,20 +366,6 @@ public class Stringification {
     }
   }
 
-  private static final Map<StateOfEvent, String> stateOfEventToString;
-  static {
-    final Map<StateOfEvent, String> temp = new HashMap<>();
-
-    temp.put(StateOfEvent.ON, "on");
-    temp.put(StateOfEvent.OFF, "off");
-
-    if (!temp.keySet().containsAll(Arrays.asList(StateOfEvent.values()))) {
-      throw new IllegalStateException("Unmapped StateOfEvent");
-    }
-
-    stateOfEventToString = Collections.unmodifiableMap(temp);
-  }
-
   /**
    * Retrieve the string representation of {@code that}.
    *
@@ -482,7 +373,9 @@ public class Stringification {
    */
   public static Optional<String> toString(StateOfEvent that)
   {
-    return Optional.ofNullable(that).map(stateOfEventToString::get);
+    return (that == null)
+      ? Optional.empty()
+      : Optional.of(that.literalText());
   }
 
   /**
@@ -492,11 +385,10 @@ public class Stringification {
    */
   public static String mustToString(StateOfEvent that)
   {
-    final Optional<String> text = toString(that);
-    if (!text.isPresent()) {
+    if (that == null) {
       throw new IllegalArgumentException("Invalid literal of StateOfEvent: " + that);
     }
-    return text.get();
+    return that.literalText();
   }
 
   private static final Map<String, StateOfEvent> stateOfEventFromString;
@@ -530,20 +422,6 @@ public class Stringification {
     }
   }
 
-  private static final Map<ReferenceTypes, String> referenceTypesToString;
-  static {
-    final Map<ReferenceTypes, String> temp = new HashMap<>();
-
-    temp.put(ReferenceTypes.EXTERNAL_REFERENCE, "ExternalReference");
-    temp.put(ReferenceTypes.MODEL_REFERENCE, "ModelReference");
-
-    if (!temp.keySet().containsAll(Arrays.asList(ReferenceTypes.values()))) {
-      throw new IllegalStateException("Unmapped ReferenceTypes");
-    }
-
-    referenceTypesToString = Collections.unmodifiableMap(temp);
-  }
-
   /**
    * Retrieve the string representation of {@code that}.
    *
@@ -551,7 +429,9 @@ public class Stringification {
    */
   public static Optional<String> toString(ReferenceTypes that)
   {
-    return Optional.ofNullable(that).map(referenceTypesToString::get);
+    return (that == null)
+      ? Optional.empty()
+      : Optional.of(that.literalText());
   }
 
   /**
@@ -561,11 +441,10 @@ public class Stringification {
    */
   public static String mustToString(ReferenceTypes that)
   {
-    final Optional<String> text = toString(that);
-    if (!text.isPresent()) {
+    if (that == null) {
       throw new IllegalArgumentException("Invalid literal of ReferenceTypes: " + that);
     }
-    return text.get();
+    return that.literalText();
   }
 
   private static final Map<String, ReferenceTypes> referenceTypesFromString;
@@ -599,42 +478,6 @@ public class Stringification {
     }
   }
 
-  private static final Map<KeyTypes, String> keyTypesToString;
-  static {
-    final Map<KeyTypes, String> temp = new HashMap<>();
-
-    temp.put(KeyTypes.ANNOTATED_RELATIONSHIP_ELEMENT, "AnnotatedRelationshipElement");
-    temp.put(KeyTypes.ASSET_ADMINISTRATION_SHELL, "AssetAdministrationShell");
-    temp.put(KeyTypes.BASIC_EVENT_ELEMENT, "BasicEventElement");
-    temp.put(KeyTypes.BLOB, "Blob");
-    temp.put(KeyTypes.CAPABILITY, "Capability");
-    temp.put(KeyTypes.CONCEPT_DESCRIPTION, "ConceptDescription");
-    temp.put(KeyTypes.DATA_ELEMENT, "DataElement");
-    temp.put(KeyTypes.ENTITY, "Entity");
-    temp.put(KeyTypes.EVENT_ELEMENT, "EventElement");
-    temp.put(KeyTypes.FILE, "File");
-    temp.put(KeyTypes.FRAGMENT_REFERENCE, "FragmentReference");
-    temp.put(KeyTypes.GLOBAL_REFERENCE, "GlobalReference");
-    temp.put(KeyTypes.IDENTIFIABLE, "Identifiable");
-    temp.put(KeyTypes.MULTI_LANGUAGE_PROPERTY, "MultiLanguageProperty");
-    temp.put(KeyTypes.OPERATION, "Operation");
-    temp.put(KeyTypes.PROPERTY, "Property");
-    temp.put(KeyTypes.RANGE, "Range");
-    temp.put(KeyTypes.REFERABLE, "Referable");
-    temp.put(KeyTypes.REFERENCE_ELEMENT, "ReferenceElement");
-    temp.put(KeyTypes.RELATIONSHIP_ELEMENT, "RelationshipElement");
-    temp.put(KeyTypes.SUBMODEL, "Submodel");
-    temp.put(KeyTypes.SUBMODEL_ELEMENT, "SubmodelElement");
-    temp.put(KeyTypes.SUBMODEL_ELEMENT_COLLECTION, "SubmodelElementCollection");
-    temp.put(KeyTypes.SUBMODEL_ELEMENT_LIST, "SubmodelElementList");
-
-    if (!temp.keySet().containsAll(Arrays.asList(KeyTypes.values()))) {
-      throw new IllegalStateException("Unmapped KeyTypes");
-    }
-
-    keyTypesToString = Collections.unmodifiableMap(temp);
-  }
-
   /**
    * Retrieve the string representation of {@code that}.
    *
@@ -642,7 +485,9 @@ public class Stringification {
    */
   public static Optional<String> toString(KeyTypes that)
   {
-    return Optional.ofNullable(that).map(keyTypesToString::get);
+    return (that == null)
+      ? Optional.empty()
+      : Optional.of(that.literalText());
   }
 
   /**
@@ -652,11 +497,10 @@ public class Stringification {
    */
   public static String mustToString(KeyTypes that)
   {
-    final Optional<String> text = toString(that);
-    if (!text.isPresent()) {
+    if (that == null) {
       throw new IllegalArgumentException("Invalid literal of KeyTypes: " + that);
     }
-    return text.get();
+    return that.literalText();
   }
 
   private static final Map<String, KeyTypes> keyTypesFromString;
@@ -712,48 +556,6 @@ public class Stringification {
     }
   }
 
-  private static final Map<DataTypeDefXsd, String> dataTypeDefXsdToString;
-  static {
-    final Map<DataTypeDefXsd, String> temp = new HashMap<>();
-
-    temp.put(DataTypeDefXsd.ANY_URI, "xs:anyURI");
-    temp.put(DataTypeDefXsd.BASE_64_BINARY, "xs:base64Binary");
-    temp.put(DataTypeDefXsd.BOOLEAN, "xs:boolean");
-    temp.put(DataTypeDefXsd.BYTE, "xs:byte");
-    temp.put(DataTypeDefXsd.DATE, "xs:date");
-    temp.put(DataTypeDefXsd.DATE_TIME, "xs:dateTime");
-    temp.put(DataTypeDefXsd.DECIMAL, "xs:decimal");
-    temp.put(DataTypeDefXsd.DOUBLE, "xs:double");
-    temp.put(DataTypeDefXsd.DURATION, "xs:duration");
-    temp.put(DataTypeDefXsd.FLOAT, "xs:float");
-    temp.put(DataTypeDefXsd.G_DAY, "xs:gDay");
-    temp.put(DataTypeDefXsd.G_MONTH, "xs:gMonth");
-    temp.put(DataTypeDefXsd.G_MONTH_DAY, "xs:gMonthDay");
-    temp.put(DataTypeDefXsd.G_YEAR, "xs:gYear");
-    temp.put(DataTypeDefXsd.G_YEAR_MONTH, "xs:gYearMonth");
-    temp.put(DataTypeDefXsd.HEX_BINARY, "xs:hexBinary");
-    temp.put(DataTypeDefXsd.INT, "xs:int");
-    temp.put(DataTypeDefXsd.INTEGER, "xs:integer");
-    temp.put(DataTypeDefXsd.LONG, "xs:long");
-    temp.put(DataTypeDefXsd.NEGATIVE_INTEGER, "xs:negativeInteger");
-    temp.put(DataTypeDefXsd.NON_NEGATIVE_INTEGER, "xs:nonNegativeInteger");
-    temp.put(DataTypeDefXsd.NON_POSITIVE_INTEGER, "xs:nonPositiveInteger");
-    temp.put(DataTypeDefXsd.POSITIVE_INTEGER, "xs:positiveInteger");
-    temp.put(DataTypeDefXsd.SHORT, "xs:short");
-    temp.put(DataTypeDefXsd.STRING, "xs:string");
-    temp.put(DataTypeDefXsd.TIME, "xs:time");
-    temp.put(DataTypeDefXsd.UNSIGNED_BYTE, "xs:unsignedByte");
-    temp.put(DataTypeDefXsd.UNSIGNED_INT, "xs:unsignedInt");
-    temp.put(DataTypeDefXsd.UNSIGNED_LONG, "xs:unsignedLong");
-    temp.put(DataTypeDefXsd.UNSIGNED_SHORT, "xs:unsignedShort");
-
-    if (!temp.keySet().containsAll(Arrays.asList(DataTypeDefXsd.values()))) {
-      throw new IllegalStateException("Unmapped DataTypeDefXsd");
-    }
-
-    dataTypeDefXsdToString = Collections.unmodifiableMap(temp);
-  }
-
   /**
    * Retrieve the string representation of {@code that}.
    *
@@ -761,7 +563,9 @@ public class Stringification {
    */
   public static Optional<String> toString(DataTypeDefXsd that)
   {
-    return Optional.ofNullable(that).map(dataTypeDefXsdToString::get);
+    return (that == null)
+      ? Optional.empty()
+      : Optional.of(that.literalText());
   }
 
   /**
@@ -771,11 +575,10 @@ public class Stringification {
    */
   public static String mustToString(DataTypeDefXsd that)
   {
-    final Optional<String> text = toString(that);
-    if (!text.isPresent()) {
+    if (that == null) {
       throw new IllegalArgumentException("Invalid literal of DataTypeDefXsd: " + that);
     }
-    return text.get();
+    return that.literalText();
   }
 
   private static final Map<String, DataTypeDefXsd> dataTypeDefXsdFromString;
@@ -837,37 +640,6 @@ public class Stringification {
     }
   }
 
-  private static final Map<DataTypeIec61360, String> dataTypeIec61360ToString;
-  static {
-    final Map<DataTypeIec61360, String> temp = new HashMap<>();
-
-    temp.put(DataTypeIec61360.DATE, "DATE");
-    temp.put(DataTypeIec61360.STRING, "STRING");
-    temp.put(DataTypeIec61360.STRING_TRANSLATABLE, "STRING_TRANSLATABLE");
-    temp.put(DataTypeIec61360.INTEGER_MEASURE, "INTEGER_MEASURE");
-    temp.put(DataTypeIec61360.INTEGER_COUNT, "INTEGER_COUNT");
-    temp.put(DataTypeIec61360.INTEGER_CURRENCY, "INTEGER_CURRENCY");
-    temp.put(DataTypeIec61360.REAL_MEASURE, "REAL_MEASURE");
-    temp.put(DataTypeIec61360.REAL_COUNT, "REAL_COUNT");
-    temp.put(DataTypeIec61360.REAL_CURRENCY, "REAL_CURRENCY");
-    temp.put(DataTypeIec61360.BOOLEAN, "BOOLEAN");
-    temp.put(DataTypeIec61360.IRI, "IRI");
-    temp.put(DataTypeIec61360.IRDI, "IRDI");
-    temp.put(DataTypeIec61360.RATIONAL, "RATIONAL");
-    temp.put(DataTypeIec61360.RATIONAL_MEASURE, "RATIONAL_MEASURE");
-    temp.put(DataTypeIec61360.TIME, "TIME");
-    temp.put(DataTypeIec61360.TIMESTAMP, "TIMESTAMP");
-    temp.put(DataTypeIec61360.FILE, "FILE");
-    temp.put(DataTypeIec61360.HTML, "HTML");
-    temp.put(DataTypeIec61360.BLOB, "BLOB");
-
-    if (!temp.keySet().containsAll(Arrays.asList(DataTypeIec61360.values()))) {
-      throw new IllegalStateException("Unmapped DataTypeIec61360");
-    }
-
-    dataTypeIec61360ToString = Collections.unmodifiableMap(temp);
-  }
-
   /**
    * Retrieve the string representation of {@code that}.
    *
@@ -875,7 +647,9 @@ public class Stringification {
    */
   public static Optional<String> toString(DataTypeIec61360 that)
   {
-    return Optional.ofNullable(that).map(dataTypeIec61360ToString::get);
+    return (that == null)
+      ? Optional.empty()
+      : Optional.of(that.literalText());
   }
 
   /**
@@ -885,11 +659,10 @@ public class Stringification {
    */
   public static String mustToString(DataTypeIec61360 that)
   {
-    final Optional<String> text = toString(that);
-    if (!text.isPresent()) {
+    if (that == null) {
       throw new IllegalArgumentException("Invalid literal of DataTypeIec61360: " + that);
     }
-    return text.get();
+    return that.literalText();
   }
 
   private static final Map<String, DataTypeIec61360> dataTypeIec61360FromString;

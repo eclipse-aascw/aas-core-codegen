@@ -1549,16 +1549,45 @@ def _generate_enum(
         writer.write("\n")
 
     name = java_naming.enum_name(enum.name)
+
+    # NOTE (mristin):
+    # The literal carries its own string representation, instead of the text
+    # living only in a look-up table in the stringification. See
+    # :py:func:`_generate_ienum` for what that buys.
+    text_name = java_naming.property_name(Identifier("literal_text"))
+
+    members = Stripped(
+        f"""\
+private final String {text_name};
+
+{name}(String {text_name}) {{
+{I}this.{text_name} = {text_name};
+}}
+
+@Override
+public String {java_naming.method_name(Identifier("literal_text"))}() {{
+{I}return {text_name};
+}}"""
+    )
+
     if len(enum.literals) == 0:
+        # NOTE (mristin):
+        # An enumeration without a single literal still has to implement
+        # the interface, and a member of an enumeration has to be preceded by
+        # a semicolon closing the -- here empty -- list of the literals.
         writer.write(
             f"""\
-public enum {name} {{\n}}"""
+public enum {name} implements IEnum {{
+{I};
+
+{textwrap.indent(members, I)}
+}}"""
         )
         return Stripped(writer.getvalue()), None
 
     writer.write(
         f"""\
-public enum {name} {{\n"""
+public enum {name} implements IEnum {{\n"""
     )
     for i, literal in enumerate(enum.literals):
         if i > 0:
@@ -1588,11 +1617,14 @@ public enum {name} {{\n"""
 
         writer.write(
             textwrap.indent(
-                f"{java_naming.enum_literal_name(literal.name)}",
+                f"{java_naming.enum_literal_name(literal.name)}"
+                f"({java_common.string_literal(literal.value)})",
                 I,
             )
         )
 
+    writer.write(";\n\n")
+    writer.write(textwrap.indent(members, I))
     writer.write("\n}")
 
     return Stripped(writer.getvalue()), None
@@ -1631,16 +1663,29 @@ package {package};\n\n"""
     return java_common.JavaFile(file_name, file_content)
 
 
-def _generate_no_enumerations_defined(
+def _generate_ienum(
     package: java_common.PackageIdentifier,
 ) -> java_common.JavaFile:
     """
-    Generate a placeholder class for the ``types.enums`` package.
+    Generate the common interface implemented by every enumeration.
 
-    Interfaces and classes always import ``{package}.types.enums.*`` so that
-    package must exist even if the meta-model defines no enumerations at all.
+    A literal carries its own string representation, so that a single
+    non-generic method can render any literal of any enumeration -- see,
+    *e.g.*, the xmlization ``writeEnum`` -- instead of needing one method per
+    enumeration. Neither a generic parameter nor a ``Class`` token could
+    achieve that: what is missing is the *function* attached to the type, and
+    only the literal itself can carry it.
+
+    Implementing an interface leaves an enumeration a perfectly ordinary Java
+    enumeration: ``switch``, ``values()``, ``valueOf(String)``, ``name()``,
+    ``ordinal()``, ``EnumSet``, ``EnumMap`` and the built-in serialization all
+    keep working, exactly as they do for ``java.time.DayOfWeek``.
+
+    Interfaces and classes always import ``{package}.types.enums.*``, so this
+    file doubles as the reason that package is never empty, even for a
+    meta-model which defines no enumeration at all.
     """
-    structure_name = Stripped("NoEnumerationsDefined")
+    structure_name = Stripped("IEnum")
     file_name = java_common.enum_package_path(structure_name)
     file_content = f"""\
 {java_common.WARNING}
@@ -1648,13 +1693,16 @@ def _generate_no_enumerations_defined(
 package {package}.types.enums;
 
 /**
- * Represent a placeholder so that this package is not empty.
- *
- * <p>The meta-model defines no enumerations, but the {{@code types.enums}}
- * package is imported unconditionally throughout the generated code, so we
- * need at least one class in it for the import to resolve.
+ * Represent a literal of an enumeration of the meta-model.
  */
-public class NoEnumerationsDefined {{
+public interface IEnum {{
+{I}/**
+{I} * Get the string representation of this literal.
+{I} *
+{I} * <p>This is the text the literal is de/serialized as, which is in general
+{I} * not its {{@link Enum#name()}}.
+{I} */
+{I}String literalText();
 }}
 
 {java_common.WARNING}
@@ -2161,12 +2209,10 @@ def generate(
     errors = []  # type: List[Error]
 
     files.append(_generate_iclass(package))
+    files.append(_generate_ienum(package))
 
     if len(symbol_table.named_unions) > 0:
         files.append(_generate_iunion(package))
-
-    if len(symbol_table.enumerations) == 0:
-        files.append(_generate_no_enumerations_defined(package))
 
     for our_type in symbol_table.our_types:
         if not isinstance(

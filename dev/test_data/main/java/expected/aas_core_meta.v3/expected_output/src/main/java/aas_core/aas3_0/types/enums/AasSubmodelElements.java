@@ -8,24 +8,35 @@ package aas_core.aas3_0.types.enums;
 /**
  * Enumeration of all possible elements of a {@link aas_core.aas3_0.types.impl.SubmodelElementList}.
  */
-public enum AasSubmodelElements {
-  ANNOTATED_RELATIONSHIP_ELEMENT,
-  BASIC_EVENT_ELEMENT,
-  BLOB,
-  CAPABILITY,
-  DATA_ELEMENT,
-  ENTITY,
-  EVENT_ELEMENT,
-  FILE,
-  MULTI_LANGUAGE_PROPERTY,
-  OPERATION,
-  PROPERTY,
-  RANGE,
-  REFERENCE_ELEMENT,
-  RELATIONSHIP_ELEMENT,
-  SUBMODEL_ELEMENT,
-  SUBMODEL_ELEMENT_LIST,
-  SUBMODEL_ELEMENT_COLLECTION
+public enum AasSubmodelElements implements IEnum {
+  ANNOTATED_RELATIONSHIP_ELEMENT("AnnotatedRelationshipElement"),
+  BASIC_EVENT_ELEMENT("BasicEventElement"),
+  BLOB("Blob"),
+  CAPABILITY("Capability"),
+  DATA_ELEMENT("DataElement"),
+  ENTITY("Entity"),
+  EVENT_ELEMENT("EventElement"),
+  FILE("File"),
+  MULTI_LANGUAGE_PROPERTY("MultiLanguageProperty"),
+  OPERATION("Operation"),
+  PROPERTY("Property"),
+  RANGE("Range"),
+  REFERENCE_ELEMENT("ReferenceElement"),
+  RELATIONSHIP_ELEMENT("RelationshipElement"),
+  SUBMODEL_ELEMENT("SubmodelElement"),
+  SUBMODEL_ELEMENT_LIST("SubmodelElementList"),
+  SUBMODEL_ELEMENT_COLLECTION("SubmodelElementCollection");
+
+  private final String literalText;
+
+  AasSubmodelElements(String literalText) {
+    this.literalText = literalText;
+  }
+
+  @Override
+  public String literalText() {
+    return literalText;
+  }
 }
 
 /*

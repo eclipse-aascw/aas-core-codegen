@@ -248,19 +248,13 @@ def _content_writer_name(type_anno: intermediate.TypeAnnotationUnion) -> Identif
     """
     Name the function writing ``type_anno`` as the content of an element.
 
-    There is no ``writeTextAs_{primitive}`` to match the reading side: once
-    the value is at hand, nothing type-specific is left to do with it, so all
-    four primitives rendered through ``toString`` share a single writer, and
-    so does the byte array. An enumeration, a list and a tuple do have
-    something of their own to write, and hence get a function each.
-
-    The enumeration is keyed by the moniker, ``writeTextAs_{Enum}``, and not
-    by the symbol -- which would read as ``write{Enum}Content`` -- so that
-    the writers keep the two name spaces of the readers apart: a name which
-    contains an underscore is keyed by a moniker, one which does not is
-    keyed by a symbol (see :py:func:`_type_moniker`). Were an enumeration
-    named by the symbol, one called ``Stringified`` or ``ByteArray`` would
-    silently take the name of a shared writer.
+    There is no writer per leaf type to match the reading side: once the value
+    is at hand, nothing type-specific is left to do with it, so all four
+    primitives rendered through ``toString`` share a single writer, the byte
+    array has its own, and every enumeration shares ``writeEnum`` -- a literal
+    carries its own text, so one non-generic method renders any of them. Only
+    a list and a tuple have something of their own to write, and hence get
+    a function each.
     """
     if isinstance(
         type_anno, (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation)
@@ -275,7 +269,7 @@ def _content_writer_name(type_anno: intermediate.TypeAnnotationUnion) -> Identif
     if primitive_type is not None:
         return Identifier("writeStringifiedContent")
 
-    return Identifier(f"writeTextAs_{_leaf_moniker(type_anno)}")
+    return Identifier("writeEnum")
 
 
 @require(lambda v_name: v_name.startswith("v"))
@@ -2300,6 +2294,27 @@ private static <T> void writeStringifiedContent(
     )
 
 
+def _generate_write_enum() -> Stripped:
+    """Generate the writer rendering any enumeration literal as content."""
+    return Stripped(
+        f"""\
+/**
+ * Write the text of {{@code that}} as XML content.
+ *
+ * <p>This is the {{@link ContentWriter}} of every enumeration-typed value, be
+ * it a property, a list item or a tuple item. There is one writer, and not
+ * one per enumeration, since a literal carries its own text -- see
+ * {{@link IEnum#literalText()}} -- so nothing here is specific to
+ * an enumeration.
+ */
+private static void writeEnum(
+{I}IEnum that,
+{I}XMLStreamWriter writer) throws XMLStreamException {{
+{I}writer.writeCharacters(that.literalText());
+}}"""
+    )
+
+
 def _generate_write_byte_array_content() -> Stripped:
     """Generate the writer rendering a byte array as base64-encoded content."""
     return Stripped(
@@ -2327,8 +2342,12 @@ private static void writeByteArrayContent(
 # fmt: off
 @require(lambda type_anno: not _is_instance_type(type_anno))
 @require(
-    lambda type_anno: intermediate.try_primitive_type(type_anno) is None,
-    "A primitive is written by one of the two shared content writers",
+    lambda type_anno: isinstance(
+        type_anno,
+        (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation)
+    ),
+    "A primitive and an enumeration are written by one of the shared content "
+    "writers, so only a list and a tuple are left with a writer of their own",
 )
 # fmt: on
 def _generate_content_writer(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
@@ -2337,7 +2356,6 @@ def _generate_content_writer(type_anno: intermediate.TypeAnnotationUnion) -> Str
     value_type = java_common.generate_type(type_anno)
 
     body: Stripped
-    throws = ""
 
     if isinstance(type_anno, intermediate.ListTypeAnnotation):
         item_type = java_common.generate_type(type_anno.items)
@@ -2362,7 +2380,11 @@ try {{
 {I}throw failure;
 }}"""
         )
-    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+    else:
+        assert isinstance(
+            type_anno, intermediate.TupleTypeAnnotation
+        ), f"Expected a tuple, but got: {type_anno}"
+
         item_writes = []  # type: List[str]
         for i, item_type_anno in enumerate(type_anno.items):
             if i > 0:
@@ -2386,19 +2408,12 @@ try {{
 {I}throw failure;
 }}"""
         )
-    else:
-        assert isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
-            type_anno.our_type, intermediate.Enumeration
-        ), f"Expected an enumeration, but got: {type_anno}"
-
-        body = Stripped("writer.writeCharacters(Stringification.mustToString(that));")
-        throws = " throws XMLStreamException"
 
     return Stripped(
         f"""\
 private static void {name}(
 {I}{indent_but_first_line(value_type, I)} that,
-{I}XMLStreamWriter writer){throws} {{
+{I}XMLStreamWriter writer) {{
 {I}{indent_but_first_line(body, I)}
 }}"""
     )
@@ -2566,8 +2581,16 @@ def _generate_visitor(
     if intermediate.PrimitiveType.BYTEARRAY in written_primitives:
         blocks.append(_generate_write_byte_array_content())
 
+    if needed.enumerations:
+        blocks.append(_generate_write_enum())
+
     for type_anno in needed.content_readers.values():
         if intermediate.try_primitive_type(type_anno) is not None:
+            continue
+
+        if isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+            type_anno.our_type, intermediate.Enumeration
+        ):
             continue
 
         blocks.append(_generate_content_writer(type_anno))

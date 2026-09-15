@@ -5,10 +5,21 @@
 
 package dummy.types.enums;
 
-public enum SomeEnum {
-  FIRST,
-  SECOND,
-  THIRD
+public enum SomeEnum implements IEnum {
+  FIRST("first"),
+  SECOND("second"),
+  THIRD("third");
+
+  private final String literalText;
+
+  SomeEnum(String literalText) {
+    this.literalText = literalText;
+  }
+
+  @Override
+  public String literalText() {
+    return literalText;
+  }
 }
 
 /*

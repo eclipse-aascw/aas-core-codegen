@@ -781,10 +781,19 @@ public class Xmlization {
       }
     }
 
-    private static void writeTextAs_Result(
-      Result that,
+    /**
+     * Write the text of {@code that} as XML content.
+     *
+     * <p>This is the {@link ContentWriter} of every enumeration-typed value, be
+     * it a property, a list item or a tuple item. There is one writer, and not
+     * one per enumeration, since a literal carries its own text -- see
+     * {@link IEnum#literalText()} -- so nothing here is specific to
+     * an enumeration.
+     */
+    private static void writeEnum(
+      IEnum that,
       XMLStreamWriter writer) throws XMLStreamException {
-      writer.writeCharacters(Stringification.mustToString(that));
+      writer.writeCharacters(that.literalText());
     }
 
     private static void writeListOf_Result(
@@ -810,7 +819,7 @@ public class Xmlization {
         "v",
         that,
         writer,
-        _VisitorWithWriter::writeTextAs_Result);
+        _VisitorWithWriter::writeEnum);
     }
 
     private static void writeSomethingAsSequence(

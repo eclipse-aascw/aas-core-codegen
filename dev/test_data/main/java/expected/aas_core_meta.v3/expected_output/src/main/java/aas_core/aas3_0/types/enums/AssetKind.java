@@ -8,19 +8,30 @@ package aas_core.aas3_0.types.enums;
 /**
  * Enumeration for denoting whether an asset is a type asset or an instance asset.
  */
-public enum AssetKind {
+public enum AssetKind implements IEnum {
   /**
    * Type asset
    */
-  TYPE,
+  TYPE("Type"),
   /**
    * Instance asset
    */
-  INSTANCE,
+  INSTANCE("Instance"),
   /**
    * Neither a type asset nor an instance asset
    */
-  NOT_APPLICABLE
+  NOT_APPLICABLE("NotApplicable");
+
+  private final String literalText;
+
+  AssetKind(String literalText) {
+    this.literalText = literalText;
+  }
+
+  @Override
+  public String literalText() {
+    return literalText;
+  }
 }
 
 /*

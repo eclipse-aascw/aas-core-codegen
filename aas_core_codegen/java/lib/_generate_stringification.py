@@ -30,44 +30,13 @@ def _generate_enum_to_and_from_string(
 
     name = java_naming.enum_name(enumeration.name)
 
-    # region To-string-map
+    text_name = java_naming.method_name(Identifier("literal_text"))
 
-    enum_to_string_blocks = []  # type: List[Stripped]
-
-    for literal in enumeration.literals:
-        literal_name = java_naming.enum_literal_name(literal.name)
-
-        literal_string = java_common.string_literal(literal.value)
-
-        enum_to_string_blocks.append(
-            Stripped(f"""temp.put({name}.{literal_name}, {literal_string});""")
-        )
-
-    enum_to_string_mapping = "\n".join(enum_to_string_blocks)
-
-    to_str_map_name = java_naming.property_name(
-        Identifier(f"{enumeration.name}_to_string")
-    )
-
-    to_str_map = Stripped(
-        f"""\
-private static final Map<{name}, String> {to_str_map_name};
-static {{
-{I}final Map<{name}, String> temp = new HashMap<>();
-
-{I}{indent_but_first_line(enum_to_string_mapping, I)}
-
-{I}if (!temp.keySet().containsAll(Arrays.asList({name}.values()))) {{
-{II}throw new IllegalStateException("Unmapped {name}");
-{I}}}
-
-{I}{to_str_map_name} = Collections.unmodifiableMap(temp);
-}}"""
-    )
-
-    blocks.append(to_str_map)
-
-    # endregion
+    # NOTE (mristin):
+    # There is no map from the literals to their strings. A literal carries
+    # its own text (see the ``IEnum`` interface in the types), so the two
+    # methods below only have to hand it out. The other direction does need
+    # a map, as a string carries nothing.
 
     # region To-string-method
 
@@ -83,7 +52,9 @@ static {{
  */
 public static Optional<String> {to_str_name}({name} that)
 {{
-{I}return Optional.ofNullable(that).map({to_str_map_name}::get);
+{I}return (that == null)
+{II}? Optional.empty()
+{II}: Optional.of(that.{text_name}());
 }}"""
     )
 
@@ -105,11 +76,10 @@ public static Optional<String> {to_str_name}({name} that)
  */
 public static String {must_to_str_name}({name} that)
 {{
-{I}final Optional<String> text = {to_str_name}(that);
-{I}if (!text.isPresent()) {{
+{I}if (that == null) {{
 {II}throw new IllegalArgumentException("Invalid literal of {name}: " + that);
 {I}}}
-{I}return text.get();
+{I}return that.{text_name}();
 }}"""
         )
     )

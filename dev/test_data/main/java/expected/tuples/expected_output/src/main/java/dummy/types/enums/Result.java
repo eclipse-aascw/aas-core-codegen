@@ -5,9 +5,20 @@
 
 package dummy.types.enums;
 
-public enum Result {
-  OK,
-  NOT_OK
+public enum Result implements IEnum {
+  OK("ok"),
+  NOT_OK("not-ok");
+
+  private final String literalText;
+
+  Result(String literalText) {
+    this.literalText = literalText;
+  }
+
+  @Override
+  public String literalText() {
+    return literalText;
+  }
 }
 
 /*
