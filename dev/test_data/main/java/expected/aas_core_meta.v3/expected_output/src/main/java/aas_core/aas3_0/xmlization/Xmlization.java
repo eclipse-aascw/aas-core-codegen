@@ -74,6 +74,30 @@ public class Xmlization {
   }
 
   /**
+   * Signal a failure of the serialization, carrying the path to the culprit.
+   *
+   * <p>The path is built as the stack unwinds -- every container prepends
+   * the one segment it knows, the property its name and the list the index
+   * of the item -- which is why this can not be a
+   * {@link SerializeException} already: that one renders its message in
+   * its constructor, so its path has to be complete by then.
+   * {@link Serialize#to} renders and converts.
+   */
+  @SuppressWarnings("serial")
+  private static class _SerializeFailure extends RuntimeException {
+    private final Reporting.Error error;
+
+    _SerializeFailure(Reporting.Error error) {
+      super(error.getCause());
+      this.error = error;
+    }
+
+    Reporting.Error getError() {
+      return error;
+    }
+  }
+
+  /**
    * The XML namespace of the meta-model
    */
   public static final String AAS_NAME_SPACE =
@@ -8175,3245 +8199,2808 @@ public class Xmlization {
   static class _VisitorWithWriter
     extends AbstractVisitorWithContext<XMLStreamWriter> {
 
-    private boolean topLevel = true;
+    /**
+     * Declare the XML namespace on the element which this visitor writes.
+     *
+     * <p>Only the outermost element carries the declaration. The obvious
+     * alternative -- a flag cleared once the first element has been written --
+     * would be mutable state, and state forces every method of this class to be
+     * an instance method, which in turn makes every method reference to it
+     * capture {@code this} and allocate. Pinning the flag in the constructor
+     * instead costs one visitor per case, allocated once for the whole program,
+     * and lets everything else here be {@code static}.
+     */
+    private final boolean withNamespace;
 
-    @FunctionalInterface
-    private interface ElementContentSerializer<T> {
-      void serialize(T that, XMLStreamWriter writer) throws XMLStreamException;
+    private _VisitorWithWriter(boolean withNamespace) {
+      this.withNamespace = withNamespace;
     }
 
     /**
-     * Write {@code that} as an XML element named {@code name}, delegating
-     * the content in-between the start and the end tag to
-     * {@code serializeContent}.
-     *
-     * <p>This is shared by all the property kinds (primitive, enumeration,
-     * class, interface, list) as they all wrap their content in exactly the
-     * same way.
+     * Write the outermost element, which declares the XML namespace.
      */
-    private <T> void serializeElement(
+    private static final _VisitorWithWriter ROOT =
+      new _VisitorWithWriter(true);
+
+    /**
+     * Write an element nested in another one, which never re-declares the XML
+     * namespace.
+     */
+    private static final _VisitorWithWriter NESTED =
+      new _VisitorWithWriter(false);
+
+    /**
+     * Write {@code that} where {@code writer} already is.
+     *
+     * <p>Every value is written through this one shape, so that the writing
+     * composes: {@link #writeElement} frames it in a start and an end tag, and
+     * a class's own {@code write...AsSequence} already is one.
+     *
+     * <p>There is deliberately no second shape for a whole element, as there is
+     * on the reading side. An element differs from a content only in what it
+     * writes, never in its shape; the reading needs the distinction because
+     * a content reader has to be told whether its element was self-closing, and
+     * a writer has nothing to be told.
+     *
+     * <p>Use sites take a {@code ContentWriter<? super T>} -- Java's spelling
+     * of the contravariance -- so that the single writer of an {@link IClass}
+     * serves wherever the writer of a more specific interface is expected.
+     */
+    @FunctionalInterface
+    private interface ContentWriter<T> {
+      void write(T that, XMLStreamWriter writer) throws XMLStreamException;
+    }
+
+    /**
+     * Write {@code that} as an XML element named {@code name}, its content
+     * written by {@code writeContent}.
+     *
+     * <p>An element is nothing but a start and an end tag around a content, so
+     * there is no writer per property kind: only the content writer differs,
+     * and the type of the value alone decides which one it is.
+     *
+     * <p>{@code withNamespace} declares the XML namespace on the element,
+     * which only the outermost element does.
+     */
+    private static <T> void writeElement(
       String name,
       T that,
       XMLStreamWriter writer,
-      ElementContentSerializer<T> serializeContent) {
+      boolean withNamespace,
+      ContentWriter<? super T> writeContent) {
       try {
         writer.writeStartElement(name);
-        if (topLevel) {
+        if (withNamespace) {
           writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
         }
-        serializeContent.serialize(that, writer);
+        writeContent.write(that, writer);
         writer.writeEndElement();
       } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
+        throw new _SerializeFailure(
+          new Reporting.Error(exception.getMessage()));
       }
     }
 
     /**
-     * Adapt {@code writeItem} to serialize every item of an iterable.
+     * Write {@code that} as an XML element named {@code name} nested in
+     * another element, so that the XML namespace is not re-declared.
      *
-     * <p>This is shared by all the list-typed properties, which only need to
-     * supply how a single item is written.
+     * <p>This is what an item of a list or of a tuple is written with. It
+     * contributes no segment to the error path: its container has already
+     * contributed the item's index, and the index selects this very element
+     * (see {@link #writeListOf} in the generated writers).
      */
-    private <T> ElementContentSerializer<Iterable<T>> serializeItems(
-      ElementContentSerializer<T> writeItem) {
-      return (items, w) -> {
-        for (T item : items) {
-          writeItem.serialize(item, w);
-        }
-      };
+    private static <T> void writeElement(
+      String name,
+      T that,
+      XMLStreamWriter writer,
+      ContentWriter<? super T> writeContent) {
+      writeElement(name, that, writer, false, writeContent);
     }
 
     /**
-     * Adapt {@code writeContent} to serialize a value wrapped in its own
-     * {@code name} element.
+     * Write {@code that} as the XML element of a property called
+     * {@code name}.
      *
-     * <p>This is only needed for a scalar item (a primitive or an enumeration
-     * literal), which is wrapped in a positional {@code v}/{@code v1}/
-     * {@code v2} *etc.* element; a class item is dispatched through its own
-     * natural element tag by {@code this::visit} already, so it needs no
-     * such wrapping.
-     *
-     * <p>{@code name} is a plain runtime string, not a type, so it can not be
-     * pinned via a generic type parameter -- binding it requires an actual
-     * closure, built once here.
+     * <p>This is {@link #writeElement} plus the one thing a property knows
+     * which nothing below it does: its own name. Prepending it here, once,
+     * saves a {@code try} around every one of the property writes.
      */
-    private <T> ElementContentSerializer<T> asNamedElementSerializer(
-      String name, ElementContentSerializer<T> writeContent) {
-      return (that, w) -> serializeElement(name, that, w, writeContent);
+    private static <T> void writeProperty(
+      String name,
+      T that,
+      XMLStreamWriter writer,
+      ContentWriter<? super T> writeContent) {
+      try {
+        writeElement(name, that, writer, false, writeContent);
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.NameSegment(name));
+        throw failure;
+      }
+    }
+
+    /**
+     * Write {@code that} as the XML element of a property called
+     * {@code name} if it has been given, and write nothing at all otherwise.
+     *
+     * <p>The {@link Optional} is taken apart here, once, instead of at every
+     * optional property: asking it and then unwrapping it at the call site
+     * would call the getter twice, and every call allocates an
+     * {@link Optional} of its own.
+     */
+    private static <T> void writeOptionalProperty(
+      String name,
+      Optional<T> that,
+      XMLStreamWriter writer,
+      ContentWriter<? super T> writeContent) {
+      final T value = that.orElse(null);
+      if (value != null) {
+        writeProperty(name, value, writer, writeContent);
+      }
+    }
+
+    /**
+     * Write {@code that} as its own, self-describing XML element.
+     *
+     * <p>Which element that is, is decided by the run-time type of
+     * {@code that}, so this one writer serves every abstract class, every
+     * concrete class with descendants, and the item of a list or of a tuple of
+     * any class at all. The reading, which has to decide what to construct
+     * before it has read anything, needs a dispatcher per interface instead.
+     *
+     * <p>An element written from here is nested in another one by
+     * construction, so it goes through the visitor which does not re-declare
+     * the XML namespace.
+     */
+    private static void writeClass(
+      IClass that,
+      XMLStreamWriter writer) {
+      NESTED.visit(that, writer);
     }
 
     /**
      * Write {@code that.toString()} as XML content.
      *
-     * <p>This is shared by every {@code boolean}/{@code long}/{@code double}/
-     * {@code String}-typed property or list item, standing in for the property-
-     * or item-specific {@link ElementContentSerializer}.
+     * <p>This is the {@link ContentWriter} of every {@code boolean}/
+     * {@code long}/{@code double}/{@code String}-typed value, be it
+     * a property, a list item or a tuple item.
      */
-    private <T> void writeStringifiedContent(T that, XMLStreamWriter writer)
-      throws XMLStreamException {
+    private static <T> void writeStringifiedContent(
+      T that,
+      XMLStreamWriter writer) throws XMLStreamException {
       writer.writeCharacters(that.toString());
     }
 
     /**
      * Write {@code that} as base64-encoded XML content.
      *
-     * <p>This is shared by every {@code byte[]}-typed property or list item,
-     * standing in for the property- or item-specific
-     * {@link ElementContentSerializer}.
+     * <p>This is the {@link ContentWriter} of every {@code byte[]}-typed
+     * value, be it a property, a list item or a tuple item.
      */
-    private void writeByteArrayContent(byte[] that, XMLStreamWriter writer)
-      throws XMLStreamException {
+    private static void writeByteArrayContent(
+      byte[] that,
+      XMLStreamWriter writer) throws XMLStreamException {
       writer.writeCharacters(
         Base64.getEncoder().encodeToString(that));
     }
 
-    /**
-     * Write a literal of {@link ModellingKind} as XML content.
-     *
-     * <p>This is shared by every ModellingKind-typed property or list item,
-     * standing in for the property- or item-specific
-     * {@link ElementContentSerializer}.
-     */
-    private void writeModellingKindContent(ModellingKind that, XMLStreamWriter writer)
-      throws XMLStreamException {
+    private static void writeListOf_IReference(
+      List<IReference> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (IReference item : that) {
+          writeClass(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeTextAs_DataTypeDefXsd(
+      DataTypeDefXsd that,
+      XMLStreamWriter writer) throws XMLStreamException {
       writer.writeCharacters(Stringification.mustToString(that));
     }
 
-    /**
-     * Write a literal of {@link QualifierKind} as XML content.
-     *
-     * <p>This is shared by every QualifierKind-typed property or list item,
-     * standing in for the property- or item-specific
-     * {@link ElementContentSerializer}.
-     */
-    private void writeQualifierKindContent(QualifierKind that, XMLStreamWriter writer)
-      throws XMLStreamException {
+    private static void writeListOf_IEmbeddedDataSpecification(
+      List<IEmbeddedDataSpecification> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (IEmbeddedDataSpecification item : that) {
+          writeClass(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeTextAs_QualifierKind(
+      QualifierKind that,
+      XMLStreamWriter writer) throws XMLStreamException {
       writer.writeCharacters(Stringification.mustToString(that));
     }
 
-    /**
-     * Write a literal of {@link AssetKind} as XML content.
-     *
-     * <p>This is shared by every AssetKind-typed property or list item,
-     * standing in for the property- or item-specific
-     * {@link ElementContentSerializer}.
-     */
-    private void writeAssetKindContent(AssetKind that, XMLStreamWriter writer)
-      throws XMLStreamException {
+    private static void writeListOf_IExtension(
+      List<IExtension> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (IExtension item : that) {
+          writeClass(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeListOf_ILangStringNameType(
+      List<ILangStringNameType> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (ILangStringNameType item : that) {
+          writeClass(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeListOf_ILangStringTextType(
+      List<ILangStringTextType> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (ILangStringTextType item : that) {
+          writeClass(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeTextAs_AssetKind(
+      AssetKind that,
+      XMLStreamWriter writer) throws XMLStreamException {
       writer.writeCharacters(Stringification.mustToString(that));
     }
 
-    /**
-     * Write a literal of {@link AasSubmodelElements} as XML content.
-     *
-     * <p>This is shared by every AasSubmodelElements-typed property or list item,
-     * standing in for the property- or item-specific
-     * {@link ElementContentSerializer}.
-     */
-    private void writeAasSubmodelElementsContent(AasSubmodelElements that, XMLStreamWriter writer)
-      throws XMLStreamException {
+    private static void writeListOf_ISpecificAssetId(
+      List<ISpecificAssetId> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (ISpecificAssetId item : that) {
+          writeClass(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeTextAs_ModellingKind(
+      ModellingKind that,
+      XMLStreamWriter writer) throws XMLStreamException {
       writer.writeCharacters(Stringification.mustToString(that));
     }
 
-    /**
-     * Write a literal of {@link EntityType} as XML content.
-     *
-     * <p>This is shared by every EntityType-typed property or list item,
-     * standing in for the property- or item-specific
-     * {@link ElementContentSerializer}.
-     */
-    private void writeEntityTypeContent(EntityType that, XMLStreamWriter writer)
-      throws XMLStreamException {
+    private static void writeListOf_IQualifier(
+      List<IQualifier> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (IQualifier item : that) {
+          writeClass(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeListOf_ISubmodelElement(
+      List<ISubmodelElement> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (ISubmodelElement item : that) {
+          writeClass(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeTextAs_AasSubmodelElements(
+      AasSubmodelElements that,
+      XMLStreamWriter writer) throws XMLStreamException {
       writer.writeCharacters(Stringification.mustToString(that));
     }
 
-    /**
-     * Write a literal of {@link Direction} as XML content.
-     *
-     * <p>This is shared by every Direction-typed property or list item,
-     * standing in for the property- or item-specific
-     * {@link ElementContentSerializer}.
-     */
-    private void writeDirectionContent(Direction that, XMLStreamWriter writer)
-      throws XMLStreamException {
+    private static void writeListOf_IDataElement(
+      List<IDataElement> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (IDataElement item : that) {
+          writeClass(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeTextAs_EntityType(
+      EntityType that,
+      XMLStreamWriter writer) throws XMLStreamException {
       writer.writeCharacters(Stringification.mustToString(that));
     }
 
-    /**
-     * Write a literal of {@link StateOfEvent} as XML content.
-     *
-     * <p>This is shared by every StateOfEvent-typed property or list item,
-     * standing in for the property- or item-specific
-     * {@link ElementContentSerializer}.
-     */
-    private void writeStateOfEventContent(StateOfEvent that, XMLStreamWriter writer)
-      throws XMLStreamException {
+    private static void writeTextAs_Direction(
+      Direction that,
+      XMLStreamWriter writer) throws XMLStreamException {
       writer.writeCharacters(Stringification.mustToString(that));
     }
 
-    /**
-     * Write a literal of {@link ReferenceTypes} as XML content.
-     *
-     * <p>This is shared by every ReferenceTypes-typed property or list item,
-     * standing in for the property- or item-specific
-     * {@link ElementContentSerializer}.
-     */
-    private void writeReferenceTypesContent(ReferenceTypes that, XMLStreamWriter writer)
-      throws XMLStreamException {
+    private static void writeTextAs_StateOfEvent(
+      StateOfEvent that,
+      XMLStreamWriter writer) throws XMLStreamException {
       writer.writeCharacters(Stringification.mustToString(that));
     }
 
-    /**
-     * Write a literal of {@link KeyTypes} as XML content.
-     *
-     * <p>This is shared by every KeyTypes-typed property or list item,
-     * standing in for the property- or item-specific
-     * {@link ElementContentSerializer}.
-     */
-    private void writeKeyTypesContent(KeyTypes that, XMLStreamWriter writer)
-      throws XMLStreamException {
+    private static void writeListOf_IOperationVariable(
+      List<IOperationVariable> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (IOperationVariable item : that) {
+          writeClass(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeTextAs_ReferenceTypes(
+      ReferenceTypes that,
+      XMLStreamWriter writer) throws XMLStreamException {
       writer.writeCharacters(Stringification.mustToString(that));
     }
 
-    /**
-     * Write a literal of {@link DataTypeDefXsd} as XML content.
-     *
-     * <p>This is shared by every DataTypeDefXsd-typed property or list item,
-     * standing in for the property- or item-specific
-     * {@link ElementContentSerializer}.
-     */
-    private void writeDataTypeDefXsdContent(DataTypeDefXsd that, XMLStreamWriter writer)
-      throws XMLStreamException {
+    private static void writeListOf_IKey(
+      List<IKey> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (IKey item : that) {
+          writeClass(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeTextAs_KeyTypes(
+      KeyTypes that,
+      XMLStreamWriter writer) throws XMLStreamException {
       writer.writeCharacters(Stringification.mustToString(that));
     }
 
-    /**
-     * Write a literal of {@link DataTypeIec61360} as XML content.
-     *
-     * <p>This is shared by every DataTypeIec61360-typed property or list item,
-     * standing in for the property- or item-specific
-     * {@link ElementContentSerializer}.
-     */
-    private void writeDataTypeIec61360Content(DataTypeIec61360 that, XMLStreamWriter writer)
-      throws XMLStreamException {
+    private static void writeListOf_IAssetAdministrationShell(
+      List<IAssetAdministrationShell> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (IAssetAdministrationShell item : that) {
+          writeClass(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeListOf_ISubmodel(
+      List<ISubmodel> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (ISubmodel item : that) {
+          writeClass(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeListOf_IConceptDescription(
+      List<IConceptDescription> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (IConceptDescription item : that) {
+          writeClass(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeListOf_IValueReferencePair(
+      List<IValueReferencePair> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (IValueReferencePair item : that) {
+          writeClass(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeListOf_ILangStringPreferredNameTypeIec61360(
+      List<ILangStringPreferredNameTypeIec61360> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (ILangStringPreferredNameTypeIec61360 item : that) {
+          writeClass(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeListOf_ILangStringShortNameTypeIec61360(
+      List<ILangStringShortNameTypeIec61360> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (ILangStringShortNameTypeIec61360 item : that) {
+          writeClass(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeTextAs_DataTypeIec61360(
+      DataTypeIec61360 that,
+      XMLStreamWriter writer) throws XMLStreamException {
       writer.writeCharacters(Stringification.mustToString(that));
     }
 
-    private void extensionToSequence(
+    private static void writeListOf_ILangStringDefinitionTypeIec61360(
+      List<ILangStringDefinitionTypeIec61360> that,
+      XMLStreamWriter writer) {
+      int index = 0;
+      try {
+        for (ILangStringDefinitionTypeIec61360 item : that) {
+          writeClass(item, writer);
+          index++;
+        }
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.IndexSegment(index));
+        throw failure;
+      }
+    }
+
+    private static void writeExtensionAsSequence(
       IExtension that,
       XMLStreamWriter writer) {
-      if (that.getSemanticId().isPresent()) {
-        serializeElement(
-          "semanticId",
-          that.getSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "semanticId",
+        that.getSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
-        serializeElement(
-          "supplementalSemanticIds",
-          that.getSupplementalSemanticIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "supplementalSemanticIds",
+        that.getSupplementalSemanticIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
 
-      serializeElement(
+      writeProperty(
         "name",
         that.getName(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getValueType().isPresent()) {
-        serializeElement(
-          "valueType",
-          that.getValueType().get(),
-          writer,
-          this::writeDataTypeDefXsdContent);
-      }
+      writeOptionalProperty(
+        "valueType",
+        that.getValueType(),
+        writer,
+        _VisitorWithWriter::writeTextAs_DataTypeDefXsd);
 
-      if (that.getValue().isPresent()) {
-        serializeElement(
-          "value",
-          that.getValue().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "value",
+        that.getValue(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getRefersTo().isPresent()) {
-        serializeElement(
-          "refersTo",
-          that.getRefersTo().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "refersTo",
+        that.getRefersTo(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
     }
 
     @Override
     public void visitExtension(
       IExtension that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "extension");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.extensionToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "extension",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeExtensionAsSequence);
     }
 
-    private void administrativeInformationToSequence(
+    private static void writeAdministrativeInformationAsSequence(
       IAdministrativeInformation that,
       XMLStreamWriter writer) {
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
-        serializeElement(
-          "embeddedDataSpecifications",
-          that.getEmbeddedDataSpecifications().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "embeddedDataSpecifications",
+        that.getEmbeddedDataSpecifications(),
+        writer,
+        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
 
-      if (that.getVersion().isPresent()) {
-        serializeElement(
-          "version",
-          that.getVersion().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "version",
+        that.getVersion(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getRevision().isPresent()) {
-        serializeElement(
-          "revision",
-          that.getRevision().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "revision",
+        that.getRevision(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getCreator().isPresent()) {
-        serializeElement(
-          "creator",
-          that.getCreator().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "creator",
+        that.getCreator(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getTemplateId().isPresent()) {
-        serializeElement(
-          "templateId",
-          that.getTemplateId().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "templateId",
+        that.getTemplateId(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitAdministrativeInformation(
       IAdministrativeInformation that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "administrativeInformation");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.administrativeInformationToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "administrativeInformation",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeAdministrativeInformationAsSequence);
     }
 
-    private void qualifierToSequence(
+    private static void writeQualifierAsSequence(
       IQualifier that,
       XMLStreamWriter writer) {
-      if (that.getSemanticId().isPresent()) {
-        serializeElement(
-          "semanticId",
-          that.getSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "semanticId",
+        that.getSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
-        serializeElement(
-          "supplementalSemanticIds",
-          that.getSupplementalSemanticIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "supplementalSemanticIds",
+        that.getSupplementalSemanticIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
 
-      if (that.getKind().isPresent()) {
-        serializeElement(
-          "kind",
-          that.getKind().get(),
-          writer,
-          this::writeQualifierKindContent);
-      }
+      writeOptionalProperty(
+        "kind",
+        that.getKind(),
+        writer,
+        _VisitorWithWriter::writeTextAs_QualifierKind);
 
-      serializeElement(
+      writeProperty(
         "type",
         that.getType(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
 
-      serializeElement(
+      writeProperty(
         "valueType",
         that.getValueType(),
         writer,
-        this::writeDataTypeDefXsdContent);
+        _VisitorWithWriter::writeTextAs_DataTypeDefXsd);
 
-      if (that.getValue().isPresent()) {
-        serializeElement(
-          "value",
-          that.getValue().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "value",
+        that.getValue(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getValueId().isPresent()) {
-        serializeElement(
-          "valueId",
-          that.getValueId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "valueId",
+        that.getValueId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
     }
 
     @Override
     public void visitQualifier(
       IQualifier that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "qualifier");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.qualifierToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "qualifier",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeQualifierAsSequence);
     }
 
-    private void assetAdministrationShellToSequence(
+    private static void writeAssetAdministrationShellAsSequence(
       IAssetAdministrationShell that,
       XMLStreamWriter writer) {
-      if (that.getExtensions().isPresent()) {
-        serializeElement(
-          "extensions",
-          that.getExtensions().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "extensions",
+        that.getExtensions(),
+        writer,
+        _VisitorWithWriter::writeListOf_IExtension);
 
-      if (that.getCategory().isPresent()) {
-        serializeElement(
-          "category",
-          that.getCategory().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "category",
+        that.getCategory(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getIdShort().isPresent()) {
-        serializeElement(
-          "idShort",
-          that.getIdShort().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "idShort",
+        that.getIdShort(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getDisplayName().isPresent()) {
-        serializeElement(
-          "displayName",
-          that.getDisplayName().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "displayName",
+        that.getDisplayName(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringNameType);
 
-      if (that.getDescription().isPresent()) {
-        serializeElement(
-          "description",
-          that.getDescription().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "description",
+        that.getDescription(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringTextType);
 
-      if (that.getAdministration().isPresent()) {
-        serializeElement(
-          "administration",
-          that.getAdministration().get(),
-          writer,
-          (value, w) -> this.administrativeInformationToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "administration",
+        that.getAdministration(),
+        writer,
+        _VisitorWithWriter::writeAdministrativeInformationAsSequence);
 
-      serializeElement(
+      writeProperty(
         "id",
         that.getId(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
-        serializeElement(
-          "embeddedDataSpecifications",
-          that.getEmbeddedDataSpecifications().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "embeddedDataSpecifications",
+        that.getEmbeddedDataSpecifications(),
+        writer,
+        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
 
-      if (that.getDerivedFrom().isPresent()) {
-        serializeElement(
-          "derivedFrom",
-          that.getDerivedFrom().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "derivedFrom",
+        that.getDerivedFrom(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      serializeElement(
+      writeProperty(
         "assetInformation",
         that.getAssetInformation(),
         writer,
-        (value, w) -> this.assetInformationToSequence(value, w));
+        _VisitorWithWriter::writeAssetInformationAsSequence);
 
-      if (that.getSubmodels().isPresent()) {
-        serializeElement(
-          "submodels",
-          that.getSubmodels().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "submodels",
+        that.getSubmodels(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
     }
 
     @Override
     public void visitAssetAdministrationShell(
       IAssetAdministrationShell that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "assetAdministrationShell");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.assetAdministrationShellToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "assetAdministrationShell",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeAssetAdministrationShellAsSequence);
     }
 
-    private void assetInformationToSequence(
+    private static void writeAssetInformationAsSequence(
       IAssetInformation that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "assetKind",
         that.getAssetKind(),
         writer,
-        this::writeAssetKindContent);
+        _VisitorWithWriter::writeTextAs_AssetKind);
 
-      if (that.getGlobalAssetId().isPresent()) {
-        serializeElement(
-          "globalAssetId",
-          that.getGlobalAssetId().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "globalAssetId",
+        that.getGlobalAssetId(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getSpecificAssetIds().isPresent()) {
-        serializeElement(
-          "specificAssetIds",
-          that.getSpecificAssetIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "specificAssetIds",
+        that.getSpecificAssetIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_ISpecificAssetId);
 
-      if (that.getAssetType().isPresent()) {
-        serializeElement(
-          "assetType",
-          that.getAssetType().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "assetType",
+        that.getAssetType(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getDefaultThumbnail().isPresent()) {
-        serializeElement(
-          "defaultThumbnail",
-          that.getDefaultThumbnail().get(),
-          writer,
-          (value, w) -> this.resourceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "defaultThumbnail",
+        that.getDefaultThumbnail(),
+        writer,
+        _VisitorWithWriter::writeResourceAsSequence);
     }
 
     @Override
     public void visitAssetInformation(
       IAssetInformation that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "assetInformation");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.assetInformationToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "assetInformation",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeAssetInformationAsSequence);
     }
 
-    private void resourceToSequence(
+    private static void writeResourceAsSequence(
       IResource that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "path",
         that.getPath(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getContentType().isPresent()) {
-        serializeElement(
-          "contentType",
-          that.getContentType().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "contentType",
+        that.getContentType(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitResource(
       IResource that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "resource");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.resourceToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "resource",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeResourceAsSequence);
     }
 
-    private void specificAssetIdToSequence(
+    private static void writeSpecificAssetIdAsSequence(
       ISpecificAssetId that,
       XMLStreamWriter writer) {
-      if (that.getSemanticId().isPresent()) {
-        serializeElement(
-          "semanticId",
-          that.getSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "semanticId",
+        that.getSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
-        serializeElement(
-          "supplementalSemanticIds",
-          that.getSupplementalSemanticIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "supplementalSemanticIds",
+        that.getSupplementalSemanticIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
 
-      serializeElement(
+      writeProperty(
         "name",
         that.getName(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
 
-      serializeElement(
+      writeProperty(
         "value",
         that.getValue(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getExternalSubjectId().isPresent()) {
-        serializeElement(
-          "externalSubjectId",
-          that.getExternalSubjectId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "externalSubjectId",
+        that.getExternalSubjectId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
     }
 
     @Override
     public void visitSpecificAssetId(
       ISpecificAssetId that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "specificAssetId");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.specificAssetIdToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "specificAssetId",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeSpecificAssetIdAsSequence);
     }
 
-    private void submodelToSequence(
+    private static void writeSubmodelAsSequence(
       ISubmodel that,
       XMLStreamWriter writer) {
-      if (that.getExtensions().isPresent()) {
-        serializeElement(
-          "extensions",
-          that.getExtensions().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "extensions",
+        that.getExtensions(),
+        writer,
+        _VisitorWithWriter::writeListOf_IExtension);
 
-      if (that.getCategory().isPresent()) {
-        serializeElement(
-          "category",
-          that.getCategory().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "category",
+        that.getCategory(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getIdShort().isPresent()) {
-        serializeElement(
-          "idShort",
-          that.getIdShort().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "idShort",
+        that.getIdShort(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getDisplayName().isPresent()) {
-        serializeElement(
-          "displayName",
-          that.getDisplayName().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "displayName",
+        that.getDisplayName(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringNameType);
 
-      if (that.getDescription().isPresent()) {
-        serializeElement(
-          "description",
-          that.getDescription().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "description",
+        that.getDescription(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringTextType);
 
-      if (that.getAdministration().isPresent()) {
-        serializeElement(
-          "administration",
-          that.getAdministration().get(),
-          writer,
-          (value, w) -> this.administrativeInformationToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "administration",
+        that.getAdministration(),
+        writer,
+        _VisitorWithWriter::writeAdministrativeInformationAsSequence);
 
-      serializeElement(
+      writeProperty(
         "id",
         that.getId(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getKind().isPresent()) {
-        serializeElement(
-          "kind",
-          that.getKind().get(),
-          writer,
-          this::writeModellingKindContent);
-      }
+      writeOptionalProperty(
+        "kind",
+        that.getKind(),
+        writer,
+        _VisitorWithWriter::writeTextAs_ModellingKind);
 
-      if (that.getSemanticId().isPresent()) {
-        serializeElement(
-          "semanticId",
-          that.getSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "semanticId",
+        that.getSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
-        serializeElement(
-          "supplementalSemanticIds",
-          that.getSupplementalSemanticIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "supplementalSemanticIds",
+        that.getSupplementalSemanticIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
 
-      if (that.getQualifiers().isPresent()) {
-        serializeElement(
-          "qualifiers",
-          that.getQualifiers().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "qualifiers",
+        that.getQualifiers(),
+        writer,
+        _VisitorWithWriter::writeListOf_IQualifier);
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
-        serializeElement(
-          "embeddedDataSpecifications",
-          that.getEmbeddedDataSpecifications().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "embeddedDataSpecifications",
+        that.getEmbeddedDataSpecifications(),
+        writer,
+        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
 
-      if (that.getSubmodelElements().isPresent()) {
-        serializeElement(
-          "submodelElements",
-          that.getSubmodelElements().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "submodelElements",
+        that.getSubmodelElements(),
+        writer,
+        _VisitorWithWriter::writeListOf_ISubmodelElement);
     }
 
     @Override
     public void visitSubmodel(
       ISubmodel that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "submodel");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.submodelToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "submodel",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeSubmodelAsSequence);
     }
 
-    private void relationshipElementToSequence(
+    private static void writeRelationshipElementAsSequence(
       IRelationshipElement that,
       XMLStreamWriter writer) {
-      if (that.getExtensions().isPresent()) {
-        serializeElement(
-          "extensions",
-          that.getExtensions().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "extensions",
+        that.getExtensions(),
+        writer,
+        _VisitorWithWriter::writeListOf_IExtension);
 
-      if (that.getCategory().isPresent()) {
-        serializeElement(
-          "category",
-          that.getCategory().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "category",
+        that.getCategory(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getIdShort().isPresent()) {
-        serializeElement(
-          "idShort",
-          that.getIdShort().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "idShort",
+        that.getIdShort(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getDisplayName().isPresent()) {
-        serializeElement(
-          "displayName",
-          that.getDisplayName().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "displayName",
+        that.getDisplayName(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringNameType);
 
-      if (that.getDescription().isPresent()) {
-        serializeElement(
-          "description",
-          that.getDescription().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "description",
+        that.getDescription(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringTextType);
 
-      if (that.getSemanticId().isPresent()) {
-        serializeElement(
-          "semanticId",
-          that.getSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "semanticId",
+        that.getSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
-        serializeElement(
-          "supplementalSemanticIds",
-          that.getSupplementalSemanticIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "supplementalSemanticIds",
+        that.getSupplementalSemanticIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
 
-      if (that.getQualifiers().isPresent()) {
-        serializeElement(
-          "qualifiers",
-          that.getQualifiers().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "qualifiers",
+        that.getQualifiers(),
+        writer,
+        _VisitorWithWriter::writeListOf_IQualifier);
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
-        serializeElement(
-          "embeddedDataSpecifications",
-          that.getEmbeddedDataSpecifications().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "embeddedDataSpecifications",
+        that.getEmbeddedDataSpecifications(),
+        writer,
+        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
 
-      serializeElement(
+      writeProperty(
         "first",
         that.getFirst(),
         writer,
-        (value, w) -> this.referenceToSequence(value, w));
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      serializeElement(
+      writeProperty(
         "second",
         that.getSecond(),
         writer,
-        (value, w) -> this.referenceToSequence(value, w));
+        _VisitorWithWriter::writeReferenceAsSequence);
     }
 
     @Override
     public void visitRelationshipElement(
       IRelationshipElement that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "relationshipElement");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.relationshipElementToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "relationshipElement",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeRelationshipElementAsSequence);
     }
 
-    private void submodelElementListToSequence(
+    private static void writeSubmodelElementListAsSequence(
       ISubmodelElementList that,
       XMLStreamWriter writer) {
-      if (that.getExtensions().isPresent()) {
-        serializeElement(
-          "extensions",
-          that.getExtensions().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "extensions",
+        that.getExtensions(),
+        writer,
+        _VisitorWithWriter::writeListOf_IExtension);
 
-      if (that.getCategory().isPresent()) {
-        serializeElement(
-          "category",
-          that.getCategory().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "category",
+        that.getCategory(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getIdShort().isPresent()) {
-        serializeElement(
-          "idShort",
-          that.getIdShort().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "idShort",
+        that.getIdShort(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getDisplayName().isPresent()) {
-        serializeElement(
-          "displayName",
-          that.getDisplayName().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "displayName",
+        that.getDisplayName(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringNameType);
 
-      if (that.getDescription().isPresent()) {
-        serializeElement(
-          "description",
-          that.getDescription().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "description",
+        that.getDescription(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringTextType);
 
-      if (that.getSemanticId().isPresent()) {
-        serializeElement(
-          "semanticId",
-          that.getSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "semanticId",
+        that.getSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
-        serializeElement(
-          "supplementalSemanticIds",
-          that.getSupplementalSemanticIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "supplementalSemanticIds",
+        that.getSupplementalSemanticIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
 
-      if (that.getQualifiers().isPresent()) {
-        serializeElement(
-          "qualifiers",
-          that.getQualifiers().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "qualifiers",
+        that.getQualifiers(),
+        writer,
+        _VisitorWithWriter::writeListOf_IQualifier);
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
-        serializeElement(
-          "embeddedDataSpecifications",
-          that.getEmbeddedDataSpecifications().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "embeddedDataSpecifications",
+        that.getEmbeddedDataSpecifications(),
+        writer,
+        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
 
-      if (that.getOrderRelevant().isPresent()) {
-        serializeElement(
-          "orderRelevant",
-          that.getOrderRelevant().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "orderRelevant",
+        that.getOrderRelevant(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getSemanticIdListElement().isPresent()) {
-        serializeElement(
-          "semanticIdListElement",
-          that.getSemanticIdListElement().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "semanticIdListElement",
+        that.getSemanticIdListElement(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      serializeElement(
+      writeProperty(
         "typeValueListElement",
         that.getTypeValueListElement(),
         writer,
-        this::writeAasSubmodelElementsContent);
+        _VisitorWithWriter::writeTextAs_AasSubmodelElements);
 
-      if (that.getValueTypeListElement().isPresent()) {
-        serializeElement(
-          "valueTypeListElement",
-          that.getValueTypeListElement().get(),
-          writer,
-          this::writeDataTypeDefXsdContent);
-      }
+      writeOptionalProperty(
+        "valueTypeListElement",
+        that.getValueTypeListElement(),
+        writer,
+        _VisitorWithWriter::writeTextAs_DataTypeDefXsd);
 
-      if (that.getValue().isPresent()) {
-        serializeElement(
-          "value",
-          that.getValue().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "value",
+        that.getValue(),
+        writer,
+        _VisitorWithWriter::writeListOf_ISubmodelElement);
     }
 
     @Override
     public void visitSubmodelElementList(
       ISubmodelElementList that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "submodelElementList");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.submodelElementListToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "submodelElementList",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeSubmodelElementListAsSequence);
     }
 
-    private void submodelElementCollectionToSequence(
+    private static void writeSubmodelElementCollectionAsSequence(
       ISubmodelElementCollection that,
       XMLStreamWriter writer) {
-      if (that.getExtensions().isPresent()) {
-        serializeElement(
-          "extensions",
-          that.getExtensions().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "extensions",
+        that.getExtensions(),
+        writer,
+        _VisitorWithWriter::writeListOf_IExtension);
 
-      if (that.getCategory().isPresent()) {
-        serializeElement(
-          "category",
-          that.getCategory().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "category",
+        that.getCategory(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getIdShort().isPresent()) {
-        serializeElement(
-          "idShort",
-          that.getIdShort().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "idShort",
+        that.getIdShort(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getDisplayName().isPresent()) {
-        serializeElement(
-          "displayName",
-          that.getDisplayName().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "displayName",
+        that.getDisplayName(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringNameType);
 
-      if (that.getDescription().isPresent()) {
-        serializeElement(
-          "description",
-          that.getDescription().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "description",
+        that.getDescription(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringTextType);
 
-      if (that.getSemanticId().isPresent()) {
-        serializeElement(
-          "semanticId",
-          that.getSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "semanticId",
+        that.getSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
-        serializeElement(
-          "supplementalSemanticIds",
-          that.getSupplementalSemanticIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "supplementalSemanticIds",
+        that.getSupplementalSemanticIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
 
-      if (that.getQualifiers().isPresent()) {
-        serializeElement(
-          "qualifiers",
-          that.getQualifiers().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "qualifiers",
+        that.getQualifiers(),
+        writer,
+        _VisitorWithWriter::writeListOf_IQualifier);
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
-        serializeElement(
-          "embeddedDataSpecifications",
-          that.getEmbeddedDataSpecifications().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "embeddedDataSpecifications",
+        that.getEmbeddedDataSpecifications(),
+        writer,
+        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
 
-      if (that.getValue().isPresent()) {
-        serializeElement(
-          "value",
-          that.getValue().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "value",
+        that.getValue(),
+        writer,
+        _VisitorWithWriter::writeListOf_ISubmodelElement);
     }
 
     @Override
     public void visitSubmodelElementCollection(
       ISubmodelElementCollection that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "submodelElementCollection");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.submodelElementCollectionToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "submodelElementCollection",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeSubmodelElementCollectionAsSequence);
     }
 
-    private void propertyToSequence(
+    private static void writePropertyAsSequence(
       IProperty that,
       XMLStreamWriter writer) {
-      if (that.getExtensions().isPresent()) {
-        serializeElement(
-          "extensions",
-          that.getExtensions().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "extensions",
+        that.getExtensions(),
+        writer,
+        _VisitorWithWriter::writeListOf_IExtension);
 
-      if (that.getCategory().isPresent()) {
-        serializeElement(
-          "category",
-          that.getCategory().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "category",
+        that.getCategory(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getIdShort().isPresent()) {
-        serializeElement(
-          "idShort",
-          that.getIdShort().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "idShort",
+        that.getIdShort(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getDisplayName().isPresent()) {
-        serializeElement(
-          "displayName",
-          that.getDisplayName().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "displayName",
+        that.getDisplayName(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringNameType);
 
-      if (that.getDescription().isPresent()) {
-        serializeElement(
-          "description",
-          that.getDescription().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "description",
+        that.getDescription(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringTextType);
 
-      if (that.getSemanticId().isPresent()) {
-        serializeElement(
-          "semanticId",
-          that.getSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "semanticId",
+        that.getSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
-        serializeElement(
-          "supplementalSemanticIds",
-          that.getSupplementalSemanticIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "supplementalSemanticIds",
+        that.getSupplementalSemanticIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
 
-      if (that.getQualifiers().isPresent()) {
-        serializeElement(
-          "qualifiers",
-          that.getQualifiers().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "qualifiers",
+        that.getQualifiers(),
+        writer,
+        _VisitorWithWriter::writeListOf_IQualifier);
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
-        serializeElement(
-          "embeddedDataSpecifications",
-          that.getEmbeddedDataSpecifications().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "embeddedDataSpecifications",
+        that.getEmbeddedDataSpecifications(),
+        writer,
+        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
 
-      serializeElement(
+      writeProperty(
         "valueType",
         that.getValueType(),
         writer,
-        this::writeDataTypeDefXsdContent);
+        _VisitorWithWriter::writeTextAs_DataTypeDefXsd);
 
-      if (that.getValue().isPresent()) {
-        serializeElement(
-          "value",
-          that.getValue().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "value",
+        that.getValue(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getValueId().isPresent()) {
-        serializeElement(
-          "valueId",
-          that.getValueId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "valueId",
+        that.getValueId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
     }
 
     @Override
     public void visitProperty(
       IProperty that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "property");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.propertyToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "property",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writePropertyAsSequence);
     }
 
-    private void multiLanguagePropertyToSequence(
+    private static void writeMultiLanguagePropertyAsSequence(
       IMultiLanguageProperty that,
       XMLStreamWriter writer) {
-      if (that.getExtensions().isPresent()) {
-        serializeElement(
-          "extensions",
-          that.getExtensions().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "extensions",
+        that.getExtensions(),
+        writer,
+        _VisitorWithWriter::writeListOf_IExtension);
 
-      if (that.getCategory().isPresent()) {
-        serializeElement(
-          "category",
-          that.getCategory().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "category",
+        that.getCategory(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getIdShort().isPresent()) {
-        serializeElement(
-          "idShort",
-          that.getIdShort().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "idShort",
+        that.getIdShort(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getDisplayName().isPresent()) {
-        serializeElement(
-          "displayName",
-          that.getDisplayName().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "displayName",
+        that.getDisplayName(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringNameType);
 
-      if (that.getDescription().isPresent()) {
-        serializeElement(
-          "description",
-          that.getDescription().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "description",
+        that.getDescription(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringTextType);
 
-      if (that.getSemanticId().isPresent()) {
-        serializeElement(
-          "semanticId",
-          that.getSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "semanticId",
+        that.getSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
-        serializeElement(
-          "supplementalSemanticIds",
-          that.getSupplementalSemanticIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "supplementalSemanticIds",
+        that.getSupplementalSemanticIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
 
-      if (that.getQualifiers().isPresent()) {
-        serializeElement(
-          "qualifiers",
-          that.getQualifiers().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "qualifiers",
+        that.getQualifiers(),
+        writer,
+        _VisitorWithWriter::writeListOf_IQualifier);
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
-        serializeElement(
-          "embeddedDataSpecifications",
-          that.getEmbeddedDataSpecifications().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "embeddedDataSpecifications",
+        that.getEmbeddedDataSpecifications(),
+        writer,
+        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
 
-      if (that.getValue().isPresent()) {
-        serializeElement(
-          "value",
-          that.getValue().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "value",
+        that.getValue(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringTextType);
 
-      if (that.getValueId().isPresent()) {
-        serializeElement(
-          "valueId",
-          that.getValueId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "valueId",
+        that.getValueId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
     }
 
     @Override
     public void visitMultiLanguageProperty(
       IMultiLanguageProperty that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "multiLanguageProperty");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.multiLanguagePropertyToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "multiLanguageProperty",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeMultiLanguagePropertyAsSequence);
     }
 
-    private void rangeToSequence(
+    private static void writeRangeAsSequence(
       IRange that,
       XMLStreamWriter writer) {
-      if (that.getExtensions().isPresent()) {
-        serializeElement(
-          "extensions",
-          that.getExtensions().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "extensions",
+        that.getExtensions(),
+        writer,
+        _VisitorWithWriter::writeListOf_IExtension);
 
-      if (that.getCategory().isPresent()) {
-        serializeElement(
-          "category",
-          that.getCategory().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "category",
+        that.getCategory(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getIdShort().isPresent()) {
-        serializeElement(
-          "idShort",
-          that.getIdShort().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "idShort",
+        that.getIdShort(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getDisplayName().isPresent()) {
-        serializeElement(
-          "displayName",
-          that.getDisplayName().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "displayName",
+        that.getDisplayName(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringNameType);
 
-      if (that.getDescription().isPresent()) {
-        serializeElement(
-          "description",
-          that.getDescription().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "description",
+        that.getDescription(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringTextType);
 
-      if (that.getSemanticId().isPresent()) {
-        serializeElement(
-          "semanticId",
-          that.getSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "semanticId",
+        that.getSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
-        serializeElement(
-          "supplementalSemanticIds",
-          that.getSupplementalSemanticIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "supplementalSemanticIds",
+        that.getSupplementalSemanticIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
 
-      if (that.getQualifiers().isPresent()) {
-        serializeElement(
-          "qualifiers",
-          that.getQualifiers().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "qualifiers",
+        that.getQualifiers(),
+        writer,
+        _VisitorWithWriter::writeListOf_IQualifier);
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
-        serializeElement(
-          "embeddedDataSpecifications",
-          that.getEmbeddedDataSpecifications().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "embeddedDataSpecifications",
+        that.getEmbeddedDataSpecifications(),
+        writer,
+        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
 
-      serializeElement(
+      writeProperty(
         "valueType",
         that.getValueType(),
         writer,
-        this::writeDataTypeDefXsdContent);
+        _VisitorWithWriter::writeTextAs_DataTypeDefXsd);
 
-      if (that.getMin().isPresent()) {
-        serializeElement(
-          "min",
-          that.getMin().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "min",
+        that.getMin(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getMax().isPresent()) {
-        serializeElement(
-          "max",
-          that.getMax().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "max",
+        that.getMax(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitRange(
       IRange that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "range");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.rangeToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "range",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeRangeAsSequence);
     }
 
-    private void referenceElementToSequence(
+    private static void writeReferenceElementAsSequence(
       IReferenceElement that,
       XMLStreamWriter writer) {
-      if (that.getExtensions().isPresent()) {
-        serializeElement(
-          "extensions",
-          that.getExtensions().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "extensions",
+        that.getExtensions(),
+        writer,
+        _VisitorWithWriter::writeListOf_IExtension);
 
-      if (that.getCategory().isPresent()) {
-        serializeElement(
-          "category",
-          that.getCategory().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "category",
+        that.getCategory(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getIdShort().isPresent()) {
-        serializeElement(
-          "idShort",
-          that.getIdShort().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "idShort",
+        that.getIdShort(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getDisplayName().isPresent()) {
-        serializeElement(
-          "displayName",
-          that.getDisplayName().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "displayName",
+        that.getDisplayName(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringNameType);
 
-      if (that.getDescription().isPresent()) {
-        serializeElement(
-          "description",
-          that.getDescription().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "description",
+        that.getDescription(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringTextType);
 
-      if (that.getSemanticId().isPresent()) {
-        serializeElement(
-          "semanticId",
-          that.getSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "semanticId",
+        that.getSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
-        serializeElement(
-          "supplementalSemanticIds",
-          that.getSupplementalSemanticIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "supplementalSemanticIds",
+        that.getSupplementalSemanticIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
 
-      if (that.getQualifiers().isPresent()) {
-        serializeElement(
-          "qualifiers",
-          that.getQualifiers().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "qualifiers",
+        that.getQualifiers(),
+        writer,
+        _VisitorWithWriter::writeListOf_IQualifier);
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
-        serializeElement(
-          "embeddedDataSpecifications",
-          that.getEmbeddedDataSpecifications().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "embeddedDataSpecifications",
+        that.getEmbeddedDataSpecifications(),
+        writer,
+        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
 
-      if (that.getValue().isPresent()) {
-        serializeElement(
-          "value",
-          that.getValue().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "value",
+        that.getValue(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
     }
 
     @Override
     public void visitReferenceElement(
       IReferenceElement that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "referenceElement");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.referenceElementToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "referenceElement",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeReferenceElementAsSequence);
     }
 
-    private void blobToSequence(
+    private static void writeBlobAsSequence(
       IBlob that,
       XMLStreamWriter writer) {
-      if (that.getExtensions().isPresent()) {
-        serializeElement(
-          "extensions",
-          that.getExtensions().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "extensions",
+        that.getExtensions(),
+        writer,
+        _VisitorWithWriter::writeListOf_IExtension);
 
-      if (that.getCategory().isPresent()) {
-        serializeElement(
-          "category",
-          that.getCategory().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "category",
+        that.getCategory(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getIdShort().isPresent()) {
-        serializeElement(
-          "idShort",
-          that.getIdShort().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "idShort",
+        that.getIdShort(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getDisplayName().isPresent()) {
-        serializeElement(
-          "displayName",
-          that.getDisplayName().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "displayName",
+        that.getDisplayName(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringNameType);
 
-      if (that.getDescription().isPresent()) {
-        serializeElement(
-          "description",
-          that.getDescription().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "description",
+        that.getDescription(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringTextType);
 
-      if (that.getSemanticId().isPresent()) {
-        serializeElement(
-          "semanticId",
-          that.getSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "semanticId",
+        that.getSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
-        serializeElement(
-          "supplementalSemanticIds",
-          that.getSupplementalSemanticIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "supplementalSemanticIds",
+        that.getSupplementalSemanticIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
 
-      if (that.getQualifiers().isPresent()) {
-        serializeElement(
-          "qualifiers",
-          that.getQualifiers().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "qualifiers",
+        that.getQualifiers(),
+        writer,
+        _VisitorWithWriter::writeListOf_IQualifier);
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
-        serializeElement(
-          "embeddedDataSpecifications",
-          that.getEmbeddedDataSpecifications().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "embeddedDataSpecifications",
+        that.getEmbeddedDataSpecifications(),
+        writer,
+        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
 
-      if (that.getValue().isPresent()) {
-        serializeElement(
-          "value",
-          that.getValue().get(),
-          writer,
-          this::writeByteArrayContent);
-      }
+      writeOptionalProperty(
+        "value",
+        that.getValue(),
+        writer,
+        _VisitorWithWriter::writeByteArrayContent);
 
-      serializeElement(
+      writeProperty(
         "contentType",
         that.getContentType(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitBlob(
       IBlob that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "blob");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.blobToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "blob",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeBlobAsSequence);
     }
 
-    private void fileToSequence(
+    private static void writeFileAsSequence(
       IFile that,
       XMLStreamWriter writer) {
-      if (that.getExtensions().isPresent()) {
-        serializeElement(
-          "extensions",
-          that.getExtensions().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "extensions",
+        that.getExtensions(),
+        writer,
+        _VisitorWithWriter::writeListOf_IExtension);
 
-      if (that.getCategory().isPresent()) {
-        serializeElement(
-          "category",
-          that.getCategory().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "category",
+        that.getCategory(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getIdShort().isPresent()) {
-        serializeElement(
-          "idShort",
-          that.getIdShort().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "idShort",
+        that.getIdShort(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getDisplayName().isPresent()) {
-        serializeElement(
-          "displayName",
-          that.getDisplayName().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "displayName",
+        that.getDisplayName(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringNameType);
 
-      if (that.getDescription().isPresent()) {
-        serializeElement(
-          "description",
-          that.getDescription().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "description",
+        that.getDescription(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringTextType);
 
-      if (that.getSemanticId().isPresent()) {
-        serializeElement(
-          "semanticId",
-          that.getSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "semanticId",
+        that.getSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
-        serializeElement(
-          "supplementalSemanticIds",
-          that.getSupplementalSemanticIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "supplementalSemanticIds",
+        that.getSupplementalSemanticIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
 
-      if (that.getQualifiers().isPresent()) {
-        serializeElement(
-          "qualifiers",
-          that.getQualifiers().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "qualifiers",
+        that.getQualifiers(),
+        writer,
+        _VisitorWithWriter::writeListOf_IQualifier);
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
-        serializeElement(
-          "embeddedDataSpecifications",
-          that.getEmbeddedDataSpecifications().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "embeddedDataSpecifications",
+        that.getEmbeddedDataSpecifications(),
+        writer,
+        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
 
-      if (that.getValue().isPresent()) {
-        serializeElement(
-          "value",
-          that.getValue().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "value",
+        that.getValue(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      serializeElement(
+      writeProperty(
         "contentType",
         that.getContentType(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitFile(
       IFile that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "file");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.fileToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "file",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeFileAsSequence);
     }
 
-    private void annotatedRelationshipElementToSequence(
+    private static void writeAnnotatedRelationshipElementAsSequence(
       IAnnotatedRelationshipElement that,
       XMLStreamWriter writer) {
-      if (that.getExtensions().isPresent()) {
-        serializeElement(
-          "extensions",
-          that.getExtensions().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "extensions",
+        that.getExtensions(),
+        writer,
+        _VisitorWithWriter::writeListOf_IExtension);
 
-      if (that.getCategory().isPresent()) {
-        serializeElement(
-          "category",
-          that.getCategory().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "category",
+        that.getCategory(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getIdShort().isPresent()) {
-        serializeElement(
-          "idShort",
-          that.getIdShort().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "idShort",
+        that.getIdShort(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getDisplayName().isPresent()) {
-        serializeElement(
-          "displayName",
-          that.getDisplayName().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "displayName",
+        that.getDisplayName(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringNameType);
 
-      if (that.getDescription().isPresent()) {
-        serializeElement(
-          "description",
-          that.getDescription().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "description",
+        that.getDescription(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringTextType);
 
-      if (that.getSemanticId().isPresent()) {
-        serializeElement(
-          "semanticId",
-          that.getSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "semanticId",
+        that.getSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
-        serializeElement(
-          "supplementalSemanticIds",
-          that.getSupplementalSemanticIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "supplementalSemanticIds",
+        that.getSupplementalSemanticIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
 
-      if (that.getQualifiers().isPresent()) {
-        serializeElement(
-          "qualifiers",
-          that.getQualifiers().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "qualifiers",
+        that.getQualifiers(),
+        writer,
+        _VisitorWithWriter::writeListOf_IQualifier);
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
-        serializeElement(
-          "embeddedDataSpecifications",
-          that.getEmbeddedDataSpecifications().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "embeddedDataSpecifications",
+        that.getEmbeddedDataSpecifications(),
+        writer,
+        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
 
-      serializeElement(
+      writeProperty(
         "first",
         that.getFirst(),
         writer,
-        (value, w) -> this.referenceToSequence(value, w));
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      serializeElement(
+      writeProperty(
         "second",
         that.getSecond(),
         writer,
-        (value, w) -> this.referenceToSequence(value, w));
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getAnnotations().isPresent()) {
-        serializeElement(
-          "annotations",
-          that.getAnnotations().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "annotations",
+        that.getAnnotations(),
+        writer,
+        _VisitorWithWriter::writeListOf_IDataElement);
     }
 
     @Override
     public void visitAnnotatedRelationshipElement(
       IAnnotatedRelationshipElement that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "annotatedRelationshipElement");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.annotatedRelationshipElementToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "annotatedRelationshipElement",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeAnnotatedRelationshipElementAsSequence);
     }
 
-    private void entityToSequence(
+    private static void writeEntityAsSequence(
       IEntity that,
       XMLStreamWriter writer) {
-      if (that.getExtensions().isPresent()) {
-        serializeElement(
-          "extensions",
-          that.getExtensions().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "extensions",
+        that.getExtensions(),
+        writer,
+        _VisitorWithWriter::writeListOf_IExtension);
 
-      if (that.getCategory().isPresent()) {
-        serializeElement(
-          "category",
-          that.getCategory().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "category",
+        that.getCategory(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getIdShort().isPresent()) {
-        serializeElement(
-          "idShort",
-          that.getIdShort().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "idShort",
+        that.getIdShort(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getDisplayName().isPresent()) {
-        serializeElement(
-          "displayName",
-          that.getDisplayName().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "displayName",
+        that.getDisplayName(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringNameType);
 
-      if (that.getDescription().isPresent()) {
-        serializeElement(
-          "description",
-          that.getDescription().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "description",
+        that.getDescription(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringTextType);
 
-      if (that.getSemanticId().isPresent()) {
-        serializeElement(
-          "semanticId",
-          that.getSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "semanticId",
+        that.getSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
-        serializeElement(
-          "supplementalSemanticIds",
-          that.getSupplementalSemanticIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "supplementalSemanticIds",
+        that.getSupplementalSemanticIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
 
-      if (that.getQualifiers().isPresent()) {
-        serializeElement(
-          "qualifiers",
-          that.getQualifiers().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "qualifiers",
+        that.getQualifiers(),
+        writer,
+        _VisitorWithWriter::writeListOf_IQualifier);
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
-        serializeElement(
-          "embeddedDataSpecifications",
-          that.getEmbeddedDataSpecifications().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "embeddedDataSpecifications",
+        that.getEmbeddedDataSpecifications(),
+        writer,
+        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
 
-      if (that.getStatements().isPresent()) {
-        serializeElement(
-          "statements",
-          that.getStatements().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "statements",
+        that.getStatements(),
+        writer,
+        _VisitorWithWriter::writeListOf_ISubmodelElement);
 
-      serializeElement(
+      writeProperty(
         "entityType",
         that.getEntityType(),
         writer,
-        this::writeEntityTypeContent);
+        _VisitorWithWriter::writeTextAs_EntityType);
 
-      if (that.getGlobalAssetId().isPresent()) {
-        serializeElement(
-          "globalAssetId",
-          that.getGlobalAssetId().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "globalAssetId",
+        that.getGlobalAssetId(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getSpecificAssetIds().isPresent()) {
-        serializeElement(
-          "specificAssetIds",
-          that.getSpecificAssetIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "specificAssetIds",
+        that.getSpecificAssetIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_ISpecificAssetId);
     }
 
     @Override
     public void visitEntity(
       IEntity that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "entity");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.entityToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "entity",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeEntityAsSequence);
     }
 
-    private void eventPayloadToSequence(
+    private static void writeEventPayloadAsSequence(
       IEventPayload that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "source",
         that.getSource(),
         writer,
-        (value, w) -> this.referenceToSequence(value, w));
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSourceSemanticId().isPresent()) {
-        serializeElement(
-          "sourceSemanticId",
-          that.getSourceSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "sourceSemanticId",
+        that.getSourceSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      serializeElement(
+      writeProperty(
         "observableReference",
         that.getObservableReference(),
         writer,
-        (value, w) -> this.referenceToSequence(value, w));
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getObservableSemanticId().isPresent()) {
-        serializeElement(
-          "observableSemanticId",
-          that.getObservableSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "observableSemanticId",
+        that.getObservableSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getTopic().isPresent()) {
-        serializeElement(
-          "topic",
-          that.getTopic().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "topic",
+        that.getTopic(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getSubjectId().isPresent()) {
-        serializeElement(
-          "subjectId",
-          that.getSubjectId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "subjectId",
+        that.getSubjectId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      serializeElement(
+      writeProperty(
         "timeStamp",
         that.getTimeStamp(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getPayload().isPresent()) {
-        serializeElement(
-          "payload",
-          that.getPayload().get(),
-          writer,
-          this::writeByteArrayContent);
-      }
+      writeOptionalProperty(
+        "payload",
+        that.getPayload(),
+        writer,
+        _VisitorWithWriter::writeByteArrayContent);
     }
 
     @Override
     public void visitEventPayload(
       IEventPayload that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "eventPayload");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.eventPayloadToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "eventPayload",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeEventPayloadAsSequence);
     }
 
-    private void basicEventElementToSequence(
+    private static void writeBasicEventElementAsSequence(
       IBasicEventElement that,
       XMLStreamWriter writer) {
-      if (that.getExtensions().isPresent()) {
-        serializeElement(
-          "extensions",
-          that.getExtensions().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "extensions",
+        that.getExtensions(),
+        writer,
+        _VisitorWithWriter::writeListOf_IExtension);
 
-      if (that.getCategory().isPresent()) {
-        serializeElement(
-          "category",
-          that.getCategory().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "category",
+        that.getCategory(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getIdShort().isPresent()) {
-        serializeElement(
-          "idShort",
-          that.getIdShort().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "idShort",
+        that.getIdShort(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getDisplayName().isPresent()) {
-        serializeElement(
-          "displayName",
-          that.getDisplayName().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "displayName",
+        that.getDisplayName(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringNameType);
 
-      if (that.getDescription().isPresent()) {
-        serializeElement(
-          "description",
-          that.getDescription().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "description",
+        that.getDescription(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringTextType);
 
-      if (that.getSemanticId().isPresent()) {
-        serializeElement(
-          "semanticId",
-          that.getSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "semanticId",
+        that.getSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
-        serializeElement(
-          "supplementalSemanticIds",
-          that.getSupplementalSemanticIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "supplementalSemanticIds",
+        that.getSupplementalSemanticIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
 
-      if (that.getQualifiers().isPresent()) {
-        serializeElement(
-          "qualifiers",
-          that.getQualifiers().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "qualifiers",
+        that.getQualifiers(),
+        writer,
+        _VisitorWithWriter::writeListOf_IQualifier);
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
-        serializeElement(
-          "embeddedDataSpecifications",
-          that.getEmbeddedDataSpecifications().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "embeddedDataSpecifications",
+        that.getEmbeddedDataSpecifications(),
+        writer,
+        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
 
-      serializeElement(
+      writeProperty(
         "observed",
         that.getObserved(),
         writer,
-        (value, w) -> this.referenceToSequence(value, w));
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      serializeElement(
+      writeProperty(
         "direction",
         that.getDirection(),
         writer,
-        this::writeDirectionContent);
+        _VisitorWithWriter::writeTextAs_Direction);
 
-      serializeElement(
+      writeProperty(
         "state",
         that.getState(),
         writer,
-        this::writeStateOfEventContent);
+        _VisitorWithWriter::writeTextAs_StateOfEvent);
 
-      if (that.getMessageTopic().isPresent()) {
-        serializeElement(
-          "messageTopic",
-          that.getMessageTopic().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "messageTopic",
+        that.getMessageTopic(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getMessageBroker().isPresent()) {
-        serializeElement(
-          "messageBroker",
-          that.getMessageBroker().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "messageBroker",
+        that.getMessageBroker(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getLastUpdate().isPresent()) {
-        serializeElement(
-          "lastUpdate",
-          that.getLastUpdate().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "lastUpdate",
+        that.getLastUpdate(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getMinInterval().isPresent()) {
-        serializeElement(
-          "minInterval",
-          that.getMinInterval().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "minInterval",
+        that.getMinInterval(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getMaxInterval().isPresent()) {
-        serializeElement(
-          "maxInterval",
-          that.getMaxInterval().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "maxInterval",
+        that.getMaxInterval(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitBasicEventElement(
       IBasicEventElement that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "basicEventElement");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.basicEventElementToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "basicEventElement",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeBasicEventElementAsSequence);
     }
 
-    private void operationToSequence(
+    private static void writeOperationAsSequence(
       IOperation that,
       XMLStreamWriter writer) {
-      if (that.getExtensions().isPresent()) {
-        serializeElement(
-          "extensions",
-          that.getExtensions().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "extensions",
+        that.getExtensions(),
+        writer,
+        _VisitorWithWriter::writeListOf_IExtension);
 
-      if (that.getCategory().isPresent()) {
-        serializeElement(
-          "category",
-          that.getCategory().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "category",
+        that.getCategory(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getIdShort().isPresent()) {
-        serializeElement(
-          "idShort",
-          that.getIdShort().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "idShort",
+        that.getIdShort(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getDisplayName().isPresent()) {
-        serializeElement(
-          "displayName",
-          that.getDisplayName().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "displayName",
+        that.getDisplayName(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringNameType);
 
-      if (that.getDescription().isPresent()) {
-        serializeElement(
-          "description",
-          that.getDescription().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "description",
+        that.getDescription(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringTextType);
 
-      if (that.getSemanticId().isPresent()) {
-        serializeElement(
-          "semanticId",
-          that.getSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "semanticId",
+        that.getSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
-        serializeElement(
-          "supplementalSemanticIds",
-          that.getSupplementalSemanticIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "supplementalSemanticIds",
+        that.getSupplementalSemanticIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
 
-      if (that.getQualifiers().isPresent()) {
-        serializeElement(
-          "qualifiers",
-          that.getQualifiers().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "qualifiers",
+        that.getQualifiers(),
+        writer,
+        _VisitorWithWriter::writeListOf_IQualifier);
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
-        serializeElement(
-          "embeddedDataSpecifications",
-          that.getEmbeddedDataSpecifications().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "embeddedDataSpecifications",
+        that.getEmbeddedDataSpecifications(),
+        writer,
+        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
 
-      if (that.getInputVariables().isPresent()) {
-        serializeElement(
-          "inputVariables",
-          that.getInputVariables().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "inputVariables",
+        that.getInputVariables(),
+        writer,
+        _VisitorWithWriter::writeListOf_IOperationVariable);
 
-      if (that.getOutputVariables().isPresent()) {
-        serializeElement(
-          "outputVariables",
-          that.getOutputVariables().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "outputVariables",
+        that.getOutputVariables(),
+        writer,
+        _VisitorWithWriter::writeListOf_IOperationVariable);
 
-      if (that.getInoutputVariables().isPresent()) {
-        serializeElement(
-          "inoutputVariables",
-          that.getInoutputVariables().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "inoutputVariables",
+        that.getInoutputVariables(),
+        writer,
+        _VisitorWithWriter::writeListOf_IOperationVariable);
     }
 
     @Override
     public void visitOperation(
       IOperation that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "operation");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.operationToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "operation",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeOperationAsSequence);
     }
 
-    private void operationVariableToSequence(
+    private static void writeOperationVariableAsSequence(
       IOperationVariable that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "value",
         that.getValue(),
         writer,
-        this::visit);
+        _VisitorWithWriter::writeClass);
     }
 
     @Override
     public void visitOperationVariable(
       IOperationVariable that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "operationVariable");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.operationVariableToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "operationVariable",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeOperationVariableAsSequence);
     }
 
-    private void capabilityToSequence(
+    private static void writeCapabilityAsSequence(
       ICapability that,
       XMLStreamWriter writer) {
-      if (that.getExtensions().isPresent()) {
-        serializeElement(
-          "extensions",
-          that.getExtensions().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "extensions",
+        that.getExtensions(),
+        writer,
+        _VisitorWithWriter::writeListOf_IExtension);
 
-      if (that.getCategory().isPresent()) {
-        serializeElement(
-          "category",
-          that.getCategory().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "category",
+        that.getCategory(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getIdShort().isPresent()) {
-        serializeElement(
-          "idShort",
-          that.getIdShort().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "idShort",
+        that.getIdShort(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getDisplayName().isPresent()) {
-        serializeElement(
-          "displayName",
-          that.getDisplayName().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "displayName",
+        that.getDisplayName(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringNameType);
 
-      if (that.getDescription().isPresent()) {
-        serializeElement(
-          "description",
-          that.getDescription().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "description",
+        that.getDescription(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringTextType);
 
-      if (that.getSemanticId().isPresent()) {
-        serializeElement(
-          "semanticId",
-          that.getSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "semanticId",
+        that.getSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSupplementalSemanticIds().isPresent()) {
-        serializeElement(
-          "supplementalSemanticIds",
-          that.getSupplementalSemanticIds().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "supplementalSemanticIds",
+        that.getSupplementalSemanticIds(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
 
-      if (that.getQualifiers().isPresent()) {
-        serializeElement(
-          "qualifiers",
-          that.getQualifiers().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "qualifiers",
+        that.getQualifiers(),
+        writer,
+        _VisitorWithWriter::writeListOf_IQualifier);
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
-        serializeElement(
-          "embeddedDataSpecifications",
-          that.getEmbeddedDataSpecifications().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "embeddedDataSpecifications",
+        that.getEmbeddedDataSpecifications(),
+        writer,
+        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
     }
 
     @Override
     public void visitCapability(
       ICapability that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "capability");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.capabilityToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "capability",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeCapabilityAsSequence);
     }
 
-    private void conceptDescriptionToSequence(
+    private static void writeConceptDescriptionAsSequence(
       IConceptDescription that,
       XMLStreamWriter writer) {
-      if (that.getExtensions().isPresent()) {
-        serializeElement(
-          "extensions",
-          that.getExtensions().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "extensions",
+        that.getExtensions(),
+        writer,
+        _VisitorWithWriter::writeListOf_IExtension);
 
-      if (that.getCategory().isPresent()) {
-        serializeElement(
-          "category",
-          that.getCategory().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "category",
+        that.getCategory(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getIdShort().isPresent()) {
-        serializeElement(
-          "idShort",
-          that.getIdShort().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "idShort",
+        that.getIdShort(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getDisplayName().isPresent()) {
-        serializeElement(
-          "displayName",
-          that.getDisplayName().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "displayName",
+        that.getDisplayName(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringNameType);
 
-      if (that.getDescription().isPresent()) {
-        serializeElement(
-          "description",
-          that.getDescription().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "description",
+        that.getDescription(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringTextType);
 
-      if (that.getAdministration().isPresent()) {
-        serializeElement(
-          "administration",
-          that.getAdministration().get(),
-          writer,
-          (value, w) -> this.administrativeInformationToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "administration",
+        that.getAdministration(),
+        writer,
+        _VisitorWithWriter::writeAdministrativeInformationAsSequence);
 
-      serializeElement(
+      writeProperty(
         "id",
         that.getId(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getEmbeddedDataSpecifications().isPresent()) {
-        serializeElement(
-          "embeddedDataSpecifications",
-          that.getEmbeddedDataSpecifications().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "embeddedDataSpecifications",
+        that.getEmbeddedDataSpecifications(),
+        writer,
+        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
 
-      if (that.getIsCaseOf().isPresent()) {
-        serializeElement(
-          "isCaseOf",
-          that.getIsCaseOf().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "isCaseOf",
+        that.getIsCaseOf(),
+        writer,
+        _VisitorWithWriter::writeListOf_IReference);
     }
 
     @Override
     public void visitConceptDescription(
       IConceptDescription that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "conceptDescription");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.conceptDescriptionToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "conceptDescription",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeConceptDescriptionAsSequence);
     }
 
-    private void referenceToSequence(
+    private static void writeReferenceAsSequence(
       IReference that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "type",
         that.getType(),
         writer,
-        this::writeReferenceTypesContent);
+        _VisitorWithWriter::writeTextAs_ReferenceTypes);
 
-      if (that.getReferredSemanticId().isPresent()) {
-        serializeElement(
-          "referredSemanticId",
-          that.getReferredSemanticId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "referredSemanticId",
+        that.getReferredSemanticId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      serializeElement(
+      writeProperty(
         "keys",
         that.getKeys(),
         writer,
-        serializeItems(this::visit));
+        _VisitorWithWriter::writeListOf_IKey);
     }
 
     @Override
     public void visitReference(
       IReference that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "reference");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.referenceToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "reference",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeReferenceAsSequence);
     }
 
-    private void keyToSequence(
+    private static void writeKeyAsSequence(
       IKey that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "type",
         that.getType(),
         writer,
-        this::writeKeyTypesContent);
+        _VisitorWithWriter::writeTextAs_KeyTypes);
 
-      serializeElement(
+      writeProperty(
         "value",
         that.getValue(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitKey(
       IKey that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "key");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.keyToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "key",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeKeyAsSequence);
     }
 
-    private void langStringNameTypeToSequence(
+    private static void writeLangStringNameTypeAsSequence(
       ILangStringNameType that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "language",
         that.getLanguage(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
 
-      serializeElement(
+      writeProperty(
         "text",
         that.getText(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitLangStringNameType(
       ILangStringNameType that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "langStringNameType");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.langStringNameTypeToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "langStringNameType",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeLangStringNameTypeAsSequence);
     }
 
-    private void langStringTextTypeToSequence(
+    private static void writeLangStringTextTypeAsSequence(
       ILangStringTextType that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "language",
         that.getLanguage(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
 
-      serializeElement(
+      writeProperty(
         "text",
         that.getText(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitLangStringTextType(
       ILangStringTextType that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "langStringTextType");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.langStringTextTypeToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "langStringTextType",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeLangStringTextTypeAsSequence);
     }
 
-    private void environmentToSequence(
+    private static void writeEnvironmentAsSequence(
       IEnvironment that,
       XMLStreamWriter writer) {
-      if (that.getAssetAdministrationShells().isPresent()) {
-        serializeElement(
-          "assetAdministrationShells",
-          that.getAssetAdministrationShells().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "assetAdministrationShells",
+        that.getAssetAdministrationShells(),
+        writer,
+        _VisitorWithWriter::writeListOf_IAssetAdministrationShell);
 
-      if (that.getSubmodels().isPresent()) {
-        serializeElement(
-          "submodels",
-          that.getSubmodels().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "submodels",
+        that.getSubmodels(),
+        writer,
+        _VisitorWithWriter::writeListOf_ISubmodel);
 
-      if (that.getConceptDescriptions().isPresent()) {
-        serializeElement(
-          "conceptDescriptions",
-          that.getConceptDescriptions().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "conceptDescriptions",
+        that.getConceptDescriptions(),
+        writer,
+        _VisitorWithWriter::writeListOf_IConceptDescription);
     }
 
     @Override
     public void visitEnvironment(
       IEnvironment that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "environment");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.environmentToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "environment",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeEnvironmentAsSequence);
     }
 
-    private void embeddedDataSpecificationToSequence(
+    private static void writeEmbeddedDataSpecificationAsSequence(
       IEmbeddedDataSpecification that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "dataSpecification",
         that.getDataSpecification(),
         writer,
-        (value, w) -> this.referenceToSequence(value, w));
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      serializeElement(
+      writeProperty(
         "dataSpecificationContent",
         that.getDataSpecificationContent(),
         writer,
-        this::visit);
+        _VisitorWithWriter::writeClass);
     }
 
     @Override
     public void visitEmbeddedDataSpecification(
       IEmbeddedDataSpecification that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "embeddedDataSpecification");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.embeddedDataSpecificationToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "embeddedDataSpecification",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeEmbeddedDataSpecificationAsSequence);
     }
 
-    private void levelTypeToSequence(
+    private static void writeLevelTypeAsSequence(
       ILevelType that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "min",
         that.getMin(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
 
-      serializeElement(
+      writeProperty(
         "nom",
         that.getNom(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
 
-      serializeElement(
+      writeProperty(
         "typ",
         that.getTyp(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
 
-      serializeElement(
+      writeProperty(
         "max",
         that.getMax(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitLevelType(
       ILevelType that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "levelType");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.levelTypeToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "levelType",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeLevelTypeAsSequence);
     }
 
-    private void valueReferencePairToSequence(
+    private static void writeValueReferencePairAsSequence(
       IValueReferencePair that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "value",
         that.getValue(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
 
-      serializeElement(
+      writeProperty(
         "valueId",
         that.getValueId(),
         writer,
-        (value, w) -> this.referenceToSequence(value, w));
+        _VisitorWithWriter::writeReferenceAsSequence);
     }
 
     @Override
     public void visitValueReferencePair(
       IValueReferencePair that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "valueReferencePair");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.valueReferencePairToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "valueReferencePair",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeValueReferencePairAsSequence);
     }
 
-    private void valueListToSequence(
+    private static void writeValueListAsSequence(
       IValueList that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "valueReferencePairs",
         that.getValueReferencePairs(),
         writer,
-        serializeItems(this::visit));
+        _VisitorWithWriter::writeListOf_IValueReferencePair);
     }
 
     @Override
     public void visitValueList(
       IValueList that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "valueList");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.valueListToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "valueList",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeValueListAsSequence);
     }
 
-    private void langStringPreferredNameTypeIec61360ToSequence(
+    private static void writeLangStringPreferredNameTypeIec61360AsSequence(
       ILangStringPreferredNameTypeIec61360 that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "language",
         that.getLanguage(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
 
-      serializeElement(
+      writeProperty(
         "text",
         that.getText(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitLangStringPreferredNameTypeIec61360(
       ILangStringPreferredNameTypeIec61360 that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "langStringPreferredNameTypeIec61360");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.langStringPreferredNameTypeIec61360ToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "langStringPreferredNameTypeIec61360",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeLangStringPreferredNameTypeIec61360AsSequence);
     }
 
-    private void langStringShortNameTypeIec61360ToSequence(
+    private static void writeLangStringShortNameTypeIec61360AsSequence(
       ILangStringShortNameTypeIec61360 that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "language",
         that.getLanguage(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
 
-      serializeElement(
+      writeProperty(
         "text",
         that.getText(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitLangStringShortNameTypeIec61360(
       ILangStringShortNameTypeIec61360 that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "langStringShortNameTypeIec61360");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.langStringShortNameTypeIec61360ToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "langStringShortNameTypeIec61360",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeLangStringShortNameTypeIec61360AsSequence);
     }
 
-    private void langStringDefinitionTypeIec61360ToSequence(
+    private static void writeLangStringDefinitionTypeIec61360AsSequence(
       ILangStringDefinitionTypeIec61360 that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "language",
         that.getLanguage(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
 
-      serializeElement(
+      writeProperty(
         "text",
         that.getText(),
         writer,
-        this::writeStringifiedContent);
+        _VisitorWithWriter::writeStringifiedContent);
     }
 
     @Override
     public void visitLangStringDefinitionTypeIec61360(
       ILangStringDefinitionTypeIec61360 that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "langStringDefinitionTypeIec61360");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.langStringDefinitionTypeIec61360ToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "langStringDefinitionTypeIec61360",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeLangStringDefinitionTypeIec61360AsSequence);
     }
 
-    private void dataSpecificationIec61360ToSequence(
+    private static void writeDataSpecificationIec61360AsSequence(
       IDataSpecificationIec61360 that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "preferredName",
         that.getPreferredName(),
         writer,
-        serializeItems(this::visit));
+        _VisitorWithWriter::writeListOf_ILangStringPreferredNameTypeIec61360);
 
-      if (that.getShortName().isPresent()) {
-        serializeElement(
-          "shortName",
-          that.getShortName().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "shortName",
+        that.getShortName(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringShortNameTypeIec61360);
 
-      if (that.getUnit().isPresent()) {
-        serializeElement(
-          "unit",
-          that.getUnit().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "unit",
+        that.getUnit(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getUnitId().isPresent()) {
-        serializeElement(
-          "unitId",
-          that.getUnitId().get(),
-          writer,
-          (value, w) -> this.referenceToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "unitId",
+        that.getUnitId(),
+        writer,
+        _VisitorWithWriter::writeReferenceAsSequence);
 
-      if (that.getSourceOfDefinition().isPresent()) {
-        serializeElement(
-          "sourceOfDefinition",
-          that.getSourceOfDefinition().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "sourceOfDefinition",
+        that.getSourceOfDefinition(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getSymbol().isPresent()) {
-        serializeElement(
-          "symbol",
-          that.getSymbol().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "symbol",
+        that.getSymbol(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getDataType().isPresent()) {
-        serializeElement(
-          "dataType",
-          that.getDataType().get(),
-          writer,
-          this::writeDataTypeIec61360Content);
-      }
+      writeOptionalProperty(
+        "dataType",
+        that.getDataType(),
+        writer,
+        _VisitorWithWriter::writeTextAs_DataTypeIec61360);
 
-      if (that.getDefinition().isPresent()) {
-        serializeElement(
-          "definition",
-          that.getDefinition().get(),
-          writer,
-          serializeItems(this::visit));
-      }
+      writeOptionalProperty(
+        "definition",
+        that.getDefinition(),
+        writer,
+        _VisitorWithWriter::writeListOf_ILangStringDefinitionTypeIec61360);
 
-      if (that.getValueFormat().isPresent()) {
-        serializeElement(
-          "valueFormat",
-          that.getValueFormat().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "valueFormat",
+        that.getValueFormat(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getValueList().isPresent()) {
-        serializeElement(
-          "valueList",
-          that.getValueList().get(),
-          writer,
-          (value, w) -> this.valueListToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "valueList",
+        that.getValueList(),
+        writer,
+        _VisitorWithWriter::writeValueListAsSequence);
 
-      if (that.getValue().isPresent()) {
-        serializeElement(
-          "value",
-          that.getValue().get(),
-          writer,
-          this::writeStringifiedContent);
-      }
+      writeOptionalProperty(
+        "value",
+        that.getValue(),
+        writer,
+        _VisitorWithWriter::writeStringifiedContent);
 
-      if (that.getLevelType().isPresent()) {
-        serializeElement(
-          "levelType",
-          that.getLevelType().get(),
-          writer,
-          (value, w) -> this.levelTypeToSequence(value, w));
-      }
+      writeOptionalProperty(
+        "levelType",
+        that.getLevelType(),
+        writer,
+        _VisitorWithWriter::writeLevelTypeAsSequence);
     }
 
     @Override
     public void visitDataSpecificationIec61360(
       IDataSpecificationIec61360 that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "dataSpecificationIec61360");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.dataSpecificationIec61360ToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "dataSpecificationIec61360",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeDataSpecificationIec61360AsSequence);
     }
   }
 
@@ -11438,13 +11025,42 @@ public class Xmlization {
   {
     /**
      * Serialize an instance of the meta-model to XML.
+     *
+     * <p>{@code writer} is flushed exactly once, here at the end. Nothing is
+     * flushed in-between, which is what lets {@link XMLStreamWriter} buffer,
+     * and the single flush at the end is what lets a failure of the underlying
+     * stream be reported as a {@link SerializeException} from this method --
+     * were it left to the caller, the failure would surface at their own flush,
+     * after the serialization has long returned.
+     *
+     * <p>The path of a {@link SerializeException} is rendered as a relative
+     * XPath, the same spelling the de-serialization reports, and names
+     * the properties and the list indices leading to the culprit --
+     * {@code submodelElements/*[0]/value}. Two things it deliberately does not
+     * name: the outermost element, since this method takes any
+     * {@link IClass} and the name would say nothing the caller does not
+     * already know; and the discriminator element of a polymorphic property,
+     * which the de-serialization does prepend. The de-serialization is pointing
+     * into a document it is reading, where that element is a real extra level;
+     * this is pointing into the instance the caller handed over, where it is
+     * not -- {@code value/idShort} here is exactly
+     * {@code getValue().getIdShort()}.
      */
     public static void to(
       IClass that,
       XMLStreamWriter writer) throws SerializeException {
-      _VisitorWithWriter visitor = new _VisitorWithWriter();
-      visitor.visit(
-        that, writer);
+      try {
+        _VisitorWithWriter.ROOT.visit(
+          that, writer);
+        writer.flush();
+      } catch (XMLStreamException exception) {
+        throw new SerializeException("", exception.getMessage());
+      } catch (_SerializeFailure failure) {
+        final Reporting.Error error = failure.getError();
+        throw new SerializeException(
+          Reporting.generateRelativeXPath(error.getPathSegments()),
+          error.getCause());
+      }
     }
   }
 }

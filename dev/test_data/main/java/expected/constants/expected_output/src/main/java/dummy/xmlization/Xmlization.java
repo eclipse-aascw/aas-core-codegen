@@ -74,6 +74,30 @@ public class Xmlization {
   }
 
   /**
+   * Signal a failure of the serialization, carrying the path to the culprit.
+   *
+   * <p>The path is built as the stack unwinds -- every container prepends
+   * the one segment it knows, the property its name and the list the index
+   * of the item -- which is why this can not be a
+   * {@link SerializeException} already: that one renders its message in
+   * its constructor, so its path has to be complete by then.
+   * {@link Serialize#to} renders and converts.
+   */
+  @SuppressWarnings("serial")
+  private static class _SerializeFailure extends RuntimeException {
+    private final Reporting.Error error;
+
+    _SerializeFailure(Reporting.Error error) {
+      super(error.getCause());
+      this.error = error;
+    }
+
+    Reporting.Error getError() {
+      return error;
+    }
+  }
+
+  /**
    * The XML namespace of the meta-model
    */
   public static final String AAS_NAME_SPACE =
@@ -589,139 +613,146 @@ public class Xmlization {
   static class _VisitorWithWriter
     extends AbstractVisitorWithContext<XMLStreamWriter> {
 
-    private boolean topLevel = true;
+    /**
+     * Declare the XML namespace on the element which this visitor writes.
+     *
+     * <p>Only the outermost element carries the declaration. The obvious
+     * alternative -- a flag cleared once the first element has been written --
+     * would be mutable state, and state forces every method of this class to be
+     * an instance method, which in turn makes every method reference to it
+     * capture {@code this} and allocate. Pinning the flag in the constructor
+     * instead costs one visitor per case, allocated once for the whole program,
+     * and lets everything else here be {@code static}.
+     */
+    private final boolean withNamespace;
 
-    @FunctionalInterface
-    private interface ElementContentSerializer<T> {
-      void serialize(T that, XMLStreamWriter writer) throws XMLStreamException;
+    private _VisitorWithWriter(boolean withNamespace) {
+      this.withNamespace = withNamespace;
     }
 
     /**
-     * Write {@code that} as an XML element named {@code name}, delegating
-     * the content in-between the start and the end tag to
-     * {@code serializeContent}.
-     *
-     * <p>This is shared by all the property kinds (primitive, enumeration,
-     * class, interface, list) as they all wrap their content in exactly the
-     * same way.
+     * Write the outermost element, which declares the XML namespace.
      */
-    private <T> void serializeElement(
+    private static final _VisitorWithWriter ROOT =
+      new _VisitorWithWriter(true);
+
+    /**
+     * Write {@code that} where {@code writer} already is.
+     *
+     * <p>Every value is written through this one shape, so that the writing
+     * composes: {@link #writeElement} frames it in a start and an end tag, and
+     * a class's own {@code write...AsSequence} already is one.
+     *
+     * <p>There is deliberately no second shape for a whole element, as there is
+     * on the reading side. An element differs from a content only in what it
+     * writes, never in its shape; the reading needs the distinction because
+     * a content reader has to be told whether its element was self-closing, and
+     * a writer has nothing to be told.
+     *
+     * <p>Use sites take a {@code ContentWriter<? super T>} -- Java's spelling
+     * of the contravariance -- so that the single writer of an {@link IClass}
+     * serves wherever the writer of a more specific interface is expected.
+     */
+    @FunctionalInterface
+    private interface ContentWriter<T> {
+      void write(T that, XMLStreamWriter writer) throws XMLStreamException;
+    }
+
+    /**
+     * Write {@code that} as an XML element named {@code name}, its content
+     * written by {@code writeContent}.
+     *
+     * <p>An element is nothing but a start and an end tag around a content, so
+     * there is no writer per property kind: only the content writer differs,
+     * and the type of the value alone decides which one it is.
+     *
+     * <p>{@code withNamespace} declares the XML namespace on the element,
+     * which only the outermost element does.
+     */
+    private static <T> void writeElement(
       String name,
       T that,
       XMLStreamWriter writer,
-      ElementContentSerializer<T> serializeContent) {
+      boolean withNamespace,
+      ContentWriter<? super T> writeContent) {
       try {
         writer.writeStartElement(name);
-        if (topLevel) {
+        if (withNamespace) {
           writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
         }
-        serializeContent.serialize(that, writer);
+        writeContent.write(that, writer);
         writer.writeEndElement();
       } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
+        throw new _SerializeFailure(
+          new Reporting.Error(exception.getMessage()));
       }
     }
 
     /**
-     * Adapt {@code writeItem} to serialize every item of an iterable.
+     * Write {@code that} as an XML element named {@code name} nested in
+     * another element, so that the XML namespace is not re-declared.
      *
-     * <p>This is shared by all the list-typed properties, which only need to
-     * supply how a single item is written.
+     * <p>This is what an item of a list or of a tuple is written with. It
+     * contributes no segment to the error path: its container has already
+     * contributed the item's index, and the index selects this very element
+     * (see {@link #writeListOf} in the generated writers).
      */
-    private <T> ElementContentSerializer<Iterable<T>> serializeItems(
-      ElementContentSerializer<T> writeItem) {
-      return (items, w) -> {
-        for (T item : items) {
-          writeItem.serialize(item, w);
-        }
-      };
+    private static <T> void writeElement(
+      String name,
+      T that,
+      XMLStreamWriter writer,
+      ContentWriter<? super T> writeContent) {
+      writeElement(name, that, writer, false, writeContent);
     }
 
     /**
-     * Adapt {@code writeContent} to serialize a value wrapped in its own
-     * {@code name} element.
+     * Write {@code that} as the XML element of a property called
+     * {@code name}.
      *
-     * <p>This is only needed for a scalar item (a primitive or an enumeration
-     * literal), which is wrapped in a positional {@code v}/{@code v1}/
-     * {@code v2} *etc.* element; a class item is dispatched through its own
-     * natural element tag by {@code this::visit} already, so it needs no
-     * such wrapping.
-     *
-     * <p>{@code name} is a plain runtime string, not a type, so it can not be
-     * pinned via a generic type parameter -- binding it requires an actual
-     * closure, built once here.
+     * <p>This is {@link #writeElement} plus the one thing a property knows
+     * which nothing below it does: its own name. Prepending it here, once,
+     * saves a {@code try} around every one of the property writes.
      */
-    private <T> ElementContentSerializer<T> asNamedElementSerializer(
-      String name, ElementContentSerializer<T> writeContent) {
-      return (that, w) -> serializeElement(name, that, w, writeContent);
+    private static <T> void writeProperty(
+      String name,
+      T that,
+      XMLStreamWriter writer,
+      ContentWriter<? super T> writeContent) {
+      try {
+        writeElement(name, that, writer, false, writeContent);
+      } catch (_SerializeFailure failure) {
+        failure.getError().prependSegment(
+          new Reporting.NameSegment(name));
+        throw failure;
+      }
     }
 
-    /**
-     * Write {@code that.toString()} as XML content.
-     *
-     * <p>This is shared by every {@code boolean}/{@code long}/{@code double}/
-     * {@code String}-typed property or list item, standing in for the property-
-     * or item-specific {@link ElementContentSerializer}.
-     */
-    private <T> void writeStringifiedContent(T that, XMLStreamWriter writer)
-      throws XMLStreamException {
-      writer.writeCharacters(that.toString());
-    }
-
-    /**
-     * Write {@code that} as base64-encoded XML content.
-     *
-     * <p>This is shared by every {@code byte[]}-typed property or list item,
-     * standing in for the property- or item-specific
-     * {@link ElementContentSerializer}.
-     */
-    private void writeByteArrayContent(byte[] that, XMLStreamWriter writer)
-      throws XMLStreamException {
-      writer.writeCharacters(
-        Base64.getEncoder().encodeToString(that));
-    }
-
-    /**
-     * Write a literal of {@link SomeEnum} as XML content.
-     *
-     * <p>This is shared by every SomeEnum-typed property or list item,
-     * standing in for the property- or item-specific
-     * {@link ElementContentSerializer}.
-     */
-    private void writeSomeEnumContent(SomeEnum that, XMLStreamWriter writer)
-      throws XMLStreamException {
+    private static void writeTextAs_SomeEnum(
+      SomeEnum that,
+      XMLStreamWriter writer) throws XMLStreamException {
       writer.writeCharacters(Stringification.mustToString(that));
     }
 
-    private void somethingToSequence(
+    private static void writeSomethingAsSequence(
       ISomething that,
       XMLStreamWriter writer) {
-      serializeElement(
+      writeProperty(
         "someEnum",
         that.getSomeEnum(),
         writer,
-        this::writeSomeEnumContent);
+        _VisitorWithWriter::writeTextAs_SomeEnum);
     }
 
     @Override
     public void visitSomething(
       ISomething that,
       XMLStreamWriter writer) {
-      try {
-        writer.writeStartElement(
-          "something");
-        if (topLevel) {
-          writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-          topLevel = false;
-        }
-        this.somethingToSequence(
-          that,
-          writer);
-        writer.writeEndElement();
-      } catch (XMLStreamException exception) {
-        throw new SerializeException("", exception.getMessage());
-      }
+      writeElement(
+        "something",
+        that,
+        writer,
+        withNamespace,
+        _VisitorWithWriter::writeSomethingAsSequence);
     }
   }
 
@@ -746,13 +777,42 @@ public class Xmlization {
   {
     /**
      * Serialize an instance of the meta-model to XML.
+     *
+     * <p>{@code writer} is flushed exactly once, here at the end. Nothing is
+     * flushed in-between, which is what lets {@link XMLStreamWriter} buffer,
+     * and the single flush at the end is what lets a failure of the underlying
+     * stream be reported as a {@link SerializeException} from this method --
+     * were it left to the caller, the failure would surface at their own flush,
+     * after the serialization has long returned.
+     *
+     * <p>The path of a {@link SerializeException} is rendered as a relative
+     * XPath, the same spelling the de-serialization reports, and names
+     * the properties and the list indices leading to the culprit --
+     * {@code submodelElements/*[0]/value}. Two things it deliberately does not
+     * name: the outermost element, since this method takes any
+     * {@link IClass} and the name would say nothing the caller does not
+     * already know; and the discriminator element of a polymorphic property,
+     * which the de-serialization does prepend. The de-serialization is pointing
+     * into a document it is reading, where that element is a real extra level;
+     * this is pointing into the instance the caller handed over, where it is
+     * not -- {@code value/idShort} here is exactly
+     * {@code getValue().getIdShort()}.
      */
     public static void to(
       IClass that,
       XMLStreamWriter writer) throws SerializeException {
-      _VisitorWithWriter visitor = new _VisitorWithWriter();
-      visitor.visit(
-        that, writer);
+      try {
+        _VisitorWithWriter.ROOT.visit(
+          that, writer);
+        writer.flush();
+      } catch (XMLStreamException exception) {
+        throw new SerializeException("", exception.getMessage());
+      } catch (_SerializeFailure failure) {
+        final Reporting.Error error = failure.getError();
+        throw new SerializeException(
+          Reporting.generateRelativeXPath(error.getPathSegments()),
+          error.getCause());
+      }
     }
   }
 }

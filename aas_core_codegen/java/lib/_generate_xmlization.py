@@ -229,6 +229,124 @@ def _element_reader_name(
 
 # endregion
 
+# region Names of the generated writers
+
+
+#: Name of the class through which the writing is dispatched. A method
+#: reference to one of its static writers has to be qualified by it, exactly
+#: as the readers are qualified by ``_DeserializeImplementation``.
+_VISITOR_NAME: Final[Identifier] = Identifier("_VisitorWithWriter")
+
+
+def _as_sequence_name(cls: intermediate.ConcreteClass) -> Identifier:
+    """Name the function writing the properties of ``cls`` as their sequence."""
+    return Identifier(f"write{java_naming.class_name(cls.name)}AsSequence")
+
+
+@require(lambda type_anno: not _is_instance_type(type_anno))
+def _content_writer_name(type_anno: intermediate.TypeAnnotationUnion) -> Identifier:
+    """
+    Name the function writing ``type_anno`` as the content of an element.
+
+    There is no ``writeTextAs_{primitive}`` to match the reading side: once
+    the value is at hand, nothing type-specific is left to do with it, so all
+    four primitives rendered through ``toString`` share a single writer, and
+    so does the byte array. An enumeration, a list and a tuple do have
+    something of their own to write, and hence get a function each.
+
+    The enumeration is keyed by the moniker, ``writeTextAs_{Enum}``, and not
+    by the symbol -- which would read as ``write{Enum}Content`` -- so that
+    the writers keep the two name spaces of the readers apart: a name which
+    contains an underscore is keyed by a moniker, one which does not is
+    keyed by a symbol (see :py:func:`_type_moniker`). Were an enumeration
+    named by the symbol, one called ``Stringified`` or ``ByteArray`` would
+    silently take the name of a shared writer.
+    """
+    if isinstance(
+        type_anno, (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation)
+    ):
+        return Identifier(f"write{_type_moniker(type_anno)}")
+
+    primitive_type = intermediate.try_primitive_type(type_anno)
+
+    if primitive_type is intermediate.PrimitiveType.BYTEARRAY:
+        return Identifier("writeByteArrayContent")
+
+    if primitive_type is not None:
+        return Identifier("writeStringifiedContent")
+
+    return Identifier(f"writeTextAs_{_leaf_moniker(type_anno)}")
+
+
+@require(lambda v_name: v_name.startswith("v"))
+@require(lambda type_anno: not _is_instance_type(type_anno))
+def _at_v_writer_name(
+    type_anno: intermediate.TypeAnnotationUnion, v_name: str
+) -> Identifier:
+    """Name the function writing ``type_anno`` as an element called ``v_name``."""
+    return Identifier(f"writeAtV{v_name[1:]}_{_type_moniker(type_anno)}")
+
+
+def _element_writer_name(
+    type_anno: intermediate.TypeAnnotationUnion, v_name: str
+) -> Identifier:
+    """
+    Name the function writing a single element holding ``type_anno``.
+
+    This is what a list item and a tuple item are written with. An instance
+    writes its own, self-describing element, whereas everything else is
+    wrapped in an element which the container names -- ``v`` in a list,
+    ``v1``, ``v2``, ... by position in a tuple.
+
+    Unlike :py:func:`_element_reader_name`, an instance needs no writer per
+    class: the element follows from the run-time type of the value, which
+    a single virtual call answers for every class at once.
+    """
+    if _is_instance_type(type_anno):
+        assert isinstance(type_anno, intermediate.OurTypeAnnotation)
+
+        if isinstance(type_anno.our_type, intermediate.NamedUnion):
+            return Identifier("writeUnion")
+
+        return Identifier("writeClass")
+
+    return _at_v_writer_name(type_anno, v_name)
+
+
+def _content_writer_reference(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
+    """
+    Reference the writer of ``type_anno`` as the content of a property element.
+
+    A concrete class without any descendant has a single admissible element
+    name, so the property element holds its properties directly. Everything
+    else which is an instance writes its own discriminator element nested
+    within the property element, and hence goes through a dispatching writer.
+    """
+    name: Identifier
+
+    if _is_instance_type(type_anno):
+        assert isinstance(type_anno, intermediate.OurTypeAnnotation)
+        our_type = type_anno.our_type
+
+        if isinstance(our_type, intermediate.NamedUnion):
+            name = Identifier("writeUnion")
+        elif _is_dispatched(our_type):
+            name = Identifier("writeClass")
+        else:
+            assert isinstance(our_type, intermediate.ConcreteClass), (
+                f"Expected a concrete class without any descendant, "
+                f"but got: {our_type}"
+            )
+            name = _as_sequence_name(our_type)
+    else:
+        name = _content_writer_name(type_anno)
+
+    return Stripped(f"{_VISITOR_NAME}::{name}")
+
+
+# endregion
+
+
 # region Gating
 
 
@@ -325,6 +443,57 @@ def _collect_needed(symbol_table: intermediate.SymbolTable) -> _Needed:
             register_content(type_anno)
 
     return needed
+
+
+@ensure(lambda result: result[0] or not result[1])
+def _collect_dispatching_writers(
+    symbol_table: intermediate.SymbolTable,
+) -> Tuple[bool, bool]:
+    """
+    Determine which of the two dispatching writers the meta-model reaches.
+
+    Give whether ``writeClass`` and whether ``writeUnion`` have to be
+    generated, in that order. The union writer delegates to the class writer,
+    so the former can not be needed without the latter.
+
+    The walk has to recurse into the items of a list and of a tuple the same
+    way :py:func:`_collect_needed` does, but the position matters here: an
+    item is always written as its own, self-describing element, whereas
+    a property of a concrete class without any descendant writes its
+    properties directly into the property element and needs no dispatch.
+    """
+    classes = False
+    unions = False
+
+    def register(type_anno: intermediate.TypeAnnotationUnion, as_item: bool) -> None:
+        """Register what writing ``type_anno`` in its position dispatches to."""
+        nonlocal classes
+        nonlocal unions
+
+        if isinstance(type_anno, intermediate.ListTypeAnnotation):
+            register(type_anno.items, True)
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            for item_type_anno in type_anno.items:
+                register(item_type_anno, True)
+        elif _is_instance_type(type_anno):
+            assert isinstance(type_anno, intermediate.OurTypeAnnotation)
+
+            if isinstance(type_anno.our_type, intermediate.NamedUnion):
+                unions = True
+                classes = True
+            elif as_item or _is_dispatched(type_anno.our_type):
+                classes = True
+        else:
+            # NOTE (mristin):
+            # A primitive and an enumeration literal are written as text, so
+            # there is nothing to dispatch on.
+            pass
+
+    for cls in symbol_table.concrete_classes:
+        for prop in cls.properties:
+            register(intermediate.beneath_optional(prop.type_annotation), False)
+
+    return classes, unions
 
 
 # endregion
@@ -1883,675 +2052,428 @@ public static class Deserialize
     return Stripped(writer.getvalue())
 
 
-def _generate_serialize_element() -> Stripped:
-    """Generate the generic helper to write a property as a named XML element."""
+# region Shared writers
+
+
+def _generate_visitors(with_nested: bool) -> Stripped:
+    """Generate the namespace flag and the immutable visitors pinning it."""
+    nested = (
+        ""
+        if not with_nested
+        else f"""
+
+/**
+ * Write an element nested in another one, which never re-declares the XML
+ * namespace.
+ */
+private static final {_VISITOR_NAME} NESTED =
+{I}new {_VISITOR_NAME}(false);"""
+    )
+
     return Stripped(
         f"""\
-@FunctionalInterface
-private interface ElementContentSerializer<T> {{
-{I}void serialize(T that, XMLStreamWriter writer) throws XMLStreamException;
+/**
+ * Declare the XML namespace on the element which this visitor writes.
+ *
+ * <p>Only the outermost element carries the declaration. The obvious
+ * alternative -- a flag cleared once the first element has been written --
+ * would be mutable state, and state forces every method of this class to be
+ * an instance method, which in turn makes every method reference to it
+ * capture {{@code this}} and allocate. Pinning the flag in the constructor
+ * instead costs one visitor per case, allocated once for the whole program,
+ * and lets everything else here be {{@code static}}.
+ */
+private final boolean withNamespace;
+
+private {_VISITOR_NAME}(boolean withNamespace) {{
+{I}this.withNamespace = withNamespace;
 }}
 
 /**
- * Write {{@code that}} as an XML element named {{@code name}}, delegating
- * the content in-between the start and the end tag to
- * {{@code serializeContent}}.
- *
- * <p>This is shared by all the property kinds (primitive, enumeration,
- * class, interface, list) as they all wrap their content in exactly the
- * same way.
+ * Write the outermost element, which declares the XML namespace.
  */
-private <T> void serializeElement(
+private static final {_VISITOR_NAME} ROOT =
+{I}new {_VISITOR_NAME}(true);{nested}"""
+    )
+
+
+def _generate_content_writer_interface() -> Stripped:
+    """Generate the single shape which every writer has."""
+    return Stripped(
+        f"""\
+/**
+ * Write {{@code that}} where {{@code writer}} already is.
+ *
+ * <p>Every value is written through this one shape, so that the writing
+ * composes: {{@link #writeElement}} frames it in a start and an end tag, and
+ * a class's own {{@code write...AsSequence}} already is one.
+ *
+ * <p>There is deliberately no second shape for a whole element, as there is
+ * on the reading side. An element differs from a content only in what it
+ * writes, never in its shape; the reading needs the distinction because
+ * a content reader has to be told whether its element was self-closing, and
+ * a writer has nothing to be told.
+ *
+ * <p>Use sites take a {{@code ContentWriter<? super T>}} -- Java's spelling
+ * of the contravariance -- so that the single writer of an {{@link IClass}}
+ * serves wherever the writer of a more specific interface is expected.
+ */
+@FunctionalInterface
+private interface ContentWriter<T> {{
+{I}void write(T that, XMLStreamWriter writer) throws XMLStreamException;
+}}"""
+    )
+
+
+def _generate_write_element() -> Stripped:
+    """Generate the framer writing a value as a named XML element."""
+    return Stripped(
+        f"""\
+/**
+ * Write {{@code that}} as an XML element named {{@code name}}, its content
+ * written by {{@code writeContent}}.
+ *
+ * <p>An element is nothing but a start and an end tag around a content, so
+ * there is no writer per property kind: only the content writer differs,
+ * and the type of the value alone decides which one it is.
+ *
+ * <p>{{@code withNamespace}} declares the XML namespace on the element,
+ * which only the outermost element does.
+ */
+private static <T> void writeElement(
 {I}String name,
 {I}T that,
 {I}XMLStreamWriter writer,
-{I}ElementContentSerializer<T> serializeContent) {{
+{I}boolean withNamespace,
+{I}ContentWriter<? super T> writeContent) {{
 {I}try {{
 {II}writer.writeStartElement(name);
-{II}if (topLevel) {{
+{II}if (withNamespace) {{
 {III}writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-{III}topLevel = false;
 {II}}}
-{II}serializeContent.serialize(that, writer);
+{II}writeContent.write(that, writer);
 {II}writer.writeEndElement();
 {I}}} catch (XMLStreamException exception) {{
-{II}throw new SerializeException("", exception.getMessage());
+{II}throw new _SerializeFailure(
+{III}new Reporting.Error(exception.getMessage()));
+{I}}}
+}}
+
+/**
+ * Write {{@code that}} as an XML element named {{@code name}} nested in
+ * another element, so that the XML namespace is not re-declared.
+ *
+ * <p>This is what an item of a list or of a tuple is written with. It
+ * contributes no segment to the error path: its container has already
+ * contributed the item's index, and the index selects this very element
+ * (see {{@link #writeListOf}} in the generated writers).
+ */
+private static <T> void writeElement(
+{I}String name,
+{I}T that,
+{I}XMLStreamWriter writer,
+{I}ContentWriter<? super T> writeContent) {{
+{I}writeElement(name, that, writer, false, writeContent);
+}}"""
+    )
+
+
+def _generate_write_property() -> Stripped:
+    """Generate the framer writing a property, naming it on the error path."""
+    return Stripped(
+        f"""\
+/**
+ * Write {{@code that}} as the XML element of a property called
+ * {{@code name}}.
+ *
+ * <p>This is {{@link #writeElement}} plus the one thing a property knows
+ * which nothing below it does: its own name. Prepending it here, once,
+ * saves a {{@code try}} around every one of the property writes.
+ */
+private static <T> void writeProperty(
+{I}String name,
+{I}T that,
+{I}XMLStreamWriter writer,
+{I}ContentWriter<? super T> writeContent) {{
+{I}try {{
+{II}writeElement(name, that, writer, false, writeContent);
+{I}}} catch (_SerializeFailure failure) {{
+{II}failure.getError().prependSegment(
+{III}new Reporting.NameSegment(name));
+{II}throw failure;
 {I}}}
 }}"""
     )
 
 
-def _generate_serialize_items() -> Stripped:
-    """Generate the generic helper to write every item of a list property."""
+def _generate_write_optional_property() -> Stripped:
+    """Generate the framer writing a property which may not have been given."""
     return Stripped(
         f"""\
 /**
- * Adapt {{@code writeItem}} to serialize every item of an iterable.
+ * Write {{@code that}} as the XML element of a property called
+ * {{@code name}} if it has been given, and write nothing at all otherwise.
  *
- * <p>This is shared by all the list-typed properties, which only need to
- * supply how a single item is written.
+ * <p>The {{@link Optional}} is taken apart here, once, instead of at every
+ * optional property: asking it and then unwrapping it at the call site
+ * would call the getter twice, and every call allocates an
+ * {{@link Optional}} of its own.
  */
-private <T> ElementContentSerializer<Iterable<T>> serializeItems(
-{I}ElementContentSerializer<T> writeItem) {{
-{I}return (items, w) -> {{
-{II}for (T item : items) {{
-{III}writeItem.serialize(item, w);
-{II}}}
-{I}}};
+private static <T> void writeOptionalProperty(
+{I}String name,
+{I}Optional<T> that,
+{I}XMLStreamWriter writer,
+{I}ContentWriter<? super T> writeContent) {{
+{I}final T value = that.orElse(null);
+{I}if (value != null) {{
+{II}writeProperty(name, value, writer, writeContent);
+{I}}}
 }}"""
     )
 
 
-def _generate_as_named_element_serializer() -> Stripped:
-    """Generate the adapter binding a name into an item content serializer."""
+def _generate_write_class() -> Stripped:
+    """Generate the writer picking the element from the value itself."""
     return Stripped(
         f"""\
 /**
- * Adapt {{@code writeContent}} to serialize a value wrapped in its own
- * {{@code name}} element.
+ * Write {{@code that}} as its own, self-describing XML element.
  *
- * <p>This is only needed for a scalar item (a primitive or an enumeration
- * literal), which is wrapped in a positional {{@code v}}/{{@code v1}}/
- * {{@code v2}} *etc.* element; a class item is dispatched through its own
- * natural element tag by {{@code this::visit}} already, so it needs no
- * such wrapping.
+ * <p>Which element that is, is decided by the run-time type of
+ * {{@code that}}, so this one writer serves every abstract class, every
+ * concrete class with descendants, and the item of a list or of a tuple of
+ * any class at all. The reading, which has to decide what to construct
+ * before it has read anything, needs a dispatcher per interface instead.
  *
- * <p>{{@code name}} is a plain runtime string, not a type, so it can not be
- * pinned via a generic type parameter -- binding it requires an actual
- * closure, built once here.
+ * <p>An element written from here is nested in another one by
+ * construction, so it goes through the visitor which does not re-declare
+ * the XML namespace.
  */
-private <T> ElementContentSerializer<T> asNamedElementSerializer(
-{I}String name, ElementContentSerializer<T> writeContent) {{
-{I}return (that, w) -> serializeElement(name, that, w, writeContent);
+private static void writeClass(
+{I}IClass that,
+{I}XMLStreamWriter writer) {{
+{I}NESTED.visit(that, writer);
+}}"""
+    )
+
+
+def _generate_write_union() -> Stripped:
+    """Generate the writer of a named union shared by all the named unions."""
+    return Stripped(
+        f"""\
+/**
+ * Write the underlying instance of {{@code that}} as its own XML element.
+ *
+ * <p>A named union is not itself an {{@link IClass}}, so it can not be
+ * written by {{@link #writeClass}} directly. Dispatching over the common
+ * {{@code IUnion<?>}} instead of the union's own type means a single writer
+ * for *all* the named unions, not one per union.
+ *
+ * <p>Should a named union ever be allowed to flatten a primitive or an
+ * enumeration alternative, only this body has to change -- every call site
+ * stays the same.
+ */
+private static void writeUnion(
+{I}IUnion<?> that,
+{I}XMLStreamWriter writer) {{
+{I}writeClass(that.getUnderlying(), writer);
 }}"""
     )
 
 
 def _generate_write_stringified_content() -> Stripped:
-    """Generate the helper to write a value's ``toString()`` as XML content."""
+    """Generate the writer rendering a value through its ``toString``."""
     return Stripped(
         f"""\
 /**
  * Write {{@code that.toString()}} as XML content.
  *
- * <p>This is shared by every {{@code boolean}}/{{@code long}}/{{@code double}}/
- * {{@code String}}-typed property or list item, standing in for the property-
- * or item-specific {{@link ElementContentSerializer}}.
+ * <p>This is the {{@link ContentWriter}} of every {{@code boolean}}/
+ * {{@code long}}/{{@code double}}/{{@code String}}-typed value, be it
+ * a property, a list item or a tuple item.
  */
-private <T> void writeStringifiedContent(T that, XMLStreamWriter writer)
-{I}throws XMLStreamException {{
+private static <T> void writeStringifiedContent(
+{I}T that,
+{I}XMLStreamWriter writer) throws XMLStreamException {{
 {I}writer.writeCharacters(that.toString());
 }}"""
     )
 
 
 def _generate_write_byte_array_content() -> Stripped:
-    """Generate the helper to write a byte array as base64-encoded XML content."""
+    """Generate the writer rendering a byte array as base64-encoded content."""
     return Stripped(
         f"""\
 /**
  * Write {{@code that}} as base64-encoded XML content.
  *
- * <p>This is shared by every {{@code byte[]}}-typed property or list item,
- * standing in for the property- or item-specific
- * {{@link ElementContentSerializer}}.
+ * <p>This is the {{@link ContentWriter}} of every {{@code byte[]}}-typed
+ * value, be it a property, a list item or a tuple item.
  */
-private void writeByteArrayContent(byte[] that, XMLStreamWriter writer)
-{I}throws XMLStreamException {{
+private static void writeByteArrayContent(
+{I}byte[] that,
+{I}XMLStreamWriter writer) throws XMLStreamException {{
 {I}writer.writeCharacters(
 {II}Base64.getEncoder().encodeToString(that));
 }}"""
     )
 
 
-def _generate_write_enum_content(
-    enumeration: intermediate.Enumeration,
-) -> Stripped:
-    """Generate the helper to write a literal of ``enumeration`` as XML content."""
-    enum_name = java_naming.enum_name(enumeration.name)
-    method_name = java_naming.method_name(
-        Identifier(f"write_{enumeration.name}_content")
-    )
+# endregion
 
-    return Stripped(
-        f"""\
-/**
- * Write a literal of {{@link {enum_name}}} as XML content.
- *
- * <p>This is shared by every {enum_name}-typed property or list item,
- * standing in for the property- or item-specific
- * {{@link ElementContentSerializer}}.
- */
-private void {method_name}({enum_name} that, XMLStreamWriter writer)
-{I}throws XMLStreamException {{
-{I}writer.writeCharacters(Stringification.mustToString(that));
+# region Writers of a single type
+
+
+# fmt: off
+@require(lambda type_anno: not _is_instance_type(type_anno))
+@require(
+    lambda type_anno: intermediate.try_primitive_type(type_anno) is None,
+    "A primitive is written by one of the two shared content writers",
+)
+# fmt: on
+def _generate_content_writer(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
+    """Generate the function writing ``type_anno`` as the content of an element."""
+    name = _content_writer_name(type_anno)
+    value_type = java_common.generate_type(type_anno)
+
+    body: Stripped
+    throws = ""
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        item_type = java_common.generate_type(type_anno.items)
+        item_writer = _element_writer_name(type_anno.items, "v")
+
+        # NOTE (mristin):
+        # The ``try`` sits outside the loop, and the index is advanced only
+        # once an item has been written, so that the item which failed is
+        # the one named on the error path. A ``try`` per item would cost
+        # nothing at run-time either, but it would be a good deal noisier.
+        body = Stripped(
+            f"""\
+int index = 0;
+try {{
+{I}for ({item_type} item : that) {{
+{II}{item_writer}(item, writer);
+{II}index++;
+{I}}}
+}} catch (_SerializeFailure failure) {{
+{I}failure.getError().prependSegment(
+{II}new Reporting.IndexSegment(index));
+{I}throw failure;
 }}"""
-    )
+        )
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        item_writes = []  # type: List[str]
+        for i, item_type_anno in enumerate(type_anno.items):
+            if i > 0:
+                item_writes.append(f"{I}index = {i};")
 
+            item_writes.append(
+                f"{I}{_element_writer_name(item_type_anno, f'v{i + 1}')}"
+                f"(that.item{i + 1}(), writer);"
+            )
 
-def _generate_serialize_primitive_property_as_content(
-    prop: intermediate.Property,
-) -> Stripped:
-    """Generate the serialization of the primitive-type ``prop`` as XML content."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
+        joined_item_writes = "\n".join(item_writes)
 
-    a_type = intermediate.try_primitive_type(type_anno)
-    assert (
-        a_type is not None
-    ), f"Unexpected non-primitive type of the property {prop.name!r}: {type_anno}"
-
-    getter_name = java_naming.getter_name(prop.name)
-    xml_prop_name_literal = java_common.string_literal(prop.xml_name)
-
-    content_serializer: Stripped
-
-    if (
-        a_type is intermediate.PrimitiveType.BOOL
-        or a_type is intermediate.PrimitiveType.INT
-        or a_type is intermediate.PrimitiveType.FLOAT
-        or a_type is intermediate.PrimitiveType.STR
-    ):
-        content_serializer = Stripped("this::writeStringifiedContent")
-    elif a_type is intermediate.PrimitiveType.BYTEARRAY:
-        content_serializer = Stripped("this::writeByteArrayContent")
+        body = Stripped(
+            f"""\
+int index = 0;
+try {{
+{joined_item_writes}
+}} catch (_SerializeFailure failure) {{
+{I}failure.getError().prependSegment(
+{II}new Reporting.IndexSegment(index));
+{I}throw failure;
+}}"""
+        )
     else:
-        assert_never(a_type)
+        assert isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+            type_anno.our_type, intermediate.Enumeration
+        ), f"Expected an enumeration, but got: {type_anno}"
 
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        return Stripped(
-            f"""\
-if (that.{getter_name}().isPresent()) {{
-{I}serializeElement(
-{II}{xml_prop_name_literal},
-{II}that.{getter_name}().get(),
-{II}writer,
-{II}{indent_but_first_line(content_serializer, II)});
-}}"""
-        )
+        body = Stripped("writer.writeCharacters(Stringification.mustToString(that));")
+        throws = " throws XMLStreamException"
 
     return Stripped(
         f"""\
-serializeElement(
-{I}{xml_prop_name_literal},
-{I}that.{getter_name}(),
-{I}writer,
-{I}{indent_but_first_line(content_serializer, I)});"""
-    )
-
-
-def _generate_serialize_enumeration_property_as_content(
-    prop: intermediate.Property,
-) -> Stripped:
-    """Generate the serialization of an enumeration ``prop`` as XML content."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-    assert isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
-        type_anno.our_type, intermediate.Enumeration
-    ), (
-        f"This function is expected to be called only for a property whose "
-        f"(optional-stripped) type is an enumeration, since the caller "
-        f"(_generate_serialize_property_as_content) already dispatches on "
-        f"intermediate.Enumeration before invoking us, but the property "
-        f"{prop.name!r} has the type {prop.type_annotation}."
-    )
-
-    write_content_method = java_naming.method_name(
-        Identifier(f"write_{type_anno.our_type.name}_content")
-    )
-
-    getter_name = java_naming.getter_name(prop.name)
-    xml_prop_name_literal = java_common.string_literal(prop.xml_name)
-
-    content_serializer = Stripped(f"this::{write_content_method}")
-
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        return Stripped(
-            f"""\
-if (that.{getter_name}().isPresent()) {{
-{I}serializeElement(
-{II}{xml_prop_name_literal},
-{II}that.{getter_name}().get(),
-{II}writer,
-{II}{indent_but_first_line(content_serializer, II)});
+private static void {name}(
+{I}{indent_but_first_line(value_type, I)} that,
+{I}XMLStreamWriter writer){throws} {{
+{I}{indent_but_first_line(body, I)}
 }}"""
-        )
+    )
+
+
+@require(lambda type_anno: not _is_instance_type(type_anno))
+def _generate_at_v_writer(
+    type_anno: intermediate.TypeAnnotationUnion, v_name: str
+) -> Stripped:
+    """Generate the function writing ``type_anno`` as a ``v``-element."""
+    name = _at_v_writer_name(type_anno, v_name)
+    value_type = java_common.generate_type(type_anno)
+    v_name_literal = java_common.string_literal(v_name)
+    content_writer = _content_writer_reference(type_anno)
 
     return Stripped(
         f"""\
-serializeElement(
-{I}{xml_prop_name_literal},
-{I}that.{getter_name}(),
-{I}writer,
-{I}{indent_but_first_line(content_serializer, I)});"""
+private static void {name}(
+{I}{indent_but_first_line(value_type, I)} that,
+{I}XMLStreamWriter writer) {{
+{I}writeElement(
+{II}{v_name_literal},
+{II}that,
+{II}writer,
+{II}{content_writer});
+}}"""
     )
 
 
-def _generate_serialize_polymorphic_property_as_content(
-    prop: intermediate.Property,
-) -> Stripped:
-    """
-    Generate the serialization of a polymorphic property as XML content.
+# endregion
 
-    A property is polymorphic here if the element to write is picked at
-    run-time from the value itself, dispatched through its own discriminator
-    element -- this is the case both for an interface-typed property (either
-    an abstract class or a concrete class with concrete descendants) and for
-    a named union, so we treat them uniformly.
-    """
+# region Serialization of a class
+
+
+def _generate_serialize_property(prop: intermediate.Property) -> Stripped:
+    """Generate the snippet writing the property ``prop`` as an XML element."""
     type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-    # fmt: off
-    assert (
-        isinstance(type_anno, intermediate.OurTypeAnnotation)
-        and (
-            isinstance(
-                type_anno.our_type,
-                (intermediate.AbstractClass, intermediate.NamedUnion),
-            )
-            or (
-                isinstance(type_anno.our_type, intermediate.ConcreteClass)
-                and len(type_anno.our_type.concrete_descendants) > 0
-            )
-        )
-    ), (
-        f"This function is expected to be called only for a property whose "
-        f"(optional-stripped) type requires polymorphic dispatch through "
-        f"a Java interface, *i.e.*, either an abstract class, a concrete "
-        f"class with concrete descendants, or a named union, since the "
-        f"caller (_generate_serialize_property_as_content) already "
-        f"dispatches on that before invoking us, but the property "
-        f"{prop.name!r} has the type {prop.type_annotation}."
-    )
-    # fmt: on
-
-    getter_name = java_naming.getter_name(prop.name)
-    xml_prop_name_literal = java_common.string_literal(prop.xml_name)
 
     # NOTE (mristin):
-    # A named union has its own ``visit`` overload in the visitor (see
-    # :py:func:`_generate_union_visit_helper`), so ``this::visit`` binds
-    # to it exactly as it binds to the inherited ``IClass``-typed overload
-    # for a class-typed property.
-    content_serializer = Stripped("this::visit")
-
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        return Stripped(
-            f"""\
-if (that.{getter_name}().isPresent()) {{
-{I}serializeElement(
-{II}{xml_prop_name_literal},
-{II}that.{getter_name}().get(),
-{II}writer,
-{II}{indent_but_first_line(content_serializer, II)});
-}}"""
-        )
-
-    return Stripped(
-        f"""\
-serializeElement(
-{I}{xml_prop_name_literal},
-{I}that.{getter_name}(),
-{I}writer,
-{I}{indent_but_first_line(content_serializer, I)});"""
+    # Every property kind is written by the very same call -- only the
+    # content writer differs, and the type of the property alone picks it.
+    function_name = (
+        "writeOptionalProperty"
+        if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
+        else "writeProperty"
     )
 
-
-def _generate_serialize_concrete_class_property_as_sequence(
-    prop: intermediate.Property,
-) -> Stripped:
-    """Generate the serialization of the class ``prop`` as a sequence of properties."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-    assert isinstance(type_anno, intermediate.OurTypeAnnotation)
-    assert isinstance(type_anno.our_type, intermediate.ConcreteClass)
-
-    cls_to_sequence = java_naming.method_name(
-        Identifier(f"{type_anno.our_type.name}_to_sequence")
-    )
-
-    getter_name = java_naming.getter_name(prop.name)
     xml_prop_name_literal = java_common.string_literal(prop.xml_name)
-
-    content_serializer = Stripped(f"(value, w) -> this.{cls_to_sequence}(value, w)")
-
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        return Stripped(
-            f"""\
-if (that.{getter_name}().isPresent()) {{
-{I}serializeElement(
-{II}{xml_prop_name_literal},
-{II}that.{getter_name}().get(),
-{II}writer,
-{II}{indent_but_first_line(content_serializer, II)});
-}}"""
-        )
-
-    return Stripped(
-        f"""\
-serializeElement(
-{I}{xml_prop_name_literal},
-{I}that.{getter_name}(),
-{I}writer,
-{I}{indent_but_first_line(content_serializer, I)});"""
-    )
-
-
-def _generate_serialize_tuple_helper(arity: int) -> Stripped:
-    """Generate the generic helper to serialize a tuple as XML content."""
-    type_params = [f"T{i + 1}" for i in range(arity)]
-    tuple_type = f"Tuple{arity}<{', '.join(type_params)}>"
-
-    param_lines = [
-        f"ElementContentSerializer<T{i + 1}> writeItem{i + 1}" for i in range(arity)
-    ]
-
-    writer = io.StringIO()
-    writer.write(
-        f"""\
-/**
- * Adapt {{@code writeItem1}}, ..., {{@code writeItem{arity}}} to serialize a
- * tuple of {arity} item(s), each writing itself (whether wrapped in its own
- * positional element or dispatched through its own natural element tag, as
- * decided by the caller -- see {{@link #asNamedElementSerializer}}).
- */
-private <{", ".join(type_params)}> ElementContentSerializer<{tuple_type}> serializeTuple{arity}(
-"""
-    )
-    for i, param_line in enumerate(param_lines):
-        writer.write(I)
-        writer.write(param_line)
-        writer.write(",\n" if i < len(param_lines) - 1 else ") {\n")
-
-    writer.write(f"{I}return (value, w) -> {{\n")
-    for i in range(arity):
-        writer.write(f"{II}writeItem{i + 1}.serialize(value.item{i + 1}(), w);\n")
-    writer.write(f"{I}}};\n}}")
-
-    return Stripped(writer.getvalue())
-
-
-def _generate_serialize_tuple_property_as_content(
-    prop: intermediate.Property,
-) -> Stripped:
-    """Generate the serialization of a tuple ``prop`` as a sequence of elements."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-    assert isinstance(type_anno, intermediate.TupleTypeAnnotation), (
-        f"This function is expected to be called only for a property whose "
-        f"(optional-stripped) type is a tuple, since the caller "
-        f"(_generate_serialize_property_as_content) already dispatches on "
-        f"intermediate.TupleTypeAnnotation before invoking us, but the "
-        f"property {prop.name!r} has the type {prop.type_annotation}."
-    )
-
-    arity = len(type_anno.items)
-
-    item_content_serializers = []  # type: List[Stripped]
-
-    for i, item_type_anno in enumerate(type_anno.items):
-        v_name_literal = java_common.string_literal(f"v{i + 1}")
-
-        primitive_type = intermediate.try_primitive_type(item_type_anno)
-
-        item_content_serializer: Stripped
-
-        if primitive_type is not None:
-            write_content_ref: Stripped
-
-            if (
-                primitive_type is intermediate.PrimitiveType.BOOL
-                or primitive_type is intermediate.PrimitiveType.INT
-                or primitive_type is intermediate.PrimitiveType.FLOAT
-                or primitive_type is intermediate.PrimitiveType.STR
-            ):
-                write_content_ref = Stripped("this::writeStringifiedContent")
-            elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
-                write_content_ref = Stripped("this::writeByteArrayContent")
-            else:
-                assert_never(primitive_type)
-
-            item_content_serializer = Stripped(
-                f"asNamedElementSerializer({v_name_literal}, {write_content_ref})"
-            )
-        elif isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
-            item_type_anno.our_type, intermediate.Enumeration
-        ):
-            write_content_method = java_naming.method_name(
-                Identifier(f"write_{item_type_anno.our_type.name}_content")
-            )
-            item_content_serializer = Stripped(
-                f"asNamedElementSerializer({v_name_literal}, this::{write_content_method})"
-            )
-        elif isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
-            item_type_anno.our_type,
-            (
-                intermediate.AbstractClass,
-                intermediate.ConcreteClass,
-                intermediate.NamedUnion,
-            ),
-        ):
-            # NOTE (mristin):
-            # A class item is dispatched through ``this.visit``, which already
-            # matches the shape ``ElementContentSerializer<T>`` expects and
-            # writes its own natural element tag, exactly as for a class item
-            # of a list -- unlike a scalar item, it must *not* be additionally
-            # wrapped in its own ``v{i+1}`` element. A named union item is
-            # matched by its own ``visit`` overload (see
-            # :py:func:`_generate_union_visit_helper`), so it can be
-            # passed on unchanged just like a class item.
-            item_content_serializer = Stripped("this::visit")
-        else:
-            raise NotImplementedError(
-                f"We only handle XML de/serialization of atomic tuple items "
-                f"(primitives, constrained primitives, enumeration literals) "
-                f"or classes, but you want to generate the code for an item of "
-                f"type {item_type_anno}. Please contact the developers if you "
-                f"need this feature."
-            )
-
-        item_content_serializers.append(item_content_serializer)
-
-    joined_item_content_serializers = ",\n".join(item_content_serializers)
-
-    content_serializer = Stripped(
-        f"""\
-serializeTuple{arity}(
-{I}{indent_but_first_line(joined_item_content_serializers, I)})"""
-    )
-
     getter_name = java_naming.getter_name(prop.name)
-    xml_prop_name_literal = java_common.string_literal(prop.xml_name)
-
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        return Stripped(
-            f"""\
-if (that.{getter_name}().isPresent()) {{
-{I}serializeElement(
-{II}{xml_prop_name_literal},
-{II}that.{getter_name}().get(),
-{II}writer,
-{II}{indent_but_first_line(content_serializer, II)});
-}}"""
-        )
+    content_writer = _content_writer_reference(type_anno)
 
     return Stripped(
         f"""\
-serializeElement(
+{function_name}(
 {I}{xml_prop_name_literal},
 {I}that.{getter_name}(),
 {I}writer,
-{I}{indent_but_first_line(content_serializer, I)});"""
+{I}{content_writer});"""
     )
 
 
-def _generate_serialize_list_property_as_content(
-    prop: intermediate.Property,
-) -> Stripped:
-    """Generate the serialization of a list ``prop`` as a sequence of elements."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
+def _generate_class_as_sequence(cls: intermediate.ConcreteClass) -> Stripped:
+    """Generate the function writing ``cls`` as a sequence of property elements."""
+    blocks = [_generate_serialize_property(prop=prop) for prop in cls.properties]
 
-    assert isinstance(type_anno, intermediate.ListTypeAnnotation), (
-        f"This function is expected to be called only for a property whose "
-        f"(optional-stripped) type is a list, since the caller "
-        f"(_generate_serialize_property_as_content) already dispatches on "
-        f"intermediate.ListTypeAnnotation before invoking us, but the "
-        f"property {prop.name!r} has the type {prop.type_annotation}."
-    )
-
-    primitive_type = intermediate.try_primitive_type(type_anno.items)
-
-    content_serializer: Stripped
-
-    if primitive_type is not None:
-        item_content_method_ref: Stripped
-
-        if (
-            primitive_type is intermediate.PrimitiveType.BOOL
-            or primitive_type is intermediate.PrimitiveType.INT
-            or primitive_type is intermediate.PrimitiveType.FLOAT
-            or primitive_type is intermediate.PrimitiveType.STR
-        ):
-            item_content_method_ref = Stripped("this::writeStringifiedContent")
-        elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
-            item_content_method_ref = Stripped("this::writeByteArrayContent")
-        else:
-            assert_never(primitive_type)
-
-        # NOTE (mristin):
-        # An atomic item is wrapped in its own ``v`` element, exactly like a
-        # standalone atomic property is wrapped in its own named element --
-        # so we reuse ``asNamedElementSerializer`` and the same
-        # content-writing method reference for both.
-        content_serializer = Stripped(
-            f"""\
-serializeItems(asNamedElementSerializer("v", {item_content_method_ref}))"""
-        )
-    elif isinstance(type_anno.items, intermediate.OurTypeAnnotation) and isinstance(
-        type_anno.items.our_type, intermediate.Enumeration
-    ):
-        write_content_method = java_naming.method_name(
-            Identifier(f"write_{type_anno.items.our_type.name}_content")
-        )
-
-        content_serializer = Stripped(
-            f"""\
-serializeItems(asNamedElementSerializer("v", this::{write_content_method}))"""
-        )
-    elif isinstance(type_anno.items, intermediate.OurTypeAnnotation) and isinstance(
-        type_anno.items.our_type,
-        (
-            intermediate.AbstractClass,
-            intermediate.ConcreteClass,
-            intermediate.NamedUnion,
-        ),
-    ):
-        # NOTE (mristin):
-        # A class item is dispatched through ``this.visit``, which already
-        # matches the shape ``ElementContentSerializer<T>`` expects, so we
-        # pass it directly as a method reference instead of wrapping it in
-        # a lambda. A named union item is matched by its own ``visit``
-        # overload (see :py:func:`_generate_union_visit_helper`), so it
-        # can be passed on unchanged just like a class item.
-        content_serializer = Stripped("serializeItems(this::visit)")
-    else:
-        raise NotImplementedError(
-            f"We only handle XML de/serialization of lists containing atomic "
-            f"values (primitives, constrained primitives, enumeration literals) "
-            f"or classes, but you want to generate the code for a list of "
-            f"type {type_anno}. Please contact the developers if you need "
-            f"this feature."
-        )
-
-    getter_name = java_naming.getter_name(prop.name)
-    xml_prop_name_literal = java_common.string_literal(prop.xml_name)
-
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        return Stripped(
-            f"""\
-if (that.{getter_name}().isPresent()) {{
-{I}serializeElement(
-{II}{xml_prop_name_literal},
-{II}that.{getter_name}().get(),
-{II}writer,
-{II}{indent_but_first_line(content_serializer, II)});
-}}"""
-        )
-
-    return Stripped(
-        f"""\
-serializeElement(
-{I}{xml_prop_name_literal},
-{I}that.{getter_name}(),
-{I}writer,
-{I}{indent_but_first_line(content_serializer, I)});"""
-    )
-
-
-def _generate_serialize_property_as_content(prop: intermediate.Property) -> Stripped:
-    """Generate the code to serialize the ``prop`` as content of an XML element."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-    body = None  # type: Optional[Stripped]
-
-    if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
-        body = _generate_serialize_primitive_property_as_content(prop=prop)
-    elif isinstance(type_anno, intermediate.OurTypeAnnotation):
-        our_type = type_anno.our_type
-
-        if isinstance(our_type, intermediate.Enumeration):
-            body = _generate_serialize_enumeration_property_as_content(prop=prop)
-
-        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-            body = _generate_serialize_primitive_property_as_content(prop=prop)
-
-        elif isinstance(
-            our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
-        ):
-            if (
-                isinstance(our_type, intermediate.AbstractClass)
-                or len(our_type.concrete_descendants) > 0
-            ):
-                body = _generate_serialize_polymorphic_property_as_content(prop=prop)
-            else:
-                body = _generate_serialize_concrete_class_property_as_sequence(
-                    prop=prop
-                )
-
-        elif isinstance(our_type, intermediate.NamedUnion):
-            body = _generate_serialize_polymorphic_property_as_content(prop=prop)
-
-        else:
-            assert_never(our_type)
-
-    elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        body = _generate_serialize_list_property_as_content(prop=prop)
-
-    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        body = _generate_serialize_tuple_property_as_content(prop=prop)
-
-    else:
-        assert_never(type_anno)
-
-    return body
-
-
-def _generate_class_to_sequence(cls: intermediate.ConcreteClass) -> Stripped:
-    """Generate the method to write ``cls`` as a sequence of properties as XML."""
-    blocks = []  # type: List[Stripped]
-
-    for prop in cls.properties:
-        body = _generate_serialize_property_as_content(prop=prop)
-        blocks.append(body)
-
-    interface_name = java_naming.interface_name(cls.name)
-    method_name = java_naming.method_name(Identifier(f"{cls.name}_to_sequence"))
-
-    writer = io.StringIO()
-
-    if len(cls.properties) == 0:
+    if len(blocks) == 0:
         blocks.append(Stripped("// Intentionally empty."))
 
+    interface_name = java_naming.interface_name(cls.name)
+    name = _as_sequence_name(cls)
+
+    writer = io.StringIO()
     writer.write(
         f"""\
-private void {method_name}(
+private static void {name}(
 {I}{interface_name} that,
 {I}XMLStreamWriter writer) {{
 """
@@ -2568,73 +2490,28 @@ private void {method_name}(
 
 
 def _generate_visit_for_class(cls: intermediate.ConcreteClass) -> Stripped:
-    """Generate the method to write the ``cls`` as an XML element."""
+    """Generate the method writing the ``cls`` as its own XML element."""
     interface_name = java_naming.interface_name(cls.name)
     visit_name = java_naming.method_name(Identifier(f"visit_{cls.name}"))
-
-    cls_to_sequence_name = java_naming.method_name(
-        Identifier(f"{cls.name}_to_sequence")
-    )
-
     xml_cls_name_literal = java_common.string_literal(naming.xml_class_name(cls.name))
 
-    writer = io.StringIO()
-
-    writer.write(
+    return Stripped(
         f"""\
 @Override
 public void {visit_name}(
 {I}{interface_name} that,
 {I}XMLStreamWriter writer) {{
-{I}try {{
-{II}writer.writeStartElement(
-{III}{xml_cls_name_literal});
-{II}if (topLevel) {{
-{III}writer.writeNamespace("xmlns", AAS_NAME_SPACE);
-{III}topLevel = false;
-{II}}}
-{II}this.{cls_to_sequence_name}(
-{III}that,
-{III}writer);
-{II}writer.writeEndElement();
-{I}}} catch (XMLStreamException exception) {{
-{II}throw new SerializeException("", exception.getMessage());
-{I}}}
+{I}writeElement(
+{II}{xml_cls_name_literal},
+{II}that,
+{II}writer,
+{II}withNamespace,
+{II}{_VISITOR_NAME}::{_as_sequence_name(cls)});
 }}"""
     )
 
-    return Stripped(writer.getvalue())
 
-
-def _generate_union_visit_helper() -> Stripped:
-    """
-    Generate a single ``visit`` overload shared by every named union.
-
-    A named union is not itself an ``IClass``, so it can not be dispatched by
-    the inherited, ``IClass``-typed ``visit(IClass, XMLStreamWriter)``
-    overload of ``AbstractVisitorWithContext``. We add this overload,
-    single-purpose, so that call sites can keep passing ``this::visit``
-    around as a plain method reference or calling it directly, regardless of
-    whether the value at hand is a class instance or a named union.
-
-    Dispatching over the common ``IUnion<?>`` (see ``_generate_iunion`` in
-    ``_generate_types.py``) instead of the union's own type means we need
-    only this one overload for *all* named unions, not one per union.
-
-    Should a named union ever be allowed to flatten primitive or enumeration
-    alternatives, only the body of this method has to change (to dispatch on
-    the underlying value's kind) -- every call site stays the same.
-    """
-    return Stripped(
-        f"""\
-private void visit(
-{I}IUnion<?> that,
-{I}XMLStreamWriter writer) {{
-{I}this.visit(
-{II}that.getUnderlying(),
-{II}writer);
-}}"""
-    )
+# endregion
 
 
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -2645,55 +2522,88 @@ def _generate_visitor(
     """Generate a visitor which serializes instances of the meta-model to XML."""
     errors = []  # type: List[Error]
 
+    # NOTE (mristin):
+    # The reading and the writing are composed out of the same shapes, so
+    # the very same gating pass answers for both.
+    needed = _collect_needed(symbol_table)
+
+    write_classes, write_unions = _collect_dispatching_writers(symbol_table)
+
     blocks = [
-        _generate_serialize_element(),
-        _generate_serialize_items(),
-        _generate_as_named_element_serializer(),
-        _generate_write_stringified_content(),
-        _generate_write_byte_array_content(),
+        _generate_visitors(with_nested=write_classes),
+        _generate_content_writer_interface(),
+        _generate_write_element(),
     ]  # type: List[Stripped]
 
-    for enumeration in symbol_table.enumerations:
-        blocks.append(_generate_write_enum_content(enumeration=enumeration))
+    if any(len(cls.properties) > 0 for cls in symbol_table.concrete_classes):
+        blocks.append(_generate_write_property())
 
-    for arity in intermediate.tuple_arities(symbol_table):
-        blocks.append(_generate_serialize_tuple_helper(arity=arity))
+    if any(
+        isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
+        for cls in symbol_table.concrete_classes
+        for prop in cls.properties
+    ):
+        blocks.append(_generate_write_optional_property())
+
+    if write_classes:
+        blocks.append(_generate_write_class())
+
+    if write_unions:
+        blocks.append(_generate_write_union())
+
+    written_primitives = set()  # type: Set[intermediate.PrimitiveType]
+    for type_anno in needed.content_readers.values():
+        primitive_type = intermediate.try_primitive_type(type_anno)
+        if primitive_type is not None:
+            written_primitives.add(primitive_type)
+
+    if any(
+        primitive_type is not intermediate.PrimitiveType.BYTEARRAY
+        for primitive_type in written_primitives
+    ):
+        blocks.append(_generate_write_stringified_content())
+
+    if intermediate.PrimitiveType.BYTEARRAY in written_primitives:
+        blocks.append(_generate_write_byte_array_content())
+
+    for type_anno in needed.content_readers.values():
+        if intermediate.try_primitive_type(type_anno) is not None:
+            continue
+
+        blocks.append(_generate_content_writer(type_anno))
+
+    for type_anno, v_name in needed.at_v_readers.values():
+        blocks.append(_generate_at_v_writer(type_anno, v_name))
 
     # The abstract classes are directly dispatched by the transformer,
     # so we do not need to handle them separately.
 
     for cls in symbol_table.concrete_classes:
         if cls.is_implementation_specific:
-            implementation_keys = [
-                specific_implementations.ImplementationKey(
-                    f"Xmlization/VisitorWithWriter/visit_{cls.name}.java"
-                ),
-                specific_implementations.ImplementationKey(
-                    f"Xmlization/VisitorWithWriter/{cls.name}_to_sequence.java"
-                ),
-            ]
+            implementation_key = specific_implementations.ImplementationKey(
+                f"Xmlization/VisitorWithWriter/{cls.name}_to_sequence.java"
+            )
 
-            for implementation_key in implementation_keys:
-                implementation = spec_impls.get(implementation_key, None)
-                if implementation is None:
-                    errors.append(
-                        Error(
-                            cls.parsed.node,
-                            f"The xmlization snippet is missing "
-                            f"for the implementation-specific "
-                            f"class {cls.name}: {implementation_key}",
-                        )
+            implementation = spec_impls.get(implementation_key, None)
+            if implementation is None:
+                errors.append(
+                    Error(
+                        cls.parsed.node,
+                        f"The xmlization snippet is missing "
+                        f"for the implementation-specific "
+                        f"class {cls.name}: {implementation_key}",
                     )
-                    continue
+                )
+                continue
 
-                blocks.append(spec_impls[implementation_key])
+            blocks.append(implementation)
         else:
-            blocks.append(_generate_class_to_sequence(cls=cls))
+            blocks.append(_generate_class_as_sequence(cls=cls))
 
-            blocks.append(_generate_visit_for_class(cls=cls))
-
-    if len(symbol_table.named_unions) > 0:
-        blocks.append(_generate_union_visit_helper())
+        # NOTE (mristin):
+        # Writing the element around the sequence is the same for every
+        # class, implementation-specific or not, so it is never snippeted.
+        blocks.append(_generate_visit_for_class(cls=cls))
 
     if len(errors) > 0:
         return None, errors
@@ -2704,10 +2614,8 @@ def _generate_visitor(
 /**
  * Serialize recursively the instances as XML elements.
  */
-static class _VisitorWithWriter
+static class {_VISITOR_NAME}
 {I}extends AbstractVisitorWithContext<XMLStreamWriter> {{
-
-{I}private boolean topLevel = true;
 
 """
     )
@@ -2731,13 +2639,42 @@ def _generate_serialize(
             f"""\
 /**
  * Serialize an instance of the meta-model to XML.
+ *
+ * <p>{{@code writer}} is flushed exactly once, here at the end. Nothing is
+ * flushed in-between, which is what lets {{@link XMLStreamWriter}} buffer,
+ * and the single flush at the end is what lets a failure of the underlying
+ * stream be reported as a {{@link SerializeException}} from this method --
+ * were it left to the caller, the failure would surface at their own flush,
+ * after the serialization has long returned.
+ *
+ * <p>The path of a {{@link SerializeException}} is rendered as a relative
+ * XPath, the same spelling the de-serialization reports, and names
+ * the properties and the list indices leading to the culprit --
+ * {{@code submodelElements/*[0]/value}}. Two things it deliberately does not
+ * name: the outermost element, since this method takes any
+ * {{@link IClass}} and the name would say nothing the caller does not
+ * already know; and the discriminator element of a polymorphic property,
+ * which the de-serialization does prepend. The de-serialization is pointing
+ * into a document it is reading, where that element is a real extra level;
+ * this is pointing into the instance the caller handed over, where it is
+ * not -- {{@code value/idShort}} here is exactly
+ * {{@code getValue().getIdShort()}}.
  */
 public static void to(
 {I}IClass that,
 {I}XMLStreamWriter writer) throws SerializeException {{
-{I}_VisitorWithWriter visitor = new _VisitorWithWriter();
-{I}visitor.visit(
-{II}that, writer);
+{I}try {{
+{II}{_VISITOR_NAME}.ROOT.visit(
+{III}that, writer);
+{II}writer.flush();
+{I}}} catch (XMLStreamException exception) {{
+{II}throw new SerializeException("", exception.getMessage());
+{I}}} catch (_SerializeFailure failure) {{
+{II}final Reporting.Error error = failure.getError();
+{II}throw new SerializeException(
+{III}Reporting.generateRelativeXPath(error.getPathSegments()),
+{III}error.getCause());
+{I}}}
 }}"""
         ),
     ]  # type: List[Stripped]
@@ -2929,6 +2866,30 @@ public class Xmlization {{
 
 {II}public Optional<String> getReason() {{
 {III}return Optional.ofNullable(reason);
+{II}}}
+{I}}}
+
+{I}/**
+{I} * Signal a failure of the serialization, carrying the path to the culprit.
+{I} *
+{I} * <p>The path is built as the stack unwinds -- every container prepends
+{I} * the one segment it knows, the property its name and the list the index
+{I} * of the item -- which is why this can not be a
+{I} * {{@link SerializeException}} already: that one renders its message in
+{I} * its constructor, so its path has to be complete by then.
+{I} * {{@link Serialize#to}} renders and converts.
+{I} */
+{I}@SuppressWarnings("serial")
+{I}private static class _SerializeFailure extends RuntimeException {{
+{II}private final Reporting.Error error;
+
+{II}_SerializeFailure(Reporting.Error error) {{
+{III}super(error.getCause());
+{III}this.error = error;
+{II}}}
+
+{II}Reporting.Error getError() {{
+{III}return error;
 {II}}}
 {I}}}
 
