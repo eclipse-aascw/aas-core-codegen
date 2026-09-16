@@ -1,7 +1,7 @@
 """Generate code for XML de/serialization."""
 
 import io
-from typing import Tuple, Optional, List, Dict
+from typing import Tuple, Optional, List, Dict, Sequence
 
 from icontract import ensure, require
 
@@ -29,25 +29,46 @@ from aas_core_codegen.typescript.common import (
 # region De-serialization
 
 
-_PARSE_FUNCTION_BY_PRIMITIVE_TYPE = {
-    intermediate.PrimitiveType.BOOL: Identifier("parseBooleanText"),
-    intermediate.PrimitiveType.INT: Identifier("parseIntegerText"),
-    intermediate.PrimitiveType.FLOAT: Identifier("parseFloatText"),
-    intermediate.PrimitiveType.STR: Identifier("parseStringText"),
-    intermediate.PrimitiveType.BYTEARRAY: Identifier("parseBase64EncodedBytesText"),
+_CONTENT_PARSER_BY_PRIMITIVE_TYPE = {
+    intermediate.PrimitiveType.BOOL: Identifier("parseBooleanContent"),
+    intermediate.PrimitiveType.INT: Identifier("parseIntegerContent"),
+    intermediate.PrimitiveType.FLOAT: Identifier("parseFloatContent"),
+    intermediate.PrimitiveType.STR: Identifier("parseStringContent"),
+    intermediate.PrimitiveType.BYTEARRAY: Identifier("parseBase64EncodedBytesContent"),
+}
+
+#: Moniker of a primitive type, for the name of a composed parser, see
+#: :py:func:`_atomic_moniker`
+_MONIKER_BY_PRIMITIVE_TYPE = {
+    intermediate.PrimitiveType.BOOL: Identifier("Bool"),
+    intermediate.PrimitiveType.INT: Identifier("Int"),
+    intermediate.PrimitiveType.FLOAT: Identifier("Float"),
+    intermediate.PrimitiveType.STR: Identifier("Str"),
+    intermediate.PrimitiveType.BYTEARRAY: Identifier("Bytes"),
 }
 
 
-def _generate_parse_text_for_primitive_type(
+def _generate_parse_content_for_primitive_type(
     primitive_type: intermediate.PrimitiveType,
 ) -> Stripped:
-    """Generate parser for a primitive XML text representation."""
+    """
+    Generate the parser of the content of an element holding a primitive value.
+
+    The text is read and validated in the very same function. We deliberately do not
+    split the two: the element of a primitive is by far the commonest thing to parse,
+    and a text parser of its own would be called from nowhere else -- a list item and
+    a tuple item go through ``parseNamedElement``, which is given this parser.
+    """
+    function_name = _CONTENT_PARSER_BY_PRIMITIVE_TYPE[primitive_type]
+
     if primitive_type is intermediate.PrimitiveType.BOOL:
         return Stripped(
             f"""\
-function parseBooleanText(
-{I}text: string
+function {function_name}(
+{I}cursor: XmlCursor
 ): AasCommon.Either<boolean, DeserializationError> {{
+{I}const text = parseTextContent(cursor);
+
 {I}if (text === "true" || text === "1") {{
 {II}return new AasCommon.Either<boolean, DeserializationError>(true, null);
 {I}}}
@@ -64,9 +85,11 @@ function parseBooleanText(
     elif primitive_type is intermediate.PrimitiveType.INT:
         return Stripped(
             f"""\
-function parseIntegerText(
-{I}text: string
+function {function_name}(
+{I}cursor: XmlCursor
 ): AasCommon.Either<number, DeserializationError> {{
+{I}const text = parseTextContent(cursor);
+
 {I}if (!/^[+-]?\\d+$/.test(text)) {{
 {II}return newDeserializationError<number>(
 {III}`Expected integer text, but got: ${{text}}`
@@ -87,9 +110,11 @@ function parseIntegerText(
     elif primitive_type is intermediate.PrimitiveType.FLOAT:
         return Stripped(
             f"""\
-function parseFloatText(
-{I}text: string
+function {function_name}(
+{I}cursor: XmlCursor
 ): AasCommon.Either<number, DeserializationError> {{
+{I}const text = parseTextContent(cursor);
+
 {I}if (text === "INF") {{
 {II}return new AasCommon.Either<number, DeserializationError>(Infinity, null);
 {I}}}
@@ -114,20 +139,23 @@ function parseFloatText(
     elif primitive_type is intermediate.PrimitiveType.STR:
         return Stripped(
             f"""\
-function parseStringText(
-{I}text: string
+function {function_name}(
+{I}cursor: XmlCursor
 ): AasCommon.Either<string, DeserializationError> {{
-{I}return new AasCommon.Either<string, DeserializationError>(text, null);
+{I}return new AasCommon.Either<string, DeserializationError>(
+{II}parseTextContent(cursor),
+{II}null
+{I});
 }}"""
         )
 
     elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
         return Stripped(
             f"""\
-function parseBase64EncodedBytesText(
-{I}text: string
+function {function_name}(
+{I}cursor: XmlCursor
 ): AasCommon.Either<Uint8Array, DeserializationError> {{
-{I}const decodedOrError = AasCommon.base64Decode(text);
+{I}const decodedOrError = AasCommon.base64Decode(parseTextContent(cursor));
 {I}if (decodedOrError.error !== null) {{
 {II}return newDeserializationError<Uint8Array>(
 {III}decodedOrError.error
@@ -145,42 +173,81 @@ function parseBase64EncodedBytesText(
         assert_never(primitive_type)
 
 
-def _parse_function_for_atomic_type(
-    type_annotation: intermediate.AtomicTypeAnnotation,
+#: Maximum length of a line of the generated code, in columns
+#:
+#: This is deliberately well above the ``printWidth`` of 88 which the Prettier
+#: configuration sets. The consuming project runs Prettier over the generated code,
+#: so neither spelling is the "wrong" one, and this is only about keeping what we
+#: record readable: breaking a call of three short arguments over five lines costs far
+#: more, at the hundreds of property sites, than the long line saves.
+_MAX_LINE_LENGTH = 100
+
+
+def _join_call_arguments(
+    callee: str, arguments: Sequence[str], columns: int
+) -> Stripped:
+    """
+    Render the call to the ``callee`` with the ``arguments``.
+
+    The ``callee`` is the whole expression in front of the parenthesis, so it carries
+    the explicit type arguments of a generic function as well. The ``columns`` are
+    the columns already taken on the line before the call -- the indention plus
+    whatever precedes it, such as ``return ``. The arguments go on the same line as
+    the ``callee`` if the call fits in :py:attr:`_MAX_LINE_LENGTH` columns, and one
+    argument per line otherwise.
+    """
+    joined = ", ".join(arguments)
+
+    if columns + len(callee) + len("(") + len(joined) + len(");") <= _MAX_LINE_LENGTH:
+        return Stripped(f"{callee}({joined})")
+
+    arguments_joined = ",\n".join(f"{I}{argument}" for argument in arguments)
+    return Stripped(
+        f"""\
+{callee}(
+{arguments_joined}
+)"""
+    )
+
+
+def _content_parser_name_for_enumeration(
+    enumeration: intermediate.Enumeration,
 ) -> Identifier:
-    """Resolve the generated parse helper for an atomic XML text value."""
-    if isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
-        return _PARSE_FUNCTION_BY_PRIMITIVE_TYPE[type_annotation.a_type]
+    """Give out the name of the parser of an ``enumeration`` literal."""
+    return typescript_naming.function_name(
+        Identifier(f"parse_{enumeration.name}_content")
+    )
 
-    elif isinstance(type_annotation, intermediate.OurTypeAnnotation):
-        our_type = type_annotation.our_type
 
-        # NOTE (mristin):
-        # A class or a named union is never de-serialized as an atomic text
-        # value -- it always dispatches on the local name of the XML element,
-        # see :py:func:`_parse_atomic_property`.
-        assert not isinstance(
-            our_type,
-            (
-                intermediate.AbstractClass,
-                intermediate.ConcreteClass,
-                intermediate.NamedUnion,
-            ),
-        )
+def _generate_parse_content_for_enumeration(
+    enumeration: intermediate.Enumeration,
+) -> Stripped:
+    """
+    Generate the parser of the content of an element holding a literal.
 
-        if isinstance(our_type, intermediate.Enumeration):
-            return typescript_naming.function_name(
-                Identifier(f"parse_{our_type.name}_text")
-            )
+    The work is done by the shared ``parseEnumerationContent``, which is given
+    the ``fromString`` of the stringification module -- the lookup lives there
+    already, and the only thing this function adds is the name of
+    the enumeration for the error message.
+    """
+    enum_name = typescript_naming.enum_name(enumeration.name)
+    function_name = _content_parser_name_for_enumeration(enumeration)
+    from_string_function = typescript_naming.function_name(
+        Identifier(f"{enumeration.name}_from_string")
+    )
 
-        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-            return _PARSE_FUNCTION_BY_PRIMITIVE_TYPE[our_type.constrainee]
-
-        else:
-            assert_never(our_type)
-
-    else:
-        assert_never(type_annotation)
+    return Stripped(
+        f"""\
+function {function_name}(
+{I}cursor: XmlCursor
+): AasCommon.Either<AasTypes.{enum_name}, DeserializationError> {{
+{I}return parseEnumerationContent(
+{II}cursor,
+{II}{typescript_common.string_literal(enum_name)},
+{II}AasStringification.{from_string_function}
+{I});
+}}"""
+    )
 
 
 def _parse_sequence_function_name_for_concrete_class(
@@ -192,42 +259,11 @@ def _parse_sequence_function_name_for_concrete_class(
     The function assumes that the opening tag has been already read and parses
     only the properties, breaking (without consuming) at the closing tag. The
     caller is responsible for reading the opening tag beforehand and consuming
-    the closing tag afterwards.
+    the closing tag afterwards -- which is exactly the contract of
+    a ``ContentParser``, so this function needs no wrapper to serve as one.
     """
     return typescript_naming.function_name(
         Identifier(f"parse_{cls.name}_from_sequence")
-    )
-
-
-def _generate_parse_text_as_enumeration(
-    enumeration: intermediate.Enumeration,
-) -> Stripped:
-    """Generate parser for text representation of an enumeration literal."""
-    enum_name = typescript_naming.enum_name(enumeration.name)
-    parse_function_name = typescript_naming.function_name(
-        Identifier(f"parse_{enumeration.name}_text")
-    )
-    from_string_function = typescript_naming.function_name(
-        Identifier(f"{enumeration.name}_from_string")
-    )
-
-    return Stripped(
-        f"""\
-function {parse_function_name}(
-{I}text: string
-): AasCommon.Either<AasTypes.{enum_name}, DeserializationError> {{
-{I}const literal = AasStringification.{from_string_function}(text);
-{I}if (literal === null) {{
-{II}return newDeserializationError<AasTypes.{enum_name}>(
-{III}`Unexpected literal of {enum_name}: ${{text}}`
-{II});
-{I}}}
-
-{I}return new AasCommon.Either<AasTypes.{enum_name}, DeserializationError>(
-{II}literal,
-{II}null
-{I});
-}}"""
     )
 
 
@@ -249,247 +285,415 @@ def _dispatch_parse_element_function_name_for_named_union(
     )
 
 
-def _parse_atomic_property(
-    type_anno: intermediate.AtomicTypeAnnotation,
-) -> Tuple[Stripped, Stripped]:
+def _dispatch_map_name(name: Identifier) -> Identifier:
     """
-    Generate the statements to parse a property of an atomic (non-list, non-tuple)
-    type, and the expression of the parsed value.
+    Give out the name of the map from a local name to the parser of that element.
 
-    The closing tag of the property is *not* consumed by the generated
-    statements; the caller is expected to read and verify it afterwards, and
-    assign the returned value expression to the property's variable.
-
-    :param type_anno:
-        the property's (optional- and list/tuple-stripped) type annotation --
-        a primitive, an enumeration, or a single class/interface
-    :return: generated TS statements, and the expression of the parsed value
+    The ``name`` is the name of the interface or of the named union *as it is spelled
+    in the meta-model*, and not as it is spelled in TypeScript: the constant is
+    upper-snake-cased, and a camel-cased type name would lose its word boundaries.
     """
-    if isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
-        type_anno.our_type, intermediate.NamedUnion
-    ):
-        # NOTE (mristin):
-        # A named union has no element tag of its own, so we always dispatch
-        # on the local name of the next XML element, exactly as we do for an
-        # abstract class or a concrete class with descendants.
-        dispatch_function_name = _dispatch_parse_element_function_name_for_named_union(
-            named_union=type_anno.our_type
-        )
+    return typescript_naming.constant_name(Identifier(f"parsers_of_{name}"))
 
-        return (
-            Stripped(
-                f"""\
-const instanceOrError = {dispatch_function_name}(cursor);
-if (instanceOrError.error !== null) {{
-{I}propertyError = instanceOrError.error;
-{I}break;
-}}"""
-            ),
-            Stripped("instanceOrError.mustValue()"),
-        )
 
-    if not (
-        isinstance(type_anno, intermediate.OurTypeAnnotation)
-        and isinstance(
-            type_anno.our_type,
-            (intermediate.AbstractClass, intermediate.ConcreteClass),
-        )
-    ):
-        parse_function = _parse_function_for_atomic_type(type_anno)
-        return (
-            Stripped(
-                f"""\
-const text = parseTextContent(cursor);
+def _type_name_of_our_type(our_type: intermediate.OurType) -> Identifier:
+    """Give out the TypeScript type which the parser of ``our_type`` gives out."""
+    if isinstance(our_type, intermediate.Enumeration):
+        return typescript_naming.enum_name(our_type.name)
 
-const parsedOrError = {parse_function}(text);
-if (parsedOrError.error !== null) {{
-{I}propertyError = parsedOrError.error;
-{I}break;
-}}"""
-            ),
-            Stripped("parsedOrError.mustValue()"),
-        )
+    elif isinstance(our_type, intermediate.AbstractClass):
+        return typescript_naming.interface_name(our_type.name)
+
+    elif isinstance(our_type, intermediate.ConcreteClass):
+        return typescript_naming.class_name(our_type.name)
+
+    elif isinstance(our_type, intermediate.NamedUnion):
+        return typescript_naming.union_name(our_type.name)
+
+    elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+        raise AssertionError("Expected to handle this case before")
+
+    else:
+        assert_never(our_type)
+
+    raise AssertionError("Should not have gotten here")
+
+
+def _atomic_moniker(type_annotation: intermediate.TypeAnnotationUnion) -> Identifier:
+    """
+    Determine the moniker of the atomic ``type_annotation``.
+
+    The monikers are the parts out of which we build the names of the composed
+    parsers. A moniker never contains an underscore -- a TypeScript type name is
+    camel-cased -- so a name whose parts are separated by an underscore can always
+    be split back into its parts. The arity is spelled out in a tuple's name for
+    the same reason. The names are thus unique by construction, and we need no check
+    for collisions.
+    """
+    primitive_type = intermediate.try_primitive_type(type_annotation)
+    if primitive_type is not None:
+        return _MONIKER_BY_PRIMITIVE_TYPE[primitive_type]
+
+    assert isinstance(
+        type_annotation, intermediate.OurTypeAnnotation
+    ), f"Expected an atomic type annotation, but got: {type_annotation}"
+
+    return _type_name_of_our_type(type_annotation.our_type)
+
+
+def _is_dispatched(type_anno: intermediate.TypeAnnotationUnion) -> bool:
+    """
+    Check whether a value of ``type_anno`` is parsed by dispatching on the local name
+    of its XML element.
+
+    This is the case for an abstract class, for a concrete class with concrete
+    descendants, and for a named union -- none of them prescribes the element tag,
+    so the tag is what tells us which parser to use.
+    """
+    if not isinstance(type_anno, intermediate.OurTypeAnnotation):
+        return False
 
     our_type = type_anno.our_type
 
-    if (
-        isinstance(our_type, intermediate.ConcreteClass)
-        and len(our_type.concrete_descendants) == 0
-    ):
-        # NOTE (mristin):
-        # The concrete type is statically known, so ``{parse_sequence_function_name}``
-        # already guarantees the correct runtime type -- no dispatch, and no
-        # cast-with-null-check, is necessary.
-        parse_sequence_function_name = _parse_sequence_function_name_for_concrete_class(
-            cls=our_type
+    if isinstance(our_type, intermediate.NamedUnion):
+        return True
+
+    if isinstance(our_type, intermediate.AbstractClass):
+        return True
+
+    if isinstance(our_type, intermediate.ConcreteClass):
+        return len(our_type.concrete_descendants) > 0
+
+    return False
+
+
+def _dispatch_parse_function_name(
+    type_anno: intermediate.OurTypeAnnotation,
+) -> Identifier:
+    """Give out the dispatching parser of ``type_anno``, see :py:func:`_is_dispatched`."""
+    our_type = type_anno.our_type
+
+    if isinstance(our_type, intermediate.NamedUnion):
+        return _dispatch_parse_element_function_name_for_named_union(
+            named_union=our_type
         )
 
-        return (
-            Stripped(
-                f"""\
-const classOrError = {parse_sequence_function_name}(cursor);
-if (classOrError.error !== null) {{
-{I}propertyError = classOrError.error;
-{I}break;
-}}"""
-            ),
-            Stripped("classOrError.mustValue()"),
-        )
+    assert isinstance(
+        our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+    ), f"Expected a class, but got: {our_type}"
 
-    # NOTE (mristin):
-    # We reject an XML element of an unexpected type based on its local name
-    # alone -- see {_dispatch_parse_element_function_name.__name__} -- instead
-    # of wastefully parsing its full content only to discover the type
-    # mismatch afterwards through a runtime cast.
     assert our_type.interface is not None, (
         "Expected an interface on an abstract class, or on a concrete class "
         "with concrete descendants"
     )
 
-    dispatch_function_name = _dispatch_parse_element_function_name(our_type.interface)
-
-    return (
-        Stripped(
-            f"""\
-const instanceOrError = {dispatch_function_name}(cursor);
-if (instanceOrError.error !== null) {{
-{I}propertyError = instanceOrError.error;
-{I}break;
-}}"""
-        ),
-        Stripped("instanceOrError.mustValue()"),
-    )
+    return _dispatch_parse_element_function_name(our_type.interface)
 
 
-def _parse_list_property(
-    type_anno: intermediate.ListTypeAnnotation,
-) -> Tuple[Stripped, Stripped]:
+def _content_parser_name(
+    type_annotation: intermediate.TypeAnnotationUnion,
+) -> Identifier:
     """
-    Generate the statements to parse a property of a list type, and the
-    expression of the parsed value.
+    Give out the parser of the content of the element holding a value of
+    the ``type_annotation``.
 
-    The closing tag of the property is *not* consumed by the generated
-    statements; the caller is expected to read and verify it afterwards, and
-    assign the returned value expression to the property's variable.
+    Every parser shares the shape ``ContentParser<T>``: the opening tag has been read
+    by the caller, and the parser stops right before the corresponding closing tag.
+    Two of the five kinds need no generated parser at all, as the function which is
+    generated together with the type already wears the shape -- a class embeds its
+    properties directly, so ``parse{Cls}FromSequence`` *is* the content of
+    the element, and a dispatched value nests an element of its own, which
+    ``dispatchParse{X}Element`` reads whole.
 
-    :param type_anno: the property's (optional-stripped) list type annotation
-    :return: generated TS statements, and the expression of the parsed value
+    This is a pure function of its argument. The code of the parsers which have to be
+    composed is generated by :py:class:`_ParserRegistry`.
     """
-    assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
-        f"(mristin) We only handle XML de/serialization of lists "
-        f"containing atomic values, but you want to generate the code "
-        f"for a list of type {type_anno}. Please contact the "
-        f"developers if you need this feature."
-    )
+    type_anno = intermediate.beneath_optional(type_annotation)
 
-    if isinstance(type_anno.items, intermediate.OurTypeAnnotation) and isinstance(
-        type_anno.items.our_type, intermediate.NamedUnion
-    ):
-        # NOTE (mristin):
-        # A named union has no element tag of its own, so we always dispatch
-        # on the local name of the next XML element, exactly as we do for an
-        # abstract class or a concrete class with descendants.
-        items_named_union = type_anno.items.our_type
-        expected_name = typescript_naming.union_name(items_named_union.name)
-        parse_item_expr = Stripped(
-            _dispatch_parse_element_function_name_for_named_union(
-                named_union=items_named_union
-            )
-        )
-        item_type = Stripped(f"AasTypes.{expected_name}")
-    elif not (
-        isinstance(type_anno.items, intermediate.OurTypeAnnotation)
-        and isinstance(
-            type_anno.items.our_type,
-            (intermediate.AbstractClass, intermediate.ConcreteClass),
-        )
-    ):
-        parse_item_function = _parse_function_for_atomic_type(type_anno.items)
-        v_literal = typescript_common.string_literal("v")
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        return _CONTENT_PARSER_BY_PRIMITIVE_TYPE[primitive_type]
 
-        item_type = typescript_common.generate_type(
-            type_anno.items,
-            types_module=Identifier("AasTypes"),
-        )
-        parse_item_expr = Stripped(
-            f"(aCursor) => parseNamedVElement(aCursor, {v_literal}, "
-            f"{parse_item_function})"
-        )
-    else:
-        items_our_type = type_anno.items.our_type
+    if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
+        raise AssertionError("Expected to handle this case before")
 
-        if (
-            isinstance(items_our_type, intermediate.ConcreteClass)
-            and len(items_our_type.concrete_descendants) == 0
+    elif isinstance(type_anno, intermediate.OurTypeAnnotation):
+        our_type = type_anno.our_type
+
+        if isinstance(our_type, intermediate.Enumeration):
+            return _content_parser_name_for_enumeration(our_type)
+
+        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+            raise AssertionError("Expected to handle this case before")
+
+        elif isinstance(
+            our_type,
+            (
+                intermediate.AbstractClass,
+                intermediate.ConcreteClass,
+                intermediate.NamedUnion,
+            ),
         ):
-            # NOTE (mristin):
-            # The concrete type is statically known, so we can directly check
-            # the local name of the element and parse it with the concrete
-            # class's own parse function -- no dispatch is necessary.
-            expected_name = typescript_naming.class_name(items_our_type.name)
-            items_xml_name_literal = typescript_common.string_literal(
-                naming.xml_class_name(items_our_type.name)
-            )
-            parse_sequence_function_name = (
-                _parse_sequence_function_name_for_concrete_class(cls=items_our_type)
+            if _is_dispatched(type_anno):
+                return _dispatch_parse_function_name(type_anno)
+
+            assert isinstance(our_type, intermediate.ConcreteClass), (
+                f"Unexpected abstract class with no concrete "
+                f"descendants: {our_type.name!r}"
             )
 
-            parse_item_expr = Stripped(
-                f"(aCursor) => parseNamedClassElement(\n"
-                f"{I}aCursor,\n"
-                f"{I}{items_xml_name_literal},\n"
-                f"{I}{parse_sequence_function_name}\n"
-                f")"
+            return _parse_sequence_function_name_for_concrete_class(cls=our_type)
+
+        else:
+            assert_never(our_type)
+
+    elif isinstance(type_anno, intermediate.ListTypeAnnotation):
+        moniker = _atomic_moniker(intermediate.beneath_optional(type_anno.items))
+        return Identifier(f"parseListOf{moniker}Content")
+
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        monikers = [_atomic_moniker(item) for item in type_anno.items]
+        return Identifier(
+            f"parseTuple{len(type_anno.items)}Of" + "_".join(monikers) + "Content"
+        )
+
+    else:
+        assert_never(type_anno)
+
+    raise AssertionError("Should not have gotten here")
+
+
+def _element_parser_name(
+    type_anno: intermediate.AtomicTypeAnnotation, tag_suffix: str
+) -> Identifier:
+    """
+    Give out the parser of a whole XML element, the tags included, holding a value of
+    the ``type_anno``.
+
+    This is what an item of a list or of a tuple is parsed with. A dispatched value
+    picks the tag from its own model type, so it needs no name and no generated
+    parser; everything else sits in an element tagged ``v``, ``v1``, ``v2``, *etc.*,
+    prescribed by the position, which the ``tag_suffix`` gives.
+    """
+    if _is_dispatched(type_anno):
+        assert isinstance(type_anno, intermediate.OurTypeAnnotation)
+        return _dispatch_parse_function_name(type_anno)
+
+    if isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+        type_anno.our_type, intermediate.ConcreteClass
+    ):
+        cls_name = typescript_naming.class_name(type_anno.our_type.name)
+        return Identifier(f"parse{cls_name}Element")
+
+    moniker = _atomic_moniker(type_anno)
+    return Identifier(f"parse{moniker}V{tag_suffix}Element")
+
+
+class _ParserRegistry:
+    """
+    Generate the code of the parsers which a meta-model needs to be composed.
+
+    All the parsers share the same shape, ``ContentParser<T>``, so a parser can be
+    given to another parser as its item parser, and a list of enumeration literals --
+    or anything deeper that a meta-model might grow -- falls out of the pieces which
+    are already there.
+
+    The composed parsers are de-duplicated by the type which they parse, so that all
+    the classes share them, and they are named by :py:func:`_content_parser_name` and
+    :py:func:`_element_parser_name`. Nothing is composed at the time of the parsing:
+    a parser is a module-level function declaration, which is hoisted, so the order
+    in which we emit them does not matter, and the de-serialization allocates no
+    closure.
+
+    The methods come grouped: first the queries, which give out what has been
+    registered so far and change nothing, and then the commands, which register and
+    give out nothing.
+    """
+
+    def __init__(self) -> None:
+        """Initialize with nothing registered."""
+        self._blocks_by_name = dict()  # type: Dict[Identifier, Stripped]
+
+    @property
+    def blocks(self) -> List[Stripped]:
+        """Give out the code of the registered parsers, ordered by the parser name."""
+        return [self._blocks_by_name[name] for name in sorted(self._blocks_by_name)]
+
+    def _add(self, name: Identifier, block: Stripped) -> None:
+        """Register the ``block`` which defines the parser ``name``."""
+        self._blocks_by_name[name] = block
+
+    def _register_element_parser(
+        self, type_anno: intermediate.AtomicTypeAnnotation, tag_suffix: str
+    ) -> None:
+        """
+        Register the parser of a whole element holding a value of the ``type_anno``.
+
+        A dispatched value needs none, see :py:func:`_element_parser_name`.
+        """
+        if _is_dispatched(type_anno):
+            return
+
+        name = _element_parser_name(type_anno, tag_suffix)
+
+        value_type = typescript_common.generate_type(
+            type_anno, types_module=Identifier("AasTypes")
+        )
+
+        if isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+            type_anno.our_type, intermediate.ConcreteClass
+        ):
+            tag_literal = typescript_common.string_literal(
+                naming.xml_class_name(type_anno.our_type.name)
             )
         else:
-            assert items_our_type.interface is not None, (
-                "Expected an interface on an abstract class, or on a concrete "
-                "class with concrete descendants"
-            )
+            tag_literal = typescript_common.string_literal(f"v{tag_suffix}")
 
-            if isinstance(items_our_type, intermediate.AbstractClass):
-                expected_name = typescript_naming.interface_name(items_our_type.name)
-            else:
-                expected_name = typescript_naming.class_name(items_our_type.name)
+        call = _join_call_arguments(
+            "parseNamedElement",
+            ["cursor", tag_literal, _content_parser_name(type_anno)],
+            columns=len(I) + len("return "),
+        )
 
-            parse_item_expr = _dispatch_parse_element_function_name(
-                items_our_type.interface
-            )
-
-        item_type = Stripped(f"AasTypes.{expected_name}")
-
-    return (
-        Stripped(
-            f"""\
-const parsedItemsOrError = parseList<{item_type}>(
-{I}cursor,
-{I}{indent_but_first_line(parse_item_expr, I)}
-);
-if (parsedItemsOrError.error !== null) {{
-{I}propertyError = parsedItemsOrError.error;
-{I}break;
+        self._add(
+            name,
+            Stripped(
+                f"""\
+function {name}(
+{I}cursor: XmlCursor
+): AasCommon.Either<{value_type}, DeserializationError> {{
+{I}return {indent_but_first_line(call, I)};
 }}"""
-        ),
-        Stripped("parsedItemsOrError.mustValue()"),
-    )
+            ),
+        )
+
+    def _register_list_parser(self, type_anno: intermediate.ListTypeAnnotation) -> None:
+        """Register the parser of the content of an element holding a list."""
+        items_type_anno = intermediate.beneath_optional(type_anno.items)
+
+        assert isinstance(items_type_anno, intermediate.AtomicTypeAnnotationAsTuple), (
+            f"(mristin) We only handle XML de/serialization of lists "
+            f"containing atomic values, but you want to generate the code "
+            f"for a list of type {type_anno}. Please contact the "
+            f"developers if you need this feature."
+        )
+
+        self._register_element_parser(items_type_anno, tag_suffix="")
+
+        name = _content_parser_name(type_anno)
+
+        item_type = typescript_common.generate_type(
+            items_type_anno, types_module=Identifier("AasTypes")
+        )
+        call = _join_call_arguments(
+            f"parseList<{item_type}>",
+            ["cursor", _element_parser_name(items_type_anno, tag_suffix="")],
+            columns=len(I) + len("return "),
+        )
+
+        self._add(
+            name,
+            Stripped(
+                f"""\
+function {name}(
+{I}cursor: XmlCursor
+): AasCommon.Either<Array<{item_type}>, DeserializationError> {{
+{I}return {indent_but_first_line(call, I)};
+}}"""
+            ),
+        )
+
+    def _register_tuple_parser(
+        self, type_anno: intermediate.TupleTypeAnnotation
+    ) -> None:
+        """Register the parser of the content of an element holding a tuple."""
+        arity = len(type_anno.items)
+
+        item_types = []  # type: List[str]
+        parse_items = []  # type: List[str]
+
+        for i, item_type_anno in enumerate(type_anno.items):
+            assert isinstance(
+                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
+                "Tuple items are restricted to atomic types (primitives, "
+                "constrained primitives, classes and enumerations) by "
+                "intermediate._translate._verify_only_simple_type_patterns, so no "
+                "nested optionals, lists or tuples are expected here."
+            )
+
+            self._register_element_parser(item_type_anno, tag_suffix=str(i + 1))
+
+            item_types.append(
+                typescript_common.generate_type(
+                    item_type_anno, types_module=Identifier("AasTypes")
+                )
+            )
+            parse_items.append(_element_parser_name(item_type_anno, str(i + 1)))
+
+        name = _content_parser_name(type_anno)
+
+        value_type = typescript_common.generate_type(
+            type_anno, types_module=Identifier("AasTypes")
+        )
+
+        item_types_joined = ", ".join(item_types)
+
+        call = _join_call_arguments(
+            f"parseTuple{arity}<{item_types_joined}>",
+            ["cursor"] + parse_items,
+            columns=len(I) + len("return "),
+        )
+
+        self._add(
+            name,
+            Stripped(
+                f"""\
+function {name}(
+{I}cursor: XmlCursor
+): AasCommon.Either<{value_type}, DeserializationError> {{
+{I}return {indent_but_first_line(call, I)};
+}}"""
+            ),
+        )
+
+    def register_property_parser(
+        self, type_annotation: intermediate.TypeAnnotationUnion
+    ) -> None:
+        """
+        Register the parsers needed to parse the content of the element holding
+        a value of the ``type_annotation``.
+        """
+        type_anno = intermediate.beneath_optional(type_annotation)
+
+        if isinstance(type_anno, intermediate.ListTypeAnnotation):
+            self._register_list_parser(type_anno)
+
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            self._register_tuple_parser(type_anno)
+
+        else:
+            # NOTE (mristin):
+            # An atomic value is parsed either by a parser which is generated
+            # together with its type -- a class and a dispatched value -- or by one of
+            # the parsers which we generate once for the whole module, for a primitive
+            # and for an enumeration. There is nothing to compose in either case.
+            pass
 
 
 def _generate_parse_tuple_function(arity: int) -> Stripped:
     """
     Generate a generic function to parse a tuple of the given ``arity``.
 
-    Each positional item is parsed by its own ``parseItem{i}`` callback, which
-    is expected to have already consumed its own opening and closing tags (if
-    any) -- see, for example, ``parseNamedVElement``, ``parseNamedClassElement``
-    or a dispatch-parse function, all of which already conform to this shape.
+    Each positional item is parsed by its own ``parseItem{i}``, which is expected to
+    have already consumed its own opening and closing tags -- see, for example,
+    ``parseNamedElement`` or a dispatch-parse function, both of which do.
     """
     type_params_joined = ", ".join(f"T{i}" for i in range(arity))
     tuple_type = f"[{', '.join(f'T{i}' for i in range(arity))}]"
 
     params_joined = ",\n".join(
-        f"{I}parseItem{i}: (cursor: XmlCursor) => "
-        f"AasCommon.Either<T{i}, DeserializationError>"
-        for i in range(arity)
+        f"{I}parseItem{i}: ContentParser<T{i}>" for i in range(arity)
     )
 
     item_blocks = []  # type: List[str]
@@ -528,141 +732,6 @@ function parseTuple{arity}<{type_params_joined}>(
     )
 
 
-def _parse_tuple_property(
-    type_anno: intermediate.TupleTypeAnnotation,
-) -> Tuple[Stripped, Stripped]:
-    """
-    Generate the statements to parse a property of a tuple type, and the
-    expression of the parsed value.
-
-    The closing tag of the property is *not* consumed by the generated
-    statements; the caller is expected to read and verify it afterwards, and
-    assign the returned value expression to the property's variable.
-
-    :param type_anno: the property's (optional-stripped) tuple type annotation
-    :return: generated TS statements, and the expression of the parsed value
-    """
-    item_types = []  # type: List[Stripped]
-    item_parsers = []  # type: List[Stripped]
-
-    for i, item_type_anno in enumerate(type_anno.items):
-        assert isinstance(item_type_anno, intermediate.AtomicTypeAnnotationAsTuple), (
-            "Tuple items are restricted to atomic types (primitives, "
-            "constrained primitives, classes and enumerations) by "
-            "intermediate._translate._verify_only_simple_type_patterns, so no "
-            "nested optionals, lists or tuples are expected here."
-        )
-
-        if isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
-            item_type_anno.our_type, intermediate.NamedUnion
-        ):
-            # NOTE (mristin):
-            # A named union has no element tag of its own, so we always
-            # dispatch on the local name of the next XML element, exactly as
-            # we do for an abstract class or a concrete class with
-            # descendants.
-            item_named_union = item_type_anno.our_type
-            item_types.append(
-                Stripped(
-                    f"AasTypes.{typescript_naming.union_name(item_named_union.name)}"
-                )
-            )
-            item_parsers.append(
-                _dispatch_parse_element_function_name_for_named_union(
-                    named_union=item_named_union
-                )
-            )
-            continue
-
-        if not (
-            isinstance(item_type_anno, intermediate.OurTypeAnnotation)
-            and isinstance(
-                item_type_anno.our_type,
-                (intermediate.AbstractClass, intermediate.ConcreteClass),
-            )
-        ):
-            parse_function = _parse_function_for_atomic_type(item_type_anno)
-            v_name_literal = typescript_common.string_literal(f"v{i + 1}")
-
-            item_types.append(
-                typescript_common.generate_type(
-                    item_type_anno, types_module=Identifier("AasTypes")
-                )
-            )
-            item_parsers.append(
-                Stripped(
-                    f"(aCursor) => parseNamedVElement(\n"
-                    f"{I}aCursor, {v_name_literal}, {parse_function}\n"
-                    f")"
-                )
-            )
-            continue
-
-        our_type = item_type_anno.our_type
-
-        if (
-            isinstance(our_type, intermediate.ConcreteClass)
-            and len(our_type.concrete_descendants) == 0
-        ):
-            # NOTE (mristin):
-            # The concrete type is statically known, so we can directly check
-            # the local name of the element and parse it with the concrete
-            # class's own parse function -- no dispatch is necessary.
-            xml_name_literal_for_item = typescript_common.string_literal(
-                naming.xml_class_name(our_type.name)
-            )
-            parse_sequence_function_name = (
-                _parse_sequence_function_name_for_concrete_class(cls=our_type)
-            )
-
-            item_types.append(
-                Stripped(f"AasTypes.{typescript_naming.class_name(our_type.name)}")
-            )
-            item_parsers.append(
-                Stripped(
-                    f"(aCursor) => parseNamedClassElement(\n"
-                    f"{I}aCursor,\n"
-                    f"{I}{xml_name_literal_for_item},\n"
-                    f"{I}{parse_sequence_function_name}\n"
-                    f")"
-                )
-            )
-            continue
-
-        assert our_type.interface is not None, (
-            "Expected an interface on an abstract class, or on a concrete "
-            "class with concrete descendants"
-        )
-
-        if isinstance(our_type, intermediate.AbstractClass):
-            expected_name = typescript_naming.interface_name(our_type.name)
-        else:
-            expected_name = typescript_naming.class_name(our_type.name)
-
-        item_types.append(Stripped(f"AasTypes.{expected_name}"))
-        item_parsers.append(_dispatch_parse_element_function_name(our_type.interface))
-
-    arity = len(type_anno.items)
-    parse_tuple_function_name = f"parseTuple{arity}"
-    item_types_joined = ", ".join(item_types)
-    item_parsers_joined = ",\n".join(item_parsers)
-
-    return (
-        Stripped(
-            f"""\
-const tupleOrError = {parse_tuple_function_name}<{item_types_joined}>(
-{I}cursor,
-{I}{indent_but_first_line(item_parsers_joined, I)}
-);
-if (tupleOrError.error !== null) {{
-{I}propertyError = tupleOrError.error;
-{I}break;
-}}"""
-        ),
-        Stripped("tupleOrError.mustValue()"),
-    )
-
-
 @require(lambda cls, prop: id(prop) in cls.property_id_set)
 def _generate_parse_case_for_property(
     cls: intermediate.ConcreteClass,
@@ -674,60 +743,34 @@ def _generate_parse_case_for_property(
 
     The generated code stores the parsed property value into ``var_name``.
     """
+    del cls  # only used for the pre-condition
+
     xml_name_literal = typescript_common.string_literal(prop.xml_name)
 
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-    duplicate_check = Stripped(
-        f"""\
-if ({var_name} !== null) {{
-{I}propertyError = new DeserializationError(
-{II}"Property " +
-{III}{xml_name_literal} +
-{III}" occurred more than once"
-{I});
-{I}break;
-}}"""
+    # NOTE (mristin):
+    # A case sits two levels below the ``switch``, which the class's parser indents by
+    # three, so the body of a case lands on the fourth level.
+    call = _join_call_arguments(
+        "parseElementContent",
+        ["cursor", "propertyLocalName", _content_parser_name(prop.type_annotation)],
+        columns=len(IIII) + len("const parsed = "),
     )
-
-    if isinstance(
-        type_anno,
-        (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
-    ):
-        statements, value_expr = _parse_atomic_property(type_anno=type_anno)
-    elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        statements, value_expr = _parse_list_property(type_anno=type_anno)
-    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        statements, value_expr = _parse_tuple_property(type_anno=type_anno)
-    else:
-        assert_never(type_anno)
 
     # NOTE (mristin):
-    # None of the three functions above consumes the property's own closing
-    # tag -- we do it here, uniformly, once the property's content has been
-    # successfully parsed.
-    parse_body = Stripped(
-        f"""\
-{statements}
-
-const propertyCloseError = consumeCloseTag(
-{I}cursor,
-{I}propertyLocalName
-);
-if (propertyCloseError !== null) {{
-{I}propertyError = propertyCloseError;
-{I}break;
-}}
-
-{var_name} = {value_expr};"""
-    )
-
+    # Both halves of the result are taken unconditionally. On a failure the value is
+    # ``null``, and the property loop returns as soon as it sees the error, so what we
+    # assign to the variable is never read -- see also ``parseElementContent``.
     return Stripped(
         f"""\
 case {xml_name_literal}: {{
-{I}{indent_but_first_line(duplicate_check, I)}
+{I}if ({var_name} !== null) {{
+{II}propertyError = duplicatePropertyError(propertyLocalName);
+{II}break;
+{I}}}
 
-{I}{indent_but_first_line(parse_body, I)}
+{I}const parsed = {indent_but_first_line(call, I)};
+{I}propertyError = parsed.error;
+{I}{var_name} = parsed.value;
 {I}break;
 }}"""
     )
@@ -838,7 +881,9 @@ return new AasCommon.Either<AasTypes.{cls_name}, DeserializationError>(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {{@link {typescript_common.TYPES_MODULE}!{cls_name}}} is embedded.
  */
 function {function_name}(
 {I}cursor: XmlCursor
@@ -883,6 +928,172 @@ function {function_name}(
 
 {I}{indent_but_first_line(construct, I)}
 }}"""
+    )
+
+
+def _generate_dispatch_map(
+    map_name: Identifier,
+    expected_name: Identifier,
+    implementers: Sequence[intermediate.ConcreteClass],
+) -> Stripped:
+    """
+    Generate the map from the local name of an XML element to the parser of
+    the content of that element.
+
+    The map replaces what used to be a ``switch`` in every dispatching function:
+    the parsers are all of the same shape, so the only thing which distinguishes
+    one dispatch from another is which local names it accepts.
+    """
+    entries = []  # type: List[str]
+    for implementer in implementers:
+        local_name_literal = typescript_common.string_literal(
+            naming.xml_class_name(implementer.name)
+        )
+        parse_function_name = _parse_sequence_function_name_for_concrete_class(
+            cls=implementer
+        )
+
+        entries.append(f"{I}[{local_name_literal}, {parse_function_name}]")
+
+    entries_joined = ",\n".join(entries)
+
+    return Stripped(
+        f"""\
+const {map_name} = new Map<
+{I}string,
+{I}ContentParser<AasTypes.{expected_name}>
+>([
+{entries_joined}
+]);"""
+    )
+
+
+def _generate_dispatch_parse_element(
+    map_name: Identifier,
+    expected_name: Identifier,
+    function_name: Identifier,
+) -> Stripped:
+    """
+    Generate a function to dispatch-parse an element into ``expected_name``.
+
+    The function is a shim over the shared ``dispatchParseElement`` and the map
+    which :py:func:`_generate_dispatch_map` generates. Unlike
+    :py:func:`_generate_root_dispatch_map`, which has to account for every concrete
+    class in the meta-model, that map holds only the implementers of
+    ``expected_name``. This lets us reject an XML element of an unexpected type
+    based on its local name alone, without wastefully parsing its full (possibly
+    deeply nested) content only to discover the type mismatch afterwards.
+    """
+    call = _join_call_arguments(
+        "dispatchParseElement",
+        ["cursor", typescript_common.string_literal(expected_name), map_name],
+        columns=len(I) + len("return "),
+    )
+
+    return Stripped(
+        f"""\
+/**
+ * Dispatch-parse an instance
+ * of {{@link {typescript_common.TYPES_MODULE}!{expected_name}}} from the next
+ * XML element in `cursor`, based on the element's local name.
+ *
+ * @param cursor - to read from
+ * @returns the parsed instance, or an error
+ */
+function {function_name}(
+{I}cursor: XmlCursor
+): AasCommon.Either<AasTypes.{expected_name}, DeserializationError> {{
+{I}return {indent_but_first_line(call, I)};
+}}"""
+    )
+
+
+def _generate_from_xml_string_for_interface(
+    interface: intermediate.Interface,
+) -> Stripped:
+    """
+    Generate a public function to parse a whole XML string as an ``interface``.
+
+    This gives the callers a way to de-serialize an instance of a known
+    interface directly, without going through ``fromXmlString``.
+    """
+    if isinstance(interface.base, intermediate.AbstractClass):
+        expected_name = typescript_naming.interface_name(interface.name)
+    else:
+        expected_name = typescript_naming.class_name(interface.name)
+
+    function_name = typescript_naming.function_name(
+        Identifier(f"{interface.name}_from_xml_string")
+    )
+    dispatch_function_name = _dispatch_parse_element_function_name(interface)
+
+    return Stripped(
+        f"""\
+/**
+ * Parse an XML string as an instance
+ * of {{@link {typescript_common.TYPES_MODULE}!{expected_name}}}.
+ *
+ * @param xml - XML string to parse
+ * @returns parsed instance, or an error
+ */
+export function {function_name}(
+{I}xml: string
+): AasCommon.Either<AasTypes.{expected_name}, DeserializationError> {{
+{I}if (xml.length === 0) {{
+{II}return newDeserializationError<AasTypes.{expected_name}>(
+{III}"Expected an XML document, but got an empty string"
+{II});
+{I}}}
+
+{I}const tokensOrError = tokenizeXml(xml);
+{I}if (tokensOrError.error !== null) {{
+{II}return new AasCommon.Either<AasTypes.{expected_name}, DeserializationError>(
+{III}null,
+{III}tokensOrError.error
+{II});
+{I}}}
+
+{I}const cursor = new XmlCursor(tokensOrError.mustValue());
+
+{I}const instanceOrError = {dispatch_function_name}(cursor);
+{I}if (instanceOrError.error !== null) {{
+{II}return instanceOrError;
+{I}}}
+
+{I}cursor.skipIgnorable();
+{I}if (cursor.current() !== null) {{
+{II}return newDeserializationError<AasTypes.{expected_name}>(
+{III}"Expected no tokens after the root XML element, but got token kind: " +
+{IIII}currentTokenKind(cursor)
+{II});
+{I}}}
+
+{I}return instanceOrError;
+}}"""
+    )
+
+
+def _generate_root_dispatch_map(symbol_table: intermediate.SymbolTable) -> Stripped:
+    """Generate the dispatch map from root XML local names to parse functions."""
+    entries = []  # type: List[str]
+    for cls in symbol_table.concrete_classes:
+        local_name_literal = typescript_common.string_literal(
+            naming.xml_class_name(cls.name)
+        )
+        parse_function_name = _parse_sequence_function_name_for_concrete_class(cls=cls)
+
+        entries.append(f"{I}[{local_name_literal}, {parse_function_name}]")
+
+    entries_joined = ",\n".join(entries)
+
+    return Stripped(
+        f"""\
+const ROOT_DISPATCH_BY_LOCAL_NAME = new Map<
+{I}string,
+{I}ContentParser<AasTypes.Class>
+>([
+{entries_joined}
+]);"""
     )
 
 
@@ -1348,285 +1559,6 @@ class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
     return Stripped(writer.getvalue())
 
 
-def _generate_dispatch_parse_interface_element(
-    interface: intermediate.Interface,
-) -> Stripped:
-    """
-    Generate a function to dispatch-parse an ``interface`` from an XML element.
-
-    Unlike :py:func:`_generate_root_dispatch_map`, which has to account for
-    every concrete class in the meta-model, this dispatches only over the
-    concrete classes which actually implement ``interface``. This lets us
-    reject an XML element of an unexpected type based on its local name alone,
-    without wastefully parsing its full (possibly deeply nested) content only
-    to discover the type mismatch afterwards.
-    """
-    if isinstance(interface.base, intermediate.AbstractClass):
-        expected_name = typescript_naming.interface_name(interface.name)
-    else:
-        expected_name = typescript_naming.class_name(interface.name)
-
-    function_name = _dispatch_parse_element_function_name(interface)
-
-    case_writer = io.StringIO()
-    for implementer in interface.implementers:
-        implementer_local_name_literal = typescript_common.string_literal(
-            naming.xml_class_name(implementer.name)
-        )
-        parse_function_name = _parse_sequence_function_name_for_concrete_class(
-            cls=implementer
-        )
-
-        case_writer.write(
-            f"""\
-{II}case {implementer_local_name_literal}:
-{III}instanceOrError = {parse_function_name}(cursor);
-{III}break;
-"""
-        )
-
-    return Stripped(
-        f"""\
-/**
- * Dispatch-parse an instance
- * of {{@link {typescript_common.TYPES_MODULE}!{expected_name}}} from the next
- * XML element in `cursor`, based on the element's local name.
- *
- * @param cursor - to read from
- * @returns the parsed instance, or an error
- */
-function {function_name}(
-{I}cursor: XmlCursor
-): AasCommon.Either<AasTypes.{expected_name}, DeserializationError> {{
-{I}const startTagOrError = readNextOpenTag(cursor);
-{I}if (startTagOrError.error !== null) {{
-{II}return new AasCommon.Either<AasTypes.{expected_name}, DeserializationError>(
-{III}null,
-{III}startTagOrError.error
-{II});
-{I}}}
-{I}const startTag = startTagOrError.mustValue();
-
-{I}const localName = localNameOfTag(startTag.tag);
-{I}cursor.advance();
-
-{I}let instanceOrError: AasCommon.Either<AasTypes.{expected_name}, DeserializationError>;
-{I}switch (localName) {{
-{case_writer.getvalue().rstrip()}
-{II}default:
-{III}return newDeserializationError<AasTypes.{expected_name}>(
-{IIII}`Expected an instance of {expected_name}, but got: ${{localName}}`
-{III});
-{I}}}
-
-{I}if (instanceOrError.error !== null) {{
-{II}return instanceOrError;
-{I}}}
-
-{I}const closeError = consumeCloseTag(cursor, localName);
-{I}if (closeError !== null) {{
-{II}return new AasCommon.Either<AasTypes.{expected_name}, DeserializationError>(
-{III}null,
-{III}closeError
-{II});
-{I}}}
-
-{I}return instanceOrError;
-}}"""
-    )
-
-
-def _generate_dispatch_parse_named_union_element(
-    named_union: intermediate.NamedUnion,
-) -> Stripped:
-    """
-    Generate a function to dispatch-parse the ``named_union`` from an XML element.
-
-    This dispatches over the (already flattened) implementers of
-    ``named_union``, exactly as :py:func:`_generate_dispatch_parse_interface_element`
-    dispatches over the implementers of an interface. XML dispatch is always
-    by the element's local name, regardless of whether the union is
-    dispatched by ``modelType`` or structurally on the JSON side, so a single
-    dispatch shape serves every named union.
-    """
-    expected_name = typescript_naming.union_name(named_union.name)
-    function_name = _dispatch_parse_element_function_name_for_named_union(
-        named_union=named_union
-    )
-
-    case_writer = io.StringIO()
-    for implementer in named_union.implementers:
-        implementer_local_name_literal = typescript_common.string_literal(
-            naming.xml_class_name(implementer.name)
-        )
-        parse_function_name = _parse_sequence_function_name_for_concrete_class(
-            cls=implementer
-        )
-
-        case_writer.write(
-            f"""\
-{II}case {implementer_local_name_literal}:
-{III}instanceOrError = {parse_function_name}(cursor);
-{III}break;
-"""
-        )
-
-    return Stripped(
-        f"""\
-/**
- * Dispatch-parse an instance
- * of {{@link {typescript_common.TYPES_MODULE}!{expected_name}}} from the next
- * XML element in `cursor`, based on the element's local name.
- *
- * @param cursor - to read from
- * @returns the parsed instance, or an error
- */
-function {function_name}(
-{I}cursor: XmlCursor
-): AasCommon.Either<AasTypes.{expected_name}, DeserializationError> {{
-{I}const startTagOrError = readNextOpenTag(cursor);
-{I}if (startTagOrError.error !== null) {{
-{II}return new AasCommon.Either<AasTypes.{expected_name}, DeserializationError>(
-{III}null,
-{III}startTagOrError.error
-{II});
-{I}}}
-{I}const startTag = startTagOrError.mustValue();
-
-{I}const localName = localNameOfTag(startTag.tag);
-{I}cursor.advance();
-
-{I}let instanceOrError: AasCommon.Either<AasTypes.{expected_name}, DeserializationError>;
-{I}switch (localName) {{
-{case_writer.getvalue().rstrip()}
-{II}default:
-{III}return newDeserializationError<AasTypes.{expected_name}>(
-{IIII}`Expected an instance of {expected_name}, but got: ${{localName}}`
-{III});
-{I}}}
-
-{I}if (instanceOrError.error !== null) {{
-{II}return instanceOrError;
-{I}}}
-
-{I}const closeError = consumeCloseTag(cursor, localName);
-{I}if (closeError !== null) {{
-{II}return new AasCommon.Either<AasTypes.{expected_name}, DeserializationError>(
-{III}null,
-{III}closeError
-{II});
-{I}}}
-
-{I}return instanceOrError;
-}}"""
-    )
-
-
-def _generate_from_xml_string_for_interface(
-    interface: intermediate.Interface,
-) -> Stripped:
-    """
-    Generate a public function to parse a whole XML string as an ``interface``.
-
-    This gives the callers a way to de-serialize an instance of a known
-    interface directly, without going through ``fromXmlString``.
-    """
-    if isinstance(interface.base, intermediate.AbstractClass):
-        expected_name = typescript_naming.interface_name(interface.name)
-    else:
-        expected_name = typescript_naming.class_name(interface.name)
-
-    function_name = typescript_naming.function_name(
-        Identifier(f"{interface.name}_from_xml_string")
-    )
-    dispatch_function_name = _dispatch_parse_element_function_name(interface)
-
-    return Stripped(
-        f"""\
-/**
- * Parse an XML string as an instance
- * of {{@link {typescript_common.TYPES_MODULE}!{expected_name}}}.
- *
- * @param xml - XML string to parse
- * @returns parsed instance, or an error
- */
-export function {function_name}(
-{I}xml: string
-): AasCommon.Either<AasTypes.{expected_name}, DeserializationError> {{
-{I}if (xml.length === 0) {{
-{II}return newDeserializationError<AasTypes.{expected_name}>(
-{III}"Expected an XML document, but got an empty string"
-{II});
-{I}}}
-
-{I}const tokensOrError = tokenizeXml(xml);
-{I}if (tokensOrError.error !== null) {{
-{II}return new AasCommon.Either<AasTypes.{expected_name}, DeserializationError>(
-{III}null,
-{III}tokensOrError.error
-{II});
-{I}}}
-
-{I}const cursor = new XmlCursor(tokensOrError.mustValue());
-
-{I}const instanceOrError = {dispatch_function_name}(cursor);
-{I}if (instanceOrError.error !== null) {{
-{II}return instanceOrError;
-{I}}}
-
-{I}cursor.skipIgnorable();
-{I}if (cursor.current() !== null) {{
-{II}return newDeserializationError<AasTypes.{expected_name}>(
-{III}"Expected no tokens after the root XML element, but got token kind: " +
-{IIII}currentTokenKind(cursor)
-{II});
-{I}}}
-
-{I}return instanceOrError;
-}}"""
-    )
-
-
-def _generate_root_dispatch_map(symbol_table: intermediate.SymbolTable) -> Stripped:
-    """Generate the dispatch map from root XML local names to parse functions."""
-    writer = io.StringIO()
-    writer.write(
-        f"""\
-const ROOT_DISPATCH_BY_LOCAL_NAME =
-{I}new Map<
-{II}string,
-{II}(cursor: XmlCursor) => AasCommon.Either<AasTypes.Class, DeserializationError>
-{I}>([
-"""
-    )
-
-    for i, cls in enumerate(symbol_table.concrete_classes):
-        local_name_literal = typescript_common.string_literal(
-            naming.xml_class_name(cls.name)
-        )
-        parse_function_name = _parse_sequence_function_name_for_concrete_class(cls=cls)
-
-        writer.write(
-            f"""\
-{II}[
-{III}{local_name_literal},
-{III}{parse_function_name}
-{II}]"""
-        )
-
-        if i < len(symbol_table.concrete_classes) - 1:
-            writer.write(",\n")
-        else:
-            writer.write("\n")
-
-    writer.write(
-        f"""\
-{I}]);"""
-    )
-
-    return Stripped(writer.getvalue())
-
-
 # endregion
 
 
@@ -1788,6 +1720,23 @@ function newDeserializationError<T>(
 {II}new DeserializationError(message)
 {I});
 }}
+
+/**
+ * Parse a value from `cursor`.
+ *
+ * Every parser in this module wears this one shape, which is what lets them
+ * compose: a parser can be given to another parser without a closure, since
+ * everything it needs comes from the `cursor` and from its own definition.
+ * The name says what a parser consumes -- a `parse*Content` stops right before
+ * the closing tag of the element which the caller has opened, while
+ * a `parse*Element` and a `dispatchParse*Element` read an element of their own,
+ * its tags included.
+ *
+ * @typeParam T - type of the parsed value
+ */
+type ContentParser<T> = (
+{I}cursor: XmlCursor
+) => AasCommon.Either<T, DeserializationError>;
 
 function currentTokenKind(cursor: XmlCursor): string {{
 {I}const token = cursor.current();
@@ -1974,74 +1923,64 @@ function readNextOpenTag(
 }}
 
 /**
- * Read the next XML element from `cursor`, expecting it to be named
- * `expectedLocalName`, parse its text content with `parseTextFn` and
- * consume the matching closing element.
+ * Parse the content of the XML element which the caller has opened, and consume
+ * the corresponding closing element named `localName`.
  *
- * This is shared by the parsing of a single list item (with a fixed
- * local name, *e.g.*, `"v"`) and the parsing of a single tuple item (with
- * a positional local name, *e.g.*, `"v1"`).
+ * This is the one thing which every value of an XML element has in common,
+ * whatever it holds: the property loop of a class calls it directly, since
+ * it has already read the opening tag and switched on its local name, and
+ * `parseNamedElement` calls it after reading an opening tag of its own.
+ *
+ * A property loop assigns *both* halves of the result -- the value as well as
+ * the error -- without looking at either first. The loop returns as soon as
+ * the error is set, so the `null` value which comes with an error is never
+ * read, and the property's variable needs no guard.
  *
  * @param cursor - to read from
- * @param expectedLocalName - the expected local name of the element
- * @param parseTextFn - parses the text content of the element
+ * @param localName - local name of the element which the caller has opened
+ * @param parseContent - parses the content of the element
  * @returns parsed value, or an error
  * @typeParam T - type of the parsed value
  */
-function parseNamedVElement<T>(
+function parseElementContent<T>(
 {I}cursor: XmlCursor,
-{I}expectedLocalName: string,
-{I}parseTextFn: (text: string) => AasCommon.Either<T, DeserializationError>
+{I}localName: string,
+{I}parseContent: ContentParser<T>
 ): AasCommon.Either<T, DeserializationError> {{
-{I}const startTagOrError = readNextOpenTag(cursor);
-{I}if (startTagOrError.error !== null) {{
-{II}return new AasCommon.Either<T, DeserializationError>(
-{III}null,
-{III}startTagOrError.error
-{II});
-{I}}}
-{I}const startTag = startTagOrError.mustValue();
-
-{I}const observedLocalName = localNameOfTag(startTag.tag);
-{I}if (observedLocalName !== expectedLocalName) {{
-{II}return newDeserializationError<T>(
-{III}`Expected the element '${{expectedLocalName}}', ` +
-{IIII}`but got '${{observedLocalName}}'`
-{II});
+{I}const parsedOrError = parseContent(cursor);
+{I}if (parsedOrError.error !== null) {{
+{II}return parsedOrError;
 {I}}}
 
-{I}cursor.advance();
-
-{I}const text = parseTextContent(cursor);
-
-{I}const closeError = consumeCloseTag(cursor, expectedLocalName);
+{I}const closeError = consumeCloseTag(cursor, localName);
 {I}if (closeError !== null) {{
 {II}return new AasCommon.Either<T, DeserializationError>(null, closeError);
 {I}}}
 
-{I}return parseTextFn(text);
+{I}return parsedOrError;
 }}
 
 /**
  * Read the next XML element from `cursor`, expecting it to be named
- * `expectedLocalName`, parse its content with `parseFn` and consume the
- * matching closing element.
+ * `expectedLocalName`, parse its content with `parseContent` and consume
+ * the matching closing element.
  *
- * This is used for a list or a tuple item whose concrete type is statically
- * known (*i.e.*, it has no further descendants), so we can reject
- * an unexpected element based on its local name alone, without wastefully
- * parsing its full (possibly deeply nested) content.
+ * This is what an item of a list or of a tuple is parsed with -- a scalar item
+ * in an element tagged `"v"`, `"v1"`, `"v2"`, *etc.*, and an item whose concrete
+ * class is statically known in an element named after that class. Rejecting
+ * an unexpected element on its local name alone spares us parsing its full
+ * (possibly deeply nested) content only to discover the mismatch afterwards.
  *
  * @param cursor - to read from
  * @param expectedLocalName - the expected local name of the element
- * @param parseFn - parses the sequence of properties of the class instance
- * @returns the parsed instance, or an error
- * @typeParam T - type of the parsed instance
+ * @param parseContent - parses the content of the element
+ * @returns parsed value, or an error
+ * @typeParam T - type of the parsed value
  */
-function parseNamedClassElement<T>(
+function parseNamedElement<T>(
 {I}cursor: XmlCursor,
 {I}expectedLocalName: string,
-{I}parseFn: (cursor: XmlCursor) => AasCommon.Either<T, DeserializationError>
+{I}parseContent: ContentParser<T>
 ): AasCommon.Either<T, DeserializationError> {{
 {I}const startTagOrError = readNextOpenTag(cursor);
 {I}if (startTagOrError.error !== null) {{
@@ -2062,17 +2001,7 @@ function parseNamedClassElement<T>(
 
 {I}cursor.advance();
 
-{I}const instanceOrError = parseFn(cursor);
-{I}if (instanceOrError.error !== null) {{
-{II}return instanceOrError;
-{I}}}
-
-{I}const closeError = consumeCloseTag(cursor, expectedLocalName);
-{I}if (closeError !== null) {{
-{II}return new AasCommon.Either<T, DeserializationError>(null, closeError);
-{I}}}
-
-{I}return instanceOrError;
+{I}return parseElementContent(cursor, expectedLocalName, parseContent);
 }}
 
 /**
@@ -2089,7 +2018,7 @@ function parseNamedClassElement<T>(
  */
 function parseList<T>(
 {I}cursor: XmlCursor,
-{I}parseItem: (cursor: XmlCursor) => AasCommon.Either<T, DeserializationError>
+{I}parseItem: ContentParser<T>
 ): AasCommon.Either<Array<T>, DeserializationError> {{
 {I}const items = new Array<T>();
 {I}let itemIndex = 0;
@@ -2258,11 +2187,130 @@ function parseTextContent(cursor: XmlCursor): string {{
         ),
     ]  # type: List[Stripped]
 
+    # NOTE (mristin):
+    # A meta-model which has no interface and no named union dispatches nowhere, and
+    # an unused function would make ESLint unhappy. The shims which this function
+    # serves are generated further below, one per interface and per named union.
+    if len(symbol_table.named_unions) > 0 or any(
+        cls.interface is not None for cls in symbol_table.classes
+    ):
+        blocks.append(
+            Stripped(
+                f"""\
+/**
+ * Read the next XML element from `cursor` and parse it with the parser which
+ * `parsersByLocalName` gives for the element's local name.
+ *
+ * An abstract class, a concrete class with descendants and a named union all
+ * prescribe no element tag of their own, so the tag is what tells us which
+ * parser to use. The set of local names which are accepted is the only thing
+ * which distinguishes one such dispatch from another, so it is the only thing
+ * which is generated -- the reading itself lives here.
+ *
+ * @param cursor - to read from
+ * @param expectedWhat - what we expected to read, for the error message
+ * @param parsersByLocalName - parser of the content, by the element's local name
+ * @returns parsed instance, or an error
+ * @typeParam T - type of the parsed instance
+ */
+function dispatchParseElement<T>(
+{I}cursor: XmlCursor,
+{I}expectedWhat: string,
+{I}parsersByLocalName: ReadonlyMap<string, ContentParser<T>>
+): AasCommon.Either<T, DeserializationError> {{
+{I}const startTagOrError = readNextOpenTag(cursor);
+{I}if (startTagOrError.error !== null) {{
+{II}return new AasCommon.Either<T, DeserializationError>(
+{III}null,
+{III}startTagOrError.error
+{II});
+{I}}}
+
+{I}const localName = localNameOfTag(startTagOrError.mustValue().tag);
+
+{I}const parseContent = parsersByLocalName.get(localName);
+{I}if (parseContent === undefined) {{
+{II}return newDeserializationError<T>(
+{III}`Expected an instance of ${{expectedWhat}}, but got: ${{localName}}`
+{II});
+{I}}}
+
+{I}cursor.advance();
+
+{I}return parseElementContent(cursor, localName, parseContent);
+}}"""
+            )
+        )
+
+    if len(symbol_table.enumerations) > 0:
+        blocks.append(
+            Stripped(
+                f"""\
+/**
+ * Parse the content of an XML element as a literal of the enumeration called
+ * `enumerationName`, looking the text up with `fromString`.
+ *
+ * The lookup lives in the stringification module already, so this function is
+ * generic over it, and every enumeration of the meta-model shares it. The name
+ * of the enumeration is the only thing it adds, for the error message.
+ *
+ * @param cursor - to read from
+ * @param enumerationName - name of the enumeration, for the error message
+ * @param fromString - gives the literal for the text, or `null`
+ * @returns parsed literal, or an error
+ * @typeParam T - type of the enumeration
+ */
+function parseEnumerationContent<T>(
+{I}cursor: XmlCursor,
+{I}enumerationName: string,
+{I}fromString: (text: string) => T | null
+): AasCommon.Either<T, DeserializationError> {{
+{I}const text = parseTextContent(cursor);
+
+{I}const literal = fromString(text);
+{I}if (literal === null) {{
+{II}return newDeserializationError<T>(
+{III}`Unexpected literal of ${{enumerationName}}: ${{text}}`
+{II});
+{I}}}
+
+{I}return new AasCommon.Either<T, DeserializationError>(literal, null);
+}}"""
+            )
+        )
+
+    # NOTE (mristin):
+    # A property which occurs twice is reported by the one shared function, so it is
+    # needed as soon as any class has a property at all -- and not needed otherwise,
+    # where an unused function would make ESLint unhappy.
+    if any(
+        len(concrete_cls.properties) > 0
+        for concrete_cls in symbol_table.concrete_classes
+    ):
+        blocks.append(
+            Stripped(
+                f"""\
+/**
+ * Report that the property `localName` occurred more than once.
+ *
+ * The check itself sits in the property loop, right in front of the parse, since
+ * only the loop knows whether the property's variable has been set already. This
+ * is only the error, so that the message is written once instead of at every one
+ * of the property cases.
+ */
+function duplicatePropertyError(localName: string): DeserializationError {{
+{I}return new DeserializationError(
+{II}"Property " + localName + " occurred more than once"
+{I});
+}}"""
+            )
+        )
+
     for primitive_type in intermediate.PrimitiveType:
-        blocks.append(_generate_parse_text_for_primitive_type(primitive_type))
+        blocks.append(_generate_parse_content_for_primitive_type(primitive_type))
 
     for enumeration in symbol_table.enumerations:
-        blocks.append(_generate_parse_text_as_enumeration(enumeration))
+        blocks.append(_generate_parse_content_for_enumeration(enumeration))
 
     for enumeration in symbol_table.enumerations:
         blocks.append(_generate_serialize_text_as_enumeration(enumeration))
@@ -2270,39 +2318,89 @@ function parseTextContent(cursor: XmlCursor): string {{
     for arity in intermediate.tuple_arities(symbol_table=symbol_table):
         blocks.append(_generate_parse_tuple_function(arity))
 
+    # NOTE (mristin):
+    # We compose the parsers first, so that we know which of them a meta-model
+    # actually reaches. They are de-duplicated by the type which they parse, so that
+    # all the classes share them, and they are hoisted function declarations, so
+    # the order in which we emit them does not matter.
+    parser_registry = _ParserRegistry()
+
+    for concrete_cls in symbol_table.concrete_classes:
+        for prop in concrete_cls.properties:
+            parser_registry.register_property_parser(prop.type_annotation)
+
+    blocks.extend(parser_registry.blocks)
+
     for concrete_cls in symbol_table.concrete_classes:
         blocks.append(_generate_parse_concrete_class(cls=concrete_cls))
 
     for cls in symbol_table.classes:
+        interface = None  # type: Optional[intermediate.Interface]
+
         if isinstance(cls, intermediate.AbstractClass):
-            blocks.append(
-                _generate_dispatch_parse_interface_element(interface=cls.interface)
-            )
-            blocks.append(
-                _generate_from_xml_string_for_interface(interface=cls.interface)
-            )
+            interface = cls.interface
         elif isinstance(cls, intermediate.ConcreteClass):
             if len(cls.concrete_descendants) > 0:
                 assert (
                     cls.interface is not None
                 ), "Expected an interface on a class with concrete descendants"
 
-                blocks.append(
-                    _generate_dispatch_parse_interface_element(interface=cls.interface)
-                )
-                blocks.append(
-                    _generate_from_xml_string_for_interface(interface=cls.interface)
-                )
+                interface = cls.interface
         else:
             assert_never(cls)
+
+        if interface is None:
+            continue
+
+        if isinstance(interface.base, intermediate.AbstractClass):
+            expected_name = typescript_naming.interface_name(interface.name)
+        else:
+            expected_name = typescript_naming.class_name(interface.name)
+
+        map_name = _dispatch_map_name(interface.name)
+
+        blocks.append(
+            _generate_dispatch_map(
+                map_name=map_name,
+                expected_name=expected_name,
+                implementers=interface.implementers,
+            )
+        )
+        blocks.append(
+            _generate_dispatch_parse_element(
+                map_name=map_name,
+                expected_name=expected_name,
+                function_name=_dispatch_parse_element_function_name(interface),
+            )
+        )
+        blocks.append(_generate_from_xml_string_for_interface(interface=interface))
 
     # NOTE (mristin):
     # We keep the named unions' own dispatch functions in a loop of their
     # own, separate from the loop above, since a named union is never
     # a member of ``symbol_table.classes``.
     for named_union in symbol_table.named_unions:
+        union_name = typescript_naming.union_name(named_union.name)
+
+        map_name = _dispatch_map_name(named_union.name)
+
         blocks.append(
-            _generate_dispatch_parse_named_union_element(named_union=named_union)
+            _generate_dispatch_map(
+                map_name=map_name,
+                expected_name=union_name,
+                implementers=named_union.implementers,
+            )
+        )
+        blocks.append(
+            _generate_dispatch_parse_element(
+                map_name=map_name,
+                expected_name=union_name,
+                function_name=(
+                    _dispatch_parse_element_function_name_for_named_union(
+                        named_union=named_union
+                    )
+                ),
+            )
         )
 
     blocks.extend(

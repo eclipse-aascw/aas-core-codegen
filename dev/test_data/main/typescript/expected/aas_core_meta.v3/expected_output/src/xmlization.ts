@@ -119,6 +119,23 @@ function newDeserializationError<T>(
   );
 }
 
+/**
+ * Parse a value from `cursor`.
+ *
+ * Every parser in this module wears this one shape, which is what lets them
+ * compose: a parser can be given to another parser without a closure, since
+ * everything it needs comes from the `cursor` and from its own definition.
+ * The name says what a parser consumes -- a `parse*Content` stops right before
+ * the closing tag of the element which the caller has opened, while
+ * a `parse*Element` and a `dispatchParse*Element` read an element of their own,
+ * its tags included.
+ *
+ * @typeParam T - type of the parsed value
+ */
+type ContentParser<T> = (
+  cursor: XmlCursor
+) => AasCommon.Either<T, DeserializationError>;
+
 function currentTokenKind(cursor: XmlCursor): string {
   const token = cursor.current();
   if (token === null) {
@@ -304,74 +321,64 @@ function readNextOpenTag(
 }
 
 /**
- * Read the next XML element from `cursor`, expecting it to be named
- * `expectedLocalName`, parse its text content with `parseTextFn` and
- * consume the matching closing element.
+ * Parse the content of the XML element which the caller has opened, and consume
+ * the corresponding closing element named `localName`.
  *
- * This is shared by the parsing of a single list item (with a fixed
- * local name, *e.g.*, `"v"`) and the parsing of a single tuple item (with
- * a positional local name, *e.g.*, `"v1"`).
+ * This is the one thing which every value of an XML element has in common,
+ * whatever it holds: the property loop of a class calls it directly, since
+ * it has already read the opening tag and switched on its local name, and
+ * `parseNamedElement` calls it after reading an opening tag of its own.
+ *
+ * A property loop assigns *both* halves of the result -- the value as well as
+ * the error -- without looking at either first. The loop returns as soon as
+ * the error is set, so the `null` value which comes with an error is never
+ * read, and the property's variable needs no guard.
  *
  * @param cursor - to read from
- * @param expectedLocalName - the expected local name of the element
- * @param parseTextFn - parses the text content of the element
+ * @param localName - local name of the element which the caller has opened
+ * @param parseContent - parses the content of the element
  * @returns parsed value, or an error
  * @typeParam T - type of the parsed value
  */
-function parseNamedVElement<T>(
+function parseElementContent<T>(
   cursor: XmlCursor,
-  expectedLocalName: string,
-  parseTextFn: (text: string) => AasCommon.Either<T, DeserializationError>
+  localName: string,
+  parseContent: ContentParser<T>
 ): AasCommon.Either<T, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<T, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const observedLocalName = localNameOfTag(startTag.tag);
-  if (observedLocalName !== expectedLocalName) {
-    return newDeserializationError<T>(
-      `Expected the element '${expectedLocalName}', ` +
-        `but got '${observedLocalName}'`
-    );
+  const parsedOrError = parseContent(cursor);
+  if (parsedOrError.error !== null) {
+    return parsedOrError;
   }
 
-  cursor.advance();
-
-  const text = parseTextContent(cursor);
-
-  const closeError = consumeCloseTag(cursor, expectedLocalName);
+  const closeError = consumeCloseTag(cursor, localName);
   if (closeError !== null) {
     return new AasCommon.Either<T, DeserializationError>(null, closeError);
   }
 
-  return parseTextFn(text);
+  return parsedOrError;
 }
 
 /**
  * Read the next XML element from `cursor`, expecting it to be named
- * `expectedLocalName`, parse its content with `parseFn` and consume the
- * matching closing element.
+ * `expectedLocalName`, parse its content with `parseContent` and consume
+ * the matching closing element.
  *
- * This is used for a list or a tuple item whose concrete type is statically
- * known (*i.e.*, it has no further descendants), so we can reject
- * an unexpected element based on its local name alone, without wastefully
- * parsing its full (possibly deeply nested) content.
+ * This is what an item of a list or of a tuple is parsed with -- a scalar item
+ * in an element tagged `"v"`, `"v1"`, `"v2"`, *etc.*, and an item whose concrete
+ * class is statically known in an element named after that class. Rejecting
+ * an unexpected element on its local name alone spares us parsing its full
+ * (possibly deeply nested) content only to discover the mismatch afterwards.
  *
  * @param cursor - to read from
  * @param expectedLocalName - the expected local name of the element
- * @param parseFn - parses the sequence of properties of the class instance
- * @returns the parsed instance, or an error
- * @typeParam T - type of the parsed instance
+ * @param parseContent - parses the content of the element
+ * @returns parsed value, or an error
+ * @typeParam T - type of the parsed value
  */
-function parseNamedClassElement<T>(
+function parseNamedElement<T>(
   cursor: XmlCursor,
   expectedLocalName: string,
-  parseFn: (cursor: XmlCursor) => AasCommon.Either<T, DeserializationError>
+  parseContent: ContentParser<T>
 ): AasCommon.Either<T, DeserializationError> {
   const startTagOrError = readNextOpenTag(cursor);
   if (startTagOrError.error !== null) {
@@ -392,17 +399,7 @@ function parseNamedClassElement<T>(
 
   cursor.advance();
 
-  const instanceOrError = parseFn(cursor);
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, expectedLocalName);
-  if (closeError !== null) {
-    return new AasCommon.Either<T, DeserializationError>(null, closeError);
-  }
-
-  return instanceOrError;
+  return parseElementContent(cursor, expectedLocalName, parseContent);
 }
 
 /**
@@ -419,7 +416,7 @@ function parseNamedClassElement<T>(
  */
 function parseList<T>(
   cursor: XmlCursor,
-  parseItem: (cursor: XmlCursor) => AasCommon.Either<T, DeserializationError>
+  parseItem: ContentParser<T>
 ): AasCommon.Either<Array<T>, DeserializationError> {
   const items = new Array<T>();
   let itemIndex = 0;
@@ -586,9 +583,99 @@ function parseTextContent(cursor: XmlCursor): string {
   return text;
 }
 
-function parseBooleanText(
-  text: string
+/**
+ * Read the next XML element from `cursor` and parse it with the parser which
+ * `parsersByLocalName` gives for the element's local name.
+ *
+ * An abstract class, a concrete class with descendants and a named union all
+ * prescribe no element tag of their own, so the tag is what tells us which
+ * parser to use. The set of local names which are accepted is the only thing
+ * which distinguishes one such dispatch from another, so it is the only thing
+ * which is generated -- the reading itself lives here.
+ *
+ * @param cursor - to read from
+ * @param expectedWhat - what we expected to read, for the error message
+ * @param parsersByLocalName - parser of the content, by the element's local name
+ * @returns parsed instance, or an error
+ * @typeParam T - type of the parsed instance
+ */
+function dispatchParseElement<T>(
+  cursor: XmlCursor,
+  expectedWhat: string,
+  parsersByLocalName: ReadonlyMap<string, ContentParser<T>>
+): AasCommon.Either<T, DeserializationError> {
+  const startTagOrError = readNextOpenTag(cursor);
+  if (startTagOrError.error !== null) {
+    return new AasCommon.Either<T, DeserializationError>(
+      null,
+      startTagOrError.error
+    );
+  }
+
+  const localName = localNameOfTag(startTagOrError.mustValue().tag);
+
+  const parseContent = parsersByLocalName.get(localName);
+  if (parseContent === undefined) {
+    return newDeserializationError<T>(
+      `Expected an instance of ${expectedWhat}, but got: ${localName}`
+    );
+  }
+
+  cursor.advance();
+
+  return parseElementContent(cursor, localName, parseContent);
+}
+
+/**
+ * Parse the content of an XML element as a literal of the enumeration called
+ * `enumerationName`, looking the text up with `fromString`.
+ *
+ * The lookup lives in the stringification module already, so this function is
+ * generic over it, and every enumeration of the meta-model shares it. The name
+ * of the enumeration is the only thing it adds, for the error message.
+ *
+ * @param cursor - to read from
+ * @param enumerationName - name of the enumeration, for the error message
+ * @param fromString - gives the literal for the text, or `null`
+ * @returns parsed literal, or an error
+ * @typeParam T - type of the enumeration
+ */
+function parseEnumerationContent<T>(
+  cursor: XmlCursor,
+  enumerationName: string,
+  fromString: (text: string) => T | null
+): AasCommon.Either<T, DeserializationError> {
+  const text = parseTextContent(cursor);
+
+  const literal = fromString(text);
+  if (literal === null) {
+    return newDeserializationError<T>(
+      `Unexpected literal of ${enumerationName}: ${text}`
+    );
+  }
+
+  return new AasCommon.Either<T, DeserializationError>(literal, null);
+}
+
+/**
+ * Report that the property `localName` occurred more than once.
+ *
+ * The check itself sits in the property loop, right in front of the parse, since
+ * only the loop knows whether the property's variable has been set already. This
+ * is only the error, so that the message is written once instead of at every one
+ * of the property cases.
+ */
+function duplicatePropertyError(localName: string): DeserializationError {
+  return new DeserializationError(
+    "Property " + localName + " occurred more than once"
+  );
+}
+
+function parseBooleanContent(
+  cursor: XmlCursor
 ): AasCommon.Either<boolean, DeserializationError> {
+  const text = parseTextContent(cursor);
+
   if (text === "true" || text === "1") {
     return new AasCommon.Either<boolean, DeserializationError>(true, null);
   }
@@ -601,9 +688,11 @@ function parseBooleanText(
   );
 }
 
-function parseIntegerText(
-  text: string
+function parseIntegerContent(
+  cursor: XmlCursor
 ): AasCommon.Either<number, DeserializationError> {
+  const text = parseTextContent(cursor);
+
   if (!/^[+-]?\d+$/.test(text)) {
     return newDeserializationError<number>(
       `Expected integer text, but got: ${text}`
@@ -620,9 +709,11 @@ function parseIntegerText(
   return new AasCommon.Either<number, DeserializationError>(value, null);
 }
 
-function parseFloatText(
-  text: string
+function parseFloatContent(
+  cursor: XmlCursor
 ): AasCommon.Either<number, DeserializationError> {
+  const text = parseTextContent(cursor);
+
   if (text === "INF") {
     return new AasCommon.Either<number, DeserializationError>(Infinity, null);
   }
@@ -643,16 +734,19 @@ function parseFloatText(
   return new AasCommon.Either<number, DeserializationError>(value, null);
 }
 
-function parseStringText(
-  text: string
+function parseStringContent(
+  cursor: XmlCursor
 ): AasCommon.Either<string, DeserializationError> {
-  return new AasCommon.Either<string, DeserializationError>(text, null);
+  return new AasCommon.Either<string, DeserializationError>(
+    parseTextContent(cursor),
+    null
+  );
 }
 
-function parseBase64EncodedBytesText(
-  text: string
+function parseBase64EncodedBytesContent(
+  cursor: XmlCursor
 ): AasCommon.Either<Uint8Array, DeserializationError> {
-  const decodedOrError = AasCommon.base64Decode(text);
+  const decodedOrError = AasCommon.base64Decode(parseTextContent(cursor));
   if (decodedOrError.error !== null) {
     return newDeserializationError<Uint8Array>(
       decodedOrError.error
@@ -665,179 +759,113 @@ function parseBase64EncodedBytesText(
   );
 }
 
-function parseModellingKindText(
-  text: string
+function parseModellingKindContent(
+  cursor: XmlCursor
 ): AasCommon.Either<AasTypes.ModellingKind, DeserializationError> {
-  const literal = AasStringification.modellingKindFromString(text);
-  if (literal === null) {
-    return newDeserializationError<AasTypes.ModellingKind>(
-      `Unexpected literal of ModellingKind: ${text}`
-    );
-  }
-
-  return new AasCommon.Either<AasTypes.ModellingKind, DeserializationError>(
-    literal,
-    null
+  return parseEnumerationContent(
+    cursor,
+    "ModellingKind",
+    AasStringification.modellingKindFromString
   );
 }
 
-function parseQualifierKindText(
-  text: string
+function parseQualifierKindContent(
+  cursor: XmlCursor
 ): AasCommon.Either<AasTypes.QualifierKind, DeserializationError> {
-  const literal = AasStringification.qualifierKindFromString(text);
-  if (literal === null) {
-    return newDeserializationError<AasTypes.QualifierKind>(
-      `Unexpected literal of QualifierKind: ${text}`
-    );
-  }
-
-  return new AasCommon.Either<AasTypes.QualifierKind, DeserializationError>(
-    literal,
-    null
+  return parseEnumerationContent(
+    cursor,
+    "QualifierKind",
+    AasStringification.qualifierKindFromString
   );
 }
 
-function parseAssetKindText(
-  text: string
+function parseAssetKindContent(
+  cursor: XmlCursor
 ): AasCommon.Either<AasTypes.AssetKind, DeserializationError> {
-  const literal = AasStringification.assetKindFromString(text);
-  if (literal === null) {
-    return newDeserializationError<AasTypes.AssetKind>(
-      `Unexpected literal of AssetKind: ${text}`
-    );
-  }
-
-  return new AasCommon.Either<AasTypes.AssetKind, DeserializationError>(
-    literal,
-    null
+  return parseEnumerationContent(
+    cursor,
+    "AssetKind",
+    AasStringification.assetKindFromString
   );
 }
 
-function parseAasSubmodelElementsText(
-  text: string
+function parseAasSubmodelElementsContent(
+  cursor: XmlCursor
 ): AasCommon.Either<AasTypes.AasSubmodelElements, DeserializationError> {
-  const literal = AasStringification.aasSubmodelElementsFromString(text);
-  if (literal === null) {
-    return newDeserializationError<AasTypes.AasSubmodelElements>(
-      `Unexpected literal of AasSubmodelElements: ${text}`
-    );
-  }
-
-  return new AasCommon.Either<AasTypes.AasSubmodelElements, DeserializationError>(
-    literal,
-    null
+  return parseEnumerationContent(
+    cursor,
+    "AasSubmodelElements",
+    AasStringification.aasSubmodelElementsFromString
   );
 }
 
-function parseEntityTypeText(
-  text: string
+function parseEntityTypeContent(
+  cursor: XmlCursor
 ): AasCommon.Either<AasTypes.EntityType, DeserializationError> {
-  const literal = AasStringification.entityTypeFromString(text);
-  if (literal === null) {
-    return newDeserializationError<AasTypes.EntityType>(
-      `Unexpected literal of EntityType: ${text}`
-    );
-  }
-
-  return new AasCommon.Either<AasTypes.EntityType, DeserializationError>(
-    literal,
-    null
+  return parseEnumerationContent(
+    cursor,
+    "EntityType",
+    AasStringification.entityTypeFromString
   );
 }
 
-function parseDirectionText(
-  text: string
+function parseDirectionContent(
+  cursor: XmlCursor
 ): AasCommon.Either<AasTypes.Direction, DeserializationError> {
-  const literal = AasStringification.directionFromString(text);
-  if (literal === null) {
-    return newDeserializationError<AasTypes.Direction>(
-      `Unexpected literal of Direction: ${text}`
-    );
-  }
-
-  return new AasCommon.Either<AasTypes.Direction, DeserializationError>(
-    literal,
-    null
+  return parseEnumerationContent(
+    cursor,
+    "Direction",
+    AasStringification.directionFromString
   );
 }
 
-function parseStateOfEventText(
-  text: string
+function parseStateOfEventContent(
+  cursor: XmlCursor
 ): AasCommon.Either<AasTypes.StateOfEvent, DeserializationError> {
-  const literal = AasStringification.stateOfEventFromString(text);
-  if (literal === null) {
-    return newDeserializationError<AasTypes.StateOfEvent>(
-      `Unexpected literal of StateOfEvent: ${text}`
-    );
-  }
-
-  return new AasCommon.Either<AasTypes.StateOfEvent, DeserializationError>(
-    literal,
-    null
+  return parseEnumerationContent(
+    cursor,
+    "StateOfEvent",
+    AasStringification.stateOfEventFromString
   );
 }
 
-function parseReferenceTypesText(
-  text: string
+function parseReferenceTypesContent(
+  cursor: XmlCursor
 ): AasCommon.Either<AasTypes.ReferenceTypes, DeserializationError> {
-  const literal = AasStringification.referenceTypesFromString(text);
-  if (literal === null) {
-    return newDeserializationError<AasTypes.ReferenceTypes>(
-      `Unexpected literal of ReferenceTypes: ${text}`
-    );
-  }
-
-  return new AasCommon.Either<AasTypes.ReferenceTypes, DeserializationError>(
-    literal,
-    null
+  return parseEnumerationContent(
+    cursor,
+    "ReferenceTypes",
+    AasStringification.referenceTypesFromString
   );
 }
 
-function parseKeyTypesText(
-  text: string
+function parseKeyTypesContent(
+  cursor: XmlCursor
 ): AasCommon.Either<AasTypes.KeyTypes, DeserializationError> {
-  const literal = AasStringification.keyTypesFromString(text);
-  if (literal === null) {
-    return newDeserializationError<AasTypes.KeyTypes>(
-      `Unexpected literal of KeyTypes: ${text}`
-    );
-  }
-
-  return new AasCommon.Either<AasTypes.KeyTypes, DeserializationError>(
-    literal,
-    null
+  return parseEnumerationContent(
+    cursor,
+    "KeyTypes",
+    AasStringification.keyTypesFromString
   );
 }
 
-function parseDataTypeDefXsdText(
-  text: string
+function parseDataTypeDefXsdContent(
+  cursor: XmlCursor
 ): AasCommon.Either<AasTypes.DataTypeDefXsd, DeserializationError> {
-  const literal = AasStringification.dataTypeDefXsdFromString(text);
-  if (literal === null) {
-    return newDeserializationError<AasTypes.DataTypeDefXsd>(
-      `Unexpected literal of DataTypeDefXsd: ${text}`
-    );
-  }
-
-  return new AasCommon.Either<AasTypes.DataTypeDefXsd, DeserializationError>(
-    literal,
-    null
+  return parseEnumerationContent(
+    cursor,
+    "DataTypeDefXsd",
+    AasStringification.dataTypeDefXsdFromString
   );
 }
 
-function parseDataTypeIec61360Text(
-  text: string
+function parseDataTypeIec61360Content(
+  cursor: XmlCursor
 ): AasCommon.Either<AasTypes.DataTypeIec61360, DeserializationError> {
-  const literal = AasStringification.dataTypeIec61360FromString(text);
-  if (literal === null) {
-    return newDeserializationError<AasTypes.DataTypeIec61360>(
-      `Unexpected literal of DataTypeIec61360: ${text}`
-    );
-  }
-
-  return new AasCommon.Either<AasTypes.DataTypeIec61360, DeserializationError>(
-    literal,
-    null
+  return parseEnumerationContent(
+    cursor,
+    "DataTypeIec61360",
+    AasStringification.dataTypeIec61360FromString
   );
 }
 
@@ -907,13 +935,251 @@ function serializeDataTypeIec61360Text(
   return escapeXmlText(AasStringification.mustDataTypeIec61360ToString(value));
 }
 
+function parseAssetAdministrationShellElement(
+  cursor: XmlCursor
+): AasCommon.Either<AasTypes.AssetAdministrationShell, DeserializationError> {
+  return parseNamedElement(
+    cursor,
+    "assetAdministrationShell",
+    parseAssetAdministrationShellFromSequence
+  );
+}
+
+function parseConceptDescriptionElement(
+  cursor: XmlCursor
+): AasCommon.Either<AasTypes.ConceptDescription, DeserializationError> {
+  return parseNamedElement(cursor, "conceptDescription", parseConceptDescriptionFromSequence);
+}
+
+function parseEmbeddedDataSpecificationElement(
+  cursor: XmlCursor
+): AasCommon.Either<AasTypes.EmbeddedDataSpecification, DeserializationError> {
+  return parseNamedElement(
+    cursor,
+    "embeddedDataSpecification",
+    parseEmbeddedDataSpecificationFromSequence
+  );
+}
+
+function parseExtensionElement(
+  cursor: XmlCursor
+): AasCommon.Either<AasTypes.Extension, DeserializationError> {
+  return parseNamedElement(cursor, "extension", parseExtensionFromSequence);
+}
+
+function parseKeyElement(
+  cursor: XmlCursor
+): AasCommon.Either<AasTypes.Key, DeserializationError> {
+  return parseNamedElement(cursor, "key", parseKeyFromSequence);
+}
+
+function parseLangStringDefinitionTypeIec61360Element(
+  cursor: XmlCursor
+): AasCommon.Either<AasTypes.LangStringDefinitionTypeIec61360, DeserializationError> {
+  return parseNamedElement(
+    cursor,
+    "langStringDefinitionTypeIec61360",
+    parseLangStringDefinitionTypeIec61360FromSequence
+  );
+}
+
+function parseLangStringNameTypeElement(
+  cursor: XmlCursor
+): AasCommon.Either<AasTypes.LangStringNameType, DeserializationError> {
+  return parseNamedElement(cursor, "langStringNameType", parseLangStringNameTypeFromSequence);
+}
+
+function parseLangStringPreferredNameTypeIec61360Element(
+  cursor: XmlCursor
+): AasCommon.Either<AasTypes.LangStringPreferredNameTypeIec61360, DeserializationError> {
+  return parseNamedElement(
+    cursor,
+    "langStringPreferredNameTypeIec61360",
+    parseLangStringPreferredNameTypeIec61360FromSequence
+  );
+}
+
+function parseLangStringShortNameTypeIec61360Element(
+  cursor: XmlCursor
+): AasCommon.Either<AasTypes.LangStringShortNameTypeIec61360, DeserializationError> {
+  return parseNamedElement(
+    cursor,
+    "langStringShortNameTypeIec61360",
+    parseLangStringShortNameTypeIec61360FromSequence
+  );
+}
+
+function parseLangStringTextTypeElement(
+  cursor: XmlCursor
+): AasCommon.Either<AasTypes.LangStringTextType, DeserializationError> {
+  return parseNamedElement(cursor, "langStringTextType", parseLangStringTextTypeFromSequence);
+}
+
+function parseListOfAssetAdministrationShellContent(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.AssetAdministrationShell>, DeserializationError> {
+  return parseList<AasTypes.AssetAdministrationShell>(cursor, parseAssetAdministrationShellElement);
+}
+
+function parseListOfConceptDescriptionContent(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.ConceptDescription>, DeserializationError> {
+  return parseList<AasTypes.ConceptDescription>(cursor, parseConceptDescriptionElement);
+}
+
+function parseListOfEmbeddedDataSpecificationContent(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.EmbeddedDataSpecification>, DeserializationError> {
+  return parseList<AasTypes.EmbeddedDataSpecification>(
+    cursor,
+    parseEmbeddedDataSpecificationElement
+  );
+}
+
+function parseListOfExtensionContent(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.Extension>, DeserializationError> {
+  return parseList<AasTypes.Extension>(cursor, parseExtensionElement);
+}
+
+function parseListOfIDataElementContent(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.IDataElement>, DeserializationError> {
+  return parseList<AasTypes.IDataElement>(cursor, dispatchParseDataElementElement);
+}
+
+function parseListOfISubmodelElementContent(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.ISubmodelElement>, DeserializationError> {
+  return parseList<AasTypes.ISubmodelElement>(cursor, dispatchParseSubmodelElementElement);
+}
+
+function parseListOfKeyContent(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.Key>, DeserializationError> {
+  return parseList<AasTypes.Key>(cursor, parseKeyElement);
+}
+
+function parseListOfLangStringDefinitionTypeIec61360Content(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.LangStringDefinitionTypeIec61360>, DeserializationError> {
+  return parseList<AasTypes.LangStringDefinitionTypeIec61360>(
+    cursor,
+    parseLangStringDefinitionTypeIec61360Element
+  );
+}
+
+function parseListOfLangStringNameTypeContent(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.LangStringNameType>, DeserializationError> {
+  return parseList<AasTypes.LangStringNameType>(cursor, parseLangStringNameTypeElement);
+}
+
+function parseListOfLangStringPreferredNameTypeIec61360Content(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.LangStringPreferredNameTypeIec61360>, DeserializationError> {
+  return parseList<AasTypes.LangStringPreferredNameTypeIec61360>(
+    cursor,
+    parseLangStringPreferredNameTypeIec61360Element
+  );
+}
+
+function parseListOfLangStringShortNameTypeIec61360Content(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.LangStringShortNameTypeIec61360>, DeserializationError> {
+  return parseList<AasTypes.LangStringShortNameTypeIec61360>(
+    cursor,
+    parseLangStringShortNameTypeIec61360Element
+  );
+}
+
+function parseListOfLangStringTextTypeContent(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.LangStringTextType>, DeserializationError> {
+  return parseList<AasTypes.LangStringTextType>(cursor, parseLangStringTextTypeElement);
+}
+
+function parseListOfOperationVariableContent(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.OperationVariable>, DeserializationError> {
+  return parseList<AasTypes.OperationVariable>(cursor, parseOperationVariableElement);
+}
+
+function parseListOfQualifierContent(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.Qualifier>, DeserializationError> {
+  return parseList<AasTypes.Qualifier>(cursor, parseQualifierElement);
+}
+
+function parseListOfReferenceContent(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.Reference>, DeserializationError> {
+  return parseList<AasTypes.Reference>(cursor, parseReferenceElement);
+}
+
+function parseListOfSpecificAssetIdContent(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.SpecificAssetId>, DeserializationError> {
+  return parseList<AasTypes.SpecificAssetId>(cursor, parseSpecificAssetIdElement);
+}
+
+function parseListOfSubmodelContent(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.Submodel>, DeserializationError> {
+  return parseList<AasTypes.Submodel>(cursor, parseSubmodelElement);
+}
+
+function parseListOfValueReferencePairContent(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.ValueReferencePair>, DeserializationError> {
+  return parseList<AasTypes.ValueReferencePair>(cursor, parseValueReferencePairElement);
+}
+
+function parseOperationVariableElement(
+  cursor: XmlCursor
+): AasCommon.Either<AasTypes.OperationVariable, DeserializationError> {
+  return parseNamedElement(cursor, "operationVariable", parseOperationVariableFromSequence);
+}
+
+function parseQualifierElement(
+  cursor: XmlCursor
+): AasCommon.Either<AasTypes.Qualifier, DeserializationError> {
+  return parseNamedElement(cursor, "qualifier", parseQualifierFromSequence);
+}
+
+function parseReferenceElement(
+  cursor: XmlCursor
+): AasCommon.Either<AasTypes.Reference, DeserializationError> {
+  return parseNamedElement(cursor, "reference", parseReferenceFromSequence);
+}
+
+function parseSpecificAssetIdElement(
+  cursor: XmlCursor
+): AasCommon.Either<AasTypes.SpecificAssetId, DeserializationError> {
+  return parseNamedElement(cursor, "specificAssetId", parseSpecificAssetIdFromSequence);
+}
+
+function parseSubmodelElement(
+  cursor: XmlCursor
+): AasCommon.Either<AasTypes.Submodel, DeserializationError> {
+  return parseNamedElement(cursor, "submodel", parseSubmodelFromSequence);
+}
+
+function parseValueReferencePairElement(
+  cursor: XmlCursor
+): AasCommon.Either<AasTypes.ValueReferencePair, DeserializationError> {
+  return parseNamedElement(cursor, "valueReferencePair", parseValueReferencePairFromSequence);
+}
+
 /**
  * Parse the sequence of properties of an instance
  * of {@link types!Extension}.
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!Extension} is embedded.
  */
 function parseExtensionFromSequence(
   cursor: XmlCursor
@@ -947,195 +1213,73 @@ function parseExtensionFromSequence(
     switch (propertyLocalName) {
       case "semanticId": {
         if (theSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "semanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
         break;
       }
 
       case "supplementalSemanticIds": {
         if (theSupplementalSemanticIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "supplementalSemanticIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSupplementalSemanticIds = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
         break;
       }
 
       case "name": {
         if (theName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "name" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theName = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theName = parsed.value;
         break;
       }
 
       case "valueType": {
         if (theValueType !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "valueType" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseDataTypeDefXsdText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValueType = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseDataTypeDefXsdContent);
+        propertyError = parsed.error;
+        theValueType = parsed.value;
         break;
       }
 
       case "value": {
         if (theValue !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "value" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValue = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theValue = parsed.value;
         break;
       }
 
       case "refersTo": {
         if (theRefersTo !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "refersTo" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theRefersTo = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theRefersTo = parsed.value;
         break;
       }
 
@@ -1184,7 +1328,9 @@ function parseExtensionFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!AdministrativeInformation} is embedded.
  */
 function parseAdministrativeInformationFromSequence(
   cursor: XmlCursor
@@ -1217,159 +1363,65 @@ function parseAdministrativeInformationFromSequence(
     switch (propertyLocalName) {
       case "embeddedDataSpecifications": {
         if (theEmbeddedDataSpecifications !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "embeddedDataSpecifications" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.EmbeddedDataSpecification>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "embeddedDataSpecification",
-            parseEmbeddedDataSpecificationFromSequence
-          )
+          propertyLocalName,
+          parseListOfEmbeddedDataSpecificationContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theEmbeddedDataSpecifications = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
         break;
       }
 
       case "version": {
         if (theVersion !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "version" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theVersion = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theVersion = parsed.value;
         break;
       }
 
       case "revision": {
         if (theRevision !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "revision" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theRevision = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theRevision = parsed.value;
         break;
       }
 
       case "creator": {
         if (theCreator !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "creator" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theCreator = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theCreator = parsed.value;
         break;
       }
 
       case "templateId": {
         if (theTemplateId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "templateId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theTemplateId = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theTemplateId = parsed.value;
         break;
       }
 
@@ -1413,7 +1465,9 @@ function parseAdministrativeInformationFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!Qualifier} is embedded.
  */
 function parseQualifierFromSequence(
   cursor: XmlCursor
@@ -1448,219 +1502,85 @@ function parseQualifierFromSequence(
     switch (propertyLocalName) {
       case "semanticId": {
         if (theSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "semanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
         break;
       }
 
       case "supplementalSemanticIds": {
         if (theSupplementalSemanticIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "supplementalSemanticIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSupplementalSemanticIds = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
         break;
       }
 
       case "kind": {
         if (theKind !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "kind" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseQualifierKindText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theKind = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseQualifierKindContent);
+        propertyError = parsed.error;
+        theKind = parsed.value;
         break;
       }
 
       case "type": {
         if (theType !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "type" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theType = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theType = parsed.value;
         break;
       }
 
       case "valueType": {
         if (theValueType !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "valueType" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseDataTypeDefXsdText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValueType = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseDataTypeDefXsdContent);
+        propertyError = parsed.error;
+        theValueType = parsed.value;
         break;
       }
 
       case "value": {
         if (theValue !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "value" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValue = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theValue = parsed.value;
         break;
       }
 
       case "valueId": {
         if (theValueId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "valueId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValueId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theValueId = parsed.value;
         break;
       }
 
@@ -1716,7 +1636,9 @@ function parseQualifierFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!AssetAdministrationShell} is embedded.
  */
 function parseAssetAdministrationShellFromSequence(
   cursor: XmlCursor
@@ -1755,361 +1677,153 @@ function parseAssetAdministrationShellFromSequence(
     switch (propertyLocalName) {
       case "extensions": {
         if (theExtensions !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "extensions" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Extension>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "extension",
-            parseExtensionFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theExtensions = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
         break;
       }
 
       case "category": {
         if (theCategory !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "category" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theCategory = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theCategory = parsed.value;
         break;
       }
 
       case "idShort": {
         if (theIdShort !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "idShort" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theIdShort = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
         break;
       }
 
       case "displayName": {
         if (theDisplayName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "displayName" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringNameType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringNameType",
-            parseLangStringNameTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringNameTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDisplayName = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
         break;
       }
 
       case "description": {
         if (theDescription !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "description" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringTextType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringTextType",
-            parseLangStringTextTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringTextTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDescription = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDescription = parsed.value;
         break;
       }
 
       case "administration": {
         if (theAdministration !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "administration" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseAdministrativeInformationFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
+        const parsed = parseElementContent(
           cursor,
-          propertyLocalName
+          propertyLocalName,
+          parseAdministrativeInformationFromSequence
         );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theAdministration = classOrError.mustValue();
+        propertyError = parsed.error;
+        theAdministration = parsed.value;
         break;
       }
 
       case "id": {
         if (theId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "id" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theId = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theId = parsed.value;
         break;
       }
 
       case "embeddedDataSpecifications": {
         if (theEmbeddedDataSpecifications !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "embeddedDataSpecifications" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.EmbeddedDataSpecification>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "embeddedDataSpecification",
-            parseEmbeddedDataSpecificationFromSequence
-          )
+          propertyLocalName,
+          parseListOfEmbeddedDataSpecificationContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theEmbeddedDataSpecifications = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
         break;
       }
 
       case "derivedFrom": {
         if (theDerivedFrom !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "derivedFrom" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDerivedFrom = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theDerivedFrom = parsed.value;
         break;
       }
 
       case "assetInformation": {
         if (theAssetInformation !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "assetInformation" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseAssetInformationFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
+        const parsed = parseElementContent(
           cursor,
-          propertyLocalName
+          propertyLocalName,
+          parseAssetInformationFromSequence
         );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theAssetInformation = classOrError.mustValue();
+        propertyError = parsed.error;
+        theAssetInformation = parsed.value;
         break;
       }
 
       case "submodels": {
         if (theSubmodels !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "submodels" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSubmodels = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theSubmodels = parsed.value;
         break;
       }
 
@@ -2169,7 +1883,9 @@ function parseAssetAdministrationShellFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!AssetInformation} is embedded.
  */
 function parseAssetInformationFromSequence(
   cursor: XmlCursor
@@ -2202,159 +1918,65 @@ function parseAssetInformationFromSequence(
     switch (propertyLocalName) {
       case "assetKind": {
         if (theAssetKind !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "assetKind" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseAssetKindText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theAssetKind = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseAssetKindContent);
+        propertyError = parsed.error;
+        theAssetKind = parsed.value;
         break;
       }
 
       case "globalAssetId": {
         if (theGlobalAssetId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "globalAssetId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theGlobalAssetId = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theGlobalAssetId = parsed.value;
         break;
       }
 
       case "specificAssetIds": {
         if (theSpecificAssetIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "specificAssetIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.SpecificAssetId>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "specificAssetId",
-            parseSpecificAssetIdFromSequence
-          )
+          propertyLocalName,
+          parseListOfSpecificAssetIdContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSpecificAssetIds = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theSpecificAssetIds = parsed.value;
         break;
       }
 
       case "assetType": {
         if (theAssetType !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "assetType" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theAssetType = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theAssetType = parsed.value;
         break;
       }
 
       case "defaultThumbnail": {
         if (theDefaultThumbnail !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "defaultThumbnail" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseResourceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDefaultThumbnail = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseResourceFromSequence);
+        propertyError = parsed.error;
+        theDefaultThumbnail = parsed.value;
         break;
       }
 
@@ -2402,7 +2024,9 @@ function parseAssetInformationFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!Resource} is embedded.
  */
 function parseResourceFromSequence(
   cursor: XmlCursor
@@ -2432,63 +2056,25 @@ function parseResourceFromSequence(
     switch (propertyLocalName) {
       case "path": {
         if (thePath !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "path" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        thePath = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        thePath = parsed.value;
         break;
       }
 
       case "contentType": {
         if (theContentType !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "contentType" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theContentType = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theContentType = parsed.value;
         break;
       }
 
@@ -2533,7 +2119,9 @@ function parseResourceFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!SpecificAssetId} is embedded.
  */
 function parseSpecificAssetIdFromSequence(
   cursor: XmlCursor
@@ -2566,157 +2154,61 @@ function parseSpecificAssetIdFromSequence(
     switch (propertyLocalName) {
       case "semanticId": {
         if (theSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "semanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
         break;
       }
 
       case "supplementalSemanticIds": {
         if (theSupplementalSemanticIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "supplementalSemanticIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSupplementalSemanticIds = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
         break;
       }
 
       case "name": {
         if (theName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "name" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theName = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theName = parsed.value;
         break;
       }
 
       case "value": {
         if (theValue !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "value" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValue = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theValue = parsed.value;
         break;
       }
 
       case "externalSubjectId": {
         if (theExternalSubjectId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "externalSubjectId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theExternalSubjectId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theExternalSubjectId = parsed.value;
         break;
       }
 
@@ -2770,7 +2262,9 @@ function parseSpecificAssetIdFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!Submodel} is embedded.
  */
 function parseSubmodelFromSequence(
   cursor: XmlCursor
@@ -2811,431 +2305,177 @@ function parseSubmodelFromSequence(
     switch (propertyLocalName) {
       case "extensions": {
         if (theExtensions !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "extensions" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Extension>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "extension",
-            parseExtensionFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theExtensions = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
         break;
       }
 
       case "category": {
         if (theCategory !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "category" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theCategory = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theCategory = parsed.value;
         break;
       }
 
       case "idShort": {
         if (theIdShort !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "idShort" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theIdShort = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
         break;
       }
 
       case "displayName": {
         if (theDisplayName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "displayName" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringNameType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringNameType",
-            parseLangStringNameTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringNameTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDisplayName = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
         break;
       }
 
       case "description": {
         if (theDescription !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "description" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringTextType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringTextType",
-            parseLangStringTextTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringTextTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDescription = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDescription = parsed.value;
         break;
       }
 
       case "administration": {
         if (theAdministration !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "administration" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseAdministrativeInformationFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
+        const parsed = parseElementContent(
           cursor,
-          propertyLocalName
+          propertyLocalName,
+          parseAdministrativeInformationFromSequence
         );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theAdministration = classOrError.mustValue();
+        propertyError = parsed.error;
+        theAdministration = parsed.value;
         break;
       }
 
       case "id": {
         if (theId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "id" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theId = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theId = parsed.value;
         break;
       }
 
       case "kind": {
         if (theKind !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "kind" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseModellingKindText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theKind = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseModellingKindContent);
+        propertyError = parsed.error;
+        theKind = parsed.value;
         break;
       }
 
       case "semanticId": {
         if (theSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "semanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
         break;
       }
 
       case "supplementalSemanticIds": {
         if (theSupplementalSemanticIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "supplementalSemanticIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSupplementalSemanticIds = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
         break;
       }
 
       case "qualifiers": {
         if (theQualifiers !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "qualifiers" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Qualifier>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "qualifier",
-            parseQualifierFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theQualifiers = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
         break;
       }
 
       case "embeddedDataSpecifications": {
         if (theEmbeddedDataSpecifications !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "embeddedDataSpecifications" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.EmbeddedDataSpecification>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "embeddedDataSpecification",
-            parseEmbeddedDataSpecificationFromSequence
-          )
+          propertyLocalName,
+          parseListOfEmbeddedDataSpecificationContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theEmbeddedDataSpecifications = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
         break;
       }
 
       case "submodelElements": {
         if (theSubmodelElements !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "submodelElements" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.ISubmodelElement>(
+        const parsed = parseElementContent(
           cursor,
-          dispatchParseSubmodelElementElement
+          propertyLocalName,
+          parseListOfISubmodelElementContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSubmodelElements = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theSubmodelElements = parsed.value;
         break;
       }
 
@@ -3291,7 +2531,9 @@ function parseSubmodelFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!RelationshipElement} is embedded.
  */
 function parseRelationshipElementFromSequence(
   cursor: XmlCursor
@@ -3330,366 +2572,145 @@ function parseRelationshipElementFromSequence(
     switch (propertyLocalName) {
       case "extensions": {
         if (theExtensions !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "extensions" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Extension>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "extension",
-            parseExtensionFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theExtensions = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
         break;
       }
 
       case "category": {
         if (theCategory !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "category" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theCategory = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theCategory = parsed.value;
         break;
       }
 
       case "idShort": {
         if (theIdShort !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "idShort" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theIdShort = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
         break;
       }
 
       case "displayName": {
         if (theDisplayName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "displayName" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringNameType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringNameType",
-            parseLangStringNameTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringNameTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDisplayName = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
         break;
       }
 
       case "description": {
         if (theDescription !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "description" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringTextType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringTextType",
-            parseLangStringTextTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringTextTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDescription = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDescription = parsed.value;
         break;
       }
 
       case "semanticId": {
         if (theSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "semanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
         break;
       }
 
       case "supplementalSemanticIds": {
         if (theSupplementalSemanticIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "supplementalSemanticIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSupplementalSemanticIds = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
         break;
       }
 
       case "qualifiers": {
         if (theQualifiers !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "qualifiers" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Qualifier>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "qualifier",
-            parseQualifierFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theQualifiers = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
         break;
       }
 
       case "embeddedDataSpecifications": {
         if (theEmbeddedDataSpecifications !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "embeddedDataSpecifications" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.EmbeddedDataSpecification>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "embeddedDataSpecification",
-            parseEmbeddedDataSpecificationFromSequence
-          )
+          propertyLocalName,
+          parseListOfEmbeddedDataSpecificationContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theEmbeddedDataSpecifications = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
         break;
       }
 
       case "first": {
         if (theFirst !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "first" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theFirst = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theFirst = parsed.value;
         break;
       }
 
       case "second": {
         if (theSecond !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "second" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSecond = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSecond = parsed.value;
         break;
       }
 
@@ -3749,7 +2770,9 @@ function parseRelationshipElementFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!SubmodelElementList} is embedded.
  */
 function parseSubmodelElementListFromSequence(
   cursor: XmlCursor
@@ -3791,462 +2814,189 @@ function parseSubmodelElementListFromSequence(
     switch (propertyLocalName) {
       case "extensions": {
         if (theExtensions !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "extensions" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Extension>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "extension",
-            parseExtensionFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theExtensions = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
         break;
       }
 
       case "category": {
         if (theCategory !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "category" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theCategory = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theCategory = parsed.value;
         break;
       }
 
       case "idShort": {
         if (theIdShort !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "idShort" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theIdShort = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
         break;
       }
 
       case "displayName": {
         if (theDisplayName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "displayName" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringNameType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringNameType",
-            parseLangStringNameTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringNameTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDisplayName = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
         break;
       }
 
       case "description": {
         if (theDescription !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "description" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringTextType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringTextType",
-            parseLangStringTextTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringTextTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDescription = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDescription = parsed.value;
         break;
       }
 
       case "semanticId": {
         if (theSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "semanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
         break;
       }
 
       case "supplementalSemanticIds": {
         if (theSupplementalSemanticIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "supplementalSemanticIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSupplementalSemanticIds = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
         break;
       }
 
       case "qualifiers": {
         if (theQualifiers !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "qualifiers" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Qualifier>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "qualifier",
-            parseQualifierFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theQualifiers = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
         break;
       }
 
       case "embeddedDataSpecifications": {
         if (theEmbeddedDataSpecifications !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "embeddedDataSpecifications" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.EmbeddedDataSpecification>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "embeddedDataSpecification",
-            parseEmbeddedDataSpecificationFromSequence
-          )
+          propertyLocalName,
+          parseListOfEmbeddedDataSpecificationContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theEmbeddedDataSpecifications = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
         break;
       }
 
       case "orderRelevant": {
         if (theOrderRelevant !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "orderRelevant" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseBooleanText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theOrderRelevant = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseBooleanContent);
+        propertyError = parsed.error;
+        theOrderRelevant = parsed.value;
         break;
       }
 
       case "semanticIdListElement": {
         if (theSemanticIdListElement !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "semanticIdListElement" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSemanticIdListElement = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSemanticIdListElement = parsed.value;
         break;
       }
 
       case "typeValueListElement": {
         if (theTypeValueListElement !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "typeValueListElement" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseAasSubmodelElementsText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
+        const parsed = parseElementContent(
           cursor,
-          propertyLocalName
+          propertyLocalName,
+          parseAasSubmodelElementsContent
         );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theTypeValueListElement = parsedOrError.mustValue();
+        propertyError = parsed.error;
+        theTypeValueListElement = parsed.value;
         break;
       }
 
       case "valueTypeListElement": {
         if (theValueTypeListElement !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "valueTypeListElement" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseDataTypeDefXsdText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValueTypeListElement = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseDataTypeDefXsdContent);
+        propertyError = parsed.error;
+        theValueTypeListElement = parsed.value;
         break;
       }
 
       case "value": {
         if (theValue !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "value" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.ISubmodelElement>(
+        const parsed = parseElementContent(
           cursor,
-          dispatchParseSubmodelElementElement
+          propertyLocalName,
+          parseListOfISubmodelElementContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValue = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theValue = parsed.value;
         break;
       }
 
@@ -4303,7 +3053,9 @@ function parseSubmodelElementListFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!SubmodelElementCollection} is embedded.
  */
 function parseSubmodelElementCollectionFromSequence(
   cursor: XmlCursor
@@ -4341,340 +3093,137 @@ function parseSubmodelElementCollectionFromSequence(
     switch (propertyLocalName) {
       case "extensions": {
         if (theExtensions !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "extensions" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Extension>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "extension",
-            parseExtensionFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theExtensions = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
         break;
       }
 
       case "category": {
         if (theCategory !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "category" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theCategory = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theCategory = parsed.value;
         break;
       }
 
       case "idShort": {
         if (theIdShort !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "idShort" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theIdShort = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
         break;
       }
 
       case "displayName": {
         if (theDisplayName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "displayName" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringNameType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringNameType",
-            parseLangStringNameTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringNameTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDisplayName = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
         break;
       }
 
       case "description": {
         if (theDescription !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "description" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringTextType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringTextType",
-            parseLangStringTextTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringTextTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDescription = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDescription = parsed.value;
         break;
       }
 
       case "semanticId": {
         if (theSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "semanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
         break;
       }
 
       case "supplementalSemanticIds": {
         if (theSupplementalSemanticIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "supplementalSemanticIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSupplementalSemanticIds = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
         break;
       }
 
       case "qualifiers": {
         if (theQualifiers !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "qualifiers" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Qualifier>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "qualifier",
-            parseQualifierFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theQualifiers = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
         break;
       }
 
       case "embeddedDataSpecifications": {
         if (theEmbeddedDataSpecifications !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "embeddedDataSpecifications" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.EmbeddedDataSpecification>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "embeddedDataSpecification",
-            parseEmbeddedDataSpecificationFromSequence
-          )
+          propertyLocalName,
+          parseListOfEmbeddedDataSpecificationContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theEmbeddedDataSpecifications = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
         break;
       }
 
       case "value": {
         if (theValue !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "value" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.ISubmodelElement>(
+        const parsed = parseElementContent(
           cursor,
-          dispatchParseSubmodelElementElement
+          propertyLocalName,
+          parseListOfISubmodelElementContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValue = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theValue = parsed.value;
         break;
       }
 
@@ -4723,7 +3272,9 @@ function parseSubmodelElementCollectionFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!Property} is embedded.
  */
 function parsePropertyFromSequence(
   cursor: XmlCursor
@@ -4763,399 +3314,157 @@ function parsePropertyFromSequence(
     switch (propertyLocalName) {
       case "extensions": {
         if (theExtensions !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "extensions" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Extension>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "extension",
-            parseExtensionFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theExtensions = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
         break;
       }
 
       case "category": {
         if (theCategory !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "category" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theCategory = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theCategory = parsed.value;
         break;
       }
 
       case "idShort": {
         if (theIdShort !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "idShort" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theIdShort = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
         break;
       }
 
       case "displayName": {
         if (theDisplayName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "displayName" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringNameType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringNameType",
-            parseLangStringNameTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringNameTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDisplayName = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
         break;
       }
 
       case "description": {
         if (theDescription !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "description" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringTextType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringTextType",
-            parseLangStringTextTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringTextTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDescription = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDescription = parsed.value;
         break;
       }
 
       case "semanticId": {
         if (theSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "semanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
         break;
       }
 
       case "supplementalSemanticIds": {
         if (theSupplementalSemanticIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "supplementalSemanticIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSupplementalSemanticIds = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
         break;
       }
 
       case "qualifiers": {
         if (theQualifiers !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "qualifiers" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Qualifier>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "qualifier",
-            parseQualifierFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theQualifiers = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
         break;
       }
 
       case "embeddedDataSpecifications": {
         if (theEmbeddedDataSpecifications !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "embeddedDataSpecifications" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.EmbeddedDataSpecification>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "embeddedDataSpecification",
-            parseEmbeddedDataSpecificationFromSequence
-          )
+          propertyLocalName,
+          parseListOfEmbeddedDataSpecificationContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theEmbeddedDataSpecifications = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
         break;
       }
 
       case "valueType": {
         if (theValueType !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "valueType" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseDataTypeDefXsdText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValueType = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseDataTypeDefXsdContent);
+        propertyError = parsed.error;
+        theValueType = parsed.value;
         break;
       }
 
       case "value": {
         if (theValue !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "value" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValue = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theValue = parsed.value;
         break;
       }
 
       case "valueId": {
         if (theValueId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "valueId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValueId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theValueId = parsed.value;
         break;
       }
 
@@ -5210,7 +3519,9 @@ function parsePropertyFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!MultiLanguageProperty} is embedded.
  */
 function parseMultiLanguagePropertyFromSequence(
   cursor: XmlCursor
@@ -5249,373 +3560,149 @@ function parseMultiLanguagePropertyFromSequence(
     switch (propertyLocalName) {
       case "extensions": {
         if (theExtensions !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "extensions" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Extension>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "extension",
-            parseExtensionFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theExtensions = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
         break;
       }
 
       case "category": {
         if (theCategory !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "category" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theCategory = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theCategory = parsed.value;
         break;
       }
 
       case "idShort": {
         if (theIdShort !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "idShort" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theIdShort = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
         break;
       }
 
       case "displayName": {
         if (theDisplayName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "displayName" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringNameType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringNameType",
-            parseLangStringNameTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringNameTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDisplayName = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
         break;
       }
 
       case "description": {
         if (theDescription !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "description" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringTextType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringTextType",
-            parseLangStringTextTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringTextTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDescription = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDescription = parsed.value;
         break;
       }
 
       case "semanticId": {
         if (theSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "semanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
         break;
       }
 
       case "supplementalSemanticIds": {
         if (theSupplementalSemanticIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "supplementalSemanticIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSupplementalSemanticIds = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
         break;
       }
 
       case "qualifiers": {
         if (theQualifiers !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "qualifiers" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Qualifier>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "qualifier",
-            parseQualifierFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theQualifiers = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
         break;
       }
 
       case "embeddedDataSpecifications": {
         if (theEmbeddedDataSpecifications !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "embeddedDataSpecifications" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.EmbeddedDataSpecification>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "embeddedDataSpecification",
-            parseEmbeddedDataSpecificationFromSequence
-          )
+          propertyLocalName,
+          parseListOfEmbeddedDataSpecificationContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theEmbeddedDataSpecifications = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
         break;
       }
 
       case "value": {
         if (theValue !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "value" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringTextType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringTextType",
-            parseLangStringTextTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringTextTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValue = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theValue = parsed.value;
         break;
       }
 
       case "valueId": {
         if (theValueId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "valueId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValueId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theValueId = parsed.value;
         break;
       }
 
@@ -5665,7 +3752,9 @@ function parseMultiLanguagePropertyFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!Range} is embedded.
  */
 function parseRangeFromSequence(
   cursor: XmlCursor
@@ -5705,401 +3794,157 @@ function parseRangeFromSequence(
     switch (propertyLocalName) {
       case "extensions": {
         if (theExtensions !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "extensions" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Extension>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "extension",
-            parseExtensionFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theExtensions = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
         break;
       }
 
       case "category": {
         if (theCategory !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "category" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theCategory = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theCategory = parsed.value;
         break;
       }
 
       case "idShort": {
         if (theIdShort !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "idShort" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theIdShort = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
         break;
       }
 
       case "displayName": {
         if (theDisplayName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "displayName" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringNameType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringNameType",
-            parseLangStringNameTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringNameTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDisplayName = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
         break;
       }
 
       case "description": {
         if (theDescription !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "description" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringTextType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringTextType",
-            parseLangStringTextTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringTextTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDescription = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDescription = parsed.value;
         break;
       }
 
       case "semanticId": {
         if (theSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "semanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
         break;
       }
 
       case "supplementalSemanticIds": {
         if (theSupplementalSemanticIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "supplementalSemanticIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSupplementalSemanticIds = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
         break;
       }
 
       case "qualifiers": {
         if (theQualifiers !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "qualifiers" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Qualifier>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "qualifier",
-            parseQualifierFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theQualifiers = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
         break;
       }
 
       case "embeddedDataSpecifications": {
         if (theEmbeddedDataSpecifications !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "embeddedDataSpecifications" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.EmbeddedDataSpecification>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "embeddedDataSpecification",
-            parseEmbeddedDataSpecificationFromSequence
-          )
+          propertyLocalName,
+          parseListOfEmbeddedDataSpecificationContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theEmbeddedDataSpecifications = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
         break;
       }
 
       case "valueType": {
         if (theValueType !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "valueType" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseDataTypeDefXsdText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValueType = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseDataTypeDefXsdContent);
+        propertyError = parsed.error;
+        theValueType = parsed.value;
         break;
       }
 
       case "min": {
         if (theMin !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "min" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theMin = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theMin = parsed.value;
         break;
       }
 
       case "max": {
         if (theMax !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "max" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theMax = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theMax = parsed.value;
         break;
       }
 
@@ -6154,7 +3999,9 @@ function parseRangeFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!ReferenceElement} is embedded.
  */
 function parseReferenceElementFromSequence(
   cursor: XmlCursor
@@ -6192,337 +4039,133 @@ function parseReferenceElementFromSequence(
     switch (propertyLocalName) {
       case "extensions": {
         if (theExtensions !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "extensions" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Extension>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "extension",
-            parseExtensionFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theExtensions = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
         break;
       }
 
       case "category": {
         if (theCategory !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "category" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theCategory = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theCategory = parsed.value;
         break;
       }
 
       case "idShort": {
         if (theIdShort !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "idShort" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theIdShort = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
         break;
       }
 
       case "displayName": {
         if (theDisplayName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "displayName" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringNameType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringNameType",
-            parseLangStringNameTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringNameTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDisplayName = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
         break;
       }
 
       case "description": {
         if (theDescription !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "description" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringTextType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringTextType",
-            parseLangStringTextTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringTextTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDescription = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDescription = parsed.value;
         break;
       }
 
       case "semanticId": {
         if (theSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "semanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
         break;
       }
 
       case "supplementalSemanticIds": {
         if (theSupplementalSemanticIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "supplementalSemanticIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSupplementalSemanticIds = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
         break;
       }
 
       case "qualifiers": {
         if (theQualifiers !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "qualifiers" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Qualifier>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "qualifier",
-            parseQualifierFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theQualifiers = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
         break;
       }
 
       case "embeddedDataSpecifications": {
         if (theEmbeddedDataSpecifications !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "embeddedDataSpecifications" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.EmbeddedDataSpecification>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "embeddedDataSpecification",
-            parseEmbeddedDataSpecificationFromSequence
-          )
+          propertyLocalName,
+          parseListOfEmbeddedDataSpecificationContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theEmbeddedDataSpecifications = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
         break;
       }
 
       case "value": {
         if (theValue !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "value" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValue = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theValue = parsed.value;
         break;
       }
 
@@ -6571,7 +4214,9 @@ function parseReferenceElementFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!Blob} is embedded.
  */
 function parseBlobFromSequence(
   cursor: XmlCursor
@@ -6610,370 +4255,149 @@ function parseBlobFromSequence(
     switch (propertyLocalName) {
       case "extensions": {
         if (theExtensions !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "extensions" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Extension>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "extension",
-            parseExtensionFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theExtensions = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
         break;
       }
 
       case "category": {
         if (theCategory !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "category" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theCategory = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theCategory = parsed.value;
         break;
       }
 
       case "idShort": {
         if (theIdShort !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "idShort" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theIdShort = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
         break;
       }
 
       case "displayName": {
         if (theDisplayName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "displayName" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringNameType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringNameType",
-            parseLangStringNameTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringNameTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDisplayName = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
         break;
       }
 
       case "description": {
         if (theDescription !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "description" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringTextType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringTextType",
-            parseLangStringTextTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringTextTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDescription = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDescription = parsed.value;
         break;
       }
 
       case "semanticId": {
         if (theSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "semanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
         break;
       }
 
       case "supplementalSemanticIds": {
         if (theSupplementalSemanticIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "supplementalSemanticIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSupplementalSemanticIds = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
         break;
       }
 
       case "qualifiers": {
         if (theQualifiers !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "qualifiers" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Qualifier>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "qualifier",
-            parseQualifierFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theQualifiers = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
         break;
       }
 
       case "embeddedDataSpecifications": {
         if (theEmbeddedDataSpecifications !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "embeddedDataSpecifications" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.EmbeddedDataSpecification>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "embeddedDataSpecification",
-            parseEmbeddedDataSpecificationFromSequence
-          )
+          propertyLocalName,
+          parseListOfEmbeddedDataSpecificationContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theEmbeddedDataSpecifications = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
         break;
       }
 
       case "value": {
         if (theValue !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "value" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseBase64EncodedBytesText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
+        const parsed = parseElementContent(
           cursor,
-          propertyLocalName
+          propertyLocalName,
+          parseBase64EncodedBytesContent
         );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValue = parsedOrError.mustValue();
+        propertyError = parsed.error;
+        theValue = parsed.value;
         break;
       }
 
       case "contentType": {
         if (theContentType !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "contentType" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theContentType = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theContentType = parsed.value;
         break;
       }
 
@@ -7027,7 +4451,9 @@ function parseBlobFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!File} is embedded.
  */
 function parseFileFromSequence(
   cursor: XmlCursor
@@ -7066,370 +4492,145 @@ function parseFileFromSequence(
     switch (propertyLocalName) {
       case "extensions": {
         if (theExtensions !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "extensions" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Extension>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "extension",
-            parseExtensionFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theExtensions = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
         break;
       }
 
       case "category": {
         if (theCategory !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "category" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theCategory = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theCategory = parsed.value;
         break;
       }
 
       case "idShort": {
         if (theIdShort !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "idShort" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theIdShort = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
         break;
       }
 
       case "displayName": {
         if (theDisplayName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "displayName" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringNameType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringNameType",
-            parseLangStringNameTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringNameTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDisplayName = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
         break;
       }
 
       case "description": {
         if (theDescription !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "description" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringTextType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringTextType",
-            parseLangStringTextTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringTextTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDescription = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDescription = parsed.value;
         break;
       }
 
       case "semanticId": {
         if (theSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "semanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
         break;
       }
 
       case "supplementalSemanticIds": {
         if (theSupplementalSemanticIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "supplementalSemanticIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSupplementalSemanticIds = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
         break;
       }
 
       case "qualifiers": {
         if (theQualifiers !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "qualifiers" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Qualifier>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "qualifier",
-            parseQualifierFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theQualifiers = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
         break;
       }
 
       case "embeddedDataSpecifications": {
         if (theEmbeddedDataSpecifications !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "embeddedDataSpecifications" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.EmbeddedDataSpecification>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "embeddedDataSpecification",
-            parseEmbeddedDataSpecificationFromSequence
-          )
+          propertyLocalName,
+          parseListOfEmbeddedDataSpecificationContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theEmbeddedDataSpecifications = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
         break;
       }
 
       case "value": {
         if (theValue !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "value" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValue = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theValue = parsed.value;
         break;
       }
 
       case "contentType": {
         if (theContentType !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "contentType" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theContentType = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theContentType = parsed.value;
         break;
       }
 
@@ -7483,7 +4684,9 @@ function parseFileFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!AnnotatedRelationshipElement} is embedded.
  */
 function parseAnnotatedRelationshipElementFromSequence(
   cursor: XmlCursor
@@ -7523,398 +4726,161 @@ function parseAnnotatedRelationshipElementFromSequence(
     switch (propertyLocalName) {
       case "extensions": {
         if (theExtensions !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "extensions" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Extension>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "extension",
-            parseExtensionFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theExtensions = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
         break;
       }
 
       case "category": {
         if (theCategory !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "category" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theCategory = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theCategory = parsed.value;
         break;
       }
 
       case "idShort": {
         if (theIdShort !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "idShort" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theIdShort = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
         break;
       }
 
       case "displayName": {
         if (theDisplayName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "displayName" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringNameType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringNameType",
-            parseLangStringNameTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringNameTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDisplayName = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
         break;
       }
 
       case "description": {
         if (theDescription !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "description" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringTextType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringTextType",
-            parseLangStringTextTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringTextTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDescription = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDescription = parsed.value;
         break;
       }
 
       case "semanticId": {
         if (theSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "semanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
         break;
       }
 
       case "supplementalSemanticIds": {
         if (theSupplementalSemanticIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "supplementalSemanticIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSupplementalSemanticIds = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
         break;
       }
 
       case "qualifiers": {
         if (theQualifiers !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "qualifiers" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Qualifier>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "qualifier",
-            parseQualifierFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theQualifiers = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
         break;
       }
 
       case "embeddedDataSpecifications": {
         if (theEmbeddedDataSpecifications !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "embeddedDataSpecifications" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.EmbeddedDataSpecification>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "embeddedDataSpecification",
-            parseEmbeddedDataSpecificationFromSequence
-          )
+          propertyLocalName,
+          parseListOfEmbeddedDataSpecificationContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theEmbeddedDataSpecifications = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
         break;
       }
 
       case "first": {
         if (theFirst !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "first" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theFirst = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theFirst = parsed.value;
         break;
       }
 
       case "second": {
         if (theSecond !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "second" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSecond = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSecond = parsed.value;
         break;
       }
 
       case "annotations": {
         if (theAnnotations !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "annotations" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.IDataElement>(
+        const parsed = parseElementContent(
           cursor,
-          dispatchParseDataElementElement
+          propertyLocalName,
+          parseListOfIDataElementContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theAnnotations = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theAnnotations = parsed.value;
         break;
       }
 
@@ -7975,7 +4941,9 @@ function parseAnnotatedRelationshipElementFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!Entity} is embedded.
  */
 function parseEntityFromSequence(
   cursor: XmlCursor
@@ -8016,438 +4984,177 @@ function parseEntityFromSequence(
     switch (propertyLocalName) {
       case "extensions": {
         if (theExtensions !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "extensions" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Extension>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "extension",
-            parseExtensionFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theExtensions = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
         break;
       }
 
       case "category": {
         if (theCategory !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "category" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theCategory = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theCategory = parsed.value;
         break;
       }
 
       case "idShort": {
         if (theIdShort !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "idShort" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theIdShort = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
         break;
       }
 
       case "displayName": {
         if (theDisplayName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "displayName" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringNameType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringNameType",
-            parseLangStringNameTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringNameTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDisplayName = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
         break;
       }
 
       case "description": {
         if (theDescription !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "description" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringTextType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringTextType",
-            parseLangStringTextTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringTextTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDescription = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDescription = parsed.value;
         break;
       }
 
       case "semanticId": {
         if (theSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "semanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
         break;
       }
 
       case "supplementalSemanticIds": {
         if (theSupplementalSemanticIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "supplementalSemanticIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSupplementalSemanticIds = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
         break;
       }
 
       case "qualifiers": {
         if (theQualifiers !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "qualifiers" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Qualifier>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "qualifier",
-            parseQualifierFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theQualifiers = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
         break;
       }
 
       case "embeddedDataSpecifications": {
         if (theEmbeddedDataSpecifications !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "embeddedDataSpecifications" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.EmbeddedDataSpecification>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "embeddedDataSpecification",
-            parseEmbeddedDataSpecificationFromSequence
-          )
+          propertyLocalName,
+          parseListOfEmbeddedDataSpecificationContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theEmbeddedDataSpecifications = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
         break;
       }
 
       case "statements": {
         if (theStatements !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "statements" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.ISubmodelElement>(
+        const parsed = parseElementContent(
           cursor,
-          dispatchParseSubmodelElementElement
+          propertyLocalName,
+          parseListOfISubmodelElementContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theStatements = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theStatements = parsed.value;
         break;
       }
 
       case "entityType": {
         if (theEntityType !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "entityType" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseEntityTypeText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theEntityType = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseEntityTypeContent);
+        propertyError = parsed.error;
+        theEntityType = parsed.value;
         break;
       }
 
       case "globalAssetId": {
         if (theGlobalAssetId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "globalAssetId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theGlobalAssetId = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theGlobalAssetId = parsed.value;
         break;
       }
 
       case "specificAssetIds": {
         if (theSpecificAssetIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "specificAssetIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.SpecificAssetId>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "specificAssetId",
-            parseSpecificAssetIdFromSequence
-          )
+          propertyLocalName,
+          parseListOfSpecificAssetIdContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSpecificAssetIds = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theSpecificAssetIds = parsed.value;
         break;
       }
 
@@ -8503,7 +5210,9 @@ function parseEntityFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!EventPayload} is embedded.
  */
 function parseEventPayloadFromSequence(
   cursor: XmlCursor
@@ -8539,239 +5248,101 @@ function parseEventPayloadFromSequence(
     switch (propertyLocalName) {
       case "source": {
         if (theSource !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "source" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSource = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSource = parsed.value;
         break;
       }
 
       case "sourceSemanticId": {
         if (theSourceSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "sourceSemanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSourceSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSourceSemanticId = parsed.value;
         break;
       }
 
       case "observableReference": {
         if (theObservableReference !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "observableReference" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theObservableReference = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theObservableReference = parsed.value;
         break;
       }
 
       case "observableSemanticId": {
         if (theObservableSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "observableSemanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theObservableSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theObservableSemanticId = parsed.value;
         break;
       }
 
       case "topic": {
         if (theTopic !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "topic" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theTopic = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theTopic = parsed.value;
         break;
       }
 
       case "subjectId": {
         if (theSubjectId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "subjectId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSubjectId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSubjectId = parsed.value;
         break;
       }
 
       case "timeStamp": {
         if (theTimeStamp !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "timeStamp" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theTimeStamp = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theTimeStamp = parsed.value;
         break;
       }
 
       case "payload": {
         if (thePayload !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "payload" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseBase64EncodedBytesText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
+        const parsed = parseElementContent(
           cursor,
-          propertyLocalName
+          propertyLocalName,
+          parseBase64EncodedBytesContent
         );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        thePayload = parsedOrError.mustValue();
+        propertyError = parsed.error;
+        thePayload = parsed.value;
         break;
       }
 
@@ -8834,7 +5405,9 @@ function parseEventPayloadFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!BasicEventElement} is embedded.
  */
 function parseBasicEventElementFromSequence(
   cursor: XmlCursor
@@ -8879,552 +5452,217 @@ function parseBasicEventElementFromSequence(
     switch (propertyLocalName) {
       case "extensions": {
         if (theExtensions !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "extensions" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Extension>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "extension",
-            parseExtensionFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theExtensions = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
         break;
       }
 
       case "category": {
         if (theCategory !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "category" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theCategory = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theCategory = parsed.value;
         break;
       }
 
       case "idShort": {
         if (theIdShort !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "idShort" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theIdShort = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
         break;
       }
 
       case "displayName": {
         if (theDisplayName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "displayName" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringNameType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringNameType",
-            parseLangStringNameTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringNameTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDisplayName = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
         break;
       }
 
       case "description": {
         if (theDescription !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "description" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringTextType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringTextType",
-            parseLangStringTextTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringTextTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDescription = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDescription = parsed.value;
         break;
       }
 
       case "semanticId": {
         if (theSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "semanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
         break;
       }
 
       case "supplementalSemanticIds": {
         if (theSupplementalSemanticIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "supplementalSemanticIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSupplementalSemanticIds = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
         break;
       }
 
       case "qualifiers": {
         if (theQualifiers !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "qualifiers" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Qualifier>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "qualifier",
-            parseQualifierFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theQualifiers = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
         break;
       }
 
       case "embeddedDataSpecifications": {
         if (theEmbeddedDataSpecifications !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "embeddedDataSpecifications" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.EmbeddedDataSpecification>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "embeddedDataSpecification",
-            parseEmbeddedDataSpecificationFromSequence
-          )
+          propertyLocalName,
+          parseListOfEmbeddedDataSpecificationContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theEmbeddedDataSpecifications = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
         break;
       }
 
       case "observed": {
         if (theObserved !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "observed" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theObserved = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theObserved = parsed.value;
         break;
       }
 
       case "direction": {
         if (theDirection !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "direction" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseDirectionText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDirection = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseDirectionContent);
+        propertyError = parsed.error;
+        theDirection = parsed.value;
         break;
       }
 
       case "state": {
         if (theState !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "state" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStateOfEventText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theState = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStateOfEventContent);
+        propertyError = parsed.error;
+        theState = parsed.value;
         break;
       }
 
       case "messageTopic": {
         if (theMessageTopic !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "messageTopic" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theMessageTopic = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theMessageTopic = parsed.value;
         break;
       }
 
       case "messageBroker": {
         if (theMessageBroker !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "messageBroker" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theMessageBroker = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theMessageBroker = parsed.value;
         break;
       }
 
       case "lastUpdate": {
         if (theLastUpdate !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "lastUpdate" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theLastUpdate = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theLastUpdate = parsed.value;
         break;
       }
 
       case "minInterval": {
         if (theMinInterval !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "minInterval" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theMinInterval = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theMinInterval = parsed.value;
         break;
       }
 
       case "maxInterval": {
         if (theMaxInterval !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "maxInterval" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theMaxInterval = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theMaxInterval = parsed.value;
         break;
       }
 
@@ -9496,7 +5734,9 @@ function parseBasicEventElementFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!Operation} is embedded.
  */
 function parseOperationFromSequence(
   cursor: XmlCursor
@@ -9536,416 +5776,169 @@ function parseOperationFromSequence(
     switch (propertyLocalName) {
       case "extensions": {
         if (theExtensions !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "extensions" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Extension>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "extension",
-            parseExtensionFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theExtensions = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
         break;
       }
 
       case "category": {
         if (theCategory !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "category" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theCategory = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theCategory = parsed.value;
         break;
       }
 
       case "idShort": {
         if (theIdShort !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "idShort" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theIdShort = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
         break;
       }
 
       case "displayName": {
         if (theDisplayName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "displayName" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringNameType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringNameType",
-            parseLangStringNameTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringNameTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDisplayName = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
         break;
       }
 
       case "description": {
         if (theDescription !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "description" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringTextType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringTextType",
-            parseLangStringTextTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringTextTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDescription = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDescription = parsed.value;
         break;
       }
 
       case "semanticId": {
         if (theSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "semanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
         break;
       }
 
       case "supplementalSemanticIds": {
         if (theSupplementalSemanticIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "supplementalSemanticIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSupplementalSemanticIds = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
         break;
       }
 
       case "qualifiers": {
         if (theQualifiers !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "qualifiers" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Qualifier>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "qualifier",
-            parseQualifierFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theQualifiers = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
         break;
       }
 
       case "embeddedDataSpecifications": {
         if (theEmbeddedDataSpecifications !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "embeddedDataSpecifications" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.EmbeddedDataSpecification>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "embeddedDataSpecification",
-            parseEmbeddedDataSpecificationFromSequence
-          )
+          propertyLocalName,
+          parseListOfEmbeddedDataSpecificationContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theEmbeddedDataSpecifications = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
         break;
       }
 
       case "inputVariables": {
         if (theInputVariables !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "inputVariables" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.OperationVariable>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "operationVariable",
-            parseOperationVariableFromSequence
-          )
+          propertyLocalName,
+          parseListOfOperationVariableContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theInputVariables = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theInputVariables = parsed.value;
         break;
       }
 
       case "outputVariables": {
         if (theOutputVariables !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "outputVariables" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.OperationVariable>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "operationVariable",
-            parseOperationVariableFromSequence
-          )
+          propertyLocalName,
+          parseListOfOperationVariableContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theOutputVariables = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theOutputVariables = parsed.value;
         break;
       }
 
       case "inoutputVariables": {
         if (theInoutputVariables !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "inoutputVariables" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.OperationVariable>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "operationVariable",
-            parseOperationVariableFromSequence
-          )
+          propertyLocalName,
+          parseListOfOperationVariableContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theInoutputVariables = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theInoutputVariables = parsed.value;
         break;
       }
 
@@ -9996,7 +5989,9 @@ function parseOperationFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!OperationVariable} is embedded.
  */
 function parseOperationVariableFromSequence(
   cursor: XmlCursor
@@ -10025,30 +6020,17 @@ function parseOperationVariableFromSequence(
     switch (propertyLocalName) {
       case "value": {
         if (theValue !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "value" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const instanceOrError = dispatchParseSubmodelElementElement(cursor);
-        if (instanceOrError.error !== null) {
-          propertyError = instanceOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
+        const parsed = parseElementContent(
           cursor,
-          propertyLocalName
+          propertyLocalName,
+          dispatchParseSubmodelElementElement
         );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValue = instanceOrError.mustValue();
+        propertyError = parsed.error;
+        theValue = parsed.value;
         break;
       }
 
@@ -10092,7 +6074,9 @@ function parseOperationVariableFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!Capability} is embedded.
  */
 function parseCapabilityFromSequence(
   cursor: XmlCursor
@@ -10129,308 +6113,121 @@ function parseCapabilityFromSequence(
     switch (propertyLocalName) {
       case "extensions": {
         if (theExtensions !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "extensions" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Extension>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "extension",
-            parseExtensionFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theExtensions = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
         break;
       }
 
       case "category": {
         if (theCategory !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "category" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theCategory = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theCategory = parsed.value;
         break;
       }
 
       case "idShort": {
         if (theIdShort !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "idShort" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theIdShort = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
         break;
       }
 
       case "displayName": {
         if (theDisplayName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "displayName" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringNameType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringNameType",
-            parseLangStringNameTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringNameTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDisplayName = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
         break;
       }
 
       case "description": {
         if (theDescription !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "description" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringTextType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringTextType",
-            parseLangStringTextTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringTextTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDescription = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDescription = parsed.value;
         break;
       }
 
       case "semanticId": {
         if (theSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "semanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theSemanticId = parsed.value;
         break;
       }
 
       case "supplementalSemanticIds": {
         if (theSupplementalSemanticIds !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "supplementalSemanticIds" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSupplementalSemanticIds = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theSupplementalSemanticIds = parsed.value;
         break;
       }
 
       case "qualifiers": {
         if (theQualifiers !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "qualifiers" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Qualifier>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "qualifier",
-            parseQualifierFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theQualifiers = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        propertyError = parsed.error;
+        theQualifiers = parsed.value;
         break;
       }
 
       case "embeddedDataSpecifications": {
         if (theEmbeddedDataSpecifications !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "embeddedDataSpecifications" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.EmbeddedDataSpecification>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "embeddedDataSpecification",
-            parseEmbeddedDataSpecificationFromSequence
-          )
+          propertyLocalName,
+          parseListOfEmbeddedDataSpecificationContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theEmbeddedDataSpecifications = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
         break;
       }
 
@@ -10478,7 +6275,9 @@ function parseCapabilityFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!ConceptDescription} is embedded.
  */
 function parseConceptDescriptionFromSequence(
   cursor: XmlCursor
@@ -10515,303 +6314,125 @@ function parseConceptDescriptionFromSequence(
     switch (propertyLocalName) {
       case "extensions": {
         if (theExtensions !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "extensions" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Extension>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "extension",
-            parseExtensionFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theExtensions = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        propertyError = parsed.error;
+        theExtensions = parsed.value;
         break;
       }
 
       case "category": {
         if (theCategory !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "category" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theCategory = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theCategory = parsed.value;
         break;
       }
 
       case "idShort": {
         if (theIdShort !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "idShort" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theIdShort = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theIdShort = parsed.value;
         break;
       }
 
       case "displayName": {
         if (theDisplayName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "displayName" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringNameType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringNameType",
-            parseLangStringNameTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringNameTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDisplayName = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDisplayName = parsed.value;
         break;
       }
 
       case "description": {
         if (theDescription !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "description" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringTextType>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringTextType",
-            parseLangStringTextTypeFromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringTextTypeContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDescription = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDescription = parsed.value;
         break;
       }
 
       case "administration": {
         if (theAdministration !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "administration" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseAdministrativeInformationFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
+        const parsed = parseElementContent(
           cursor,
-          propertyLocalName
+          propertyLocalName,
+          parseAdministrativeInformationFromSequence
         );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theAdministration = classOrError.mustValue();
+        propertyError = parsed.error;
+        theAdministration = parsed.value;
         break;
       }
 
       case "id": {
         if (theId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "id" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theId = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theId = parsed.value;
         break;
       }
 
       case "embeddedDataSpecifications": {
         if (theEmbeddedDataSpecifications !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "embeddedDataSpecifications" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.EmbeddedDataSpecification>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "embeddedDataSpecification",
-            parseEmbeddedDataSpecificationFromSequence
-          )
+          propertyLocalName,
+          parseListOfEmbeddedDataSpecificationContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theEmbeddedDataSpecifications = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theEmbeddedDataSpecifications = parsed.value;
         break;
       }
 
       case "isCaseOf": {
         if (theIsCaseOf !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "isCaseOf" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Reference>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "reference",
-            parseReferenceFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theIsCaseOf = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        propertyError = parsed.error;
+        theIsCaseOf = parsed.value;
         break;
       }
 
@@ -10863,7 +6484,9 @@ function parseConceptDescriptionFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!Reference} is embedded.
  */
 function parseReferenceFromSequence(
   cursor: XmlCursor
@@ -10894,97 +6517,37 @@ function parseReferenceFromSequence(
     switch (propertyLocalName) {
       case "type": {
         if (theType !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "type" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseReferenceTypesText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theType = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceTypesContent);
+        propertyError = parsed.error;
+        theType = parsed.value;
         break;
       }
 
       case "referredSemanticId": {
         if (theReferredSemanticId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "referredSemanticId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theReferredSemanticId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theReferredSemanticId = parsed.value;
         break;
       }
 
       case "keys": {
         if (theKeys !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "keys" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Key>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "key",
-            parseKeyFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theKeys = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfKeyContent);
+        propertyError = parsed.error;
+        theKeys = parsed.value;
         break;
       }
 
@@ -11036,7 +6599,9 @@ function parseReferenceFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!Key} is embedded.
  */
 function parseKeyFromSequence(
   cursor: XmlCursor
@@ -11066,63 +6631,25 @@ function parseKeyFromSequence(
     switch (propertyLocalName) {
       case "type": {
         if (theType !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "type" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseKeyTypesText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theType = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseKeyTypesContent);
+        propertyError = parsed.error;
+        theType = parsed.value;
         break;
       }
 
       case "value": {
         if (theValue !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "value" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValue = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theValue = parsed.value;
         break;
       }
 
@@ -11173,7 +6700,9 @@ function parseKeyFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!LangStringNameType} is embedded.
  */
 function parseLangStringNameTypeFromSequence(
   cursor: XmlCursor
@@ -11203,63 +6732,25 @@ function parseLangStringNameTypeFromSequence(
     switch (propertyLocalName) {
       case "language": {
         if (theLanguage !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "language" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theLanguage = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theLanguage = parsed.value;
         break;
       }
 
       case "text": {
         if (theText !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "text" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theText = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theText = parsed.value;
         break;
       }
 
@@ -11310,7 +6801,9 @@ function parseLangStringNameTypeFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!LangStringTextType} is embedded.
  */
 function parseLangStringTextTypeFromSequence(
   cursor: XmlCursor
@@ -11340,63 +6833,25 @@ function parseLangStringTextTypeFromSequence(
     switch (propertyLocalName) {
       case "language": {
         if (theLanguage !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "language" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theLanguage = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theLanguage = parsed.value;
         break;
       }
 
       case "text": {
         if (theText !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "text" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theText = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theText = parsed.value;
         break;
       }
 
@@ -11447,7 +6902,9 @@ function parseLangStringTextTypeFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!Environment} is embedded.
  */
 function parseEnvironmentFromSequence(
   cursor: XmlCursor
@@ -11478,109 +6935,45 @@ function parseEnvironmentFromSequence(
     switch (propertyLocalName) {
       case "assetAdministrationShells": {
         if (theAssetAdministrationShells !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "assetAdministrationShells" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.AssetAdministrationShell>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "assetAdministrationShell",
-            parseAssetAdministrationShellFromSequence
-          )
+          propertyLocalName,
+          parseListOfAssetAdministrationShellContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theAssetAdministrationShells = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theAssetAdministrationShells = parsed.value;
         break;
       }
 
       case "submodels": {
         if (theSubmodels !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "submodels" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.Submodel>(
-          cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "submodel",
-            parseSubmodelFromSequence
-          )
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSubmodels = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfSubmodelContent);
+        propertyError = parsed.error;
+        theSubmodels = parsed.value;
         break;
       }
 
       case "conceptDescriptions": {
         if (theConceptDescriptions !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "conceptDescriptions" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.ConceptDescription>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "conceptDescription",
-            parseConceptDescriptionFromSequence
-          )
+          propertyLocalName,
+          parseListOfConceptDescriptionContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theConceptDescriptions = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theConceptDescriptions = parsed.value;
         break;
       }
 
@@ -11622,7 +7015,9 @@ function parseEnvironmentFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!EmbeddedDataSpecification} is embedded.
  */
 function parseEmbeddedDataSpecificationFromSequence(
   cursor: XmlCursor
@@ -11652,59 +7047,29 @@ function parseEmbeddedDataSpecificationFromSequence(
     switch (propertyLocalName) {
       case "dataSpecification": {
         if (theDataSpecification !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "dataSpecification" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDataSpecification = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theDataSpecification = parsed.value;
         break;
       }
 
       case "dataSpecificationContent": {
         if (theDataSpecificationContent !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "dataSpecificationContent" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const instanceOrError = dispatchParseDataSpecificationContentElement(cursor);
-        if (instanceOrError.error !== null) {
-          propertyError = instanceOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
+        const parsed = parseElementContent(
           cursor,
-          propertyLocalName
+          propertyLocalName,
+          dispatchParseDataSpecificationContentElement
         );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDataSpecificationContent = instanceOrError.mustValue();
+        propertyError = parsed.error;
+        theDataSpecificationContent = parsed.value;
         break;
       }
 
@@ -11755,7 +7120,9 @@ function parseEmbeddedDataSpecificationFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!LevelType} is embedded.
  */
 function parseLevelTypeFromSequence(
   cursor: XmlCursor
@@ -11787,125 +7154,49 @@ function parseLevelTypeFromSequence(
     switch (propertyLocalName) {
       case "min": {
         if (theMin !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "min" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseBooleanText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theMin = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseBooleanContent);
+        propertyError = parsed.error;
+        theMin = parsed.value;
         break;
       }
 
       case "nom": {
         if (theNom !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "nom" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseBooleanText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theNom = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseBooleanContent);
+        propertyError = parsed.error;
+        theNom = parsed.value;
         break;
       }
 
       case "typ": {
         if (theTyp !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "typ" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseBooleanText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theTyp = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseBooleanContent);
+        propertyError = parsed.error;
+        theTyp = parsed.value;
         break;
       }
 
       case "max": {
         if (theMax !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "max" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseBooleanText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theMax = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseBooleanContent);
+        propertyError = parsed.error;
+        theMax = parsed.value;
         break;
       }
 
@@ -11970,7 +7261,9 @@ function parseLevelTypeFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!ValueReferencePair} is embedded.
  */
 function parseValueReferencePairFromSequence(
   cursor: XmlCursor
@@ -12000,61 +7293,25 @@ function parseValueReferencePairFromSequence(
     switch (propertyLocalName) {
       case "value": {
         if (theValue !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "value" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValue = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theValue = parsed.value;
         break;
       }
 
       case "valueId": {
         if (theValueId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "valueId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValueId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theValueId = parsed.value;
         break;
       }
 
@@ -12105,7 +7362,9 @@ function parseValueReferencePairFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!ValueList} is embedded.
  */
 function parseValueListFromSequence(
   cursor: XmlCursor
@@ -12134,37 +7393,17 @@ function parseValueListFromSequence(
     switch (propertyLocalName) {
       case "valueReferencePairs": {
         if (theValueReferencePairs !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "valueReferencePairs" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.ValueReferencePair>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "valueReferencePair",
-            parseValueReferencePairFromSequence
-          )
+          propertyLocalName,
+          parseListOfValueReferencePairContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValueReferencePairs = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theValueReferencePairs = parsed.value;
         break;
       }
 
@@ -12208,7 +7447,9 @@ function parseValueListFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!LangStringPreferredNameTypeIec61360} is embedded.
  */
 function parseLangStringPreferredNameTypeIec61360FromSequence(
   cursor: XmlCursor
@@ -12238,63 +7479,25 @@ function parseLangStringPreferredNameTypeIec61360FromSequence(
     switch (propertyLocalName) {
       case "language": {
         if (theLanguage !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "language" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theLanguage = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theLanguage = parsed.value;
         break;
       }
 
       case "text": {
         if (theText !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "text" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theText = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theText = parsed.value;
         break;
       }
 
@@ -12345,7 +7548,9 @@ function parseLangStringPreferredNameTypeIec61360FromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!LangStringShortNameTypeIec61360} is embedded.
  */
 function parseLangStringShortNameTypeIec61360FromSequence(
   cursor: XmlCursor
@@ -12375,63 +7580,25 @@ function parseLangStringShortNameTypeIec61360FromSequence(
     switch (propertyLocalName) {
       case "language": {
         if (theLanguage !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "language" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theLanguage = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theLanguage = parsed.value;
         break;
       }
 
       case "text": {
         if (theText !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "text" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theText = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theText = parsed.value;
         break;
       }
 
@@ -12482,7 +7649,9 @@ function parseLangStringShortNameTypeIec61360FromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!LangStringDefinitionTypeIec61360} is embedded.
  */
 function parseLangStringDefinitionTypeIec61360FromSequence(
   cursor: XmlCursor
@@ -12512,63 +7681,25 @@ function parseLangStringDefinitionTypeIec61360FromSequence(
     switch (propertyLocalName) {
       case "language": {
         if (theLanguage !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "language" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theLanguage = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theLanguage = parsed.value;
         break;
       }
 
       case "text": {
         if (theText !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "text" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theText = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theText = parsed.value;
         break;
       }
 
@@ -12619,7 +7750,9 @@ function parseLangStringDefinitionTypeIec61360FromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!DataSpecificationIec61360} is embedded.
  */
 function parseDataSpecificationIec61360FromSequence(
   cursor: XmlCursor
@@ -12659,382 +7792,157 @@ function parseDataSpecificationIec61360FromSequence(
     switch (propertyLocalName) {
       case "preferredName": {
         if (thePreferredName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "preferredName" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringPreferredNameTypeIec61360>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringPreferredNameTypeIec61360",
-            parseLangStringPreferredNameTypeIec61360FromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringPreferredNameTypeIec61360Content
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        thePreferredName = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        thePreferredName = parsed.value;
         break;
       }
 
       case "shortName": {
         if (theShortName !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "shortName" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringShortNameTypeIec61360>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringShortNameTypeIec61360",
-            parseLangStringShortNameTypeIec61360FromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringShortNameTypeIec61360Content
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theShortName = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theShortName = parsed.value;
         break;
       }
 
       case "unit": {
         if (theUnit !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "unit" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theUnit = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theUnit = parsed.value;
         break;
       }
 
       case "unitId": {
         if (theUnitId !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "unitId" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseReferenceFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theUnitId = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceFromSequence);
+        propertyError = parsed.error;
+        theUnitId = parsed.value;
         break;
       }
 
       case "sourceOfDefinition": {
         if (theSourceOfDefinition !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "sourceOfDefinition" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSourceOfDefinition = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theSourceOfDefinition = parsed.value;
         break;
       }
 
       case "symbol": {
         if (theSymbol !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "symbol" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSymbol = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theSymbol = parsed.value;
         break;
       }
 
       case "dataType": {
         if (theDataType !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "dataType" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseDataTypeIec61360Text(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDataType = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseDataTypeIec61360Content);
+        propertyError = parsed.error;
+        theDataType = parsed.value;
         break;
       }
 
       case "definition": {
         if (theDefinition !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "definition" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.LangStringDefinitionTypeIec61360>(
+        const parsed = parseElementContent(
           cursor,
-          (aCursor) => parseNamedClassElement(
-            aCursor,
-            "langStringDefinitionTypeIec61360",
-            parseLangStringDefinitionTypeIec61360FromSequence
-          )
+          propertyLocalName,
+          parseListOfLangStringDefinitionTypeIec61360Content
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theDefinition = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theDefinition = parsed.value;
         break;
       }
 
       case "valueFormat": {
         if (theValueFormat !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "valueFormat" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValueFormat = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theValueFormat = parsed.value;
         break;
       }
 
       case "valueList": {
         if (theValueList !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "valueList" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseValueListFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValueList = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseValueListFromSequence);
+        propertyError = parsed.error;
+        theValueList = parsed.value;
         break;
       }
 
       case "value": {
         if (theValue !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "value" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theValue = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theValue = parsed.value;
         break;
       }
 
       case "levelType": {
         if (theLevelType !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "levelType" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const classOrError = parseLevelTypeFromSequence(cursor);
-        if (classOrError.error !== null) {
-          propertyError = classOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theLevelType = classOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseLevelTypeFromSequence);
+        propertyError = parsed.error;
+        theLevelType = parsed.value;
         break;
       }
 
@@ -13083,6 +7991,30 @@ function parseDataSpecificationIec61360FromSequence(
   );
 }
 
+const PARSERS_OF_HAS_SEMANTICS = new Map<
+  string,
+  ContentParser<AasTypes.IHasSemantics>
+>([
+  ["relationshipElement", parseRelationshipElementFromSequence],
+  ["annotatedRelationshipElement", parseAnnotatedRelationshipElementFromSequence],
+  ["basicEventElement", parseBasicEventElementFromSequence],
+  ["blob", parseBlobFromSequence],
+  ["capability", parseCapabilityFromSequence],
+  ["entity", parseEntityFromSequence],
+  ["extension", parseExtensionFromSequence],
+  ["file", parseFileFromSequence],
+  ["multiLanguageProperty", parseMultiLanguagePropertyFromSequence],
+  ["operation", parseOperationFromSequence],
+  ["property", parsePropertyFromSequence],
+  ["qualifier", parseQualifierFromSequence],
+  ["range", parseRangeFromSequence],
+  ["referenceElement", parseReferenceElementFromSequence],
+  ["specificAssetId", parseSpecificAssetIdFromSequence],
+  ["submodel", parseSubmodelFromSequence],
+  ["submodelElementCollection", parseSubmodelElementCollectionFromSequence],
+  ["submodelElementList", parseSubmodelElementListFromSequence]
+]);
+
 /**
  * Dispatch-parse an instance
  * of {@link types!IHasSemantics} from the next
@@ -13094,93 +8026,7 @@ function parseDataSpecificationIec61360FromSequence(
 function dispatchParseHasSemanticsElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IHasSemantics, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<AasTypes.IHasSemantics, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const localName = localNameOfTag(startTag.tag);
-  cursor.advance();
-
-  let instanceOrError: AasCommon.Either<AasTypes.IHasSemantics, DeserializationError>;
-  switch (localName) {
-    case "relationshipElement":
-      instanceOrError = parseRelationshipElementFromSequence(cursor);
-      break;
-    case "annotatedRelationshipElement":
-      instanceOrError = parseAnnotatedRelationshipElementFromSequence(cursor);
-      break;
-    case "basicEventElement":
-      instanceOrError = parseBasicEventElementFromSequence(cursor);
-      break;
-    case "blob":
-      instanceOrError = parseBlobFromSequence(cursor);
-      break;
-    case "capability":
-      instanceOrError = parseCapabilityFromSequence(cursor);
-      break;
-    case "entity":
-      instanceOrError = parseEntityFromSequence(cursor);
-      break;
-    case "extension":
-      instanceOrError = parseExtensionFromSequence(cursor);
-      break;
-    case "file":
-      instanceOrError = parseFileFromSequence(cursor);
-      break;
-    case "multiLanguageProperty":
-      instanceOrError = parseMultiLanguagePropertyFromSequence(cursor);
-      break;
-    case "operation":
-      instanceOrError = parseOperationFromSequence(cursor);
-      break;
-    case "property":
-      instanceOrError = parsePropertyFromSequence(cursor);
-      break;
-    case "qualifier":
-      instanceOrError = parseQualifierFromSequence(cursor);
-      break;
-    case "range":
-      instanceOrError = parseRangeFromSequence(cursor);
-      break;
-    case "referenceElement":
-      instanceOrError = parseReferenceElementFromSequence(cursor);
-      break;
-    case "specificAssetId":
-      instanceOrError = parseSpecificAssetIdFromSequence(cursor);
-      break;
-    case "submodel":
-      instanceOrError = parseSubmodelFromSequence(cursor);
-      break;
-    case "submodelElementCollection":
-      instanceOrError = parseSubmodelElementCollectionFromSequence(cursor);
-      break;
-    case "submodelElementList":
-      instanceOrError = parseSubmodelElementListFromSequence(cursor);
-      break;
-    default:
-      return newDeserializationError<AasTypes.IHasSemantics>(
-        `Expected an instance of IHasSemantics, but got: ${localName}`
-      );
-  }
-
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, localName);
-  if (closeError !== null) {
-    return new AasCommon.Either<AasTypes.IHasSemantics, DeserializationError>(
-      null,
-      closeError
-    );
-  }
-
-  return instanceOrError;
+  return dispatchParseElement(cursor, "IHasSemantics", PARSERS_OF_HAS_SEMANTICS);
 }
 
 /**
@@ -13225,6 +8071,29 @@ export function hasSemanticsFromXmlString(
   return instanceOrError;
 }
 
+const PARSERS_OF_HAS_EXTENSIONS = new Map<
+  string,
+  ContentParser<AasTypes.IHasExtensions>
+>([
+  ["relationshipElement", parseRelationshipElementFromSequence],
+  ["annotatedRelationshipElement", parseAnnotatedRelationshipElementFromSequence],
+  ["assetAdministrationShell", parseAssetAdministrationShellFromSequence],
+  ["basicEventElement", parseBasicEventElementFromSequence],
+  ["blob", parseBlobFromSequence],
+  ["capability", parseCapabilityFromSequence],
+  ["conceptDescription", parseConceptDescriptionFromSequence],
+  ["entity", parseEntityFromSequence],
+  ["file", parseFileFromSequence],
+  ["multiLanguageProperty", parseMultiLanguagePropertyFromSequence],
+  ["operation", parseOperationFromSequence],
+  ["property", parsePropertyFromSequence],
+  ["range", parseRangeFromSequence],
+  ["referenceElement", parseReferenceElementFromSequence],
+  ["submodel", parseSubmodelFromSequence],
+  ["submodelElementCollection", parseSubmodelElementCollectionFromSequence],
+  ["submodelElementList", parseSubmodelElementListFromSequence]
+]);
+
 /**
  * Dispatch-parse an instance
  * of {@link types!IHasExtensions} from the next
@@ -13236,90 +8105,7 @@ export function hasSemanticsFromXmlString(
 function dispatchParseHasExtensionsElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IHasExtensions, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<AasTypes.IHasExtensions, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const localName = localNameOfTag(startTag.tag);
-  cursor.advance();
-
-  let instanceOrError: AasCommon.Either<AasTypes.IHasExtensions, DeserializationError>;
-  switch (localName) {
-    case "relationshipElement":
-      instanceOrError = parseRelationshipElementFromSequence(cursor);
-      break;
-    case "annotatedRelationshipElement":
-      instanceOrError = parseAnnotatedRelationshipElementFromSequence(cursor);
-      break;
-    case "assetAdministrationShell":
-      instanceOrError = parseAssetAdministrationShellFromSequence(cursor);
-      break;
-    case "basicEventElement":
-      instanceOrError = parseBasicEventElementFromSequence(cursor);
-      break;
-    case "blob":
-      instanceOrError = parseBlobFromSequence(cursor);
-      break;
-    case "capability":
-      instanceOrError = parseCapabilityFromSequence(cursor);
-      break;
-    case "conceptDescription":
-      instanceOrError = parseConceptDescriptionFromSequence(cursor);
-      break;
-    case "entity":
-      instanceOrError = parseEntityFromSequence(cursor);
-      break;
-    case "file":
-      instanceOrError = parseFileFromSequence(cursor);
-      break;
-    case "multiLanguageProperty":
-      instanceOrError = parseMultiLanguagePropertyFromSequence(cursor);
-      break;
-    case "operation":
-      instanceOrError = parseOperationFromSequence(cursor);
-      break;
-    case "property":
-      instanceOrError = parsePropertyFromSequence(cursor);
-      break;
-    case "range":
-      instanceOrError = parseRangeFromSequence(cursor);
-      break;
-    case "referenceElement":
-      instanceOrError = parseReferenceElementFromSequence(cursor);
-      break;
-    case "submodel":
-      instanceOrError = parseSubmodelFromSequence(cursor);
-      break;
-    case "submodelElementCollection":
-      instanceOrError = parseSubmodelElementCollectionFromSequence(cursor);
-      break;
-    case "submodelElementList":
-      instanceOrError = parseSubmodelElementListFromSequence(cursor);
-      break;
-    default:
-      return newDeserializationError<AasTypes.IHasExtensions>(
-        `Expected an instance of IHasExtensions, but got: ${localName}`
-      );
-  }
-
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, localName);
-  if (closeError !== null) {
-    return new AasCommon.Either<AasTypes.IHasExtensions, DeserializationError>(
-      null,
-      closeError
-    );
-  }
-
-  return instanceOrError;
+  return dispatchParseElement(cursor, "IHasExtensions", PARSERS_OF_HAS_EXTENSIONS);
 }
 
 /**
@@ -13364,6 +8150,29 @@ export function hasExtensionsFromXmlString(
   return instanceOrError;
 }
 
+const PARSERS_OF_REFERABLE = new Map<
+  string,
+  ContentParser<AasTypes.IReferable>
+>([
+  ["relationshipElement", parseRelationshipElementFromSequence],
+  ["annotatedRelationshipElement", parseAnnotatedRelationshipElementFromSequence],
+  ["assetAdministrationShell", parseAssetAdministrationShellFromSequence],
+  ["basicEventElement", parseBasicEventElementFromSequence],
+  ["blob", parseBlobFromSequence],
+  ["capability", parseCapabilityFromSequence],
+  ["conceptDescription", parseConceptDescriptionFromSequence],
+  ["entity", parseEntityFromSequence],
+  ["file", parseFileFromSequence],
+  ["multiLanguageProperty", parseMultiLanguagePropertyFromSequence],
+  ["operation", parseOperationFromSequence],
+  ["property", parsePropertyFromSequence],
+  ["range", parseRangeFromSequence],
+  ["referenceElement", parseReferenceElementFromSequence],
+  ["submodel", parseSubmodelFromSequence],
+  ["submodelElementCollection", parseSubmodelElementCollectionFromSequence],
+  ["submodelElementList", parseSubmodelElementListFromSequence]
+]);
+
 /**
  * Dispatch-parse an instance
  * of {@link types!IReferable} from the next
@@ -13375,90 +8184,7 @@ export function hasExtensionsFromXmlString(
 function dispatchParseReferableElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IReferable, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<AasTypes.IReferable, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const localName = localNameOfTag(startTag.tag);
-  cursor.advance();
-
-  let instanceOrError: AasCommon.Either<AasTypes.IReferable, DeserializationError>;
-  switch (localName) {
-    case "relationshipElement":
-      instanceOrError = parseRelationshipElementFromSequence(cursor);
-      break;
-    case "annotatedRelationshipElement":
-      instanceOrError = parseAnnotatedRelationshipElementFromSequence(cursor);
-      break;
-    case "assetAdministrationShell":
-      instanceOrError = parseAssetAdministrationShellFromSequence(cursor);
-      break;
-    case "basicEventElement":
-      instanceOrError = parseBasicEventElementFromSequence(cursor);
-      break;
-    case "blob":
-      instanceOrError = parseBlobFromSequence(cursor);
-      break;
-    case "capability":
-      instanceOrError = parseCapabilityFromSequence(cursor);
-      break;
-    case "conceptDescription":
-      instanceOrError = parseConceptDescriptionFromSequence(cursor);
-      break;
-    case "entity":
-      instanceOrError = parseEntityFromSequence(cursor);
-      break;
-    case "file":
-      instanceOrError = parseFileFromSequence(cursor);
-      break;
-    case "multiLanguageProperty":
-      instanceOrError = parseMultiLanguagePropertyFromSequence(cursor);
-      break;
-    case "operation":
-      instanceOrError = parseOperationFromSequence(cursor);
-      break;
-    case "property":
-      instanceOrError = parsePropertyFromSequence(cursor);
-      break;
-    case "range":
-      instanceOrError = parseRangeFromSequence(cursor);
-      break;
-    case "referenceElement":
-      instanceOrError = parseReferenceElementFromSequence(cursor);
-      break;
-    case "submodel":
-      instanceOrError = parseSubmodelFromSequence(cursor);
-      break;
-    case "submodelElementCollection":
-      instanceOrError = parseSubmodelElementCollectionFromSequence(cursor);
-      break;
-    case "submodelElementList":
-      instanceOrError = parseSubmodelElementListFromSequence(cursor);
-      break;
-    default:
-      return newDeserializationError<AasTypes.IReferable>(
-        `Expected an instance of IReferable, but got: ${localName}`
-      );
-  }
-
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, localName);
-  if (closeError !== null) {
-    return new AasCommon.Either<AasTypes.IReferable, DeserializationError>(
-      null,
-      closeError
-    );
-  }
-
-  return instanceOrError;
+  return dispatchParseElement(cursor, "IReferable", PARSERS_OF_REFERABLE);
 }
 
 /**
@@ -13503,6 +8229,15 @@ export function referableFromXmlString(
   return instanceOrError;
 }
 
+const PARSERS_OF_IDENTIFIABLE = new Map<
+  string,
+  ContentParser<AasTypes.IIdentifiable>
+>([
+  ["assetAdministrationShell", parseAssetAdministrationShellFromSequence],
+  ["conceptDescription", parseConceptDescriptionFromSequence],
+  ["submodel", parseSubmodelFromSequence]
+]);
+
 /**
  * Dispatch-parse an instance
  * of {@link types!IIdentifiable} from the next
@@ -13514,48 +8249,7 @@ export function referableFromXmlString(
 function dispatchParseIdentifiableElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IIdentifiable, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<AasTypes.IIdentifiable, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const localName = localNameOfTag(startTag.tag);
-  cursor.advance();
-
-  let instanceOrError: AasCommon.Either<AasTypes.IIdentifiable, DeserializationError>;
-  switch (localName) {
-    case "assetAdministrationShell":
-      instanceOrError = parseAssetAdministrationShellFromSequence(cursor);
-      break;
-    case "conceptDescription":
-      instanceOrError = parseConceptDescriptionFromSequence(cursor);
-      break;
-    case "submodel":
-      instanceOrError = parseSubmodelFromSequence(cursor);
-      break;
-    default:
-      return newDeserializationError<AasTypes.IIdentifiable>(
-        `Expected an instance of IIdentifiable, but got: ${localName}`
-      );
-  }
-
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, localName);
-  if (closeError !== null) {
-    return new AasCommon.Either<AasTypes.IIdentifiable, DeserializationError>(
-      null,
-      closeError
-    );
-  }
-
-  return instanceOrError;
+  return dispatchParseElement(cursor, "IIdentifiable", PARSERS_OF_IDENTIFIABLE);
 }
 
 /**
@@ -13600,6 +8294,13 @@ export function identifiableFromXmlString(
   return instanceOrError;
 }
 
+const PARSERS_OF_HAS_KIND = new Map<
+  string,
+  ContentParser<AasTypes.IHasKind>
+>([
+  ["submodel", parseSubmodelFromSequence]
+]);
+
 /**
  * Dispatch-parse an instance
  * of {@link types!IHasKind} from the next
@@ -13611,42 +8312,7 @@ export function identifiableFromXmlString(
 function dispatchParseHasKindElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IHasKind, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<AasTypes.IHasKind, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const localName = localNameOfTag(startTag.tag);
-  cursor.advance();
-
-  let instanceOrError: AasCommon.Either<AasTypes.IHasKind, DeserializationError>;
-  switch (localName) {
-    case "submodel":
-      instanceOrError = parseSubmodelFromSequence(cursor);
-      break;
-    default:
-      return newDeserializationError<AasTypes.IHasKind>(
-        `Expected an instance of IHasKind, but got: ${localName}`
-      );
-  }
-
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, localName);
-  if (closeError !== null) {
-    return new AasCommon.Either<AasTypes.IHasKind, DeserializationError>(
-      null,
-      closeError
-    );
-  }
-
-  return instanceOrError;
+  return dispatchParseElement(cursor, "IHasKind", PARSERS_OF_HAS_KIND);
 }
 
 /**
@@ -13691,6 +8357,30 @@ export function hasKindFromXmlString(
   return instanceOrError;
 }
 
+const PARSERS_OF_HAS_DATA_SPECIFICATION = new Map<
+  string,
+  ContentParser<AasTypes.IHasDataSpecification>
+>([
+  ["administrativeInformation", parseAdministrativeInformationFromSequence],
+  ["relationshipElement", parseRelationshipElementFromSequence],
+  ["annotatedRelationshipElement", parseAnnotatedRelationshipElementFromSequence],
+  ["assetAdministrationShell", parseAssetAdministrationShellFromSequence],
+  ["basicEventElement", parseBasicEventElementFromSequence],
+  ["blob", parseBlobFromSequence],
+  ["capability", parseCapabilityFromSequence],
+  ["conceptDescription", parseConceptDescriptionFromSequence],
+  ["entity", parseEntityFromSequence],
+  ["file", parseFileFromSequence],
+  ["multiLanguageProperty", parseMultiLanguagePropertyFromSequence],
+  ["operation", parseOperationFromSequence],
+  ["property", parsePropertyFromSequence],
+  ["range", parseRangeFromSequence],
+  ["referenceElement", parseReferenceElementFromSequence],
+  ["submodel", parseSubmodelFromSequence],
+  ["submodelElementCollection", parseSubmodelElementCollectionFromSequence],
+  ["submodelElementList", parseSubmodelElementListFromSequence]
+]);
+
 /**
  * Dispatch-parse an instance
  * of {@link types!IHasDataSpecification} from the next
@@ -13702,93 +8392,7 @@ export function hasKindFromXmlString(
 function dispatchParseHasDataSpecificationElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IHasDataSpecification, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<AasTypes.IHasDataSpecification, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const localName = localNameOfTag(startTag.tag);
-  cursor.advance();
-
-  let instanceOrError: AasCommon.Either<AasTypes.IHasDataSpecification, DeserializationError>;
-  switch (localName) {
-    case "administrativeInformation":
-      instanceOrError = parseAdministrativeInformationFromSequence(cursor);
-      break;
-    case "relationshipElement":
-      instanceOrError = parseRelationshipElementFromSequence(cursor);
-      break;
-    case "annotatedRelationshipElement":
-      instanceOrError = parseAnnotatedRelationshipElementFromSequence(cursor);
-      break;
-    case "assetAdministrationShell":
-      instanceOrError = parseAssetAdministrationShellFromSequence(cursor);
-      break;
-    case "basicEventElement":
-      instanceOrError = parseBasicEventElementFromSequence(cursor);
-      break;
-    case "blob":
-      instanceOrError = parseBlobFromSequence(cursor);
-      break;
-    case "capability":
-      instanceOrError = parseCapabilityFromSequence(cursor);
-      break;
-    case "conceptDescription":
-      instanceOrError = parseConceptDescriptionFromSequence(cursor);
-      break;
-    case "entity":
-      instanceOrError = parseEntityFromSequence(cursor);
-      break;
-    case "file":
-      instanceOrError = parseFileFromSequence(cursor);
-      break;
-    case "multiLanguageProperty":
-      instanceOrError = parseMultiLanguagePropertyFromSequence(cursor);
-      break;
-    case "operation":
-      instanceOrError = parseOperationFromSequence(cursor);
-      break;
-    case "property":
-      instanceOrError = parsePropertyFromSequence(cursor);
-      break;
-    case "range":
-      instanceOrError = parseRangeFromSequence(cursor);
-      break;
-    case "referenceElement":
-      instanceOrError = parseReferenceElementFromSequence(cursor);
-      break;
-    case "submodel":
-      instanceOrError = parseSubmodelFromSequence(cursor);
-      break;
-    case "submodelElementCollection":
-      instanceOrError = parseSubmodelElementCollectionFromSequence(cursor);
-      break;
-    case "submodelElementList":
-      instanceOrError = parseSubmodelElementListFromSequence(cursor);
-      break;
-    default:
-      return newDeserializationError<AasTypes.IHasDataSpecification>(
-        `Expected an instance of IHasDataSpecification, but got: ${localName}`
-      );
-  }
-
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, localName);
-  if (closeError !== null) {
-    return new AasCommon.Either<AasTypes.IHasDataSpecification, DeserializationError>(
-      null,
-      closeError
-    );
-  }
-
-  return instanceOrError;
+  return dispatchParseElement(cursor, "IHasDataSpecification", PARSERS_OF_HAS_DATA_SPECIFICATION);
 }
 
 /**
@@ -13833,6 +8437,27 @@ export function hasDataSpecificationFromXmlString(
   return instanceOrError;
 }
 
+const PARSERS_OF_QUALIFIABLE = new Map<
+  string,
+  ContentParser<AasTypes.IQualifiable>
+>([
+  ["relationshipElement", parseRelationshipElementFromSequence],
+  ["annotatedRelationshipElement", parseAnnotatedRelationshipElementFromSequence],
+  ["basicEventElement", parseBasicEventElementFromSequence],
+  ["blob", parseBlobFromSequence],
+  ["capability", parseCapabilityFromSequence],
+  ["entity", parseEntityFromSequence],
+  ["file", parseFileFromSequence],
+  ["multiLanguageProperty", parseMultiLanguagePropertyFromSequence],
+  ["operation", parseOperationFromSequence],
+  ["property", parsePropertyFromSequence],
+  ["range", parseRangeFromSequence],
+  ["referenceElement", parseReferenceElementFromSequence],
+  ["submodel", parseSubmodelFromSequence],
+  ["submodelElementCollection", parseSubmodelElementCollectionFromSequence],
+  ["submodelElementList", parseSubmodelElementListFromSequence]
+]);
+
 /**
  * Dispatch-parse an instance
  * of {@link types!IQualifiable} from the next
@@ -13844,84 +8469,7 @@ export function hasDataSpecificationFromXmlString(
 function dispatchParseQualifiableElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IQualifiable, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<AasTypes.IQualifiable, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const localName = localNameOfTag(startTag.tag);
-  cursor.advance();
-
-  let instanceOrError: AasCommon.Either<AasTypes.IQualifiable, DeserializationError>;
-  switch (localName) {
-    case "relationshipElement":
-      instanceOrError = parseRelationshipElementFromSequence(cursor);
-      break;
-    case "annotatedRelationshipElement":
-      instanceOrError = parseAnnotatedRelationshipElementFromSequence(cursor);
-      break;
-    case "basicEventElement":
-      instanceOrError = parseBasicEventElementFromSequence(cursor);
-      break;
-    case "blob":
-      instanceOrError = parseBlobFromSequence(cursor);
-      break;
-    case "capability":
-      instanceOrError = parseCapabilityFromSequence(cursor);
-      break;
-    case "entity":
-      instanceOrError = parseEntityFromSequence(cursor);
-      break;
-    case "file":
-      instanceOrError = parseFileFromSequence(cursor);
-      break;
-    case "multiLanguageProperty":
-      instanceOrError = parseMultiLanguagePropertyFromSequence(cursor);
-      break;
-    case "operation":
-      instanceOrError = parseOperationFromSequence(cursor);
-      break;
-    case "property":
-      instanceOrError = parsePropertyFromSequence(cursor);
-      break;
-    case "range":
-      instanceOrError = parseRangeFromSequence(cursor);
-      break;
-    case "referenceElement":
-      instanceOrError = parseReferenceElementFromSequence(cursor);
-      break;
-    case "submodel":
-      instanceOrError = parseSubmodelFromSequence(cursor);
-      break;
-    case "submodelElementCollection":
-      instanceOrError = parseSubmodelElementCollectionFromSequence(cursor);
-      break;
-    case "submodelElementList":
-      instanceOrError = parseSubmodelElementListFromSequence(cursor);
-      break;
-    default:
-      return newDeserializationError<AasTypes.IQualifiable>(
-        `Expected an instance of IQualifiable, but got: ${localName}`
-      );
-  }
-
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, localName);
-  if (closeError !== null) {
-    return new AasCommon.Either<AasTypes.IQualifiable, DeserializationError>(
-      null,
-      closeError
-    );
-  }
-
-  return instanceOrError;
+  return dispatchParseElement(cursor, "IQualifiable", PARSERS_OF_QUALIFIABLE);
 }
 
 /**
@@ -13966,6 +8514,26 @@ export function qualifiableFromXmlString(
   return instanceOrError;
 }
 
+const PARSERS_OF_SUBMODEL_ELEMENT = new Map<
+  string,
+  ContentParser<AasTypes.ISubmodelElement>
+>([
+  ["relationshipElement", parseRelationshipElementFromSequence],
+  ["annotatedRelationshipElement", parseAnnotatedRelationshipElementFromSequence],
+  ["basicEventElement", parseBasicEventElementFromSequence],
+  ["blob", parseBlobFromSequence],
+  ["capability", parseCapabilityFromSequence],
+  ["entity", parseEntityFromSequence],
+  ["file", parseFileFromSequence],
+  ["multiLanguageProperty", parseMultiLanguagePropertyFromSequence],
+  ["operation", parseOperationFromSequence],
+  ["property", parsePropertyFromSequence],
+  ["range", parseRangeFromSequence],
+  ["referenceElement", parseReferenceElementFromSequence],
+  ["submodelElementCollection", parseSubmodelElementCollectionFromSequence],
+  ["submodelElementList", parseSubmodelElementListFromSequence]
+]);
+
 /**
  * Dispatch-parse an instance
  * of {@link types!ISubmodelElement} from the next
@@ -13977,81 +8545,7 @@ export function qualifiableFromXmlString(
 function dispatchParseSubmodelElementElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.ISubmodelElement, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<AasTypes.ISubmodelElement, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const localName = localNameOfTag(startTag.tag);
-  cursor.advance();
-
-  let instanceOrError: AasCommon.Either<AasTypes.ISubmodelElement, DeserializationError>;
-  switch (localName) {
-    case "relationshipElement":
-      instanceOrError = parseRelationshipElementFromSequence(cursor);
-      break;
-    case "annotatedRelationshipElement":
-      instanceOrError = parseAnnotatedRelationshipElementFromSequence(cursor);
-      break;
-    case "basicEventElement":
-      instanceOrError = parseBasicEventElementFromSequence(cursor);
-      break;
-    case "blob":
-      instanceOrError = parseBlobFromSequence(cursor);
-      break;
-    case "capability":
-      instanceOrError = parseCapabilityFromSequence(cursor);
-      break;
-    case "entity":
-      instanceOrError = parseEntityFromSequence(cursor);
-      break;
-    case "file":
-      instanceOrError = parseFileFromSequence(cursor);
-      break;
-    case "multiLanguageProperty":
-      instanceOrError = parseMultiLanguagePropertyFromSequence(cursor);
-      break;
-    case "operation":
-      instanceOrError = parseOperationFromSequence(cursor);
-      break;
-    case "property":
-      instanceOrError = parsePropertyFromSequence(cursor);
-      break;
-    case "range":
-      instanceOrError = parseRangeFromSequence(cursor);
-      break;
-    case "referenceElement":
-      instanceOrError = parseReferenceElementFromSequence(cursor);
-      break;
-    case "submodelElementCollection":
-      instanceOrError = parseSubmodelElementCollectionFromSequence(cursor);
-      break;
-    case "submodelElementList":
-      instanceOrError = parseSubmodelElementListFromSequence(cursor);
-      break;
-    default:
-      return newDeserializationError<AasTypes.ISubmodelElement>(
-        `Expected an instance of ISubmodelElement, but got: ${localName}`
-      );
-  }
-
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, localName);
-  if (closeError !== null) {
-    return new AasCommon.Either<AasTypes.ISubmodelElement, DeserializationError>(
-      null,
-      closeError
-    );
-  }
-
-  return instanceOrError;
+  return dispatchParseElement(cursor, "ISubmodelElement", PARSERS_OF_SUBMODEL_ELEMENT);
 }
 
 /**
@@ -14096,6 +8590,14 @@ export function submodelElementFromXmlString(
   return instanceOrError;
 }
 
+const PARSERS_OF_RELATIONSHIP_ELEMENT = new Map<
+  string,
+  ContentParser<AasTypes.RelationshipElement>
+>([
+  ["annotatedRelationshipElement", parseAnnotatedRelationshipElementFromSequence],
+  ["relationshipElement", parseRelationshipElementFromSequence]
+]);
+
 /**
  * Dispatch-parse an instance
  * of {@link types!RelationshipElement} from the next
@@ -14107,45 +8609,7 @@ export function submodelElementFromXmlString(
 function dispatchParseRelationshipElementElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.RelationshipElement, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<AasTypes.RelationshipElement, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const localName = localNameOfTag(startTag.tag);
-  cursor.advance();
-
-  let instanceOrError: AasCommon.Either<AasTypes.RelationshipElement, DeserializationError>;
-  switch (localName) {
-    case "annotatedRelationshipElement":
-      instanceOrError = parseAnnotatedRelationshipElementFromSequence(cursor);
-      break;
-    case "relationshipElement":
-      instanceOrError = parseRelationshipElementFromSequence(cursor);
-      break;
-    default:
-      return newDeserializationError<AasTypes.RelationshipElement>(
-        `Expected an instance of RelationshipElement, but got: ${localName}`
-      );
-  }
-
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, localName);
-  if (closeError !== null) {
-    return new AasCommon.Either<AasTypes.RelationshipElement, DeserializationError>(
-      null,
-      closeError
-    );
-  }
-
-  return instanceOrError;
+  return dispatchParseElement(cursor, "RelationshipElement", PARSERS_OF_RELATIONSHIP_ELEMENT);
 }
 
 /**
@@ -14190,6 +8654,18 @@ export function relationshipElementFromXmlString(
   return instanceOrError;
 }
 
+const PARSERS_OF_DATA_ELEMENT = new Map<
+  string,
+  ContentParser<AasTypes.IDataElement>
+>([
+  ["blob", parseBlobFromSequence],
+  ["file", parseFileFromSequence],
+  ["multiLanguageProperty", parseMultiLanguagePropertyFromSequence],
+  ["property", parsePropertyFromSequence],
+  ["range", parseRangeFromSequence],
+  ["referenceElement", parseReferenceElementFromSequence]
+]);
+
 /**
  * Dispatch-parse an instance
  * of {@link types!IDataElement} from the next
@@ -14201,57 +8677,7 @@ export function relationshipElementFromXmlString(
 function dispatchParseDataElementElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IDataElement, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<AasTypes.IDataElement, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const localName = localNameOfTag(startTag.tag);
-  cursor.advance();
-
-  let instanceOrError: AasCommon.Either<AasTypes.IDataElement, DeserializationError>;
-  switch (localName) {
-    case "blob":
-      instanceOrError = parseBlobFromSequence(cursor);
-      break;
-    case "file":
-      instanceOrError = parseFileFromSequence(cursor);
-      break;
-    case "multiLanguageProperty":
-      instanceOrError = parseMultiLanguagePropertyFromSequence(cursor);
-      break;
-    case "property":
-      instanceOrError = parsePropertyFromSequence(cursor);
-      break;
-    case "range":
-      instanceOrError = parseRangeFromSequence(cursor);
-      break;
-    case "referenceElement":
-      instanceOrError = parseReferenceElementFromSequence(cursor);
-      break;
-    default:
-      return newDeserializationError<AasTypes.IDataElement>(
-        `Expected an instance of IDataElement, but got: ${localName}`
-      );
-  }
-
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, localName);
-  if (closeError !== null) {
-    return new AasCommon.Either<AasTypes.IDataElement, DeserializationError>(
-      null,
-      closeError
-    );
-  }
-
-  return instanceOrError;
+  return dispatchParseElement(cursor, "IDataElement", PARSERS_OF_DATA_ELEMENT);
 }
 
 /**
@@ -14296,6 +8722,13 @@ export function dataElementFromXmlString(
   return instanceOrError;
 }
 
+const PARSERS_OF_EVENT_ELEMENT = new Map<
+  string,
+  ContentParser<AasTypes.IEventElement>
+>([
+  ["basicEventElement", parseBasicEventElementFromSequence]
+]);
+
 /**
  * Dispatch-parse an instance
  * of {@link types!IEventElement} from the next
@@ -14307,42 +8740,7 @@ export function dataElementFromXmlString(
 function dispatchParseEventElementElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IEventElement, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<AasTypes.IEventElement, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const localName = localNameOfTag(startTag.tag);
-  cursor.advance();
-
-  let instanceOrError: AasCommon.Either<AasTypes.IEventElement, DeserializationError>;
-  switch (localName) {
-    case "basicEventElement":
-      instanceOrError = parseBasicEventElementFromSequence(cursor);
-      break;
-    default:
-      return newDeserializationError<AasTypes.IEventElement>(
-        `Expected an instance of IEventElement, but got: ${localName}`
-      );
-  }
-
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, localName);
-  if (closeError !== null) {
-    return new AasCommon.Either<AasTypes.IEventElement, DeserializationError>(
-      null,
-      closeError
-    );
-  }
-
-  return instanceOrError;
+  return dispatchParseElement(cursor, "IEventElement", PARSERS_OF_EVENT_ELEMENT);
 }
 
 /**
@@ -14387,6 +8785,17 @@ export function eventElementFromXmlString(
   return instanceOrError;
 }
 
+const PARSERS_OF_ABSTRACT_LANG_STRING = new Map<
+  string,
+  ContentParser<AasTypes.IAbstractLangString>
+>([
+  ["langStringDefinitionTypeIec61360", parseLangStringDefinitionTypeIec61360FromSequence],
+  ["langStringNameType", parseLangStringNameTypeFromSequence],
+  ["langStringPreferredNameTypeIec61360", parseLangStringPreferredNameTypeIec61360FromSequence],
+  ["langStringShortNameTypeIec61360", parseLangStringShortNameTypeIec61360FromSequence],
+  ["langStringTextType", parseLangStringTextTypeFromSequence]
+]);
+
 /**
  * Dispatch-parse an instance
  * of {@link types!IAbstractLangString} from the next
@@ -14398,54 +8807,7 @@ export function eventElementFromXmlString(
 function dispatchParseAbstractLangStringElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IAbstractLangString, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<AasTypes.IAbstractLangString, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const localName = localNameOfTag(startTag.tag);
-  cursor.advance();
-
-  let instanceOrError: AasCommon.Either<AasTypes.IAbstractLangString, DeserializationError>;
-  switch (localName) {
-    case "langStringDefinitionTypeIec61360":
-      instanceOrError = parseLangStringDefinitionTypeIec61360FromSequence(cursor);
-      break;
-    case "langStringNameType":
-      instanceOrError = parseLangStringNameTypeFromSequence(cursor);
-      break;
-    case "langStringPreferredNameTypeIec61360":
-      instanceOrError = parseLangStringPreferredNameTypeIec61360FromSequence(cursor);
-      break;
-    case "langStringShortNameTypeIec61360":
-      instanceOrError = parseLangStringShortNameTypeIec61360FromSequence(cursor);
-      break;
-    case "langStringTextType":
-      instanceOrError = parseLangStringTextTypeFromSequence(cursor);
-      break;
-    default:
-      return newDeserializationError<AasTypes.IAbstractLangString>(
-        `Expected an instance of IAbstractLangString, but got: ${localName}`
-      );
-  }
-
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, localName);
-  if (closeError !== null) {
-    return new AasCommon.Either<AasTypes.IAbstractLangString, DeserializationError>(
-      null,
-      closeError
-    );
-  }
-
-  return instanceOrError;
+  return dispatchParseElement(cursor, "IAbstractLangString", PARSERS_OF_ABSTRACT_LANG_STRING);
 }
 
 /**
@@ -14490,6 +8852,13 @@ export function abstractLangStringFromXmlString(
   return instanceOrError;
 }
 
+const PARSERS_OF_DATA_SPECIFICATION_CONTENT = new Map<
+  string,
+  ContentParser<AasTypes.IDataSpecificationContent>
+>([
+  ["dataSpecificationIec61360", parseDataSpecificationIec61360FromSequence]
+]);
+
 /**
  * Dispatch-parse an instance
  * of {@link types!IDataSpecificationContent} from the next
@@ -14501,42 +8870,11 @@ export function abstractLangStringFromXmlString(
 function dispatchParseDataSpecificationContentElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IDataSpecificationContent, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<AasTypes.IDataSpecificationContent, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const localName = localNameOfTag(startTag.tag);
-  cursor.advance();
-
-  let instanceOrError: AasCommon.Either<AasTypes.IDataSpecificationContent, DeserializationError>;
-  switch (localName) {
-    case "dataSpecificationIec61360":
-      instanceOrError = parseDataSpecificationIec61360FromSequence(cursor);
-      break;
-    default:
-      return newDeserializationError<AasTypes.IDataSpecificationContent>(
-        `Expected an instance of IDataSpecificationContent, but got: ${localName}`
-      );
-  }
-
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, localName);
-  if (closeError !== null) {
-    return new AasCommon.Either<AasTypes.IDataSpecificationContent, DeserializationError>(
-      null,
-      closeError
-    );
-  }
-
-  return instanceOrError;
+  return dispatchParseElement(
+    cursor,
+    "IDataSpecificationContent",
+    PARSERS_OF_DATA_SPECIFICATION_CONTENT
+  );
 }
 
 /**
@@ -14581,164 +8919,49 @@ export function dataSpecificationContentFromXmlString(
   return instanceOrError;
 }
 
-const ROOT_DISPATCH_BY_LOCAL_NAME =
-  new Map<
-    string,
-    (cursor: XmlCursor) => AasCommon.Either<AasTypes.Class, DeserializationError>
-  >([
-    [
-      "extension",
-      parseExtensionFromSequence
-    ],
-    [
-      "administrativeInformation",
-      parseAdministrativeInformationFromSequence
-    ],
-    [
-      "qualifier",
-      parseQualifierFromSequence
-    ],
-    [
-      "assetAdministrationShell",
-      parseAssetAdministrationShellFromSequence
-    ],
-    [
-      "assetInformation",
-      parseAssetInformationFromSequence
-    ],
-    [
-      "resource",
-      parseResourceFromSequence
-    ],
-    [
-      "specificAssetId",
-      parseSpecificAssetIdFromSequence
-    ],
-    [
-      "submodel",
-      parseSubmodelFromSequence
-    ],
-    [
-      "relationshipElement",
-      parseRelationshipElementFromSequence
-    ],
-    [
-      "submodelElementList",
-      parseSubmodelElementListFromSequence
-    ],
-    [
-      "submodelElementCollection",
-      parseSubmodelElementCollectionFromSequence
-    ],
-    [
-      "property",
-      parsePropertyFromSequence
-    ],
-    [
-      "multiLanguageProperty",
-      parseMultiLanguagePropertyFromSequence
-    ],
-    [
-      "range",
-      parseRangeFromSequence
-    ],
-    [
-      "referenceElement",
-      parseReferenceElementFromSequence
-    ],
-    [
-      "blob",
-      parseBlobFromSequence
-    ],
-    [
-      "file",
-      parseFileFromSequence
-    ],
-    [
-      "annotatedRelationshipElement",
-      parseAnnotatedRelationshipElementFromSequence
-    ],
-    [
-      "entity",
-      parseEntityFromSequence
-    ],
-    [
-      "eventPayload",
-      parseEventPayloadFromSequence
-    ],
-    [
-      "basicEventElement",
-      parseBasicEventElementFromSequence
-    ],
-    [
-      "operation",
-      parseOperationFromSequence
-    ],
-    [
-      "operationVariable",
-      parseOperationVariableFromSequence
-    ],
-    [
-      "capability",
-      parseCapabilityFromSequence
-    ],
-    [
-      "conceptDescription",
-      parseConceptDescriptionFromSequence
-    ],
-    [
-      "reference",
-      parseReferenceFromSequence
-    ],
-    [
-      "key",
-      parseKeyFromSequence
-    ],
-    [
-      "langStringNameType",
-      parseLangStringNameTypeFromSequence
-    ],
-    [
-      "langStringTextType",
-      parseLangStringTextTypeFromSequence
-    ],
-    [
-      "environment",
-      parseEnvironmentFromSequence
-    ],
-    [
-      "embeddedDataSpecification",
-      parseEmbeddedDataSpecificationFromSequence
-    ],
-    [
-      "levelType",
-      parseLevelTypeFromSequence
-    ],
-    [
-      "valueReferencePair",
-      parseValueReferencePairFromSequence
-    ],
-    [
-      "valueList",
-      parseValueListFromSequence
-    ],
-    [
-      "langStringPreferredNameTypeIec61360",
-      parseLangStringPreferredNameTypeIec61360FromSequence
-    ],
-    [
-      "langStringShortNameTypeIec61360",
-      parseLangStringShortNameTypeIec61360FromSequence
-    ],
-    [
-      "langStringDefinitionTypeIec61360",
-      parseLangStringDefinitionTypeIec61360FromSequence
-    ],
-    [
-      "dataSpecificationIec61360",
-      parseDataSpecificationIec61360FromSequence
-    ]
-  ]);
+const ROOT_DISPATCH_BY_LOCAL_NAME = new Map<
+  string,
+  ContentParser<AasTypes.Class>
+>([
+  ["extension", parseExtensionFromSequence],
+  ["administrativeInformation", parseAdministrativeInformationFromSequence],
+  ["qualifier", parseQualifierFromSequence],
+  ["assetAdministrationShell", parseAssetAdministrationShellFromSequence],
+  ["assetInformation", parseAssetInformationFromSequence],
+  ["resource", parseResourceFromSequence],
+  ["specificAssetId", parseSpecificAssetIdFromSequence],
+  ["submodel", parseSubmodelFromSequence],
+  ["relationshipElement", parseRelationshipElementFromSequence],
+  ["submodelElementList", parseSubmodelElementListFromSequence],
+  ["submodelElementCollection", parseSubmodelElementCollectionFromSequence],
+  ["property", parsePropertyFromSequence],
+  ["multiLanguageProperty", parseMultiLanguagePropertyFromSequence],
+  ["range", parseRangeFromSequence],
+  ["referenceElement", parseReferenceElementFromSequence],
+  ["blob", parseBlobFromSequence],
+  ["file", parseFileFromSequence],
+  ["annotatedRelationshipElement", parseAnnotatedRelationshipElementFromSequence],
+  ["entity", parseEntityFromSequence],
+  ["eventPayload", parseEventPayloadFromSequence],
+  ["basicEventElement", parseBasicEventElementFromSequence],
+  ["operation", parseOperationFromSequence],
+  ["operationVariable", parseOperationVariableFromSequence],
+  ["capability", parseCapabilityFromSequence],
+  ["conceptDescription", parseConceptDescriptionFromSequence],
+  ["reference", parseReferenceFromSequence],
+  ["key", parseKeyFromSequence],
+  ["langStringNameType", parseLangStringNameTypeFromSequence],
+  ["langStringTextType", parseLangStringTextTypeFromSequence],
+  ["environment", parseEnvironmentFromSequence],
+  ["embeddedDataSpecification", parseEmbeddedDataSpecificationFromSequence],
+  ["levelType", parseLevelTypeFromSequence],
+  ["valueReferencePair", parseValueReferencePairFromSequence],
+  ["valueList", parseValueListFromSequence],
+  ["langStringPreferredNameTypeIec61360", parseLangStringPreferredNameTypeIec61360FromSequence],
+  ["langStringShortNameTypeIec61360", parseLangStringShortNameTypeIec61360FromSequence],
+  ["langStringDefinitionTypeIec61360", parseLangStringDefinitionTypeIec61360FromSequence],
+  ["dataSpecificationIec61360", parseDataSpecificationIec61360FromSequence]
+]);
 
 /**
  * Parse an XML string as an AAS instance.
