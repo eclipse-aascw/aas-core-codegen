@@ -31,16 +31,13 @@ export function modelTypeFromString(
   return result !== undefined ? result : null;
 }
 
-const MODEL_TYPE_TO_STRING = new Map<AasTypes.ModelType, string>([
-  [
-    AasTypes.ModelType.Readonly,
-    "Readonly"
-  ],
-  [
-    AasTypes.ModelType.Something,
-    "Something"
-  ]
-]);
+// NOTE (mristin):
+// The literals of ModelType are consecutive integers starting at 0,
+// so we index into an array instead of looking the text up in a map.
+const MODEL_TYPE_TO_STRING: readonly string[] = [
+  "Readonly",
+  "Something"
+];
 
 /**
  * Translate {@link types!ModelType} to a string.
@@ -52,7 +49,7 @@ const MODEL_TYPE_TO_STRING = new Map<AasTypes.ModelType, string>([
 export function modelTypeToString(
   value: AasTypes.ModelType
 ): string | null {
-  const result = MODEL_TYPE_TO_STRING.get(value);
+  const result = MODEL_TYPE_TO_STRING[value];
   return result !== undefined ? result : null;
 }
 
@@ -68,7 +65,7 @@ export function modelTypeToString(
 export function mustModelTypeToString(
   value: AasTypes.ModelType
 ): string {
-  const result = MODEL_TYPE_TO_STRING.get(value);
+  const result = MODEL_TYPE_TO_STRING[value];
   if (result === undefined) {
     throw new Error(
       `Invalid literal of ModelType: ${value}`
@@ -95,10 +92,13 @@ export function recordFromString(
   return result !== undefined ? result : null;
 }
 
-const RECORD_TO_STRING = new Map<AasTypes.RecorD, string>([
-  [AasTypes.RecorD.Ok, "ok"],
-  [AasTypes.RecorD.NotOk, "not-ok"]
-]);
+// NOTE (mristin):
+// The literals of RecorD are consecutive integers starting at 0,
+// so we index into an array instead of looking the text up in a map.
+const RECORD_TO_STRING: readonly string[] = [
+  "ok", // Ok
+  "not-ok" // NotOk
+];
 
 /**
  * Translate {@link types!RecorD} to a string.
@@ -109,7 +109,7 @@ const RECORD_TO_STRING = new Map<AasTypes.RecorD, string>([
 export function recordToString(
   value: AasTypes.RecorD
 ): string | null {
-  const result = RECORD_TO_STRING.get(value);
+  const result = RECORD_TO_STRING[value];
   return result !== undefined ? result : null;
 }
 
@@ -125,7 +125,7 @@ export function recordToString(
 export function mustRecordToString(
   value: AasTypes.RecorD
 ): string {
-  const result = RECORD_TO_STRING.get(value);
+  const result = RECORD_TO_STRING[value];
   if (result === undefined) {
     throw new Error(
       `Invalid literal of RecorD: ${value}`

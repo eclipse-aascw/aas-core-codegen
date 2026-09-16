@@ -175,160 +175,49 @@ export function modelTypeFromString(
   return result !== undefined ? result : null;
 }
 
-const MODEL_TYPE_TO_STRING = new Map<AasTypes.ModelType, string>([
-  [
-    AasTypes.ModelType.Extension,
-    "Extension"
-  ],
-  [
-    AasTypes.ModelType.AdministrativeInformation,
-    "AdministrativeInformation"
-  ],
-  [
-    AasTypes.ModelType.Qualifier,
-    "Qualifier"
-  ],
-  [
-    AasTypes.ModelType.AssetAdministrationShell,
-    "AssetAdministrationShell"
-  ],
-  [
-    AasTypes.ModelType.AssetInformation,
-    "AssetInformation"
-  ],
-  [
-    AasTypes.ModelType.Resource,
-    "Resource"
-  ],
-  [
-    AasTypes.ModelType.SpecificAssetId,
-    "SpecificAssetId"
-  ],
-  [
-    AasTypes.ModelType.Submodel,
-    "Submodel"
-  ],
-  [
-    AasTypes.ModelType.RelationshipElement,
-    "RelationshipElement"
-  ],
-  [
-    AasTypes.ModelType.SubmodelElementList,
-    "SubmodelElementList"
-  ],
-  [
-    AasTypes.ModelType.SubmodelElementCollection,
-    "SubmodelElementCollection"
-  ],
-  [
-    AasTypes.ModelType.Property,
-    "Property"
-  ],
-  [
-    AasTypes.ModelType.MultiLanguageProperty,
-    "MultiLanguageProperty"
-  ],
-  [
-    AasTypes.ModelType.Range,
-    "Range"
-  ],
-  [
-    AasTypes.ModelType.ReferenceElement,
-    "ReferenceElement"
-  ],
-  [
-    AasTypes.ModelType.Blob,
-    "Blob"
-  ],
-  [
-    AasTypes.ModelType.File,
-    "File"
-  ],
-  [
-    AasTypes.ModelType.AnnotatedRelationshipElement,
-    "AnnotatedRelationshipElement"
-  ],
-  [
-    AasTypes.ModelType.Entity,
-    "Entity"
-  ],
-  [
-    AasTypes.ModelType.EventPayload,
-    "EventPayload"
-  ],
-  [
-    AasTypes.ModelType.BasicEventElement,
-    "BasicEventElement"
-  ],
-  [
-    AasTypes.ModelType.Operation,
-    "Operation"
-  ],
-  [
-    AasTypes.ModelType.OperationVariable,
-    "OperationVariable"
-  ],
-  [
-    AasTypes.ModelType.Capability,
-    "Capability"
-  ],
-  [
-    AasTypes.ModelType.ConceptDescription,
-    "ConceptDescription"
-  ],
-  [
-    AasTypes.ModelType.Reference,
-    "Reference"
-  ],
-  [
-    AasTypes.ModelType.Key,
-    "Key"
-  ],
-  [
-    AasTypes.ModelType.LangStringNameType,
-    "LangStringNameType"
-  ],
-  [
-    AasTypes.ModelType.LangStringTextType,
-    "LangStringTextType"
-  ],
-  [
-    AasTypes.ModelType.Environment,
-    "Environment"
-  ],
-  [
-    AasTypes.ModelType.EmbeddedDataSpecification,
-    "EmbeddedDataSpecification"
-  ],
-  [
-    AasTypes.ModelType.LevelType,
-    "LevelType"
-  ],
-  [
-    AasTypes.ModelType.ValueReferencePair,
-    "ValueReferencePair"
-  ],
-  [
-    AasTypes.ModelType.ValueList,
-    "ValueList"
-  ],
-  [
-    AasTypes.ModelType.LangStringPreferredNameTypeIec61360,
-    "LangStringPreferredNameTypeIec61360"
-  ],
-  [
-    AasTypes.ModelType.LangStringShortNameTypeIec61360,
-    "LangStringShortNameTypeIec61360"
-  ],
-  [
-    AasTypes.ModelType.LangStringDefinitionTypeIec61360,
-    "LangStringDefinitionTypeIec61360"
-  ],
-  [
-    AasTypes.ModelType.DataSpecificationIec61360,
-    "DataSpecificationIec61360"
-  ]
-]);
+// NOTE (mristin):
+// The literals of ModelType are consecutive integers starting at 0,
+// so we index into an array instead of looking the text up in a map.
+const MODEL_TYPE_TO_STRING: readonly string[] = [
+  "Extension",
+  "AdministrativeInformation",
+  "Qualifier",
+  "AssetAdministrationShell",
+  "AssetInformation",
+  "Resource",
+  "SpecificAssetId",
+  "Submodel",
+  "RelationshipElement",
+  "SubmodelElementList",
+  "SubmodelElementCollection",
+  "Property",
+  "MultiLanguageProperty",
+  "Range",
+  "ReferenceElement",
+  "Blob",
+  "File",
+  "AnnotatedRelationshipElement",
+  "Entity",
+  "EventPayload",
+  "BasicEventElement",
+  "Operation",
+  "OperationVariable",
+  "Capability",
+  "ConceptDescription",
+  "Reference",
+  "Key",
+  "LangStringNameType",
+  "LangStringTextType",
+  "Environment",
+  "EmbeddedDataSpecification",
+  "LevelType",
+  "ValueReferencePair",
+  "ValueList",
+  "LangStringPreferredNameTypeIec61360",
+  "LangStringShortNameTypeIec61360",
+  "LangStringDefinitionTypeIec61360",
+  "DataSpecificationIec61360"
+];
 
 /**
  * Translate {@link types!ModelType} to a string.
@@ -340,7 +229,7 @@ const MODEL_TYPE_TO_STRING = new Map<AasTypes.ModelType, string>([
 export function modelTypeToString(
   value: AasTypes.ModelType
 ): string | null {
-  const result = MODEL_TYPE_TO_STRING.get(value);
+  const result = MODEL_TYPE_TO_STRING[value];
   return result !== undefined ? result : null;
 }
 
@@ -356,7 +245,7 @@ export function modelTypeToString(
 export function mustModelTypeToString(
   value: AasTypes.ModelType
 ): string {
-  const result = MODEL_TYPE_TO_STRING.get(value);
+  const result = MODEL_TYPE_TO_STRING[value];
   if (result === undefined) {
     throw new Error(
       `Invalid literal of ModelType: ${value}`
@@ -383,10 +272,13 @@ export function modellingKindFromString(
   return result !== undefined ? result : null;
 }
 
-const MODELLING_KIND_TO_STRING = new Map<AasTypes.ModellingKind, string>([
-  [AasTypes.ModellingKind.Template, "Template"],
-  [AasTypes.ModellingKind.Instance, "Instance"]
-]);
+// NOTE (mristin):
+// The literals of ModellingKind are consecutive integers starting at 0,
+// so we index into an array instead of looking the text up in a map.
+const MODELLING_KIND_TO_STRING: readonly string[] = [
+  "Template",
+  "Instance"
+];
 
 /**
  * Translate {@link types!ModellingKind} to a string.
@@ -397,7 +289,7 @@ const MODELLING_KIND_TO_STRING = new Map<AasTypes.ModellingKind, string>([
 export function modellingKindToString(
   value: AasTypes.ModellingKind
 ): string | null {
-  const result = MODELLING_KIND_TO_STRING.get(value);
+  const result = MODELLING_KIND_TO_STRING[value];
   return result !== undefined ? result : null;
 }
 
@@ -413,7 +305,7 @@ export function modellingKindToString(
 export function mustModellingKindToString(
   value: AasTypes.ModellingKind
 ): string {
-  const result = MODELLING_KIND_TO_STRING.get(value);
+  const result = MODELLING_KIND_TO_STRING[value];
   if (result === undefined) {
     throw new Error(
       `Invalid literal of ModellingKind: ${value}`
@@ -441,11 +333,14 @@ export function qualifierKindFromString(
   return result !== undefined ? result : null;
 }
 
-const QUALIFIER_KIND_TO_STRING = new Map<AasTypes.QualifierKind, string>([
-  [AasTypes.QualifierKind.ValueQualifier, "ValueQualifier"],
-  [AasTypes.QualifierKind.ConceptQualifier, "ConceptQualifier"],
-  [AasTypes.QualifierKind.TemplateQualifier, "TemplateQualifier"]
-]);
+// NOTE (mristin):
+// The literals of QualifierKind are consecutive integers starting at 0,
+// so we index into an array instead of looking the text up in a map.
+const QUALIFIER_KIND_TO_STRING: readonly string[] = [
+  "ValueQualifier",
+  "ConceptQualifier",
+  "TemplateQualifier"
+];
 
 /**
  * Translate {@link types!QualifierKind} to a string.
@@ -456,7 +351,7 @@ const QUALIFIER_KIND_TO_STRING = new Map<AasTypes.QualifierKind, string>([
 export function qualifierKindToString(
   value: AasTypes.QualifierKind
 ): string | null {
-  const result = QUALIFIER_KIND_TO_STRING.get(value);
+  const result = QUALIFIER_KIND_TO_STRING[value];
   return result !== undefined ? result : null;
 }
 
@@ -472,7 +367,7 @@ export function qualifierKindToString(
 export function mustQualifierKindToString(
   value: AasTypes.QualifierKind
 ): string {
-  const result = QUALIFIER_KIND_TO_STRING.get(value);
+  const result = QUALIFIER_KIND_TO_STRING[value];
   if (result === undefined) {
     throw new Error(
       `Invalid literal of QualifierKind: ${value}`
@@ -500,11 +395,14 @@ export function assetKindFromString(
   return result !== undefined ? result : null;
 }
 
-const ASSET_KIND_TO_STRING = new Map<AasTypes.AssetKind, string>([
-  [AasTypes.AssetKind.Type, "Type"],
-  [AasTypes.AssetKind.Instance, "Instance"],
-  [AasTypes.AssetKind.NotApplicable, "NotApplicable"]
-]);
+// NOTE (mristin):
+// The literals of AssetKind are consecutive integers starting at 0,
+// so we index into an array instead of looking the text up in a map.
+const ASSET_KIND_TO_STRING: readonly string[] = [
+  "Type",
+  "Instance",
+  "NotApplicable"
+];
 
 /**
  * Translate {@link types!AssetKind} to a string.
@@ -515,7 +413,7 @@ const ASSET_KIND_TO_STRING = new Map<AasTypes.AssetKind, string>([
 export function assetKindToString(
   value: AasTypes.AssetKind
 ): string | null {
-  const result = ASSET_KIND_TO_STRING.get(value);
+  const result = ASSET_KIND_TO_STRING[value];
   return result !== undefined ? result : null;
 }
 
@@ -531,7 +429,7 @@ export function assetKindToString(
 export function mustAssetKindToString(
   value: AasTypes.AssetKind
 ): string {
-  const result = ASSET_KIND_TO_STRING.get(value);
+  const result = ASSET_KIND_TO_STRING[value];
   if (result === undefined) {
     throw new Error(
       `Invalid literal of AssetKind: ${value}`
@@ -573,25 +471,28 @@ export function aasSubmodelElementsFromString(
   return result !== undefined ? result : null;
 }
 
-const AAS_SUBMODEL_ELEMENTS_TO_STRING = new Map<AasTypes.AasSubmodelElements, string>([
-  [AasTypes.AasSubmodelElements.AnnotatedRelationshipElement, "AnnotatedRelationshipElement"],
-  [AasTypes.AasSubmodelElements.BasicEventElement, "BasicEventElement"],
-  [AasTypes.AasSubmodelElements.Blob, "Blob"],
-  [AasTypes.AasSubmodelElements.Capability, "Capability"],
-  [AasTypes.AasSubmodelElements.DataElement, "DataElement"],
-  [AasTypes.AasSubmodelElements.Entity, "Entity"],
-  [AasTypes.AasSubmodelElements.EventElement, "EventElement"],
-  [AasTypes.AasSubmodelElements.File, "File"],
-  [AasTypes.AasSubmodelElements.MultiLanguageProperty, "MultiLanguageProperty"],
-  [AasTypes.AasSubmodelElements.Operation, "Operation"],
-  [AasTypes.AasSubmodelElements.Property, "Property"],
-  [AasTypes.AasSubmodelElements.Range, "Range"],
-  [AasTypes.AasSubmodelElements.ReferenceElement, "ReferenceElement"],
-  [AasTypes.AasSubmodelElements.RelationshipElement, "RelationshipElement"],
-  [AasTypes.AasSubmodelElements.SubmodelElement, "SubmodelElement"],
-  [AasTypes.AasSubmodelElements.SubmodelElementList, "SubmodelElementList"],
-  [AasTypes.AasSubmodelElements.SubmodelElementCollection, "SubmodelElementCollection"]
-]);
+// NOTE (mristin):
+// The literals of AasSubmodelElements are consecutive integers starting at 0,
+// so we index into an array instead of looking the text up in a map.
+const AAS_SUBMODEL_ELEMENTS_TO_STRING: readonly string[] = [
+  "AnnotatedRelationshipElement",
+  "BasicEventElement",
+  "Blob",
+  "Capability",
+  "DataElement",
+  "Entity",
+  "EventElement",
+  "File",
+  "MultiLanguageProperty",
+  "Operation",
+  "Property",
+  "Range",
+  "ReferenceElement",
+  "RelationshipElement",
+  "SubmodelElement",
+  "SubmodelElementList",
+  "SubmodelElementCollection"
+];
 
 /**
  * Translate {@link types!AasSubmodelElements} to a string.
@@ -602,7 +503,7 @@ const AAS_SUBMODEL_ELEMENTS_TO_STRING = new Map<AasTypes.AasSubmodelElements, st
 export function aasSubmodelElementsToString(
   value: AasTypes.AasSubmodelElements
 ): string | null {
-  const result = AAS_SUBMODEL_ELEMENTS_TO_STRING.get(value);
+  const result = AAS_SUBMODEL_ELEMENTS_TO_STRING[value];
   return result !== undefined ? result : null;
 }
 
@@ -618,7 +519,7 @@ export function aasSubmodelElementsToString(
 export function mustAasSubmodelElementsToString(
   value: AasTypes.AasSubmodelElements
 ): string {
-  const result = AAS_SUBMODEL_ELEMENTS_TO_STRING.get(value);
+  const result = AAS_SUBMODEL_ELEMENTS_TO_STRING[value];
   if (result === undefined) {
     throw new Error(
       `Invalid literal of AasSubmodelElements: ${value}`
@@ -645,10 +546,13 @@ export function entityTypeFromString(
   return result !== undefined ? result : null;
 }
 
-const ENTITY_TYPE_TO_STRING = new Map<AasTypes.EntityType, string>([
-  [AasTypes.EntityType.CoManagedEntity, "CoManagedEntity"],
-  [AasTypes.EntityType.SelfManagedEntity, "SelfManagedEntity"]
-]);
+// NOTE (mristin):
+// The literals of EntityType are consecutive integers starting at 0,
+// so we index into an array instead of looking the text up in a map.
+const ENTITY_TYPE_TO_STRING: readonly string[] = [
+  "CoManagedEntity",
+  "SelfManagedEntity"
+];
 
 /**
  * Translate {@link types!EntityType} to a string.
@@ -659,7 +563,7 @@ const ENTITY_TYPE_TO_STRING = new Map<AasTypes.EntityType, string>([
 export function entityTypeToString(
   value: AasTypes.EntityType
 ): string | null {
-  const result = ENTITY_TYPE_TO_STRING.get(value);
+  const result = ENTITY_TYPE_TO_STRING[value];
   return result !== undefined ? result : null;
 }
 
@@ -675,7 +579,7 @@ export function entityTypeToString(
 export function mustEntityTypeToString(
   value: AasTypes.EntityType
 ): string {
-  const result = ENTITY_TYPE_TO_STRING.get(value);
+  const result = ENTITY_TYPE_TO_STRING[value];
   if (result === undefined) {
     throw new Error(
       `Invalid literal of EntityType: ${value}`
@@ -702,10 +606,13 @@ export function directionFromString(
   return result !== undefined ? result : null;
 }
 
-const DIRECTION_TO_STRING = new Map<AasTypes.Direction, string>([
-  [AasTypes.Direction.Input, "input"],
-  [AasTypes.Direction.Output, "output"]
-]);
+// NOTE (mristin):
+// The literals of Direction are consecutive integers starting at 0,
+// so we index into an array instead of looking the text up in a map.
+const DIRECTION_TO_STRING: readonly string[] = [
+  "input", // Input
+  "output" // Output
+];
 
 /**
  * Translate {@link types!Direction} to a string.
@@ -716,7 +623,7 @@ const DIRECTION_TO_STRING = new Map<AasTypes.Direction, string>([
 export function directionToString(
   value: AasTypes.Direction
 ): string | null {
-  const result = DIRECTION_TO_STRING.get(value);
+  const result = DIRECTION_TO_STRING[value];
   return result !== undefined ? result : null;
 }
 
@@ -732,7 +639,7 @@ export function directionToString(
 export function mustDirectionToString(
   value: AasTypes.Direction
 ): string {
-  const result = DIRECTION_TO_STRING.get(value);
+  const result = DIRECTION_TO_STRING[value];
   if (result === undefined) {
     throw new Error(
       `Invalid literal of Direction: ${value}`
@@ -759,10 +666,13 @@ export function stateOfEventFromString(
   return result !== undefined ? result : null;
 }
 
-const STATE_OF_EVENT_TO_STRING = new Map<AasTypes.StateOfEvent, string>([
-  [AasTypes.StateOfEvent.On, "on"],
-  [AasTypes.StateOfEvent.Off, "off"]
-]);
+// NOTE (mristin):
+// The literals of StateOfEvent are consecutive integers starting at 0,
+// so we index into an array instead of looking the text up in a map.
+const STATE_OF_EVENT_TO_STRING: readonly string[] = [
+  "on", // On
+  "off" // Off
+];
 
 /**
  * Translate {@link types!StateOfEvent} to a string.
@@ -773,7 +683,7 @@ const STATE_OF_EVENT_TO_STRING = new Map<AasTypes.StateOfEvent, string>([
 export function stateOfEventToString(
   value: AasTypes.StateOfEvent
 ): string | null {
-  const result = STATE_OF_EVENT_TO_STRING.get(value);
+  const result = STATE_OF_EVENT_TO_STRING[value];
   return result !== undefined ? result : null;
 }
 
@@ -789,7 +699,7 @@ export function stateOfEventToString(
 export function mustStateOfEventToString(
   value: AasTypes.StateOfEvent
 ): string {
-  const result = STATE_OF_EVENT_TO_STRING.get(value);
+  const result = STATE_OF_EVENT_TO_STRING[value];
   if (result === undefined) {
     throw new Error(
       `Invalid literal of StateOfEvent: ${value}`
@@ -816,10 +726,13 @@ export function referenceTypesFromString(
   return result !== undefined ? result : null;
 }
 
-const REFERENCE_TYPES_TO_STRING = new Map<AasTypes.ReferenceTypes, string>([
-  [AasTypes.ReferenceTypes.ExternalReference, "ExternalReference"],
-  [AasTypes.ReferenceTypes.ModelReference, "ModelReference"]
-]);
+// NOTE (mristin):
+// The literals of ReferenceTypes are consecutive integers starting at 0,
+// so we index into an array instead of looking the text up in a map.
+const REFERENCE_TYPES_TO_STRING: readonly string[] = [
+  "ExternalReference",
+  "ModelReference"
+];
 
 /**
  * Translate {@link types!ReferenceTypes} to a string.
@@ -830,7 +743,7 @@ const REFERENCE_TYPES_TO_STRING = new Map<AasTypes.ReferenceTypes, string>([
 export function referenceTypesToString(
   value: AasTypes.ReferenceTypes
 ): string | null {
-  const result = REFERENCE_TYPES_TO_STRING.get(value);
+  const result = REFERENCE_TYPES_TO_STRING[value];
   return result !== undefined ? result : null;
 }
 
@@ -846,7 +759,7 @@ export function referenceTypesToString(
 export function mustReferenceTypesToString(
   value: AasTypes.ReferenceTypes
 ): string {
-  const result = REFERENCE_TYPES_TO_STRING.get(value);
+  const result = REFERENCE_TYPES_TO_STRING[value];
   if (result === undefined) {
     throw new Error(
       `Invalid literal of ReferenceTypes: ${value}`
@@ -895,32 +808,35 @@ export function keyTypesFromString(
   return result !== undefined ? result : null;
 }
 
-const KEY_TYPES_TO_STRING = new Map<AasTypes.KeyTypes, string>([
-  [AasTypes.KeyTypes.AnnotatedRelationshipElement, "AnnotatedRelationshipElement"],
-  [AasTypes.KeyTypes.AssetAdministrationShell, "AssetAdministrationShell"],
-  [AasTypes.KeyTypes.BasicEventElement, "BasicEventElement"],
-  [AasTypes.KeyTypes.Blob, "Blob"],
-  [AasTypes.KeyTypes.Capability, "Capability"],
-  [AasTypes.KeyTypes.ConceptDescription, "ConceptDescription"],
-  [AasTypes.KeyTypes.DataElement, "DataElement"],
-  [AasTypes.KeyTypes.Entity, "Entity"],
-  [AasTypes.KeyTypes.EventElement, "EventElement"],
-  [AasTypes.KeyTypes.File, "File"],
-  [AasTypes.KeyTypes.FragmentReference, "FragmentReference"],
-  [AasTypes.KeyTypes.GlobalReference, "GlobalReference"],
-  [AasTypes.KeyTypes.Identifiable, "Identifiable"],
-  [AasTypes.KeyTypes.MultiLanguageProperty, "MultiLanguageProperty"],
-  [AasTypes.KeyTypes.Operation, "Operation"],
-  [AasTypes.KeyTypes.Property, "Property"],
-  [AasTypes.KeyTypes.Range, "Range"],
-  [AasTypes.KeyTypes.Referable, "Referable"],
-  [AasTypes.KeyTypes.ReferenceElement, "ReferenceElement"],
-  [AasTypes.KeyTypes.RelationshipElement, "RelationshipElement"],
-  [AasTypes.KeyTypes.Submodel, "Submodel"],
-  [AasTypes.KeyTypes.SubmodelElement, "SubmodelElement"],
-  [AasTypes.KeyTypes.SubmodelElementCollection, "SubmodelElementCollection"],
-  [AasTypes.KeyTypes.SubmodelElementList, "SubmodelElementList"]
-]);
+// NOTE (mristin):
+// The literals of KeyTypes are consecutive integers starting at 0,
+// so we index into an array instead of looking the text up in a map.
+const KEY_TYPES_TO_STRING: readonly string[] = [
+  "AnnotatedRelationshipElement",
+  "AssetAdministrationShell",
+  "BasicEventElement",
+  "Blob",
+  "Capability",
+  "ConceptDescription",
+  "DataElement",
+  "Entity",
+  "EventElement",
+  "File",
+  "FragmentReference",
+  "GlobalReference",
+  "Identifiable",
+  "MultiLanguageProperty",
+  "Operation",
+  "Property",
+  "Range",
+  "Referable",
+  "ReferenceElement",
+  "RelationshipElement",
+  "Submodel",
+  "SubmodelElement",
+  "SubmodelElementCollection",
+  "SubmodelElementList"
+];
 
 /**
  * Translate {@link types!KeyTypes} to a string.
@@ -931,7 +847,7 @@ const KEY_TYPES_TO_STRING = new Map<AasTypes.KeyTypes, string>([
 export function keyTypesToString(
   value: AasTypes.KeyTypes
 ): string | null {
-  const result = KEY_TYPES_TO_STRING.get(value);
+  const result = KEY_TYPES_TO_STRING[value];
   return result !== undefined ? result : null;
 }
 
@@ -947,7 +863,7 @@ export function keyTypesToString(
 export function mustKeyTypesToString(
   value: AasTypes.KeyTypes
 ): string {
-  const result = KEY_TYPES_TO_STRING.get(value);
+  const result = KEY_TYPES_TO_STRING[value];
   if (result === undefined) {
     throw new Error(
       `Invalid literal of KeyTypes: ${value}`
@@ -1002,38 +918,41 @@ export function dataTypeDefXsdFromString(
   return result !== undefined ? result : null;
 }
 
-const DATA_TYPE_DEF_XSD_TO_STRING = new Map<AasTypes.DataTypeDefXsd, string>([
-  [AasTypes.DataTypeDefXsd.AnyUri, "xs:anyURI"],
-  [AasTypes.DataTypeDefXsd.Base64Binary, "xs:base64Binary"],
-  [AasTypes.DataTypeDefXsd.Boolean, "xs:boolean"],
-  [AasTypes.DataTypeDefXsd.Byte, "xs:byte"],
-  [AasTypes.DataTypeDefXsd.Date, "xs:date"],
-  [AasTypes.DataTypeDefXsd.DateTime, "xs:dateTime"],
-  [AasTypes.DataTypeDefXsd.Decimal, "xs:decimal"],
-  [AasTypes.DataTypeDefXsd.Double, "xs:double"],
-  [AasTypes.DataTypeDefXsd.Duration, "xs:duration"],
-  [AasTypes.DataTypeDefXsd.Float, "xs:float"],
-  [AasTypes.DataTypeDefXsd.GDay, "xs:gDay"],
-  [AasTypes.DataTypeDefXsd.GMonth, "xs:gMonth"],
-  [AasTypes.DataTypeDefXsd.GMonthDay, "xs:gMonthDay"],
-  [AasTypes.DataTypeDefXsd.GYear, "xs:gYear"],
-  [AasTypes.DataTypeDefXsd.GYearMonth, "xs:gYearMonth"],
-  [AasTypes.DataTypeDefXsd.HexBinary, "xs:hexBinary"],
-  [AasTypes.DataTypeDefXsd.Int, "xs:int"],
-  [AasTypes.DataTypeDefXsd.Integer, "xs:integer"],
-  [AasTypes.DataTypeDefXsd.Long, "xs:long"],
-  [AasTypes.DataTypeDefXsd.NegativeInteger, "xs:negativeInteger"],
-  [AasTypes.DataTypeDefXsd.NonNegativeInteger, "xs:nonNegativeInteger"],
-  [AasTypes.DataTypeDefXsd.NonPositiveInteger, "xs:nonPositiveInteger"],
-  [AasTypes.DataTypeDefXsd.PositiveInteger, "xs:positiveInteger"],
-  [AasTypes.DataTypeDefXsd.Short, "xs:short"],
-  [AasTypes.DataTypeDefXsd.String, "xs:string"],
-  [AasTypes.DataTypeDefXsd.Time, "xs:time"],
-  [AasTypes.DataTypeDefXsd.UnsignedByte, "xs:unsignedByte"],
-  [AasTypes.DataTypeDefXsd.UnsignedInt, "xs:unsignedInt"],
-  [AasTypes.DataTypeDefXsd.UnsignedLong, "xs:unsignedLong"],
-  [AasTypes.DataTypeDefXsd.UnsignedShort, "xs:unsignedShort"]
-]);
+// NOTE (mristin):
+// The literals of DataTypeDefXsd are consecutive integers starting at 0,
+// so we index into an array instead of looking the text up in a map.
+const DATA_TYPE_DEF_XSD_TO_STRING: readonly string[] = [
+  "xs:anyURI", // AnyUri
+  "xs:base64Binary", // Base64Binary
+  "xs:boolean", // Boolean
+  "xs:byte", // Byte
+  "xs:date", // Date
+  "xs:dateTime", // DateTime
+  "xs:decimal", // Decimal
+  "xs:double", // Double
+  "xs:duration", // Duration
+  "xs:float", // Float
+  "xs:gDay", // GDay
+  "xs:gMonth", // GMonth
+  "xs:gMonthDay", // GMonthDay
+  "xs:gYear", // GYear
+  "xs:gYearMonth", // GYearMonth
+  "xs:hexBinary", // HexBinary
+  "xs:int", // Int
+  "xs:integer", // Integer
+  "xs:long", // Long
+  "xs:negativeInteger", // NegativeInteger
+  "xs:nonNegativeInteger", // NonNegativeInteger
+  "xs:nonPositiveInteger", // NonPositiveInteger
+  "xs:positiveInteger", // PositiveInteger
+  "xs:short", // Short
+  "xs:string", // String
+  "xs:time", // Time
+  "xs:unsignedByte", // UnsignedByte
+  "xs:unsignedInt", // UnsignedInt
+  "xs:unsignedLong", // UnsignedLong
+  "xs:unsignedShort" // UnsignedShort
+];
 
 /**
  * Translate {@link types!DataTypeDefXsd} to a string.
@@ -1044,7 +963,7 @@ const DATA_TYPE_DEF_XSD_TO_STRING = new Map<AasTypes.DataTypeDefXsd, string>([
 export function dataTypeDefXsdToString(
   value: AasTypes.DataTypeDefXsd
 ): string | null {
-  const result = DATA_TYPE_DEF_XSD_TO_STRING.get(value);
+  const result = DATA_TYPE_DEF_XSD_TO_STRING[value];
   return result !== undefined ? result : null;
 }
 
@@ -1060,7 +979,7 @@ export function dataTypeDefXsdToString(
 export function mustDataTypeDefXsdToString(
   value: AasTypes.DataTypeDefXsd
 ): string {
-  const result = DATA_TYPE_DEF_XSD_TO_STRING.get(value);
+  const result = DATA_TYPE_DEF_XSD_TO_STRING[value];
   if (result === undefined) {
     throw new Error(
       `Invalid literal of DataTypeDefXsd: ${value}`
@@ -1104,27 +1023,30 @@ export function dataTypeIec61360FromString(
   return result !== undefined ? result : null;
 }
 
-const DATA_TYPE_IEC_61360_TO_STRING = new Map<AasTypes.DataTypeIec61360, string>([
-  [AasTypes.DataTypeIec61360.Date, "DATE"],
-  [AasTypes.DataTypeIec61360.String, "STRING"],
-  [AasTypes.DataTypeIec61360.StringTranslatable, "STRING_TRANSLATABLE"],
-  [AasTypes.DataTypeIec61360.IntegerMeasure, "INTEGER_MEASURE"],
-  [AasTypes.DataTypeIec61360.IntegerCount, "INTEGER_COUNT"],
-  [AasTypes.DataTypeIec61360.IntegerCurrency, "INTEGER_CURRENCY"],
-  [AasTypes.DataTypeIec61360.RealMeasure, "REAL_MEASURE"],
-  [AasTypes.DataTypeIec61360.RealCount, "REAL_COUNT"],
-  [AasTypes.DataTypeIec61360.RealCurrency, "REAL_CURRENCY"],
-  [AasTypes.DataTypeIec61360.Boolean, "BOOLEAN"],
-  [AasTypes.DataTypeIec61360.Iri, "IRI"],
-  [AasTypes.DataTypeIec61360.Irdi, "IRDI"],
-  [AasTypes.DataTypeIec61360.Rational, "RATIONAL"],
-  [AasTypes.DataTypeIec61360.RationalMeasure, "RATIONAL_MEASURE"],
-  [AasTypes.DataTypeIec61360.Time, "TIME"],
-  [AasTypes.DataTypeIec61360.Timestamp, "TIMESTAMP"],
-  [AasTypes.DataTypeIec61360.File, "FILE"],
-  [AasTypes.DataTypeIec61360.Html, "HTML"],
-  [AasTypes.DataTypeIec61360.Blob, "BLOB"]
-]);
+// NOTE (mristin):
+// The literals of DataTypeIec61360 are consecutive integers starting at 0,
+// so we index into an array instead of looking the text up in a map.
+const DATA_TYPE_IEC_61360_TO_STRING: readonly string[] = [
+  "DATE", // Date
+  "STRING", // String
+  "STRING_TRANSLATABLE", // StringTranslatable
+  "INTEGER_MEASURE", // IntegerMeasure
+  "INTEGER_COUNT", // IntegerCount
+  "INTEGER_CURRENCY", // IntegerCurrency
+  "REAL_MEASURE", // RealMeasure
+  "REAL_COUNT", // RealCount
+  "REAL_CURRENCY", // RealCurrency
+  "BOOLEAN", // Boolean
+  "IRI", // Iri
+  "IRDI", // Irdi
+  "RATIONAL", // Rational
+  "RATIONAL_MEASURE", // RationalMeasure
+  "TIME", // Time
+  "TIMESTAMP", // Timestamp
+  "FILE", // File
+  "HTML", // Html
+  "BLOB" // Blob
+];
 
 /**
  * Translate {@link types!DataTypeIec61360} to a string.
@@ -1135,7 +1057,7 @@ const DATA_TYPE_IEC_61360_TO_STRING = new Map<AasTypes.DataTypeIec61360, string>
 export function dataTypeIec61360ToString(
   value: AasTypes.DataTypeIec61360
 ): string | null {
-  const result = DATA_TYPE_IEC_61360_TO_STRING.get(value);
+  const result = DATA_TYPE_IEC_61360_TO_STRING[value];
   return result !== undefined ? result : null;
 }
 
@@ -1151,7 +1073,7 @@ export function dataTypeIec61360ToString(
 export function mustDataTypeIec61360ToString(
   value: AasTypes.DataTypeIec61360
 ): string {
-  const result = DATA_TYPE_IEC_61360_TO_STRING.get(value);
+  const result = DATA_TYPE_IEC_61360_TO_STRING[value];
   if (result === undefined) {
     throw new Error(
       `Invalid literal of DataTypeIec61360: ${value}`
