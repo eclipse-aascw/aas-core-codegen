@@ -99,13 +99,23 @@ export class DeserializationError {
 
 /**
  * Signal that XML serialization could not be performed.
+ *
+ * @remarks
+ *
+ * The {@link SerializationError.path} points into the instance which was to be
+ * serialized, and not into a document: it names the property, and the index within
+ * a list or a tuple, at which the offending value sits. Two segments which
+ * the de-serialization does report are therefore deliberately absent here. The
+ * outermost element is one, as {@link toXmlString} serializes whatever instance
+ * it is given; the element which tells a polymorphic value apart is the other,
+ * since a caller holding the instance reaches the value as, say, `value.idShort`
+ * and not as `value/idShort`.
  */
-export class SerializationError {
-  readonly message: string;
+export class SerializationError extends Error {
   readonly path: Path;
 
   constructor(message: string, path: Path | null = null) {
-    this.message = message;
+    super(message);
     this.path = path ?? new Path();
   }
 }
@@ -671,7 +681,7 @@ function duplicatePropertyError(localName: string): DeserializationError {
   );
 }
 
-function parseBooleanContent(
+function parse_bool(
   cursor: XmlCursor
 ): AasCommon.Either<boolean, DeserializationError> {
   const text = parseTextContent(cursor);
@@ -688,7 +698,7 @@ function parseBooleanContent(
   );
 }
 
-function parseIntegerContent(
+function parse_int(
   cursor: XmlCursor
 ): AasCommon.Either<number, DeserializationError> {
   const text = parseTextContent(cursor);
@@ -709,7 +719,7 @@ function parseIntegerContent(
   return new AasCommon.Either<number, DeserializationError>(value, null);
 }
 
-function parseFloatContent(
+function parse_float(
   cursor: XmlCursor
 ): AasCommon.Either<number, DeserializationError> {
   const text = parseTextContent(cursor);
@@ -734,7 +744,7 @@ function parseFloatContent(
   return new AasCommon.Either<number, DeserializationError>(value, null);
 }
 
-function parseStringContent(
+function parse_str(
   cursor: XmlCursor
 ): AasCommon.Either<string, DeserializationError> {
   return new AasCommon.Either<string, DeserializationError>(
@@ -743,7 +753,7 @@ function parseStringContent(
   );
 }
 
-function parseBase64EncodedBytesContent(
+function parse_bytes(
   cursor: XmlCursor
 ): AasCommon.Either<Uint8Array, DeserializationError> {
   const decodedOrError = AasCommon.base64Decode(parseTextContent(cursor));
@@ -759,7 +769,7 @@ function parseBase64EncodedBytesContent(
   );
 }
 
-function parseModellingKindContent(
+function parse_ModellingKind(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.ModellingKind, DeserializationError> {
   return parseEnumerationContent(
@@ -769,7 +779,7 @@ function parseModellingKindContent(
   );
 }
 
-function parseQualifierKindContent(
+function parse_QualifierKind(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.QualifierKind, DeserializationError> {
   return parseEnumerationContent(
@@ -779,7 +789,7 @@ function parseQualifierKindContent(
   );
 }
 
-function parseAssetKindContent(
+function parse_AssetKind(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.AssetKind, DeserializationError> {
   return parseEnumerationContent(
@@ -789,7 +799,7 @@ function parseAssetKindContent(
   );
 }
 
-function parseAasSubmodelElementsContent(
+function parse_AasSubmodelElements(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.AasSubmodelElements, DeserializationError> {
   return parseEnumerationContent(
@@ -799,7 +809,7 @@ function parseAasSubmodelElementsContent(
   );
 }
 
-function parseEntityTypeContent(
+function parse_EntityType(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.EntityType, DeserializationError> {
   return parseEnumerationContent(
@@ -809,7 +819,7 @@ function parseEntityTypeContent(
   );
 }
 
-function parseDirectionContent(
+function parse_Direction(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.Direction, DeserializationError> {
   return parseEnumerationContent(
@@ -819,7 +829,7 @@ function parseDirectionContent(
   );
 }
 
-function parseStateOfEventContent(
+function parse_StateOfEvent(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.StateOfEvent, DeserializationError> {
   return parseEnumerationContent(
@@ -829,7 +839,7 @@ function parseStateOfEventContent(
   );
 }
 
-function parseReferenceTypesContent(
+function parse_ReferenceTypes(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.ReferenceTypes, DeserializationError> {
   return parseEnumerationContent(
@@ -839,7 +849,7 @@ function parseReferenceTypesContent(
   );
 }
 
-function parseKeyTypesContent(
+function parse_KeyTypes(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.KeyTypes, DeserializationError> {
   return parseEnumerationContent(
@@ -849,7 +859,7 @@ function parseKeyTypesContent(
   );
 }
 
-function parseDataTypeDefXsdContent(
+function parse_DataTypeDefXsd(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.DataTypeDefXsd, DeserializationError> {
   return parseEnumerationContent(
@@ -859,7 +869,7 @@ function parseDataTypeDefXsdContent(
   );
 }
 
-function parseDataTypeIec61360Content(
+function parse_DataTypeIec61360(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.DataTypeIec61360, DeserializationError> {
   return parseEnumerationContent(
@@ -869,73 +879,139 @@ function parseDataTypeIec61360Content(
   );
 }
 
-function serializeModellingKindText(
+function write_ModellingKind(
+  parts: Array<string>,
   value: AasTypes.ModellingKind
-): string {
-  return escapeXmlText(AasStringification.mustModellingKindToString(value));
+): void {
+  writeEnumerationContent(
+    parts,
+    value,
+    "ModellingKind",
+    AasStringification.modellingKindToString
+  );
 }
 
-function serializeQualifierKindText(
+function write_QualifierKind(
+  parts: Array<string>,
   value: AasTypes.QualifierKind
-): string {
-  return escapeXmlText(AasStringification.mustQualifierKindToString(value));
+): void {
+  writeEnumerationContent(
+    parts,
+    value,
+    "QualifierKind",
+    AasStringification.qualifierKindToString
+  );
 }
 
-function serializeAssetKindText(
+function write_AssetKind(
+  parts: Array<string>,
   value: AasTypes.AssetKind
-): string {
-  return escapeXmlText(AasStringification.mustAssetKindToString(value));
+): void {
+  writeEnumerationContent(
+    parts,
+    value,
+    "AssetKind",
+    AasStringification.assetKindToString
+  );
 }
 
-function serializeAasSubmodelElementsText(
+function write_AasSubmodelElements(
+  parts: Array<string>,
   value: AasTypes.AasSubmodelElements
-): string {
-  return escapeXmlText(AasStringification.mustAasSubmodelElementsToString(value));
+): void {
+  writeEnumerationContent(
+    parts,
+    value,
+    "AasSubmodelElements",
+    AasStringification.aasSubmodelElementsToString
+  );
 }
 
-function serializeEntityTypeText(
+function write_EntityType(
+  parts: Array<string>,
   value: AasTypes.EntityType
-): string {
-  return escapeXmlText(AasStringification.mustEntityTypeToString(value));
+): void {
+  writeEnumerationContent(
+    parts,
+    value,
+    "EntityType",
+    AasStringification.entityTypeToString
+  );
 }
 
-function serializeDirectionText(
+function write_Direction(
+  parts: Array<string>,
   value: AasTypes.Direction
-): string {
-  return escapeXmlText(AasStringification.mustDirectionToString(value));
+): void {
+  writeEnumerationContent(
+    parts,
+    value,
+    "Direction",
+    AasStringification.directionToString
+  );
 }
 
-function serializeStateOfEventText(
+function write_StateOfEvent(
+  parts: Array<string>,
   value: AasTypes.StateOfEvent
-): string {
-  return escapeXmlText(AasStringification.mustStateOfEventToString(value));
+): void {
+  writeEnumerationContent(
+    parts,
+    value,
+    "StateOfEvent",
+    AasStringification.stateOfEventToString
+  );
 }
 
-function serializeReferenceTypesText(
+function write_ReferenceTypes(
+  parts: Array<string>,
   value: AasTypes.ReferenceTypes
-): string {
-  return escapeXmlText(AasStringification.mustReferenceTypesToString(value));
+): void {
+  writeEnumerationContent(
+    parts,
+    value,
+    "ReferenceTypes",
+    AasStringification.referenceTypesToString
+  );
 }
 
-function serializeKeyTypesText(
+function write_KeyTypes(
+  parts: Array<string>,
   value: AasTypes.KeyTypes
-): string {
-  return escapeXmlText(AasStringification.mustKeyTypesToString(value));
+): void {
+  writeEnumerationContent(
+    parts,
+    value,
+    "KeyTypes",
+    AasStringification.keyTypesToString
+  );
 }
 
-function serializeDataTypeDefXsdText(
+function write_DataTypeDefXsd(
+  parts: Array<string>,
   value: AasTypes.DataTypeDefXsd
-): string {
-  return escapeXmlText(AasStringification.mustDataTypeDefXsdToString(value));
+): void {
+  writeEnumerationContent(
+    parts,
+    value,
+    "DataTypeDefXsd",
+    AasStringification.dataTypeDefXsdToString
+  );
 }
 
-function serializeDataTypeIec61360Text(
+function write_DataTypeIec61360(
+  parts: Array<string>,
   value: AasTypes.DataTypeIec61360
-): string {
-  return escapeXmlText(AasStringification.mustDataTypeIec61360ToString(value));
+): void {
+  writeEnumerationContent(
+    parts,
+    value,
+    "DataTypeIec61360",
+    AasStringification.dataTypeIec61360ToString
+  );
 }
 
-function parseAssetAdministrationShellElement(
+function parseElement_AssetAdministrationShell(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.AssetAdministrationShell, DeserializationError> {
   return parseNamedElement(
@@ -945,13 +1021,13 @@ function parseAssetAdministrationShellElement(
   );
 }
 
-function parseConceptDescriptionElement(
+function parseElement_ConceptDescription(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.ConceptDescription, DeserializationError> {
   return parseNamedElement(cursor, "conceptDescription", parseConceptDescriptionFromSequence);
 }
 
-function parseEmbeddedDataSpecificationElement(
+function parseElement_EmbeddedDataSpecification(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.EmbeddedDataSpecification, DeserializationError> {
   return parseNamedElement(
@@ -961,19 +1037,19 @@ function parseEmbeddedDataSpecificationElement(
   );
 }
 
-function parseExtensionElement(
+function parseElement_Extension(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.Extension, DeserializationError> {
   return parseNamedElement(cursor, "extension", parseExtensionFromSequence);
 }
 
-function parseKeyElement(
+function parseElement_Key(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.Key, DeserializationError> {
   return parseNamedElement(cursor, "key", parseKeyFromSequence);
 }
 
-function parseLangStringDefinitionTypeIec61360Element(
+function parseElement_LangStringDefinitionTypeIec61360(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.LangStringDefinitionTypeIec61360, DeserializationError> {
   return parseNamedElement(
@@ -983,13 +1059,13 @@ function parseLangStringDefinitionTypeIec61360Element(
   );
 }
 
-function parseLangStringNameTypeElement(
+function parseElement_LangStringNameType(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.LangStringNameType, DeserializationError> {
   return parseNamedElement(cursor, "langStringNameType", parseLangStringNameTypeFromSequence);
 }
 
-function parseLangStringPreferredNameTypeIec61360Element(
+function parseElement_LangStringPreferredNameTypeIec61360(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.LangStringPreferredNameTypeIec61360, DeserializationError> {
   return parseNamedElement(
@@ -999,7 +1075,7 @@ function parseLangStringPreferredNameTypeIec61360Element(
   );
 }
 
-function parseLangStringShortNameTypeIec61360Element(
+function parseElement_LangStringShortNameTypeIec61360(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.LangStringShortNameTypeIec61360, DeserializationError> {
   return parseNamedElement(
@@ -1009,166 +1085,169 @@ function parseLangStringShortNameTypeIec61360Element(
   );
 }
 
-function parseLangStringTextTypeElement(
+function parseElement_LangStringTextType(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.LangStringTextType, DeserializationError> {
   return parseNamedElement(cursor, "langStringTextType", parseLangStringTextTypeFromSequence);
 }
 
-function parseListOfAssetAdministrationShellContent(
-  cursor: XmlCursor
-): AasCommon.Either<Array<AasTypes.AssetAdministrationShell>, DeserializationError> {
-  return parseList<AasTypes.AssetAdministrationShell>(cursor, parseAssetAdministrationShellElement);
-}
-
-function parseListOfConceptDescriptionContent(
-  cursor: XmlCursor
-): AasCommon.Either<Array<AasTypes.ConceptDescription>, DeserializationError> {
-  return parseList<AasTypes.ConceptDescription>(cursor, parseConceptDescriptionElement);
-}
-
-function parseListOfEmbeddedDataSpecificationContent(
-  cursor: XmlCursor
-): AasCommon.Either<Array<AasTypes.EmbeddedDataSpecification>, DeserializationError> {
-  return parseList<AasTypes.EmbeddedDataSpecification>(
-    cursor,
-    parseEmbeddedDataSpecificationElement
-  );
-}
-
-function parseListOfExtensionContent(
-  cursor: XmlCursor
-): AasCommon.Either<Array<AasTypes.Extension>, DeserializationError> {
-  return parseList<AasTypes.Extension>(cursor, parseExtensionElement);
-}
-
-function parseListOfIDataElementContent(
-  cursor: XmlCursor
-): AasCommon.Either<Array<AasTypes.IDataElement>, DeserializationError> {
-  return parseList<AasTypes.IDataElement>(cursor, dispatchParseDataElementElement);
-}
-
-function parseListOfISubmodelElementContent(
-  cursor: XmlCursor
-): AasCommon.Either<Array<AasTypes.ISubmodelElement>, DeserializationError> {
-  return parseList<AasTypes.ISubmodelElement>(cursor, dispatchParseSubmodelElementElement);
-}
-
-function parseListOfKeyContent(
-  cursor: XmlCursor
-): AasCommon.Either<Array<AasTypes.Key>, DeserializationError> {
-  return parseList<AasTypes.Key>(cursor, parseKeyElement);
-}
-
-function parseListOfLangStringDefinitionTypeIec61360Content(
-  cursor: XmlCursor
-): AasCommon.Either<Array<AasTypes.LangStringDefinitionTypeIec61360>, DeserializationError> {
-  return parseList<AasTypes.LangStringDefinitionTypeIec61360>(
-    cursor,
-    parseLangStringDefinitionTypeIec61360Element
-  );
-}
-
-function parseListOfLangStringNameTypeContent(
-  cursor: XmlCursor
-): AasCommon.Either<Array<AasTypes.LangStringNameType>, DeserializationError> {
-  return parseList<AasTypes.LangStringNameType>(cursor, parseLangStringNameTypeElement);
-}
-
-function parseListOfLangStringPreferredNameTypeIec61360Content(
-  cursor: XmlCursor
-): AasCommon.Either<Array<AasTypes.LangStringPreferredNameTypeIec61360>, DeserializationError> {
-  return parseList<AasTypes.LangStringPreferredNameTypeIec61360>(
-    cursor,
-    parseLangStringPreferredNameTypeIec61360Element
-  );
-}
-
-function parseListOfLangStringShortNameTypeIec61360Content(
-  cursor: XmlCursor
-): AasCommon.Either<Array<AasTypes.LangStringShortNameTypeIec61360>, DeserializationError> {
-  return parseList<AasTypes.LangStringShortNameTypeIec61360>(
-    cursor,
-    parseLangStringShortNameTypeIec61360Element
-  );
-}
-
-function parseListOfLangStringTextTypeContent(
-  cursor: XmlCursor
-): AasCommon.Either<Array<AasTypes.LangStringTextType>, DeserializationError> {
-  return parseList<AasTypes.LangStringTextType>(cursor, parseLangStringTextTypeElement);
-}
-
-function parseListOfOperationVariableContent(
-  cursor: XmlCursor
-): AasCommon.Either<Array<AasTypes.OperationVariable>, DeserializationError> {
-  return parseList<AasTypes.OperationVariable>(cursor, parseOperationVariableElement);
-}
-
-function parseListOfQualifierContent(
-  cursor: XmlCursor
-): AasCommon.Either<Array<AasTypes.Qualifier>, DeserializationError> {
-  return parseList<AasTypes.Qualifier>(cursor, parseQualifierElement);
-}
-
-function parseListOfReferenceContent(
-  cursor: XmlCursor
-): AasCommon.Either<Array<AasTypes.Reference>, DeserializationError> {
-  return parseList<AasTypes.Reference>(cursor, parseReferenceElement);
-}
-
-function parseListOfSpecificAssetIdContent(
-  cursor: XmlCursor
-): AasCommon.Either<Array<AasTypes.SpecificAssetId>, DeserializationError> {
-  return parseList<AasTypes.SpecificAssetId>(cursor, parseSpecificAssetIdElement);
-}
-
-function parseListOfSubmodelContent(
-  cursor: XmlCursor
-): AasCommon.Either<Array<AasTypes.Submodel>, DeserializationError> {
-  return parseList<AasTypes.Submodel>(cursor, parseSubmodelElement);
-}
-
-function parseListOfValueReferencePairContent(
-  cursor: XmlCursor
-): AasCommon.Either<Array<AasTypes.ValueReferencePair>, DeserializationError> {
-  return parseList<AasTypes.ValueReferencePair>(cursor, parseValueReferencePairElement);
-}
-
-function parseOperationVariableElement(
+function parseElement_OperationVariable(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.OperationVariable, DeserializationError> {
   return parseNamedElement(cursor, "operationVariable", parseOperationVariableFromSequence);
 }
 
-function parseQualifierElement(
+function parseElement_Qualifier(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.Qualifier, DeserializationError> {
   return parseNamedElement(cursor, "qualifier", parseQualifierFromSequence);
 }
 
-function parseReferenceElement(
+function parseElement_Reference(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.Reference, DeserializationError> {
   return parseNamedElement(cursor, "reference", parseReferenceFromSequence);
 }
 
-function parseSpecificAssetIdElement(
+function parseElement_SpecificAssetId(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.SpecificAssetId, DeserializationError> {
   return parseNamedElement(cursor, "specificAssetId", parseSpecificAssetIdFromSequence);
 }
 
-function parseSubmodelElement(
+function parseElement_Submodel(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.Submodel, DeserializationError> {
   return parseNamedElement(cursor, "submodel", parseSubmodelFromSequence);
 }
 
-function parseValueReferencePairElement(
+function parseElement_ValueReferencePair(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.ValueReferencePair, DeserializationError> {
   return parseNamedElement(cursor, "valueReferencePair", parseValueReferencePairFromSequence);
+}
+
+function parse_ListOf_AssetAdministrationShell(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.AssetAdministrationShell>, DeserializationError> {
+  return parseList<AasTypes.AssetAdministrationShell>(
+    cursor,
+    parseElement_AssetAdministrationShell
+  );
+}
+
+function parse_ListOf_ConceptDescription(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.ConceptDescription>, DeserializationError> {
+  return parseList<AasTypes.ConceptDescription>(cursor, parseElement_ConceptDescription);
+}
+
+function parse_ListOf_EmbeddedDataSpecification(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.EmbeddedDataSpecification>, DeserializationError> {
+  return parseList<AasTypes.EmbeddedDataSpecification>(
+    cursor,
+    parseElement_EmbeddedDataSpecification
+  );
+}
+
+function parse_ListOf_Extension(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.Extension>, DeserializationError> {
+  return parseList<AasTypes.Extension>(cursor, parseElement_Extension);
+}
+
+function parse_ListOf_IDataElement(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.IDataElement>, DeserializationError> {
+  return parseList<AasTypes.IDataElement>(cursor, dispatchParseDataElementElement);
+}
+
+function parse_ListOf_ISubmodelElement(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.ISubmodelElement>, DeserializationError> {
+  return parseList<AasTypes.ISubmodelElement>(cursor, dispatchParseSubmodelElementElement);
+}
+
+function parse_ListOf_Key(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.Key>, DeserializationError> {
+  return parseList<AasTypes.Key>(cursor, parseElement_Key);
+}
+
+function parse_ListOf_LangStringDefinitionTypeIec61360(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.LangStringDefinitionTypeIec61360>, DeserializationError> {
+  return parseList<AasTypes.LangStringDefinitionTypeIec61360>(
+    cursor,
+    parseElement_LangStringDefinitionTypeIec61360
+  );
+}
+
+function parse_ListOf_LangStringNameType(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.LangStringNameType>, DeserializationError> {
+  return parseList<AasTypes.LangStringNameType>(cursor, parseElement_LangStringNameType);
+}
+
+function parse_ListOf_LangStringPreferredNameTypeIec61360(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.LangStringPreferredNameTypeIec61360>, DeserializationError> {
+  return parseList<AasTypes.LangStringPreferredNameTypeIec61360>(
+    cursor,
+    parseElement_LangStringPreferredNameTypeIec61360
+  );
+}
+
+function parse_ListOf_LangStringShortNameTypeIec61360(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.LangStringShortNameTypeIec61360>, DeserializationError> {
+  return parseList<AasTypes.LangStringShortNameTypeIec61360>(
+    cursor,
+    parseElement_LangStringShortNameTypeIec61360
+  );
+}
+
+function parse_ListOf_LangStringTextType(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.LangStringTextType>, DeserializationError> {
+  return parseList<AasTypes.LangStringTextType>(cursor, parseElement_LangStringTextType);
+}
+
+function parse_ListOf_OperationVariable(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.OperationVariable>, DeserializationError> {
+  return parseList<AasTypes.OperationVariable>(cursor, parseElement_OperationVariable);
+}
+
+function parse_ListOf_Qualifier(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.Qualifier>, DeserializationError> {
+  return parseList<AasTypes.Qualifier>(cursor, parseElement_Qualifier);
+}
+
+function parse_ListOf_Reference(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.Reference>, DeserializationError> {
+  return parseList<AasTypes.Reference>(cursor, parseElement_Reference);
+}
+
+function parse_ListOf_SpecificAssetId(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.SpecificAssetId>, DeserializationError> {
+  return parseList<AasTypes.SpecificAssetId>(cursor, parseElement_SpecificAssetId);
+}
+
+function parse_ListOf_Submodel(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.Submodel>, DeserializationError> {
+  return parseList<AasTypes.Submodel>(cursor, parseElement_Submodel);
+}
+
+function parse_ListOf_ValueReferencePair(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.ValueReferencePair>, DeserializationError> {
+  return parseList<AasTypes.ValueReferencePair>(cursor, parseElement_ValueReferencePair);
 }
 
 /**
@@ -1229,7 +1308,7 @@ function parseExtensionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -1241,7 +1320,7 @@ function parseExtensionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theName = parsed.value;
         break;
@@ -1253,7 +1332,7 @@ function parseExtensionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseDataTypeDefXsdContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_DataTypeDefXsd);
         propertyError = parsed.error;
         theValueType = parsed.value;
         break;
@@ -1265,7 +1344,7 @@ function parseExtensionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -1277,7 +1356,7 @@ function parseExtensionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theRefersTo = parsed.value;
         break;
@@ -1370,7 +1449,7 @@ function parseAdministrativeInformationFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfEmbeddedDataSpecificationContent
+          parse_ListOf_EmbeddedDataSpecification
         );
         propertyError = parsed.error;
         theEmbeddedDataSpecifications = parsed.value;
@@ -1383,7 +1462,7 @@ function parseAdministrativeInformationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theVersion = parsed.value;
         break;
@@ -1395,7 +1474,7 @@ function parseAdministrativeInformationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theRevision = parsed.value;
         break;
@@ -1419,7 +1498,7 @@ function parseAdministrativeInformationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theTemplateId = parsed.value;
         break;
@@ -1518,7 +1597,7 @@ function parseQualifierFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -1530,7 +1609,7 @@ function parseQualifierFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseQualifierKindContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_QualifierKind);
         propertyError = parsed.error;
         theKind = parsed.value;
         break;
@@ -1542,7 +1621,7 @@ function parseQualifierFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theType = parsed.value;
         break;
@@ -1554,7 +1633,7 @@ function parseQualifierFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseDataTypeDefXsdContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_DataTypeDefXsd);
         propertyError = parsed.error;
         theValueType = parsed.value;
         break;
@@ -1566,7 +1645,7 @@ function parseQualifierFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -1681,7 +1760,7 @@ function parseAssetAdministrationShellFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -1693,7 +1772,7 @@ function parseAssetAdministrationShellFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -1705,7 +1784,7 @@ function parseAssetAdministrationShellFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -1720,7 +1799,7 @@ function parseAssetAdministrationShellFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringNameTypeContent
+          parse_ListOf_LangStringNameType
         );
         propertyError = parsed.error;
         theDisplayName = parsed.value;
@@ -1736,7 +1815,7 @@ function parseAssetAdministrationShellFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringTextTypeContent
+          parse_ListOf_LangStringTextType
         );
         propertyError = parsed.error;
         theDescription = parsed.value;
@@ -1765,7 +1844,7 @@ function parseAssetAdministrationShellFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theId = parsed.value;
         break;
@@ -1780,7 +1859,7 @@ function parseAssetAdministrationShellFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfEmbeddedDataSpecificationContent
+          parse_ListOf_EmbeddedDataSpecification
         );
         propertyError = parsed.error;
         theEmbeddedDataSpecifications = parsed.value;
@@ -1821,7 +1900,7 @@ function parseAssetAdministrationShellFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theSubmodels = parsed.value;
         break;
@@ -1922,7 +2001,7 @@ function parseAssetInformationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseAssetKindContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_AssetKind);
         propertyError = parsed.error;
         theAssetKind = parsed.value;
         break;
@@ -1934,7 +2013,7 @@ function parseAssetInformationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theGlobalAssetId = parsed.value;
         break;
@@ -1946,11 +2025,7 @@ function parseAssetInformationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(
-          cursor,
-          propertyLocalName,
-          parseListOfSpecificAssetIdContent
-        );
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_SpecificAssetId);
         propertyError = parsed.error;
         theSpecificAssetIds = parsed.value;
         break;
@@ -1962,7 +2037,7 @@ function parseAssetInformationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theAssetType = parsed.value;
         break;
@@ -2060,7 +2135,7 @@ function parseResourceFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         thePath = parsed.value;
         break;
@@ -2072,7 +2147,7 @@ function parseResourceFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theContentType = parsed.value;
         break;
@@ -2170,7 +2245,7 @@ function parseSpecificAssetIdFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -2182,7 +2257,7 @@ function parseSpecificAssetIdFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theName = parsed.value;
         break;
@@ -2194,7 +2269,7 @@ function parseSpecificAssetIdFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -2309,7 +2384,7 @@ function parseSubmodelFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -2321,7 +2396,7 @@ function parseSubmodelFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -2333,7 +2408,7 @@ function parseSubmodelFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -2348,7 +2423,7 @@ function parseSubmodelFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringNameTypeContent
+          parse_ListOf_LangStringNameType
         );
         propertyError = parsed.error;
         theDisplayName = parsed.value;
@@ -2364,7 +2439,7 @@ function parseSubmodelFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringTextTypeContent
+          parse_ListOf_LangStringTextType
         );
         propertyError = parsed.error;
         theDescription = parsed.value;
@@ -2393,7 +2468,7 @@ function parseSubmodelFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theId = parsed.value;
         break;
@@ -2405,7 +2480,7 @@ function parseSubmodelFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseModellingKindContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ModellingKind);
         propertyError = parsed.error;
         theKind = parsed.value;
         break;
@@ -2429,7 +2504,7 @@ function parseSubmodelFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -2441,7 +2516,7 @@ function parseSubmodelFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -2456,7 +2531,7 @@ function parseSubmodelFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfEmbeddedDataSpecificationContent
+          parse_ListOf_EmbeddedDataSpecification
         );
         propertyError = parsed.error;
         theEmbeddedDataSpecifications = parsed.value;
@@ -2472,7 +2547,7 @@ function parseSubmodelFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfISubmodelElementContent
+          parse_ListOf_ISubmodelElement
         );
         propertyError = parsed.error;
         theSubmodelElements = parsed.value;
@@ -2576,7 +2651,7 @@ function parseRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -2588,7 +2663,7 @@ function parseRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -2600,7 +2675,7 @@ function parseRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -2615,7 +2690,7 @@ function parseRelationshipElementFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringNameTypeContent
+          parse_ListOf_LangStringNameType
         );
         propertyError = parsed.error;
         theDisplayName = parsed.value;
@@ -2631,7 +2706,7 @@ function parseRelationshipElementFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringTextTypeContent
+          parse_ListOf_LangStringTextType
         );
         propertyError = parsed.error;
         theDescription = parsed.value;
@@ -2656,7 +2731,7 @@ function parseRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -2668,7 +2743,7 @@ function parseRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -2683,7 +2758,7 @@ function parseRelationshipElementFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfEmbeddedDataSpecificationContent
+          parse_ListOf_EmbeddedDataSpecification
         );
         propertyError = parsed.error;
         theEmbeddedDataSpecifications = parsed.value;
@@ -2818,7 +2893,7 @@ function parseSubmodelElementListFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -2830,7 +2905,7 @@ function parseSubmodelElementListFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -2842,7 +2917,7 @@ function parseSubmodelElementListFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -2857,7 +2932,7 @@ function parseSubmodelElementListFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringNameTypeContent
+          parse_ListOf_LangStringNameType
         );
         propertyError = parsed.error;
         theDisplayName = parsed.value;
@@ -2873,7 +2948,7 @@ function parseSubmodelElementListFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringTextTypeContent
+          parse_ListOf_LangStringTextType
         );
         propertyError = parsed.error;
         theDescription = parsed.value;
@@ -2898,7 +2973,7 @@ function parseSubmodelElementListFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -2910,7 +2985,7 @@ function parseSubmodelElementListFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -2925,7 +3000,7 @@ function parseSubmodelElementListFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfEmbeddedDataSpecificationContent
+          parse_ListOf_EmbeddedDataSpecification
         );
         propertyError = parsed.error;
         theEmbeddedDataSpecifications = parsed.value;
@@ -2938,7 +3013,7 @@ function parseSubmodelElementListFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseBooleanContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_bool);
         propertyError = parsed.error;
         theOrderRelevant = parsed.value;
         break;
@@ -2962,11 +3037,7 @@ function parseSubmodelElementListFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(
-          cursor,
-          propertyLocalName,
-          parseAasSubmodelElementsContent
-        );
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_AasSubmodelElements);
         propertyError = parsed.error;
         theTypeValueListElement = parsed.value;
         break;
@@ -2978,7 +3049,7 @@ function parseSubmodelElementListFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseDataTypeDefXsdContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_DataTypeDefXsd);
         propertyError = parsed.error;
         theValueTypeListElement = parsed.value;
         break;
@@ -2993,7 +3064,7 @@ function parseSubmodelElementListFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfISubmodelElementContent
+          parse_ListOf_ISubmodelElement
         );
         propertyError = parsed.error;
         theValue = parsed.value;
@@ -3097,7 +3168,7 @@ function parseSubmodelElementCollectionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -3109,7 +3180,7 @@ function parseSubmodelElementCollectionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -3121,7 +3192,7 @@ function parseSubmodelElementCollectionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -3136,7 +3207,7 @@ function parseSubmodelElementCollectionFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringNameTypeContent
+          parse_ListOf_LangStringNameType
         );
         propertyError = parsed.error;
         theDisplayName = parsed.value;
@@ -3152,7 +3223,7 @@ function parseSubmodelElementCollectionFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringTextTypeContent
+          parse_ListOf_LangStringTextType
         );
         propertyError = parsed.error;
         theDescription = parsed.value;
@@ -3177,7 +3248,7 @@ function parseSubmodelElementCollectionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -3189,7 +3260,7 @@ function parseSubmodelElementCollectionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -3204,7 +3275,7 @@ function parseSubmodelElementCollectionFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfEmbeddedDataSpecificationContent
+          parse_ListOf_EmbeddedDataSpecification
         );
         propertyError = parsed.error;
         theEmbeddedDataSpecifications = parsed.value;
@@ -3220,7 +3291,7 @@ function parseSubmodelElementCollectionFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfISubmodelElementContent
+          parse_ListOf_ISubmodelElement
         );
         propertyError = parsed.error;
         theValue = parsed.value;
@@ -3318,7 +3389,7 @@ function parsePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -3330,7 +3401,7 @@ function parsePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -3342,7 +3413,7 @@ function parsePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -3357,7 +3428,7 @@ function parsePropertyFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringNameTypeContent
+          parse_ListOf_LangStringNameType
         );
         propertyError = parsed.error;
         theDisplayName = parsed.value;
@@ -3373,7 +3444,7 @@ function parsePropertyFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringTextTypeContent
+          parse_ListOf_LangStringTextType
         );
         propertyError = parsed.error;
         theDescription = parsed.value;
@@ -3398,7 +3469,7 @@ function parsePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -3410,7 +3481,7 @@ function parsePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -3425,7 +3496,7 @@ function parsePropertyFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfEmbeddedDataSpecificationContent
+          parse_ListOf_EmbeddedDataSpecification
         );
         propertyError = parsed.error;
         theEmbeddedDataSpecifications = parsed.value;
@@ -3438,7 +3509,7 @@ function parsePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseDataTypeDefXsdContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_DataTypeDefXsd);
         propertyError = parsed.error;
         theValueType = parsed.value;
         break;
@@ -3450,7 +3521,7 @@ function parsePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -3564,7 +3635,7 @@ function parseMultiLanguagePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -3576,7 +3647,7 @@ function parseMultiLanguagePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -3588,7 +3659,7 @@ function parseMultiLanguagePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -3603,7 +3674,7 @@ function parseMultiLanguagePropertyFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringNameTypeContent
+          parse_ListOf_LangStringNameType
         );
         propertyError = parsed.error;
         theDisplayName = parsed.value;
@@ -3619,7 +3690,7 @@ function parseMultiLanguagePropertyFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringTextTypeContent
+          parse_ListOf_LangStringTextType
         );
         propertyError = parsed.error;
         theDescription = parsed.value;
@@ -3644,7 +3715,7 @@ function parseMultiLanguagePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -3656,7 +3727,7 @@ function parseMultiLanguagePropertyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -3671,7 +3742,7 @@ function parseMultiLanguagePropertyFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfEmbeddedDataSpecificationContent
+          parse_ListOf_EmbeddedDataSpecification
         );
         propertyError = parsed.error;
         theEmbeddedDataSpecifications = parsed.value;
@@ -3687,7 +3758,7 @@ function parseMultiLanguagePropertyFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringTextTypeContent
+          parse_ListOf_LangStringTextType
         );
         propertyError = parsed.error;
         theValue = parsed.value;
@@ -3798,7 +3869,7 @@ function parseRangeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -3810,7 +3881,7 @@ function parseRangeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -3822,7 +3893,7 @@ function parseRangeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -3837,7 +3908,7 @@ function parseRangeFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringNameTypeContent
+          parse_ListOf_LangStringNameType
         );
         propertyError = parsed.error;
         theDisplayName = parsed.value;
@@ -3853,7 +3924,7 @@ function parseRangeFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringTextTypeContent
+          parse_ListOf_LangStringTextType
         );
         propertyError = parsed.error;
         theDescription = parsed.value;
@@ -3878,7 +3949,7 @@ function parseRangeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -3890,7 +3961,7 @@ function parseRangeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -3905,7 +3976,7 @@ function parseRangeFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfEmbeddedDataSpecificationContent
+          parse_ListOf_EmbeddedDataSpecification
         );
         propertyError = parsed.error;
         theEmbeddedDataSpecifications = parsed.value;
@@ -3918,7 +3989,7 @@ function parseRangeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseDataTypeDefXsdContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_DataTypeDefXsd);
         propertyError = parsed.error;
         theValueType = parsed.value;
         break;
@@ -3930,7 +4001,7 @@ function parseRangeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theMin = parsed.value;
         break;
@@ -3942,7 +4013,7 @@ function parseRangeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theMax = parsed.value;
         break;
@@ -4043,7 +4114,7 @@ function parseReferenceElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -4055,7 +4126,7 @@ function parseReferenceElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -4067,7 +4138,7 @@ function parseReferenceElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -4082,7 +4153,7 @@ function parseReferenceElementFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringNameTypeContent
+          parse_ListOf_LangStringNameType
         );
         propertyError = parsed.error;
         theDisplayName = parsed.value;
@@ -4098,7 +4169,7 @@ function parseReferenceElementFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringTextTypeContent
+          parse_ListOf_LangStringTextType
         );
         propertyError = parsed.error;
         theDescription = parsed.value;
@@ -4123,7 +4194,7 @@ function parseReferenceElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -4135,7 +4206,7 @@ function parseReferenceElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -4150,7 +4221,7 @@ function parseReferenceElementFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfEmbeddedDataSpecificationContent
+          parse_ListOf_EmbeddedDataSpecification
         );
         propertyError = parsed.error;
         theEmbeddedDataSpecifications = parsed.value;
@@ -4259,7 +4330,7 @@ function parseBlobFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -4271,7 +4342,7 @@ function parseBlobFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -4283,7 +4354,7 @@ function parseBlobFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -4298,7 +4369,7 @@ function parseBlobFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringNameTypeContent
+          parse_ListOf_LangStringNameType
         );
         propertyError = parsed.error;
         theDisplayName = parsed.value;
@@ -4314,7 +4385,7 @@ function parseBlobFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringTextTypeContent
+          parse_ListOf_LangStringTextType
         );
         propertyError = parsed.error;
         theDescription = parsed.value;
@@ -4339,7 +4410,7 @@ function parseBlobFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -4351,7 +4422,7 @@ function parseBlobFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -4366,7 +4437,7 @@ function parseBlobFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfEmbeddedDataSpecificationContent
+          parse_ListOf_EmbeddedDataSpecification
         );
         propertyError = parsed.error;
         theEmbeddedDataSpecifications = parsed.value;
@@ -4379,11 +4450,7 @@ function parseBlobFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(
-          cursor,
-          propertyLocalName,
-          parseBase64EncodedBytesContent
-        );
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_bytes);
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -4395,7 +4462,7 @@ function parseBlobFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theContentType = parsed.value;
         break;
@@ -4496,7 +4563,7 @@ function parseFileFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -4508,7 +4575,7 @@ function parseFileFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -4520,7 +4587,7 @@ function parseFileFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -4535,7 +4602,7 @@ function parseFileFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringNameTypeContent
+          parse_ListOf_LangStringNameType
         );
         propertyError = parsed.error;
         theDisplayName = parsed.value;
@@ -4551,7 +4618,7 @@ function parseFileFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringTextTypeContent
+          parse_ListOf_LangStringTextType
         );
         propertyError = parsed.error;
         theDescription = parsed.value;
@@ -4576,7 +4643,7 @@ function parseFileFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -4588,7 +4655,7 @@ function parseFileFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -4603,7 +4670,7 @@ function parseFileFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfEmbeddedDataSpecificationContent
+          parse_ListOf_EmbeddedDataSpecification
         );
         propertyError = parsed.error;
         theEmbeddedDataSpecifications = parsed.value;
@@ -4616,7 +4683,7 @@ function parseFileFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -4628,7 +4695,7 @@ function parseFileFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theContentType = parsed.value;
         break;
@@ -4730,7 +4797,7 @@ function parseAnnotatedRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -4742,7 +4809,7 @@ function parseAnnotatedRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -4754,7 +4821,7 @@ function parseAnnotatedRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -4769,7 +4836,7 @@ function parseAnnotatedRelationshipElementFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringNameTypeContent
+          parse_ListOf_LangStringNameType
         );
         propertyError = parsed.error;
         theDisplayName = parsed.value;
@@ -4785,7 +4852,7 @@ function parseAnnotatedRelationshipElementFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringTextTypeContent
+          parse_ListOf_LangStringTextType
         );
         propertyError = parsed.error;
         theDescription = parsed.value;
@@ -4810,7 +4877,7 @@ function parseAnnotatedRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -4822,7 +4889,7 @@ function parseAnnotatedRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -4837,7 +4904,7 @@ function parseAnnotatedRelationshipElementFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfEmbeddedDataSpecificationContent
+          parse_ListOf_EmbeddedDataSpecification
         );
         propertyError = parsed.error;
         theEmbeddedDataSpecifications = parsed.value;
@@ -4874,11 +4941,7 @@ function parseAnnotatedRelationshipElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(
-          cursor,
-          propertyLocalName,
-          parseListOfIDataElementContent
-        );
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_IDataElement);
         propertyError = parsed.error;
         theAnnotations = parsed.value;
         break;
@@ -4988,7 +5051,7 @@ function parseEntityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -5000,7 +5063,7 @@ function parseEntityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -5012,7 +5075,7 @@ function parseEntityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -5027,7 +5090,7 @@ function parseEntityFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringNameTypeContent
+          parse_ListOf_LangStringNameType
         );
         propertyError = parsed.error;
         theDisplayName = parsed.value;
@@ -5043,7 +5106,7 @@ function parseEntityFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringTextTypeContent
+          parse_ListOf_LangStringTextType
         );
         propertyError = parsed.error;
         theDescription = parsed.value;
@@ -5068,7 +5131,7 @@ function parseEntityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -5080,7 +5143,7 @@ function parseEntityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -5095,7 +5158,7 @@ function parseEntityFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfEmbeddedDataSpecificationContent
+          parse_ListOf_EmbeddedDataSpecification
         );
         propertyError = parsed.error;
         theEmbeddedDataSpecifications = parsed.value;
@@ -5111,7 +5174,7 @@ function parseEntityFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfISubmodelElementContent
+          parse_ListOf_ISubmodelElement
         );
         propertyError = parsed.error;
         theStatements = parsed.value;
@@ -5124,7 +5187,7 @@ function parseEntityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseEntityTypeContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_EntityType);
         propertyError = parsed.error;
         theEntityType = parsed.value;
         break;
@@ -5136,7 +5199,7 @@ function parseEntityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theGlobalAssetId = parsed.value;
         break;
@@ -5148,11 +5211,7 @@ function parseEntityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(
-          cursor,
-          propertyLocalName,
-          parseListOfSpecificAssetIdContent
-        );
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_SpecificAssetId);
         propertyError = parsed.error;
         theSpecificAssetIds = parsed.value;
         break;
@@ -5300,7 +5359,7 @@ function parseEventPayloadFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theTopic = parsed.value;
         break;
@@ -5324,7 +5383,7 @@ function parseEventPayloadFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theTimeStamp = parsed.value;
         break;
@@ -5336,11 +5395,7 @@ function parseEventPayloadFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(
-          cursor,
-          propertyLocalName,
-          parseBase64EncodedBytesContent
-        );
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_bytes);
         propertyError = parsed.error;
         thePayload = parsed.value;
         break;
@@ -5456,7 +5511,7 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -5468,7 +5523,7 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -5480,7 +5535,7 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -5495,7 +5550,7 @@ function parseBasicEventElementFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringNameTypeContent
+          parse_ListOf_LangStringNameType
         );
         propertyError = parsed.error;
         theDisplayName = parsed.value;
@@ -5511,7 +5566,7 @@ function parseBasicEventElementFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringTextTypeContent
+          parse_ListOf_LangStringTextType
         );
         propertyError = parsed.error;
         theDescription = parsed.value;
@@ -5536,7 +5591,7 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -5548,7 +5603,7 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -5563,7 +5618,7 @@ function parseBasicEventElementFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfEmbeddedDataSpecificationContent
+          parse_ListOf_EmbeddedDataSpecification
         );
         propertyError = parsed.error;
         theEmbeddedDataSpecifications = parsed.value;
@@ -5588,7 +5643,7 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseDirectionContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_Direction);
         propertyError = parsed.error;
         theDirection = parsed.value;
         break;
@@ -5600,7 +5655,7 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStateOfEventContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_StateOfEvent);
         propertyError = parsed.error;
         theState = parsed.value;
         break;
@@ -5612,7 +5667,7 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theMessageTopic = parsed.value;
         break;
@@ -5636,7 +5691,7 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theLastUpdate = parsed.value;
         break;
@@ -5648,7 +5703,7 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theMinInterval = parsed.value;
         break;
@@ -5660,7 +5715,7 @@ function parseBasicEventElementFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theMaxInterval = parsed.value;
         break;
@@ -5780,7 +5835,7 @@ function parseOperationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -5792,7 +5847,7 @@ function parseOperationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -5804,7 +5859,7 @@ function parseOperationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -5819,7 +5874,7 @@ function parseOperationFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringNameTypeContent
+          parse_ListOf_LangStringNameType
         );
         propertyError = parsed.error;
         theDisplayName = parsed.value;
@@ -5835,7 +5890,7 @@ function parseOperationFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringTextTypeContent
+          parse_ListOf_LangStringTextType
         );
         propertyError = parsed.error;
         theDescription = parsed.value;
@@ -5860,7 +5915,7 @@ function parseOperationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -5872,7 +5927,7 @@ function parseOperationFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -5887,7 +5942,7 @@ function parseOperationFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfEmbeddedDataSpecificationContent
+          parse_ListOf_EmbeddedDataSpecification
         );
         propertyError = parsed.error;
         theEmbeddedDataSpecifications = parsed.value;
@@ -5903,7 +5958,7 @@ function parseOperationFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfOperationVariableContent
+          parse_ListOf_OperationVariable
         );
         propertyError = parsed.error;
         theInputVariables = parsed.value;
@@ -5919,7 +5974,7 @@ function parseOperationFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfOperationVariableContent
+          parse_ListOf_OperationVariable
         );
         propertyError = parsed.error;
         theOutputVariables = parsed.value;
@@ -5935,7 +5990,7 @@ function parseOperationFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfOperationVariableContent
+          parse_ListOf_OperationVariable
         );
         propertyError = parsed.error;
         theInoutputVariables = parsed.value;
@@ -6117,7 +6172,7 @@ function parseCapabilityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -6129,7 +6184,7 @@ function parseCapabilityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -6141,7 +6196,7 @@ function parseCapabilityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -6156,7 +6211,7 @@ function parseCapabilityFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringNameTypeContent
+          parse_ListOf_LangStringNameType
         );
         propertyError = parsed.error;
         theDisplayName = parsed.value;
@@ -6172,7 +6227,7 @@ function parseCapabilityFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringTextTypeContent
+          parse_ListOf_LangStringTextType
         );
         propertyError = parsed.error;
         theDescription = parsed.value;
@@ -6197,7 +6252,7 @@ function parseCapabilityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theSupplementalSemanticIds = parsed.value;
         break;
@@ -6209,7 +6264,7 @@ function parseCapabilityFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfQualifierContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Qualifier);
         propertyError = parsed.error;
         theQualifiers = parsed.value;
         break;
@@ -6224,7 +6279,7 @@ function parseCapabilityFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfEmbeddedDataSpecificationContent
+          parse_ListOf_EmbeddedDataSpecification
         );
         propertyError = parsed.error;
         theEmbeddedDataSpecifications = parsed.value;
@@ -6318,7 +6373,7 @@ function parseConceptDescriptionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfExtensionContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Extension);
         propertyError = parsed.error;
         theExtensions = parsed.value;
         break;
@@ -6330,7 +6385,7 @@ function parseConceptDescriptionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theCategory = parsed.value;
         break;
@@ -6342,7 +6397,7 @@ function parseConceptDescriptionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theIdShort = parsed.value;
         break;
@@ -6357,7 +6412,7 @@ function parseConceptDescriptionFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringNameTypeContent
+          parse_ListOf_LangStringNameType
         );
         propertyError = parsed.error;
         theDisplayName = parsed.value;
@@ -6373,7 +6428,7 @@ function parseConceptDescriptionFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringTextTypeContent
+          parse_ListOf_LangStringTextType
         );
         propertyError = parsed.error;
         theDescription = parsed.value;
@@ -6402,7 +6457,7 @@ function parseConceptDescriptionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theId = parsed.value;
         break;
@@ -6417,7 +6472,7 @@ function parseConceptDescriptionFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfEmbeddedDataSpecificationContent
+          parse_ListOf_EmbeddedDataSpecification
         );
         propertyError = parsed.error;
         theEmbeddedDataSpecifications = parsed.value;
@@ -6430,7 +6485,7 @@ function parseConceptDescriptionFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfReferenceContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Reference);
         propertyError = parsed.error;
         theIsCaseOf = parsed.value;
         break;
@@ -6521,7 +6576,7 @@ function parseReferenceFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseReferenceTypesContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ReferenceTypes);
         propertyError = parsed.error;
         theType = parsed.value;
         break;
@@ -6545,7 +6600,7 @@ function parseReferenceFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfKeyContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Key);
         propertyError = parsed.error;
         theKeys = parsed.value;
         break;
@@ -6635,7 +6690,7 @@ function parseKeyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseKeyTypesContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_KeyTypes);
         propertyError = parsed.error;
         theType = parsed.value;
         break;
@@ -6647,7 +6702,7 @@ function parseKeyFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -6736,7 +6791,7 @@ function parseLangStringNameTypeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theLanguage = parsed.value;
         break;
@@ -6748,7 +6803,7 @@ function parseLangStringNameTypeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theText = parsed.value;
         break;
@@ -6837,7 +6892,7 @@ function parseLangStringTextTypeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theLanguage = parsed.value;
         break;
@@ -6849,7 +6904,7 @@ function parseLangStringTextTypeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theText = parsed.value;
         break;
@@ -6942,7 +6997,7 @@ function parseEnvironmentFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfAssetAdministrationShellContent
+          parse_ListOf_AssetAdministrationShell
         );
         propertyError = parsed.error;
         theAssetAdministrationShells = parsed.value;
@@ -6955,7 +7010,7 @@ function parseEnvironmentFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfSubmodelContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Submodel);
         propertyError = parsed.error;
         theSubmodels = parsed.value;
         break;
@@ -6970,7 +7025,7 @@ function parseEnvironmentFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfConceptDescriptionContent
+          parse_ListOf_ConceptDescription
         );
         propertyError = parsed.error;
         theConceptDescriptions = parsed.value;
@@ -7158,7 +7213,7 @@ function parseLevelTypeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseBooleanContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_bool);
         propertyError = parsed.error;
         theMin = parsed.value;
         break;
@@ -7170,7 +7225,7 @@ function parseLevelTypeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseBooleanContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_bool);
         propertyError = parsed.error;
         theNom = parsed.value;
         break;
@@ -7182,7 +7237,7 @@ function parseLevelTypeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseBooleanContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_bool);
         propertyError = parsed.error;
         theTyp = parsed.value;
         break;
@@ -7194,7 +7249,7 @@ function parseLevelTypeFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseBooleanContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_bool);
         propertyError = parsed.error;
         theMax = parsed.value;
         break;
@@ -7297,7 +7352,7 @@ function parseValueReferencePairFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -7400,7 +7455,7 @@ function parseValueListFromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfValueReferencePairContent
+          parse_ListOf_ValueReferencePair
         );
         propertyError = parsed.error;
         theValueReferencePairs = parsed.value;
@@ -7483,7 +7538,7 @@ function parseLangStringPreferredNameTypeIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theLanguage = parsed.value;
         break;
@@ -7495,7 +7550,7 @@ function parseLangStringPreferredNameTypeIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theText = parsed.value;
         break;
@@ -7584,7 +7639,7 @@ function parseLangStringShortNameTypeIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theLanguage = parsed.value;
         break;
@@ -7596,7 +7651,7 @@ function parseLangStringShortNameTypeIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theText = parsed.value;
         break;
@@ -7685,7 +7740,7 @@ function parseLangStringDefinitionTypeIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theLanguage = parsed.value;
         break;
@@ -7697,7 +7752,7 @@ function parseLangStringDefinitionTypeIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theText = parsed.value;
         break;
@@ -7799,7 +7854,7 @@ function parseDataSpecificationIec61360FromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringPreferredNameTypeIec61360Content
+          parse_ListOf_LangStringPreferredNameTypeIec61360
         );
         propertyError = parsed.error;
         thePreferredName = parsed.value;
@@ -7815,7 +7870,7 @@ function parseDataSpecificationIec61360FromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringShortNameTypeIec61360Content
+          parse_ListOf_LangStringShortNameTypeIec61360
         );
         propertyError = parsed.error;
         theShortName = parsed.value;
@@ -7828,7 +7883,7 @@ function parseDataSpecificationIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theUnit = parsed.value;
         break;
@@ -7852,7 +7907,7 @@ function parseDataSpecificationIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theSourceOfDefinition = parsed.value;
         break;
@@ -7864,7 +7919,7 @@ function parseDataSpecificationIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theSymbol = parsed.value;
         break;
@@ -7876,7 +7931,7 @@ function parseDataSpecificationIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseDataTypeIec61360Content);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_DataTypeIec61360);
         propertyError = parsed.error;
         theDataType = parsed.value;
         break;
@@ -7891,7 +7946,7 @@ function parseDataSpecificationIec61360FromSequence(
         const parsed = parseElementContent(
           cursor,
           propertyLocalName,
-          parseListOfLangStringDefinitionTypeIec61360Content
+          parse_ListOf_LangStringDefinitionTypeIec61360
         );
         propertyError = parsed.error;
         theDefinition = parsed.value;
@@ -7904,7 +7959,7 @@ function parseDataSpecificationIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theValueFormat = parsed.value;
         break;
@@ -7928,7 +7983,7 @@ function parseDataSpecificationIec61360FromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theValue = parsed.value;
         break;
@@ -7989,6 +8044,973 @@ function parseDataSpecificationIec61360FromSequence(
     instance,
     null
   );
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!Extension}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeExtensionAsSequence(
+  parts: Array<string>,
+  that: AasTypes.Extension
+): void {
+  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "supplementalSemanticIds",
+    that.supplementalSemanticIds,
+    writeListOfInstances
+  );
+  writeProperty(parts, "name", that.name, write_str);
+  writeOptionalProperty(parts, "valueType", that.valueType, write_DataTypeDefXsd);
+  writeOptionalProperty(parts, "value", that.value, write_str);
+  writeOptionalProperty(parts, "refersTo", that.refersTo, writeListOfInstances);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!AdministrativeInformation}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeAdministrativeInformationAsSequence(
+  parts: Array<string>,
+  that: AasTypes.AdministrativeInformation
+): void {
+  writeOptionalProperty(
+    parts,
+    "embeddedDataSpecifications",
+    that.embeddedDataSpecifications,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "version", that.version, write_str);
+  writeOptionalProperty(parts, "revision", that.revision, write_str);
+  writeOptionalProperty(parts, "creator", that.creator, writeReferenceAsSequence);
+  writeOptionalProperty(parts, "templateId", that.templateId, write_str);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!Qualifier}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeQualifierAsSequence(
+  parts: Array<string>,
+  that: AasTypes.Qualifier
+): void {
+  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "supplementalSemanticIds",
+    that.supplementalSemanticIds,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "kind", that.kind, write_QualifierKind);
+  writeProperty(parts, "type", that.type, write_str);
+  writeProperty(parts, "valueType", that.valueType, write_DataTypeDefXsd);
+  writeOptionalProperty(parts, "value", that.value, write_str);
+  writeOptionalProperty(parts, "valueId", that.valueId, writeReferenceAsSequence);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!AssetAdministrationShell}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeAssetAdministrationShellAsSequence(
+  parts: Array<string>,
+  that: AasTypes.AssetAdministrationShell
+): void {
+  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
+  writeOptionalProperty(parts, "category", that.category, write_str);
+  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
+  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
+  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "administration",
+    that.administration,
+    writeAdministrativeInformationAsSequence
+  );
+  writeProperty(parts, "id", that.id, write_str);
+  writeOptionalProperty(
+    parts,
+    "embeddedDataSpecifications",
+    that.embeddedDataSpecifications,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "derivedFrom", that.derivedFrom, writeReferenceAsSequence);
+  writeProperty(parts, "assetInformation", that.assetInformation, writeAssetInformationAsSequence);
+  writeOptionalProperty(parts, "submodels", that.submodels, writeListOfInstances);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!AssetInformation}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeAssetInformationAsSequence(
+  parts: Array<string>,
+  that: AasTypes.AssetInformation
+): void {
+  writeProperty(parts, "assetKind", that.assetKind, write_AssetKind);
+  writeOptionalProperty(parts, "globalAssetId", that.globalAssetId, write_str);
+  writeOptionalProperty(parts, "specificAssetIds", that.specificAssetIds, writeListOfInstances);
+  writeOptionalProperty(parts, "assetType", that.assetType, write_str);
+  writeOptionalProperty(parts, "defaultThumbnail", that.defaultThumbnail, writeResourceAsSequence);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!Resource}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeResourceAsSequence(
+  parts: Array<string>,
+  that: AasTypes.Resource
+): void {
+  writeProperty(parts, "path", that.path, write_str);
+  writeOptionalProperty(parts, "contentType", that.contentType, write_str);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!SpecificAssetId}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeSpecificAssetIdAsSequence(
+  parts: Array<string>,
+  that: AasTypes.SpecificAssetId
+): void {
+  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "supplementalSemanticIds",
+    that.supplementalSemanticIds,
+    writeListOfInstances
+  );
+  writeProperty(parts, "name", that.name, write_str);
+  writeProperty(parts, "value", that.value, write_str);
+  writeOptionalProperty(
+    parts,
+    "externalSubjectId",
+    that.externalSubjectId,
+    writeReferenceAsSequence
+  );
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!Submodel}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeSubmodelAsSequence(
+  parts: Array<string>,
+  that: AasTypes.Submodel
+): void {
+  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
+  writeOptionalProperty(parts, "category", that.category, write_str);
+  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
+  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
+  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "administration",
+    that.administration,
+    writeAdministrativeInformationAsSequence
+  );
+  writeProperty(parts, "id", that.id, write_str);
+  writeOptionalProperty(parts, "kind", that.kind, write_ModellingKind);
+  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "supplementalSemanticIds",
+    that.supplementalSemanticIds,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "embeddedDataSpecifications",
+    that.embeddedDataSpecifications,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "submodelElements", that.submodelElements, writeListOfInstances);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!RelationshipElement}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeRelationshipElementAsSequence(
+  parts: Array<string>,
+  that: AasTypes.RelationshipElement
+): void {
+  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
+  writeOptionalProperty(parts, "category", that.category, write_str);
+  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
+  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
+  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "supplementalSemanticIds",
+    that.supplementalSemanticIds,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "embeddedDataSpecifications",
+    that.embeddedDataSpecifications,
+    writeListOfInstances
+  );
+  writeProperty(parts, "first", that.first, writeReferenceAsSequence);
+  writeProperty(parts, "second", that.second, writeReferenceAsSequence);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!SubmodelElementList}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeSubmodelElementListAsSequence(
+  parts: Array<string>,
+  that: AasTypes.SubmodelElementList
+): void {
+  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
+  writeOptionalProperty(parts, "category", that.category, write_str);
+  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
+  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
+  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "supplementalSemanticIds",
+    that.supplementalSemanticIds,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "embeddedDataSpecifications",
+    that.embeddedDataSpecifications,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "orderRelevant", that.orderRelevant, write_bool);
+  writeOptionalProperty(
+    parts,
+    "semanticIdListElement",
+    that.semanticIdListElement,
+    writeReferenceAsSequence
+  );
+  writeProperty(
+    parts,
+    "typeValueListElement",
+    that.typeValueListElement,
+    write_AasSubmodelElements
+  );
+  writeOptionalProperty(
+    parts,
+    "valueTypeListElement",
+    that.valueTypeListElement,
+    write_DataTypeDefXsd
+  );
+  writeOptionalProperty(parts, "value", that.value, writeListOfInstances);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!SubmodelElementCollection}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeSubmodelElementCollectionAsSequence(
+  parts: Array<string>,
+  that: AasTypes.SubmodelElementCollection
+): void {
+  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
+  writeOptionalProperty(parts, "category", that.category, write_str);
+  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
+  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
+  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "supplementalSemanticIds",
+    that.supplementalSemanticIds,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "embeddedDataSpecifications",
+    that.embeddedDataSpecifications,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "value", that.value, writeListOfInstances);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!Property}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writePropertyAsSequence(
+  parts: Array<string>,
+  that: AasTypes.Property
+): void {
+  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
+  writeOptionalProperty(parts, "category", that.category, write_str);
+  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
+  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
+  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "supplementalSemanticIds",
+    that.supplementalSemanticIds,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "embeddedDataSpecifications",
+    that.embeddedDataSpecifications,
+    writeListOfInstances
+  );
+  writeProperty(parts, "valueType", that.valueType, write_DataTypeDefXsd);
+  writeOptionalProperty(parts, "value", that.value, write_str);
+  writeOptionalProperty(parts, "valueId", that.valueId, writeReferenceAsSequence);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!MultiLanguageProperty}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeMultiLanguagePropertyAsSequence(
+  parts: Array<string>,
+  that: AasTypes.MultiLanguageProperty
+): void {
+  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
+  writeOptionalProperty(parts, "category", that.category, write_str);
+  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
+  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
+  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "supplementalSemanticIds",
+    that.supplementalSemanticIds,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "embeddedDataSpecifications",
+    that.embeddedDataSpecifications,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "value", that.value, writeListOfInstances);
+  writeOptionalProperty(parts, "valueId", that.valueId, writeReferenceAsSequence);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!Range}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeRangeAsSequence(
+  parts: Array<string>,
+  that: AasTypes.Range
+): void {
+  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
+  writeOptionalProperty(parts, "category", that.category, write_str);
+  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
+  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
+  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "supplementalSemanticIds",
+    that.supplementalSemanticIds,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "embeddedDataSpecifications",
+    that.embeddedDataSpecifications,
+    writeListOfInstances
+  );
+  writeProperty(parts, "valueType", that.valueType, write_DataTypeDefXsd);
+  writeOptionalProperty(parts, "min", that.min, write_str);
+  writeOptionalProperty(parts, "max", that.max, write_str);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!ReferenceElement}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeReferenceElementAsSequence(
+  parts: Array<string>,
+  that: AasTypes.ReferenceElement
+): void {
+  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
+  writeOptionalProperty(parts, "category", that.category, write_str);
+  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
+  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
+  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "supplementalSemanticIds",
+    that.supplementalSemanticIds,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "embeddedDataSpecifications",
+    that.embeddedDataSpecifications,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "value", that.value, writeReferenceAsSequence);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!Blob}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeBlobAsSequence(
+  parts: Array<string>,
+  that: AasTypes.Blob
+): void {
+  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
+  writeOptionalProperty(parts, "category", that.category, write_str);
+  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
+  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
+  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "supplementalSemanticIds",
+    that.supplementalSemanticIds,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "embeddedDataSpecifications",
+    that.embeddedDataSpecifications,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "value", that.value, write_bytes);
+  writeProperty(parts, "contentType", that.contentType, write_str);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!File}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeFileAsSequence(
+  parts: Array<string>,
+  that: AasTypes.File
+): void {
+  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
+  writeOptionalProperty(parts, "category", that.category, write_str);
+  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
+  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
+  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "supplementalSemanticIds",
+    that.supplementalSemanticIds,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "embeddedDataSpecifications",
+    that.embeddedDataSpecifications,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "value", that.value, write_str);
+  writeProperty(parts, "contentType", that.contentType, write_str);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!AnnotatedRelationshipElement}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeAnnotatedRelationshipElementAsSequence(
+  parts: Array<string>,
+  that: AasTypes.AnnotatedRelationshipElement
+): void {
+  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
+  writeOptionalProperty(parts, "category", that.category, write_str);
+  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
+  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
+  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "supplementalSemanticIds",
+    that.supplementalSemanticIds,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "embeddedDataSpecifications",
+    that.embeddedDataSpecifications,
+    writeListOfInstances
+  );
+  writeProperty(parts, "first", that.first, writeReferenceAsSequence);
+  writeProperty(parts, "second", that.second, writeReferenceAsSequence);
+  writeOptionalProperty(parts, "annotations", that.annotations, writeListOfInstances);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!Entity}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeEntityAsSequence(
+  parts: Array<string>,
+  that: AasTypes.Entity
+): void {
+  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
+  writeOptionalProperty(parts, "category", that.category, write_str);
+  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
+  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
+  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "supplementalSemanticIds",
+    that.supplementalSemanticIds,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "embeddedDataSpecifications",
+    that.embeddedDataSpecifications,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "statements", that.statements, writeListOfInstances);
+  writeProperty(parts, "entityType", that.entityType, write_EntityType);
+  writeOptionalProperty(parts, "globalAssetId", that.globalAssetId, write_str);
+  writeOptionalProperty(parts, "specificAssetIds", that.specificAssetIds, writeListOfInstances);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!EventPayload}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeEventPayloadAsSequence(
+  parts: Array<string>,
+  that: AasTypes.EventPayload
+): void {
+  writeProperty(parts, "source", that.source, writeReferenceAsSequence);
+  writeOptionalProperty(parts, "sourceSemanticId", that.sourceSemanticId, writeReferenceAsSequence);
+  writeProperty(parts, "observableReference", that.observableReference, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "observableSemanticId",
+    that.observableSemanticId,
+    writeReferenceAsSequence
+  );
+  writeOptionalProperty(parts, "topic", that.topic, write_str);
+  writeOptionalProperty(parts, "subjectId", that.subjectId, writeReferenceAsSequence);
+  writeProperty(parts, "timeStamp", that.timeStamp, write_str);
+  writeOptionalProperty(parts, "payload", that.payload, write_bytes);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!BasicEventElement}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeBasicEventElementAsSequence(
+  parts: Array<string>,
+  that: AasTypes.BasicEventElement
+): void {
+  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
+  writeOptionalProperty(parts, "category", that.category, write_str);
+  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
+  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
+  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "supplementalSemanticIds",
+    that.supplementalSemanticIds,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "embeddedDataSpecifications",
+    that.embeddedDataSpecifications,
+    writeListOfInstances
+  );
+  writeProperty(parts, "observed", that.observed, writeReferenceAsSequence);
+  writeProperty(parts, "direction", that.direction, write_Direction);
+  writeProperty(parts, "state", that.state, write_StateOfEvent);
+  writeOptionalProperty(parts, "messageTopic", that.messageTopic, write_str);
+  writeOptionalProperty(parts, "messageBroker", that.messageBroker, writeReferenceAsSequence);
+  writeOptionalProperty(parts, "lastUpdate", that.lastUpdate, write_str);
+  writeOptionalProperty(parts, "minInterval", that.minInterval, write_str);
+  writeOptionalProperty(parts, "maxInterval", that.maxInterval, write_str);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!Operation}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeOperationAsSequence(
+  parts: Array<string>,
+  that: AasTypes.Operation
+): void {
+  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
+  writeOptionalProperty(parts, "category", that.category, write_str);
+  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
+  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
+  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "supplementalSemanticIds",
+    that.supplementalSemanticIds,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "embeddedDataSpecifications",
+    that.embeddedDataSpecifications,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "inputVariables", that.inputVariables, writeListOfInstances);
+  writeOptionalProperty(parts, "outputVariables", that.outputVariables, writeListOfInstances);
+  writeOptionalProperty(parts, "inoutputVariables", that.inoutputVariables, writeListOfInstances);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!OperationVariable}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeOperationVariableAsSequence(
+  parts: Array<string>,
+  that: AasTypes.OperationVariable
+): void {
+  writeProperty(parts, "value", that.value, writeClass);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!Capability}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeCapabilityAsSequence(
+  parts: Array<string>,
+  that: AasTypes.Capability
+): void {
+  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
+  writeOptionalProperty(parts, "category", that.category, write_str);
+  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
+  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
+  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(parts, "semanticId", that.semanticId, writeReferenceAsSequence);
+  writeOptionalProperty(
+    parts,
+    "supplementalSemanticIds",
+    that.supplementalSemanticIds,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "qualifiers", that.qualifiers, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "embeddedDataSpecifications",
+    that.embeddedDataSpecifications,
+    writeListOfInstances
+  );
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!ConceptDescription}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeConceptDescriptionAsSequence(
+  parts: Array<string>,
+  that: AasTypes.ConceptDescription
+): void {
+  writeOptionalProperty(parts, "extensions", that.extensions, writeListOfInstances);
+  writeOptionalProperty(parts, "category", that.category, write_str);
+  writeOptionalProperty(parts, "idShort", that.idShort, write_str);
+  writeOptionalProperty(parts, "displayName", that.displayName, writeListOfInstances);
+  writeOptionalProperty(parts, "description", that.description, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "administration",
+    that.administration,
+    writeAdministrativeInformationAsSequence
+  );
+  writeProperty(parts, "id", that.id, write_str);
+  writeOptionalProperty(
+    parts,
+    "embeddedDataSpecifications",
+    that.embeddedDataSpecifications,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "isCaseOf", that.isCaseOf, writeListOfInstances);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!Reference}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeReferenceAsSequence(
+  parts: Array<string>,
+  that: AasTypes.Reference
+): void {
+  writeProperty(parts, "type", that.type, write_ReferenceTypes);
+  writeOptionalProperty(
+    parts,
+    "referredSemanticId",
+    that.referredSemanticId,
+    writeReferenceAsSequence
+  );
+  writeProperty(parts, "keys", that.keys, writeListOfInstances);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!Key}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeKeyAsSequence(
+  parts: Array<string>,
+  that: AasTypes.Key
+): void {
+  writeProperty(parts, "type", that.type, write_KeyTypes);
+  writeProperty(parts, "value", that.value, write_str);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!LangStringNameType}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeLangStringNameTypeAsSequence(
+  parts: Array<string>,
+  that: AasTypes.LangStringNameType
+): void {
+  writeProperty(parts, "language", that.language, write_str);
+  writeProperty(parts, "text", that.text, write_str);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!LangStringTextType}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeLangStringTextTypeAsSequence(
+  parts: Array<string>,
+  that: AasTypes.LangStringTextType
+): void {
+  writeProperty(parts, "language", that.language, write_str);
+  writeProperty(parts, "text", that.text, write_str);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!Environment}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeEnvironmentAsSequence(
+  parts: Array<string>,
+  that: AasTypes.Environment
+): void {
+  writeOptionalProperty(
+    parts,
+    "assetAdministrationShells",
+    that.assetAdministrationShells,
+    writeListOfInstances
+  );
+  writeOptionalProperty(parts, "submodels", that.submodels, writeListOfInstances);
+  writeOptionalProperty(
+    parts,
+    "conceptDescriptions",
+    that.conceptDescriptions,
+    writeListOfInstances
+  );
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!EmbeddedDataSpecification}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeEmbeddedDataSpecificationAsSequence(
+  parts: Array<string>,
+  that: AasTypes.EmbeddedDataSpecification
+): void {
+  writeProperty(parts, "dataSpecification", that.dataSpecification, writeReferenceAsSequence);
+  writeProperty(parts, "dataSpecificationContent", that.dataSpecificationContent, writeClass);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!LevelType}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeLevelTypeAsSequence(
+  parts: Array<string>,
+  that: AasTypes.LevelType
+): void {
+  writeProperty(parts, "min", that.min, write_bool);
+  writeProperty(parts, "nom", that.nom, write_bool);
+  writeProperty(parts, "typ", that.typ, write_bool);
+  writeProperty(parts, "max", that.max, write_bool);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!ValueReferencePair}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeValueReferencePairAsSequence(
+  parts: Array<string>,
+  that: AasTypes.ValueReferencePair
+): void {
+  writeProperty(parts, "value", that.value, write_str);
+  writeProperty(parts, "valueId", that.valueId, writeReferenceAsSequence);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!ValueList}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeValueListAsSequence(
+  parts: Array<string>,
+  that: AasTypes.ValueList
+): void {
+  writeProperty(parts, "valueReferencePairs", that.valueReferencePairs, writeListOfInstances);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!LangStringPreferredNameTypeIec61360}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeLangStringPreferredNameTypeIec61360AsSequence(
+  parts: Array<string>,
+  that: AasTypes.LangStringPreferredNameTypeIec61360
+): void {
+  writeProperty(parts, "language", that.language, write_str);
+  writeProperty(parts, "text", that.text, write_str);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!LangStringShortNameTypeIec61360}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeLangStringShortNameTypeIec61360AsSequence(
+  parts: Array<string>,
+  that: AasTypes.LangStringShortNameTypeIec61360
+): void {
+  writeProperty(parts, "language", that.language, write_str);
+  writeProperty(parts, "text", that.text, write_str);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!LangStringDefinitionTypeIec61360}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeLangStringDefinitionTypeIec61360AsSequence(
+  parts: Array<string>,
+  that: AasTypes.LangStringDefinitionTypeIec61360
+): void {
+  writeProperty(parts, "language", that.language, write_str);
+  writeProperty(parts, "text", that.text, write_str);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!DataSpecificationIec61360}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeDataSpecificationIec61360AsSequence(
+  parts: Array<string>,
+  that: AasTypes.DataSpecificationIec61360
+): void {
+  writeProperty(parts, "preferredName", that.preferredName, writeListOfInstances);
+  writeOptionalProperty(parts, "shortName", that.shortName, writeListOfInstances);
+  writeOptionalProperty(parts, "unit", that.unit, write_str);
+  writeOptionalProperty(parts, "unitId", that.unitId, writeReferenceAsSequence);
+  writeOptionalProperty(parts, "sourceOfDefinition", that.sourceOfDefinition, write_str);
+  writeOptionalProperty(parts, "symbol", that.symbol, write_str);
+  writeOptionalProperty(parts, "dataType", that.dataType, write_DataTypeIec61360);
+  writeOptionalProperty(parts, "definition", that.definition, writeListOfInstances);
+  writeOptionalProperty(parts, "valueFormat", that.valueFormat, write_str);
+  writeOptionalProperty(parts, "valueList", that.valueList, writeValueListAsSequence);
+  writeOptionalProperty(parts, "value", that.value, write_str);
+  writeOptionalProperty(parts, "levelType", that.levelType, writeLevelTypeAsSequence);
 }
 
 const PARSERS_OF_HAS_SEMANTICS = new Map<
@@ -9030,52 +10052,170 @@ export function fromXmlString(
   return instanceOrError;
 }
 
-type SerializedElement = {
-  localName: string;
-  innerXml: string;
-};
-
-function openTag(localName: string, withNamespace = false): string {
-  if (withNamespace) {
-    return `<${localName} xmlns="${NAMESPACE}">`;
-  }
-
-  return `<${localName}>`;
-}
-
-function closeTag(localName: string): string {
-  return `</${localName}>`;
-}
+/**
+ * Write the content of an XML element -- everything between its opening and its
+ * closing tag -- into `parts`.
+ *
+ * @remarks
+ *
+ * This is the one shape which every writer wears, so that a writer can be given
+ * to another writer as its item writer. The framing of the element around such
+ * a content is written by {@link writeElement}, and only there.
+ *
+ * The content is pushed as one or more separate entries instead of being
+ * concatenated as it is produced, so that the single `parts.join("")` at the very
+ * end copies every piece of text exactly once, however deeply it is nested.
+ */
+type ContentWriter<T> = (parts: Array<string>, value: T) => void;
 
 /**
- * Push `content` wrapped in its own `localName` element onto `parts`.
+ * Write `value` as the XML element `localName`, its content written
+ * by `writeContent`.
  *
- * We push the opening tag, the content and the closing tag as three separate
- * entries instead of pre-concatenating them, so that ``parts.join("")`` at
- * the top level copies the (possibly large, deeply nested) `content` exactly
- * once.
+ * @remarks
+ *
+ * The root element, and only the root element, declares the XML namespace. It is
+ * by definition the first element to be written, so `parts` is still empty when
+ * we push its opening tag, and we need no flag threaded through the writers to
+ * tell it apart.
  */
-function writeVElement(
+function writeElement<T>(
   parts: Array<string>,
   localName: string,
-  content: string
+  value: T,
+  writeContent: ContentWriter<T>
 ): void {
-  parts.push(openTag(localName));
-  parts.push(content);
-  parts.push(closeTag(localName));
+  parts.push(
+    parts.length === 0
+      ? `<${localName} xmlns="${NAMESPACE}">`
+      : `<${localName}>`
+  );
+  writeContent(parts, value);
+  parts.push(`</${localName}>`);
 }
 
 /**
- * Push a class instance already serialized to XML parts onto `parts`, wrapped
- * in its own element as given by {@link SerializedElement.localName}.
+ * Write `value` as the XML element of the property `name`.
+ *
+ * @remarks
+ *
+ * This is {@link writeElement} plus the reporting: a failure anywhere beneath
+ * this property is reported at a path which begins with the property. The framing
+ * of an *item* of a list or of a tuple deliberately goes through
+ * {@link writeElement} instead, as an item is reported by its index.
  */
-function writeClassElement(
+function writeProperty<T>(
   parts: Array<string>,
-  serialized: SerializedElement
+  name: string,
+  value: T,
+  writeContent: ContentWriter<T>
 ): void {
-  parts.push(openTag(serialized.localName));
-  parts.push(serialized.innerXml);
-  parts.push(closeTag(serialized.localName));
+  try {
+    writeElement(parts, name, value, writeContent);
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.path.prepend(new NameSegment(name));
+    }
+    throw error;
+  }
+}
+
+/**
+ * Write `value` as the XML element of the property `name` if it has been given,
+ * and write nothing at all otherwise.
+ */
+function writeOptionalProperty<T>(
+  parts: Array<string>,
+  name: string,
+  value: T | null,
+  writeContent: ContentWriter<T>
+): void {
+  if (value !== null) {
+    writeProperty(parts, name, value, writeContent);
+  }
+}
+
+/**
+ * Write the items of `values`, each as its own whole XML element.
+ *
+ * @remarks
+ *
+ * The index is advanced only after an item has been written, so that a failure is
+ * reported at the item which actually failed.
+ */
+function writeList<T>(
+  parts: Array<string>,
+  values: Array<T>,
+  writeItemElement: ContentWriter<T>
+): void {
+  let index = 0;
+  try {
+    for (const value of values) {
+      writeItemElement(parts, value);
+      index++;
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.path.prepend(new IndexSegment(index));
+    }
+    throw error;
+  }
+}
+
+/**
+ * Write the instances of `values`, each as its own, self-describing XML element.
+ *
+ * @remarks
+ *
+ * Every item goes through {@link writeClass} whatever its declared type is, so
+ * this one writer serves every list of instances in the meta-model.
+ */
+function writeListOfInstances(
+  parts: Array<string>,
+  values: Array<AasTypes.Class>
+): void {
+  writeList(parts, values, writeClass);
+}
+
+/**
+ * Write `that` as its own, self-describing XML element.
+ *
+ * @remarks
+ *
+ * Which element that is, is decided by the run-time type of `that`, so this one
+ * writer serves every abstract class, every named union, and the item of a list
+ * or of a tuple of any class at all. The reading, which has to decide what to
+ * construct before it has read anything, needs a dispatcher per interface instead.
+ */
+function writeClass(parts: Array<string>, that: AasTypes.Class): void {
+  SERIALIZER.visitWithContext(that, parts);
+}
+
+/**
+ * Write the literal `value` of the enumeration `enumerationName` as the content
+ * of an XML element.
+ *
+ * @remarks
+ *
+ * We deliberately go through the `toString` of the stringification module, which
+ * gives out `null` for a literal it does not know, and not through its `mustToString`,
+ * which throws an error of its own. An instance carrying a literal outside its
+ * enumeration is exactly the kind of failure this module reports with a path.
+ */
+function writeEnumerationContent<T>(
+  parts: Array<string>,
+  value: T,
+  enumerationName: string,
+  toString: (value: T) => string | null
+): void {
+  const text = toString(value);
+  if (text === null) {
+    throw new SerializationError(
+      `Invalid literal of ${enumerationName}: ${value}`
+    );
+  }
+
+  parts.push(escapeXmlText(text));
 }
 
 function escapeXmlText(text: string): string {
@@ -9087,2334 +10227,368 @@ function escapeXmlText(text: string): string {
     .replace(/'/g, "&apos;");
 }
 
-function serializeBooleanText(value: boolean): string {
-  return value ? "true" : "false";
+function write_bool(
+  parts: Array<string>,
+  value: boolean
+): void {
+  parts.push(value ? "true" : "false");
 }
 
-function serializeIntegerText(value: number): string {
+function write_int(
+  parts: Array<string>,
+  value: number
+): void {
   if (!Number.isInteger(value)) {
-    throw new Error(`Expected an integer, but got: ${value}`);
+    throw new SerializationError(
+      `Expected an integer, but got: ${value}`
+    );
   }
 
-  return `${value}`;
+  parts.push(`${value}`);
 }
 
-function serializeFloatText(value: number): string {
+function write_float(
+  parts: Array<string>,
+  value: number
+): void {
   if (Number.isNaN(value)) {
-    return "NaN";
+    parts.push("NaN");
+  } else if (value === Infinity) {
+    parts.push("INF");
+  } else if (value === -Infinity) {
+    parts.push("-INF");
+  } else {
+    parts.push(`${value}`);
   }
-  if (value === Infinity) {
-    return "INF";
-  }
-  if (value === -Infinity) {
-    return "-INF";
-  }
-
-  return `${value}`;
 }
 
-function serializeStringText(value: string): string {
-  return escapeXmlText(value);
+function write_str(
+  parts: Array<string>,
+  value: string
+): void {
+  parts.push(escapeXmlText(value));
 }
 
-function serializeBase64EncodedBytesText(value: Uint8Array): string {
-  return escapeXmlText(AasCommon.base64Encode(value));
+function write_bytes(
+  parts: Array<string>,
+  value: Uint8Array
+): void {
+  parts.push(escapeXmlText(AasCommon.base64Encode(value)));
 }
 
 /**
- * Serialize an AAS instance to XML parts.
+ * Write the XML element of an instance, dispatching on its run-time type.
+ *
+ * Each method writes the whole element -- the tags included -- since the element
+ * is picked by the run-time type, which this dispatch has just established. The
+ * properties are written by the corresponding module-level `write{Cls}AsSequence`,
+ * which is the content writer of that very element.
  */
-class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
-
-
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformExtension(
-    that: AasTypes.Extension
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.semanticId !== null) {
-      const serializedSemanticId = this.transform(that.semanticId);
-      parts.push(openTag("semanticId"));
-      parts.push(serializedSemanticId.innerXml);
-      parts.push(closeTag("semanticId"));
-    }
-
-  if (that.supplementalSemanticIds !== null) {
-      parts.push(openTag("supplementalSemanticIds"));
-      for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
-      }
-      parts.push(closeTag("supplementalSemanticIds"));
-    }
-
-  writeVElement(parts, "name", serializeStringText(that.name));
-
-  if (that.valueType !== null) {
-      writeVElement(parts, "valueType", serializeDataTypeDefXsdText(that.valueType));
-    }
-
-  if (that.value !== null) {
-      writeVElement(parts, "value", serializeStringText(that.value));
-    }
-
-  if (that.refersTo !== null) {
-      parts.push(openTag("refersTo"));
-      for (const itemRefersTo of that.refersTo) {
-        writeClassElement(parts, this.transform(itemRefersTo));
-      }
-      parts.push(closeTag("refersTo"));
-    }
-
-  return {
-      localName: "extension",
-      innerXml: parts.join("")
-    };
+class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
+  visitExtensionWithContext(
+    that: AasTypes.Extension,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "extension", that, writeExtensionAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformAdministrativeInformation(
-    that: AasTypes.AdministrativeInformation
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.embeddedDataSpecifications !== null) {
-      parts.push(openTag("embeddedDataSpecifications"));
-      for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
-      }
-      parts.push(closeTag("embeddedDataSpecifications"));
-    }
-
-  if (that.version !== null) {
-      writeVElement(parts, "version", serializeStringText(that.version));
-    }
-
-  if (that.revision !== null) {
-      writeVElement(parts, "revision", serializeStringText(that.revision));
-    }
-
-  if (that.creator !== null) {
-      const serializedCreator = this.transform(that.creator);
-      parts.push(openTag("creator"));
-      parts.push(serializedCreator.innerXml);
-      parts.push(closeTag("creator"));
-    }
-
-  if (that.templateId !== null) {
-      writeVElement(parts, "templateId", serializeStringText(that.templateId));
-    }
-
-  return {
-      localName: "administrativeInformation",
-      innerXml: parts.join("")
-    };
+  visitAdministrativeInformationWithContext(
+    that: AasTypes.AdministrativeInformation,
+    parts: Array<string>
+  ): void {
+    writeElement(
+      parts,
+      "administrativeInformation",
+      that,
+      writeAdministrativeInformationAsSequence
+    );
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformQualifier(
-    that: AasTypes.Qualifier
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.semanticId !== null) {
-      const serializedSemanticId = this.transform(that.semanticId);
-      parts.push(openTag("semanticId"));
-      parts.push(serializedSemanticId.innerXml);
-      parts.push(closeTag("semanticId"));
-    }
-
-  if (that.supplementalSemanticIds !== null) {
-      parts.push(openTag("supplementalSemanticIds"));
-      for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
-      }
-      parts.push(closeTag("supplementalSemanticIds"));
-    }
-
-  if (that.kind !== null) {
-      writeVElement(parts, "kind", serializeQualifierKindText(that.kind));
-    }
-
-  writeVElement(parts, "type", serializeStringText(that.type));
-
-  writeVElement(parts, "valueType", serializeDataTypeDefXsdText(that.valueType));
-
-  if (that.value !== null) {
-      writeVElement(parts, "value", serializeStringText(that.value));
-    }
-
-  if (that.valueId !== null) {
-      const serializedValueId = this.transform(that.valueId);
-      parts.push(openTag("valueId"));
-      parts.push(serializedValueId.innerXml);
-      parts.push(closeTag("valueId"));
-    }
-
-  return {
-      localName: "qualifier",
-      innerXml: parts.join("")
-    };
+  visitQualifierWithContext(
+    that: AasTypes.Qualifier,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "qualifier", that, writeQualifierAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformAssetAdministrationShell(
-    that: AasTypes.AssetAdministrationShell
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.extensions !== null) {
-      parts.push(openTag("extensions"));
-      for (const itemExtensions of that.extensions) {
-        writeClassElement(parts, this.transform(itemExtensions));
-      }
-      parts.push(closeTag("extensions"));
-    }
-
-  if (that.category !== null) {
-      writeVElement(parts, "category", serializeStringText(that.category));
-    }
-
-  if (that.idShort !== null) {
-      writeVElement(parts, "idShort", serializeStringText(that.idShort));
-    }
-
-  if (that.displayName !== null) {
-      parts.push(openTag("displayName"));
-      for (const itemDisplayName of that.displayName) {
-        writeClassElement(parts, this.transform(itemDisplayName));
-      }
-      parts.push(closeTag("displayName"));
-    }
-
-  if (that.description !== null) {
-      parts.push(openTag("description"));
-      for (const itemDescription of that.description) {
-        writeClassElement(parts, this.transform(itemDescription));
-      }
-      parts.push(closeTag("description"));
-    }
-
-  if (that.administration !== null) {
-      const serializedAdministration = this.transform(that.administration);
-      parts.push(openTag("administration"));
-      parts.push(serializedAdministration.innerXml);
-      parts.push(closeTag("administration"));
-    }
-
-  writeVElement(parts, "id", serializeStringText(that.id));
-
-  if (that.embeddedDataSpecifications !== null) {
-      parts.push(openTag("embeddedDataSpecifications"));
-      for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
-      }
-      parts.push(closeTag("embeddedDataSpecifications"));
-    }
-
-  if (that.derivedFrom !== null) {
-      const serializedDerivedFrom = this.transform(that.derivedFrom);
-      parts.push(openTag("derivedFrom"));
-      parts.push(serializedDerivedFrom.innerXml);
-      parts.push(closeTag("derivedFrom"));
-    }
-
-  const serializedAssetInformation = this.transform(that.assetInformation);
-    parts.push(openTag("assetInformation"));
-    parts.push(serializedAssetInformation.innerXml);
-    parts.push(closeTag("assetInformation"));
-
-  if (that.submodels !== null) {
-      parts.push(openTag("submodels"));
-      for (const itemSubmodels of that.submodels) {
-        writeClassElement(parts, this.transform(itemSubmodels));
-      }
-      parts.push(closeTag("submodels"));
-    }
-
-  return {
-      localName: "assetAdministrationShell",
-      innerXml: parts.join("")
-    };
+  visitAssetAdministrationShellWithContext(
+    that: AasTypes.AssetAdministrationShell,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "assetAdministrationShell", that, writeAssetAdministrationShellAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformAssetInformation(
-    that: AasTypes.AssetInformation
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  writeVElement(parts, "assetKind", serializeAssetKindText(that.assetKind));
-
-  if (that.globalAssetId !== null) {
-      writeVElement(parts, "globalAssetId", serializeStringText(that.globalAssetId));
-    }
-
-  if (that.specificAssetIds !== null) {
-      parts.push(openTag("specificAssetIds"));
-      for (const itemSpecificAssetIds of that.specificAssetIds) {
-        writeClassElement(parts, this.transform(itemSpecificAssetIds));
-      }
-      parts.push(closeTag("specificAssetIds"));
-    }
-
-  if (that.assetType !== null) {
-      writeVElement(parts, "assetType", serializeStringText(that.assetType));
-    }
-
-  if (that.defaultThumbnail !== null) {
-      const serializedDefaultThumbnail = this.transform(that.defaultThumbnail);
-      parts.push(openTag("defaultThumbnail"));
-      parts.push(serializedDefaultThumbnail.innerXml);
-      parts.push(closeTag("defaultThumbnail"));
-    }
-
-  return {
-      localName: "assetInformation",
-      innerXml: parts.join("")
-    };
+  visitAssetInformationWithContext(
+    that: AasTypes.AssetInformation,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "assetInformation", that, writeAssetInformationAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformResource(
-    that: AasTypes.Resource
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  writeVElement(parts, "path", serializeStringText(that.path));
-
-  if (that.contentType !== null) {
-      writeVElement(parts, "contentType", serializeStringText(that.contentType));
-    }
-
-  return {
-      localName: "resource",
-      innerXml: parts.join("")
-    };
+  visitResourceWithContext(
+    that: AasTypes.Resource,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "resource", that, writeResourceAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformSpecificAssetId(
-    that: AasTypes.SpecificAssetId
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.semanticId !== null) {
-      const serializedSemanticId = this.transform(that.semanticId);
-      parts.push(openTag("semanticId"));
-      parts.push(serializedSemanticId.innerXml);
-      parts.push(closeTag("semanticId"));
-    }
-
-  if (that.supplementalSemanticIds !== null) {
-      parts.push(openTag("supplementalSemanticIds"));
-      for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
-      }
-      parts.push(closeTag("supplementalSemanticIds"));
-    }
-
-  writeVElement(parts, "name", serializeStringText(that.name));
-
-  writeVElement(parts, "value", serializeStringText(that.value));
-
-  if (that.externalSubjectId !== null) {
-      const serializedExternalSubjectId = this.transform(that.externalSubjectId);
-      parts.push(openTag("externalSubjectId"));
-      parts.push(serializedExternalSubjectId.innerXml);
-      parts.push(closeTag("externalSubjectId"));
-    }
-
-  return {
-      localName: "specificAssetId",
-      innerXml: parts.join("")
-    };
+  visitSpecificAssetIdWithContext(
+    that: AasTypes.SpecificAssetId,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "specificAssetId", that, writeSpecificAssetIdAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformSubmodel(
-    that: AasTypes.Submodel
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.extensions !== null) {
-      parts.push(openTag("extensions"));
-      for (const itemExtensions of that.extensions) {
-        writeClassElement(parts, this.transform(itemExtensions));
-      }
-      parts.push(closeTag("extensions"));
-    }
-
-  if (that.category !== null) {
-      writeVElement(parts, "category", serializeStringText(that.category));
-    }
-
-  if (that.idShort !== null) {
-      writeVElement(parts, "idShort", serializeStringText(that.idShort));
-    }
-
-  if (that.displayName !== null) {
-      parts.push(openTag("displayName"));
-      for (const itemDisplayName of that.displayName) {
-        writeClassElement(parts, this.transform(itemDisplayName));
-      }
-      parts.push(closeTag("displayName"));
-    }
-
-  if (that.description !== null) {
-      parts.push(openTag("description"));
-      for (const itemDescription of that.description) {
-        writeClassElement(parts, this.transform(itemDescription));
-      }
-      parts.push(closeTag("description"));
-    }
-
-  if (that.administration !== null) {
-      const serializedAdministration = this.transform(that.administration);
-      parts.push(openTag("administration"));
-      parts.push(serializedAdministration.innerXml);
-      parts.push(closeTag("administration"));
-    }
-
-  writeVElement(parts, "id", serializeStringText(that.id));
-
-  if (that.kind !== null) {
-      writeVElement(parts, "kind", serializeModellingKindText(that.kind));
-    }
-
-  if (that.semanticId !== null) {
-      const serializedSemanticId = this.transform(that.semanticId);
-      parts.push(openTag("semanticId"));
-      parts.push(serializedSemanticId.innerXml);
-      parts.push(closeTag("semanticId"));
-    }
-
-  if (that.supplementalSemanticIds !== null) {
-      parts.push(openTag("supplementalSemanticIds"));
-      for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
-      }
-      parts.push(closeTag("supplementalSemanticIds"));
-    }
-
-  if (that.qualifiers !== null) {
-      parts.push(openTag("qualifiers"));
-      for (const itemQualifiers of that.qualifiers) {
-        writeClassElement(parts, this.transform(itemQualifiers));
-      }
-      parts.push(closeTag("qualifiers"));
-    }
-
-  if (that.embeddedDataSpecifications !== null) {
-      parts.push(openTag("embeddedDataSpecifications"));
-      for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
-      }
-      parts.push(closeTag("embeddedDataSpecifications"));
-    }
-
-  if (that.submodelElements !== null) {
-      parts.push(openTag("submodelElements"));
-      for (const itemSubmodelElements of that.submodelElements) {
-        writeClassElement(parts, this.transform(itemSubmodelElements));
-      }
-      parts.push(closeTag("submodelElements"));
-    }
-
-  return {
-      localName: "submodel",
-      innerXml: parts.join("")
-    };
+  visitSubmodelWithContext(
+    that: AasTypes.Submodel,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "submodel", that, writeSubmodelAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformRelationshipElement(
-    that: AasTypes.RelationshipElement
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.extensions !== null) {
-      parts.push(openTag("extensions"));
-      for (const itemExtensions of that.extensions) {
-        writeClassElement(parts, this.transform(itemExtensions));
-      }
-      parts.push(closeTag("extensions"));
-    }
-
-  if (that.category !== null) {
-      writeVElement(parts, "category", serializeStringText(that.category));
-    }
-
-  if (that.idShort !== null) {
-      writeVElement(parts, "idShort", serializeStringText(that.idShort));
-    }
-
-  if (that.displayName !== null) {
-      parts.push(openTag("displayName"));
-      for (const itemDisplayName of that.displayName) {
-        writeClassElement(parts, this.transform(itemDisplayName));
-      }
-      parts.push(closeTag("displayName"));
-    }
-
-  if (that.description !== null) {
-      parts.push(openTag("description"));
-      for (const itemDescription of that.description) {
-        writeClassElement(parts, this.transform(itemDescription));
-      }
-      parts.push(closeTag("description"));
-    }
-
-  if (that.semanticId !== null) {
-      const serializedSemanticId = this.transform(that.semanticId);
-      parts.push(openTag("semanticId"));
-      parts.push(serializedSemanticId.innerXml);
-      parts.push(closeTag("semanticId"));
-    }
-
-  if (that.supplementalSemanticIds !== null) {
-      parts.push(openTag("supplementalSemanticIds"));
-      for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
-      }
-      parts.push(closeTag("supplementalSemanticIds"));
-    }
-
-  if (that.qualifiers !== null) {
-      parts.push(openTag("qualifiers"));
-      for (const itemQualifiers of that.qualifiers) {
-        writeClassElement(parts, this.transform(itemQualifiers));
-      }
-      parts.push(closeTag("qualifiers"));
-    }
-
-  if (that.embeddedDataSpecifications !== null) {
-      parts.push(openTag("embeddedDataSpecifications"));
-      for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
-      }
-      parts.push(closeTag("embeddedDataSpecifications"));
-    }
-
-  const serializedFirst = this.transform(that.first);
-    parts.push(openTag("first"));
-    parts.push(serializedFirst.innerXml);
-    parts.push(closeTag("first"));
-
-  const serializedSecond = this.transform(that.second);
-    parts.push(openTag("second"));
-    parts.push(serializedSecond.innerXml);
-    parts.push(closeTag("second"));
-
-  return {
-      localName: "relationshipElement",
-      innerXml: parts.join("")
-    };
+  visitRelationshipElementWithContext(
+    that: AasTypes.RelationshipElement,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "relationshipElement", that, writeRelationshipElementAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformSubmodelElementList(
-    that: AasTypes.SubmodelElementList
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.extensions !== null) {
-      parts.push(openTag("extensions"));
-      for (const itemExtensions of that.extensions) {
-        writeClassElement(parts, this.transform(itemExtensions));
-      }
-      parts.push(closeTag("extensions"));
-    }
-
-  if (that.category !== null) {
-      writeVElement(parts, "category", serializeStringText(that.category));
-    }
-
-  if (that.idShort !== null) {
-      writeVElement(parts, "idShort", serializeStringText(that.idShort));
-    }
-
-  if (that.displayName !== null) {
-      parts.push(openTag("displayName"));
-      for (const itemDisplayName of that.displayName) {
-        writeClassElement(parts, this.transform(itemDisplayName));
-      }
-      parts.push(closeTag("displayName"));
-    }
-
-  if (that.description !== null) {
-      parts.push(openTag("description"));
-      for (const itemDescription of that.description) {
-        writeClassElement(parts, this.transform(itemDescription));
-      }
-      parts.push(closeTag("description"));
-    }
-
-  if (that.semanticId !== null) {
-      const serializedSemanticId = this.transform(that.semanticId);
-      parts.push(openTag("semanticId"));
-      parts.push(serializedSemanticId.innerXml);
-      parts.push(closeTag("semanticId"));
-    }
-
-  if (that.supplementalSemanticIds !== null) {
-      parts.push(openTag("supplementalSemanticIds"));
-      for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
-      }
-      parts.push(closeTag("supplementalSemanticIds"));
-    }
-
-  if (that.qualifiers !== null) {
-      parts.push(openTag("qualifiers"));
-      for (const itemQualifiers of that.qualifiers) {
-        writeClassElement(parts, this.transform(itemQualifiers));
-      }
-      parts.push(closeTag("qualifiers"));
-    }
-
-  if (that.embeddedDataSpecifications !== null) {
-      parts.push(openTag("embeddedDataSpecifications"));
-      for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
-      }
-      parts.push(closeTag("embeddedDataSpecifications"));
-    }
-
-  if (that.orderRelevant !== null) {
-      writeVElement(parts, "orderRelevant", serializeBooleanText(that.orderRelevant));
-    }
-
-  if (that.semanticIdListElement !== null) {
-      const serializedSemanticIdListElement = this.transform(that.semanticIdListElement);
-      parts.push(openTag("semanticIdListElement"));
-      parts.push(serializedSemanticIdListElement.innerXml);
-      parts.push(closeTag("semanticIdListElement"));
-    }
-
-  writeVElement(parts, "typeValueListElement", serializeAasSubmodelElementsText(that.typeValueListElement));
-
-  if (that.valueTypeListElement !== null) {
-      writeVElement(parts, "valueTypeListElement", serializeDataTypeDefXsdText(that.valueTypeListElement));
-    }
-
-  if (that.value !== null) {
-      parts.push(openTag("value"));
-      for (const itemValue of that.value) {
-        writeClassElement(parts, this.transform(itemValue));
-      }
-      parts.push(closeTag("value"));
-    }
-
-  return {
-      localName: "submodelElementList",
-      innerXml: parts.join("")
-    };
+  visitSubmodelElementListWithContext(
+    that: AasTypes.SubmodelElementList,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "submodelElementList", that, writeSubmodelElementListAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformSubmodelElementCollection(
-    that: AasTypes.SubmodelElementCollection
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.extensions !== null) {
-      parts.push(openTag("extensions"));
-      for (const itemExtensions of that.extensions) {
-        writeClassElement(parts, this.transform(itemExtensions));
-      }
-      parts.push(closeTag("extensions"));
-    }
-
-  if (that.category !== null) {
-      writeVElement(parts, "category", serializeStringText(that.category));
-    }
-
-  if (that.idShort !== null) {
-      writeVElement(parts, "idShort", serializeStringText(that.idShort));
-    }
-
-  if (that.displayName !== null) {
-      parts.push(openTag("displayName"));
-      for (const itemDisplayName of that.displayName) {
-        writeClassElement(parts, this.transform(itemDisplayName));
-      }
-      parts.push(closeTag("displayName"));
-    }
-
-  if (that.description !== null) {
-      parts.push(openTag("description"));
-      for (const itemDescription of that.description) {
-        writeClassElement(parts, this.transform(itemDescription));
-      }
-      parts.push(closeTag("description"));
-    }
-
-  if (that.semanticId !== null) {
-      const serializedSemanticId = this.transform(that.semanticId);
-      parts.push(openTag("semanticId"));
-      parts.push(serializedSemanticId.innerXml);
-      parts.push(closeTag("semanticId"));
-    }
-
-  if (that.supplementalSemanticIds !== null) {
-      parts.push(openTag("supplementalSemanticIds"));
-      for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
-      }
-      parts.push(closeTag("supplementalSemanticIds"));
-    }
-
-  if (that.qualifiers !== null) {
-      parts.push(openTag("qualifiers"));
-      for (const itemQualifiers of that.qualifiers) {
-        writeClassElement(parts, this.transform(itemQualifiers));
-      }
-      parts.push(closeTag("qualifiers"));
-    }
-
-  if (that.embeddedDataSpecifications !== null) {
-      parts.push(openTag("embeddedDataSpecifications"));
-      for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
-      }
-      parts.push(closeTag("embeddedDataSpecifications"));
-    }
-
-  if (that.value !== null) {
-      parts.push(openTag("value"));
-      for (const itemValue of that.value) {
-        writeClassElement(parts, this.transform(itemValue));
-      }
-      parts.push(closeTag("value"));
-    }
-
-  return {
-      localName: "submodelElementCollection",
-      innerXml: parts.join("")
-    };
+  visitSubmodelElementCollectionWithContext(
+    that: AasTypes.SubmodelElementCollection,
+    parts: Array<string>
+  ): void {
+    writeElement(
+      parts,
+      "submodelElementCollection",
+      that,
+      writeSubmodelElementCollectionAsSequence
+    );
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformProperty(
-    that: AasTypes.Property
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.extensions !== null) {
-      parts.push(openTag("extensions"));
-      for (const itemExtensions of that.extensions) {
-        writeClassElement(parts, this.transform(itemExtensions));
-      }
-      parts.push(closeTag("extensions"));
-    }
-
-  if (that.category !== null) {
-      writeVElement(parts, "category", serializeStringText(that.category));
-    }
-
-  if (that.idShort !== null) {
-      writeVElement(parts, "idShort", serializeStringText(that.idShort));
-    }
-
-  if (that.displayName !== null) {
-      parts.push(openTag("displayName"));
-      for (const itemDisplayName of that.displayName) {
-        writeClassElement(parts, this.transform(itemDisplayName));
-      }
-      parts.push(closeTag("displayName"));
-    }
-
-  if (that.description !== null) {
-      parts.push(openTag("description"));
-      for (const itemDescription of that.description) {
-        writeClassElement(parts, this.transform(itemDescription));
-      }
-      parts.push(closeTag("description"));
-    }
-
-  if (that.semanticId !== null) {
-      const serializedSemanticId = this.transform(that.semanticId);
-      parts.push(openTag("semanticId"));
-      parts.push(serializedSemanticId.innerXml);
-      parts.push(closeTag("semanticId"));
-    }
-
-  if (that.supplementalSemanticIds !== null) {
-      parts.push(openTag("supplementalSemanticIds"));
-      for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
-      }
-      parts.push(closeTag("supplementalSemanticIds"));
-    }
-
-  if (that.qualifiers !== null) {
-      parts.push(openTag("qualifiers"));
-      for (const itemQualifiers of that.qualifiers) {
-        writeClassElement(parts, this.transform(itemQualifiers));
-      }
-      parts.push(closeTag("qualifiers"));
-    }
-
-  if (that.embeddedDataSpecifications !== null) {
-      parts.push(openTag("embeddedDataSpecifications"));
-      for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
-      }
-      parts.push(closeTag("embeddedDataSpecifications"));
-    }
-
-  writeVElement(parts, "valueType", serializeDataTypeDefXsdText(that.valueType));
-
-  if (that.value !== null) {
-      writeVElement(parts, "value", serializeStringText(that.value));
-    }
-
-  if (that.valueId !== null) {
-      const serializedValueId = this.transform(that.valueId);
-      parts.push(openTag("valueId"));
-      parts.push(serializedValueId.innerXml);
-      parts.push(closeTag("valueId"));
-    }
-
-  return {
-      localName: "property",
-      innerXml: parts.join("")
-    };
+  visitPropertyWithContext(
+    that: AasTypes.Property,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "property", that, writePropertyAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformMultiLanguageProperty(
-    that: AasTypes.MultiLanguageProperty
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.extensions !== null) {
-      parts.push(openTag("extensions"));
-      for (const itemExtensions of that.extensions) {
-        writeClassElement(parts, this.transform(itemExtensions));
-      }
-      parts.push(closeTag("extensions"));
-    }
-
-  if (that.category !== null) {
-      writeVElement(parts, "category", serializeStringText(that.category));
-    }
-
-  if (that.idShort !== null) {
-      writeVElement(parts, "idShort", serializeStringText(that.idShort));
-    }
-
-  if (that.displayName !== null) {
-      parts.push(openTag("displayName"));
-      for (const itemDisplayName of that.displayName) {
-        writeClassElement(parts, this.transform(itemDisplayName));
-      }
-      parts.push(closeTag("displayName"));
-    }
-
-  if (that.description !== null) {
-      parts.push(openTag("description"));
-      for (const itemDescription of that.description) {
-        writeClassElement(parts, this.transform(itemDescription));
-      }
-      parts.push(closeTag("description"));
-    }
-
-  if (that.semanticId !== null) {
-      const serializedSemanticId = this.transform(that.semanticId);
-      parts.push(openTag("semanticId"));
-      parts.push(serializedSemanticId.innerXml);
-      parts.push(closeTag("semanticId"));
-    }
-
-  if (that.supplementalSemanticIds !== null) {
-      parts.push(openTag("supplementalSemanticIds"));
-      for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
-      }
-      parts.push(closeTag("supplementalSemanticIds"));
-    }
-
-  if (that.qualifiers !== null) {
-      parts.push(openTag("qualifiers"));
-      for (const itemQualifiers of that.qualifiers) {
-        writeClassElement(parts, this.transform(itemQualifiers));
-      }
-      parts.push(closeTag("qualifiers"));
-    }
-
-  if (that.embeddedDataSpecifications !== null) {
-      parts.push(openTag("embeddedDataSpecifications"));
-      for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
-      }
-      parts.push(closeTag("embeddedDataSpecifications"));
-    }
-
-  if (that.value !== null) {
-      parts.push(openTag("value"));
-      for (const itemValue of that.value) {
-        writeClassElement(parts, this.transform(itemValue));
-      }
-      parts.push(closeTag("value"));
-    }
-
-  if (that.valueId !== null) {
-      const serializedValueId = this.transform(that.valueId);
-      parts.push(openTag("valueId"));
-      parts.push(serializedValueId.innerXml);
-      parts.push(closeTag("valueId"));
-    }
-
-  return {
-      localName: "multiLanguageProperty",
-      innerXml: parts.join("")
-    };
+  visitMultiLanguagePropertyWithContext(
+    that: AasTypes.MultiLanguageProperty,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "multiLanguageProperty", that, writeMultiLanguagePropertyAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformRange(
-    that: AasTypes.Range
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.extensions !== null) {
-      parts.push(openTag("extensions"));
-      for (const itemExtensions of that.extensions) {
-        writeClassElement(parts, this.transform(itemExtensions));
-      }
-      parts.push(closeTag("extensions"));
-    }
-
-  if (that.category !== null) {
-      writeVElement(parts, "category", serializeStringText(that.category));
-    }
-
-  if (that.idShort !== null) {
-      writeVElement(parts, "idShort", serializeStringText(that.idShort));
-    }
-
-  if (that.displayName !== null) {
-      parts.push(openTag("displayName"));
-      for (const itemDisplayName of that.displayName) {
-        writeClassElement(parts, this.transform(itemDisplayName));
-      }
-      parts.push(closeTag("displayName"));
-    }
-
-  if (that.description !== null) {
-      parts.push(openTag("description"));
-      for (const itemDescription of that.description) {
-        writeClassElement(parts, this.transform(itemDescription));
-      }
-      parts.push(closeTag("description"));
-    }
-
-  if (that.semanticId !== null) {
-      const serializedSemanticId = this.transform(that.semanticId);
-      parts.push(openTag("semanticId"));
-      parts.push(serializedSemanticId.innerXml);
-      parts.push(closeTag("semanticId"));
-    }
-
-  if (that.supplementalSemanticIds !== null) {
-      parts.push(openTag("supplementalSemanticIds"));
-      for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
-      }
-      parts.push(closeTag("supplementalSemanticIds"));
-    }
-
-  if (that.qualifiers !== null) {
-      parts.push(openTag("qualifiers"));
-      for (const itemQualifiers of that.qualifiers) {
-        writeClassElement(parts, this.transform(itemQualifiers));
-      }
-      parts.push(closeTag("qualifiers"));
-    }
-
-  if (that.embeddedDataSpecifications !== null) {
-      parts.push(openTag("embeddedDataSpecifications"));
-      for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
-      }
-      parts.push(closeTag("embeddedDataSpecifications"));
-    }
-
-  writeVElement(parts, "valueType", serializeDataTypeDefXsdText(that.valueType));
-
-  if (that.min !== null) {
-      writeVElement(parts, "min", serializeStringText(that.min));
-    }
-
-  if (that.max !== null) {
-      writeVElement(parts, "max", serializeStringText(that.max));
-    }
-
-  return {
-      localName: "range",
-      innerXml: parts.join("")
-    };
+  visitRangeWithContext(
+    that: AasTypes.Range,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "range", that, writeRangeAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformReferenceElement(
-    that: AasTypes.ReferenceElement
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.extensions !== null) {
-      parts.push(openTag("extensions"));
-      for (const itemExtensions of that.extensions) {
-        writeClassElement(parts, this.transform(itemExtensions));
-      }
-      parts.push(closeTag("extensions"));
-    }
-
-  if (that.category !== null) {
-      writeVElement(parts, "category", serializeStringText(that.category));
-    }
-
-  if (that.idShort !== null) {
-      writeVElement(parts, "idShort", serializeStringText(that.idShort));
-    }
-
-  if (that.displayName !== null) {
-      parts.push(openTag("displayName"));
-      for (const itemDisplayName of that.displayName) {
-        writeClassElement(parts, this.transform(itemDisplayName));
-      }
-      parts.push(closeTag("displayName"));
-    }
-
-  if (that.description !== null) {
-      parts.push(openTag("description"));
-      for (const itemDescription of that.description) {
-        writeClassElement(parts, this.transform(itemDescription));
-      }
-      parts.push(closeTag("description"));
-    }
-
-  if (that.semanticId !== null) {
-      const serializedSemanticId = this.transform(that.semanticId);
-      parts.push(openTag("semanticId"));
-      parts.push(serializedSemanticId.innerXml);
-      parts.push(closeTag("semanticId"));
-    }
-
-  if (that.supplementalSemanticIds !== null) {
-      parts.push(openTag("supplementalSemanticIds"));
-      for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
-      }
-      parts.push(closeTag("supplementalSemanticIds"));
-    }
-
-  if (that.qualifiers !== null) {
-      parts.push(openTag("qualifiers"));
-      for (const itemQualifiers of that.qualifiers) {
-        writeClassElement(parts, this.transform(itemQualifiers));
-      }
-      parts.push(closeTag("qualifiers"));
-    }
-
-  if (that.embeddedDataSpecifications !== null) {
-      parts.push(openTag("embeddedDataSpecifications"));
-      for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
-      }
-      parts.push(closeTag("embeddedDataSpecifications"));
-    }
-
-  if (that.value !== null) {
-      const serializedValue = this.transform(that.value);
-      parts.push(openTag("value"));
-      parts.push(serializedValue.innerXml);
-      parts.push(closeTag("value"));
-    }
-
-  return {
-      localName: "referenceElement",
-      innerXml: parts.join("")
-    };
+  visitReferenceElementWithContext(
+    that: AasTypes.ReferenceElement,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "referenceElement", that, writeReferenceElementAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformBlob(
-    that: AasTypes.Blob
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.extensions !== null) {
-      parts.push(openTag("extensions"));
-      for (const itemExtensions of that.extensions) {
-        writeClassElement(parts, this.transform(itemExtensions));
-      }
-      parts.push(closeTag("extensions"));
-    }
-
-  if (that.category !== null) {
-      writeVElement(parts, "category", serializeStringText(that.category));
-    }
-
-  if (that.idShort !== null) {
-      writeVElement(parts, "idShort", serializeStringText(that.idShort));
-    }
-
-  if (that.displayName !== null) {
-      parts.push(openTag("displayName"));
-      for (const itemDisplayName of that.displayName) {
-        writeClassElement(parts, this.transform(itemDisplayName));
-      }
-      parts.push(closeTag("displayName"));
-    }
-
-  if (that.description !== null) {
-      parts.push(openTag("description"));
-      for (const itemDescription of that.description) {
-        writeClassElement(parts, this.transform(itemDescription));
-      }
-      parts.push(closeTag("description"));
-    }
-
-  if (that.semanticId !== null) {
-      const serializedSemanticId = this.transform(that.semanticId);
-      parts.push(openTag("semanticId"));
-      parts.push(serializedSemanticId.innerXml);
-      parts.push(closeTag("semanticId"));
-    }
-
-  if (that.supplementalSemanticIds !== null) {
-      parts.push(openTag("supplementalSemanticIds"));
-      for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
-      }
-      parts.push(closeTag("supplementalSemanticIds"));
-    }
-
-  if (that.qualifiers !== null) {
-      parts.push(openTag("qualifiers"));
-      for (const itemQualifiers of that.qualifiers) {
-        writeClassElement(parts, this.transform(itemQualifiers));
-      }
-      parts.push(closeTag("qualifiers"));
-    }
-
-  if (that.embeddedDataSpecifications !== null) {
-      parts.push(openTag("embeddedDataSpecifications"));
-      for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
-      }
-      parts.push(closeTag("embeddedDataSpecifications"));
-    }
-
-  if (that.value !== null) {
-      writeVElement(parts, "value", serializeBase64EncodedBytesText(that.value));
-    }
-
-  writeVElement(parts, "contentType", serializeStringText(that.contentType));
-
-  return {
-      localName: "blob",
-      innerXml: parts.join("")
-    };
+  visitBlobWithContext(
+    that: AasTypes.Blob,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "blob", that, writeBlobAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformFile(
-    that: AasTypes.File
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.extensions !== null) {
-      parts.push(openTag("extensions"));
-      for (const itemExtensions of that.extensions) {
-        writeClassElement(parts, this.transform(itemExtensions));
-      }
-      parts.push(closeTag("extensions"));
-    }
-
-  if (that.category !== null) {
-      writeVElement(parts, "category", serializeStringText(that.category));
-    }
-
-  if (that.idShort !== null) {
-      writeVElement(parts, "idShort", serializeStringText(that.idShort));
-    }
-
-  if (that.displayName !== null) {
-      parts.push(openTag("displayName"));
-      for (const itemDisplayName of that.displayName) {
-        writeClassElement(parts, this.transform(itemDisplayName));
-      }
-      parts.push(closeTag("displayName"));
-    }
-
-  if (that.description !== null) {
-      parts.push(openTag("description"));
-      for (const itemDescription of that.description) {
-        writeClassElement(parts, this.transform(itemDescription));
-      }
-      parts.push(closeTag("description"));
-    }
-
-  if (that.semanticId !== null) {
-      const serializedSemanticId = this.transform(that.semanticId);
-      parts.push(openTag("semanticId"));
-      parts.push(serializedSemanticId.innerXml);
-      parts.push(closeTag("semanticId"));
-    }
-
-  if (that.supplementalSemanticIds !== null) {
-      parts.push(openTag("supplementalSemanticIds"));
-      for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
-      }
-      parts.push(closeTag("supplementalSemanticIds"));
-    }
-
-  if (that.qualifiers !== null) {
-      parts.push(openTag("qualifiers"));
-      for (const itemQualifiers of that.qualifiers) {
-        writeClassElement(parts, this.transform(itemQualifiers));
-      }
-      parts.push(closeTag("qualifiers"));
-    }
-
-  if (that.embeddedDataSpecifications !== null) {
-      parts.push(openTag("embeddedDataSpecifications"));
-      for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
-      }
-      parts.push(closeTag("embeddedDataSpecifications"));
-    }
-
-  if (that.value !== null) {
-      writeVElement(parts, "value", serializeStringText(that.value));
-    }
-
-  writeVElement(parts, "contentType", serializeStringText(that.contentType));
-
-  return {
-      localName: "file",
-      innerXml: parts.join("")
-    };
+  visitFileWithContext(
+    that: AasTypes.File,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "file", that, writeFileAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformAnnotatedRelationshipElement(
-    that: AasTypes.AnnotatedRelationshipElement
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.extensions !== null) {
-      parts.push(openTag("extensions"));
-      for (const itemExtensions of that.extensions) {
-        writeClassElement(parts, this.transform(itemExtensions));
-      }
-      parts.push(closeTag("extensions"));
-    }
-
-  if (that.category !== null) {
-      writeVElement(parts, "category", serializeStringText(that.category));
-    }
-
-  if (that.idShort !== null) {
-      writeVElement(parts, "idShort", serializeStringText(that.idShort));
-    }
-
-  if (that.displayName !== null) {
-      parts.push(openTag("displayName"));
-      for (const itemDisplayName of that.displayName) {
-        writeClassElement(parts, this.transform(itemDisplayName));
-      }
-      parts.push(closeTag("displayName"));
-    }
-
-  if (that.description !== null) {
-      parts.push(openTag("description"));
-      for (const itemDescription of that.description) {
-        writeClassElement(parts, this.transform(itemDescription));
-      }
-      parts.push(closeTag("description"));
-    }
-
-  if (that.semanticId !== null) {
-      const serializedSemanticId = this.transform(that.semanticId);
-      parts.push(openTag("semanticId"));
-      parts.push(serializedSemanticId.innerXml);
-      parts.push(closeTag("semanticId"));
-    }
-
-  if (that.supplementalSemanticIds !== null) {
-      parts.push(openTag("supplementalSemanticIds"));
-      for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
-      }
-      parts.push(closeTag("supplementalSemanticIds"));
-    }
-
-  if (that.qualifiers !== null) {
-      parts.push(openTag("qualifiers"));
-      for (const itemQualifiers of that.qualifiers) {
-        writeClassElement(parts, this.transform(itemQualifiers));
-      }
-      parts.push(closeTag("qualifiers"));
-    }
-
-  if (that.embeddedDataSpecifications !== null) {
-      parts.push(openTag("embeddedDataSpecifications"));
-      for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
-      }
-      parts.push(closeTag("embeddedDataSpecifications"));
-    }
-
-  const serializedFirst = this.transform(that.first);
-    parts.push(openTag("first"));
-    parts.push(serializedFirst.innerXml);
-    parts.push(closeTag("first"));
-
-  const serializedSecond = this.transform(that.second);
-    parts.push(openTag("second"));
-    parts.push(serializedSecond.innerXml);
-    parts.push(closeTag("second"));
-
-  if (that.annotations !== null) {
-      parts.push(openTag("annotations"));
-      for (const itemAnnotations of that.annotations) {
-        writeClassElement(parts, this.transform(itemAnnotations));
-      }
-      parts.push(closeTag("annotations"));
-    }
-
-  return {
-      localName: "annotatedRelationshipElement",
-      innerXml: parts.join("")
-    };
+  visitAnnotatedRelationshipElementWithContext(
+    that: AasTypes.AnnotatedRelationshipElement,
+    parts: Array<string>
+  ): void {
+    writeElement(
+      parts,
+      "annotatedRelationshipElement",
+      that,
+      writeAnnotatedRelationshipElementAsSequence
+    );
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformEntity(
-    that: AasTypes.Entity
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.extensions !== null) {
-      parts.push(openTag("extensions"));
-      for (const itemExtensions of that.extensions) {
-        writeClassElement(parts, this.transform(itemExtensions));
-      }
-      parts.push(closeTag("extensions"));
-    }
-
-  if (that.category !== null) {
-      writeVElement(parts, "category", serializeStringText(that.category));
-    }
-
-  if (that.idShort !== null) {
-      writeVElement(parts, "idShort", serializeStringText(that.idShort));
-    }
-
-  if (that.displayName !== null) {
-      parts.push(openTag("displayName"));
-      for (const itemDisplayName of that.displayName) {
-        writeClassElement(parts, this.transform(itemDisplayName));
-      }
-      parts.push(closeTag("displayName"));
-    }
-
-  if (that.description !== null) {
-      parts.push(openTag("description"));
-      for (const itemDescription of that.description) {
-        writeClassElement(parts, this.transform(itemDescription));
-      }
-      parts.push(closeTag("description"));
-    }
-
-  if (that.semanticId !== null) {
-      const serializedSemanticId = this.transform(that.semanticId);
-      parts.push(openTag("semanticId"));
-      parts.push(serializedSemanticId.innerXml);
-      parts.push(closeTag("semanticId"));
-    }
-
-  if (that.supplementalSemanticIds !== null) {
-      parts.push(openTag("supplementalSemanticIds"));
-      for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
-      }
-      parts.push(closeTag("supplementalSemanticIds"));
-    }
-
-  if (that.qualifiers !== null) {
-      parts.push(openTag("qualifiers"));
-      for (const itemQualifiers of that.qualifiers) {
-        writeClassElement(parts, this.transform(itemQualifiers));
-      }
-      parts.push(closeTag("qualifiers"));
-    }
-
-  if (that.embeddedDataSpecifications !== null) {
-      parts.push(openTag("embeddedDataSpecifications"));
-      for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
-      }
-      parts.push(closeTag("embeddedDataSpecifications"));
-    }
-
-  if (that.statements !== null) {
-      parts.push(openTag("statements"));
-      for (const itemStatements of that.statements) {
-        writeClassElement(parts, this.transform(itemStatements));
-      }
-      parts.push(closeTag("statements"));
-    }
-
-  writeVElement(parts, "entityType", serializeEntityTypeText(that.entityType));
-
-  if (that.globalAssetId !== null) {
-      writeVElement(parts, "globalAssetId", serializeStringText(that.globalAssetId));
-    }
-
-  if (that.specificAssetIds !== null) {
-      parts.push(openTag("specificAssetIds"));
-      for (const itemSpecificAssetIds of that.specificAssetIds) {
-        writeClassElement(parts, this.transform(itemSpecificAssetIds));
-      }
-      parts.push(closeTag("specificAssetIds"));
-    }
-
-  return {
-      localName: "entity",
-      innerXml: parts.join("")
-    };
+  visitEntityWithContext(
+    that: AasTypes.Entity,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "entity", that, writeEntityAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformEventPayload(
-    that: AasTypes.EventPayload
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  const serializedSource = this.transform(that.source);
-    parts.push(openTag("source"));
-    parts.push(serializedSource.innerXml);
-    parts.push(closeTag("source"));
-
-  if (that.sourceSemanticId !== null) {
-      const serializedSourceSemanticId = this.transform(that.sourceSemanticId);
-      parts.push(openTag("sourceSemanticId"));
-      parts.push(serializedSourceSemanticId.innerXml);
-      parts.push(closeTag("sourceSemanticId"));
-    }
-
-  const serializedObservableReference = this.transform(that.observableReference);
-    parts.push(openTag("observableReference"));
-    parts.push(serializedObservableReference.innerXml);
-    parts.push(closeTag("observableReference"));
-
-  if (that.observableSemanticId !== null) {
-      const serializedObservableSemanticId = this.transform(that.observableSemanticId);
-      parts.push(openTag("observableSemanticId"));
-      parts.push(serializedObservableSemanticId.innerXml);
-      parts.push(closeTag("observableSemanticId"));
-    }
-
-  if (that.topic !== null) {
-      writeVElement(parts, "topic", serializeStringText(that.topic));
-    }
-
-  if (that.subjectId !== null) {
-      const serializedSubjectId = this.transform(that.subjectId);
-      parts.push(openTag("subjectId"));
-      parts.push(serializedSubjectId.innerXml);
-      parts.push(closeTag("subjectId"));
-    }
-
-  writeVElement(parts, "timeStamp", serializeStringText(that.timeStamp));
-
-  if (that.payload !== null) {
-      writeVElement(parts, "payload", serializeBase64EncodedBytesText(that.payload));
-    }
-
-  return {
-      localName: "eventPayload",
-      innerXml: parts.join("")
-    };
+  visitEventPayloadWithContext(
+    that: AasTypes.EventPayload,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "eventPayload", that, writeEventPayloadAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformBasicEventElement(
-    that: AasTypes.BasicEventElement
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.extensions !== null) {
-      parts.push(openTag("extensions"));
-      for (const itemExtensions of that.extensions) {
-        writeClassElement(parts, this.transform(itemExtensions));
-      }
-      parts.push(closeTag("extensions"));
-    }
-
-  if (that.category !== null) {
-      writeVElement(parts, "category", serializeStringText(that.category));
-    }
-
-  if (that.idShort !== null) {
-      writeVElement(parts, "idShort", serializeStringText(that.idShort));
-    }
-
-  if (that.displayName !== null) {
-      parts.push(openTag("displayName"));
-      for (const itemDisplayName of that.displayName) {
-        writeClassElement(parts, this.transform(itemDisplayName));
-      }
-      parts.push(closeTag("displayName"));
-    }
-
-  if (that.description !== null) {
-      parts.push(openTag("description"));
-      for (const itemDescription of that.description) {
-        writeClassElement(parts, this.transform(itemDescription));
-      }
-      parts.push(closeTag("description"));
-    }
-
-  if (that.semanticId !== null) {
-      const serializedSemanticId = this.transform(that.semanticId);
-      parts.push(openTag("semanticId"));
-      parts.push(serializedSemanticId.innerXml);
-      parts.push(closeTag("semanticId"));
-    }
-
-  if (that.supplementalSemanticIds !== null) {
-      parts.push(openTag("supplementalSemanticIds"));
-      for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
-      }
-      parts.push(closeTag("supplementalSemanticIds"));
-    }
-
-  if (that.qualifiers !== null) {
-      parts.push(openTag("qualifiers"));
-      for (const itemQualifiers of that.qualifiers) {
-        writeClassElement(parts, this.transform(itemQualifiers));
-      }
-      parts.push(closeTag("qualifiers"));
-    }
-
-  if (that.embeddedDataSpecifications !== null) {
-      parts.push(openTag("embeddedDataSpecifications"));
-      for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
-      }
-      parts.push(closeTag("embeddedDataSpecifications"));
-    }
-
-  const serializedObserved = this.transform(that.observed);
-    parts.push(openTag("observed"));
-    parts.push(serializedObserved.innerXml);
-    parts.push(closeTag("observed"));
-
-  writeVElement(parts, "direction", serializeDirectionText(that.direction));
-
-  writeVElement(parts, "state", serializeStateOfEventText(that.state));
-
-  if (that.messageTopic !== null) {
-      writeVElement(parts, "messageTopic", serializeStringText(that.messageTopic));
-    }
-
-  if (that.messageBroker !== null) {
-      const serializedMessageBroker = this.transform(that.messageBroker);
-      parts.push(openTag("messageBroker"));
-      parts.push(serializedMessageBroker.innerXml);
-      parts.push(closeTag("messageBroker"));
-    }
-
-  if (that.lastUpdate !== null) {
-      writeVElement(parts, "lastUpdate", serializeStringText(that.lastUpdate));
-    }
-
-  if (that.minInterval !== null) {
-      writeVElement(parts, "minInterval", serializeStringText(that.minInterval));
-    }
-
-  if (that.maxInterval !== null) {
-      writeVElement(parts, "maxInterval", serializeStringText(that.maxInterval));
-    }
-
-  return {
-      localName: "basicEventElement",
-      innerXml: parts.join("")
-    };
+  visitBasicEventElementWithContext(
+    that: AasTypes.BasicEventElement,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "basicEventElement", that, writeBasicEventElementAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformOperation(
-    that: AasTypes.Operation
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.extensions !== null) {
-      parts.push(openTag("extensions"));
-      for (const itemExtensions of that.extensions) {
-        writeClassElement(parts, this.transform(itemExtensions));
-      }
-      parts.push(closeTag("extensions"));
-    }
-
-  if (that.category !== null) {
-      writeVElement(parts, "category", serializeStringText(that.category));
-    }
-
-  if (that.idShort !== null) {
-      writeVElement(parts, "idShort", serializeStringText(that.idShort));
-    }
-
-  if (that.displayName !== null) {
-      parts.push(openTag("displayName"));
-      for (const itemDisplayName of that.displayName) {
-        writeClassElement(parts, this.transform(itemDisplayName));
-      }
-      parts.push(closeTag("displayName"));
-    }
-
-  if (that.description !== null) {
-      parts.push(openTag("description"));
-      for (const itemDescription of that.description) {
-        writeClassElement(parts, this.transform(itemDescription));
-      }
-      parts.push(closeTag("description"));
-    }
-
-  if (that.semanticId !== null) {
-      const serializedSemanticId = this.transform(that.semanticId);
-      parts.push(openTag("semanticId"));
-      parts.push(serializedSemanticId.innerXml);
-      parts.push(closeTag("semanticId"));
-    }
-
-  if (that.supplementalSemanticIds !== null) {
-      parts.push(openTag("supplementalSemanticIds"));
-      for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
-      }
-      parts.push(closeTag("supplementalSemanticIds"));
-    }
-
-  if (that.qualifiers !== null) {
-      parts.push(openTag("qualifiers"));
-      for (const itemQualifiers of that.qualifiers) {
-        writeClassElement(parts, this.transform(itemQualifiers));
-      }
-      parts.push(closeTag("qualifiers"));
-    }
-
-  if (that.embeddedDataSpecifications !== null) {
-      parts.push(openTag("embeddedDataSpecifications"));
-      for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
-      }
-      parts.push(closeTag("embeddedDataSpecifications"));
-    }
-
-  if (that.inputVariables !== null) {
-      parts.push(openTag("inputVariables"));
-      for (const itemInputVariables of that.inputVariables) {
-        writeClassElement(parts, this.transform(itemInputVariables));
-      }
-      parts.push(closeTag("inputVariables"));
-    }
-
-  if (that.outputVariables !== null) {
-      parts.push(openTag("outputVariables"));
-      for (const itemOutputVariables of that.outputVariables) {
-        writeClassElement(parts, this.transform(itemOutputVariables));
-      }
-      parts.push(closeTag("outputVariables"));
-    }
-
-  if (that.inoutputVariables !== null) {
-      parts.push(openTag("inoutputVariables"));
-      for (const itemInoutputVariables of that.inoutputVariables) {
-        writeClassElement(parts, this.transform(itemInoutputVariables));
-      }
-      parts.push(closeTag("inoutputVariables"));
-    }
-
-  return {
-      localName: "operation",
-      innerXml: parts.join("")
-    };
+  visitOperationWithContext(
+    that: AasTypes.Operation,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "operation", that, writeOperationAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformOperationVariable(
-    that: AasTypes.OperationVariable
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  parts.push(openTag("value"));
-    writeClassElement(parts, this.transform(that.value));
-    parts.push(closeTag("value"));
-
-  return {
-      localName: "operationVariable",
-      innerXml: parts.join("")
-    };
+  visitOperationVariableWithContext(
+    that: AasTypes.OperationVariable,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "operationVariable", that, writeOperationVariableAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformCapability(
-    that: AasTypes.Capability
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.extensions !== null) {
-      parts.push(openTag("extensions"));
-      for (const itemExtensions of that.extensions) {
-        writeClassElement(parts, this.transform(itemExtensions));
-      }
-      parts.push(closeTag("extensions"));
-    }
-
-  if (that.category !== null) {
-      writeVElement(parts, "category", serializeStringText(that.category));
-    }
-
-  if (that.idShort !== null) {
-      writeVElement(parts, "idShort", serializeStringText(that.idShort));
-    }
-
-  if (that.displayName !== null) {
-      parts.push(openTag("displayName"));
-      for (const itemDisplayName of that.displayName) {
-        writeClassElement(parts, this.transform(itemDisplayName));
-      }
-      parts.push(closeTag("displayName"));
-    }
-
-  if (that.description !== null) {
-      parts.push(openTag("description"));
-      for (const itemDescription of that.description) {
-        writeClassElement(parts, this.transform(itemDescription));
-      }
-      parts.push(closeTag("description"));
-    }
-
-  if (that.semanticId !== null) {
-      const serializedSemanticId = this.transform(that.semanticId);
-      parts.push(openTag("semanticId"));
-      parts.push(serializedSemanticId.innerXml);
-      parts.push(closeTag("semanticId"));
-    }
-
-  if (that.supplementalSemanticIds !== null) {
-      parts.push(openTag("supplementalSemanticIds"));
-      for (const itemSupplementalSemanticIds of that.supplementalSemanticIds) {
-        writeClassElement(parts, this.transform(itemSupplementalSemanticIds));
-      }
-      parts.push(closeTag("supplementalSemanticIds"));
-    }
-
-  if (that.qualifiers !== null) {
-      parts.push(openTag("qualifiers"));
-      for (const itemQualifiers of that.qualifiers) {
-        writeClassElement(parts, this.transform(itemQualifiers));
-      }
-      parts.push(closeTag("qualifiers"));
-    }
-
-  if (that.embeddedDataSpecifications !== null) {
-      parts.push(openTag("embeddedDataSpecifications"));
-      for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
-      }
-      parts.push(closeTag("embeddedDataSpecifications"));
-    }
-
-  return {
-      localName: "capability",
-      innerXml: parts.join("")
-    };
+  visitCapabilityWithContext(
+    that: AasTypes.Capability,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "capability", that, writeCapabilityAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformConceptDescription(
-    that: AasTypes.ConceptDescription
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.extensions !== null) {
-      parts.push(openTag("extensions"));
-      for (const itemExtensions of that.extensions) {
-        writeClassElement(parts, this.transform(itemExtensions));
-      }
-      parts.push(closeTag("extensions"));
-    }
-
-  if (that.category !== null) {
-      writeVElement(parts, "category", serializeStringText(that.category));
-    }
-
-  if (that.idShort !== null) {
-      writeVElement(parts, "idShort", serializeStringText(that.idShort));
-    }
-
-  if (that.displayName !== null) {
-      parts.push(openTag("displayName"));
-      for (const itemDisplayName of that.displayName) {
-        writeClassElement(parts, this.transform(itemDisplayName));
-      }
-      parts.push(closeTag("displayName"));
-    }
-
-  if (that.description !== null) {
-      parts.push(openTag("description"));
-      for (const itemDescription of that.description) {
-        writeClassElement(parts, this.transform(itemDescription));
-      }
-      parts.push(closeTag("description"));
-    }
-
-  if (that.administration !== null) {
-      const serializedAdministration = this.transform(that.administration);
-      parts.push(openTag("administration"));
-      parts.push(serializedAdministration.innerXml);
-      parts.push(closeTag("administration"));
-    }
-
-  writeVElement(parts, "id", serializeStringText(that.id));
-
-  if (that.embeddedDataSpecifications !== null) {
-      parts.push(openTag("embeddedDataSpecifications"));
-      for (const itemEmbeddedDataSpecifications of that.embeddedDataSpecifications) {
-        writeClassElement(parts, this.transform(itemEmbeddedDataSpecifications));
-      }
-      parts.push(closeTag("embeddedDataSpecifications"));
-    }
-
-  if (that.isCaseOf !== null) {
-      parts.push(openTag("isCaseOf"));
-      for (const itemIsCaseOf of that.isCaseOf) {
-        writeClassElement(parts, this.transform(itemIsCaseOf));
-      }
-      parts.push(closeTag("isCaseOf"));
-    }
-
-  return {
-      localName: "conceptDescription",
-      innerXml: parts.join("")
-    };
+  visitConceptDescriptionWithContext(
+    that: AasTypes.ConceptDescription,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "conceptDescription", that, writeConceptDescriptionAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformReference(
-    that: AasTypes.Reference
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  writeVElement(parts, "type", serializeReferenceTypesText(that.type));
-
-  if (that.referredSemanticId !== null) {
-      const serializedReferredSemanticId = this.transform(that.referredSemanticId);
-      parts.push(openTag("referredSemanticId"));
-      parts.push(serializedReferredSemanticId.innerXml);
-      parts.push(closeTag("referredSemanticId"));
-    }
-
-  parts.push(openTag("keys"));
-    for (const itemKeys of that.keys) {
-      writeClassElement(parts, this.transform(itemKeys));
-    }
-    parts.push(closeTag("keys"));
-
-  return {
-      localName: "reference",
-      innerXml: parts.join("")
-    };
+  visitReferenceWithContext(
+    that: AasTypes.Reference,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "reference", that, writeReferenceAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformKey(
-    that: AasTypes.Key
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  writeVElement(parts, "type", serializeKeyTypesText(that.type));
-
-  writeVElement(parts, "value", serializeStringText(that.value));
-
-  return {
-      localName: "key",
-      innerXml: parts.join("")
-    };
+  visitKeyWithContext(
+    that: AasTypes.Key,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "key", that, writeKeyAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformLangStringNameType(
-    that: AasTypes.LangStringNameType
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  writeVElement(parts, "language", serializeStringText(that.language));
-
-  writeVElement(parts, "text", serializeStringText(that.text));
-
-  return {
-      localName: "langStringNameType",
-      innerXml: parts.join("")
-    };
+  visitLangStringNameTypeWithContext(
+    that: AasTypes.LangStringNameType,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "langStringNameType", that, writeLangStringNameTypeAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformLangStringTextType(
-    that: AasTypes.LangStringTextType
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  writeVElement(parts, "language", serializeStringText(that.language));
-
-  writeVElement(parts, "text", serializeStringText(that.text));
-
-  return {
-      localName: "langStringTextType",
-      innerXml: parts.join("")
-    };
+  visitLangStringTextTypeWithContext(
+    that: AasTypes.LangStringTextType,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "langStringTextType", that, writeLangStringTextTypeAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformEnvironment(
-    that: AasTypes.Environment
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  if (that.assetAdministrationShells !== null) {
-      parts.push(openTag("assetAdministrationShells"));
-      for (const itemAssetAdministrationShells of that.assetAdministrationShells) {
-        writeClassElement(parts, this.transform(itemAssetAdministrationShells));
-      }
-      parts.push(closeTag("assetAdministrationShells"));
-    }
-
-  if (that.submodels !== null) {
-      parts.push(openTag("submodels"));
-      for (const itemSubmodels of that.submodels) {
-        writeClassElement(parts, this.transform(itemSubmodels));
-      }
-      parts.push(closeTag("submodels"));
-    }
-
-  if (that.conceptDescriptions !== null) {
-      parts.push(openTag("conceptDescriptions"));
-      for (const itemConceptDescriptions of that.conceptDescriptions) {
-        writeClassElement(parts, this.transform(itemConceptDescriptions));
-      }
-      parts.push(closeTag("conceptDescriptions"));
-    }
-
-  return {
-      localName: "environment",
-      innerXml: parts.join("")
-    };
+  visitEnvironmentWithContext(
+    that: AasTypes.Environment,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "environment", that, writeEnvironmentAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformEmbeddedDataSpecification(
-    that: AasTypes.EmbeddedDataSpecification
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  const serializedDataSpecification = this.transform(that.dataSpecification);
-    parts.push(openTag("dataSpecification"));
-    parts.push(serializedDataSpecification.innerXml);
-    parts.push(closeTag("dataSpecification"));
-
-  parts.push(openTag("dataSpecificationContent"));
-    writeClassElement(parts, this.transform(that.dataSpecificationContent));
-    parts.push(closeTag("dataSpecificationContent"));
-
-  return {
-      localName: "embeddedDataSpecification",
-      innerXml: parts.join("")
-    };
+  visitEmbeddedDataSpecificationWithContext(
+    that: AasTypes.EmbeddedDataSpecification,
+    parts: Array<string>
+  ): void {
+    writeElement(
+      parts,
+      "embeddedDataSpecification",
+      that,
+      writeEmbeddedDataSpecificationAsSequence
+    );
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformLevelType(
-    that: AasTypes.LevelType
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  writeVElement(parts, "min", serializeBooleanText(that.min));
-
-  writeVElement(parts, "nom", serializeBooleanText(that.nom));
-
-  writeVElement(parts, "typ", serializeBooleanText(that.typ));
-
-  writeVElement(parts, "max", serializeBooleanText(that.max));
-
-  return {
-      localName: "levelType",
-      innerXml: parts.join("")
-    };
+  visitLevelTypeWithContext(
+    that: AasTypes.LevelType,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "levelType", that, writeLevelTypeAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformValueReferencePair(
-    that: AasTypes.ValueReferencePair
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  writeVElement(parts, "value", serializeStringText(that.value));
-
-  const serializedValueId = this.transform(that.valueId);
-    parts.push(openTag("valueId"));
-    parts.push(serializedValueId.innerXml);
-    parts.push(closeTag("valueId"));
-
-  return {
-      localName: "valueReferencePair",
-      innerXml: parts.join("")
-    };
+  visitValueReferencePairWithContext(
+    that: AasTypes.ValueReferencePair,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "valueReferencePair", that, writeValueReferencePairAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformValueList(
-    that: AasTypes.ValueList
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  parts.push(openTag("valueReferencePairs"));
-    for (const itemValueReferencePairs of that.valueReferencePairs) {
-      writeClassElement(parts, this.transform(itemValueReferencePairs));
-    }
-    parts.push(closeTag("valueReferencePairs"));
-
-  return {
-      localName: "valueList",
-      innerXml: parts.join("")
-    };
+  visitValueListWithContext(
+    that: AasTypes.ValueList,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "valueList", that, writeValueListAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformLangStringPreferredNameTypeIec61360(
-    that: AasTypes.LangStringPreferredNameTypeIec61360
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  writeVElement(parts, "language", serializeStringText(that.language));
-
-  writeVElement(parts, "text", serializeStringText(that.text));
-
-  return {
-      localName: "langStringPreferredNameTypeIec61360",
-      innerXml: parts.join("")
-    };
+  visitLangStringPreferredNameTypeIec61360WithContext(
+    that: AasTypes.LangStringPreferredNameTypeIec61360,
+    parts: Array<string>
+  ): void {
+    writeElement(
+      parts,
+      "langStringPreferredNameTypeIec61360",
+      that,
+      writeLangStringPreferredNameTypeIec61360AsSequence
+    );
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformLangStringShortNameTypeIec61360(
-    that: AasTypes.LangStringShortNameTypeIec61360
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  writeVElement(parts, "language", serializeStringText(that.language));
-
-  writeVElement(parts, "text", serializeStringText(that.text));
-
-  return {
-      localName: "langStringShortNameTypeIec61360",
-      innerXml: parts.join("")
-    };
+  visitLangStringShortNameTypeIec61360WithContext(
+    that: AasTypes.LangStringShortNameTypeIec61360,
+    parts: Array<string>
+  ): void {
+    writeElement(
+      parts,
+      "langStringShortNameTypeIec61360",
+      that,
+      writeLangStringShortNameTypeIec61360AsSequence
+    );
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformLangStringDefinitionTypeIec61360(
-    that: AasTypes.LangStringDefinitionTypeIec61360
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  writeVElement(parts, "language", serializeStringText(that.language));
-
-  writeVElement(parts, "text", serializeStringText(that.text));
-
-  return {
-      localName: "langStringDefinitionTypeIec61360",
-      innerXml: parts.join("")
-    };
+  visitLangStringDefinitionTypeIec61360WithContext(
+    that: AasTypes.LangStringDefinitionTypeIec61360,
+    parts: Array<string>
+  ): void {
+    writeElement(
+      parts,
+      "langStringDefinitionTypeIec61360",
+      that,
+      writeLangStringDefinitionTypeIec61360AsSequence
+    );
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformDataSpecificationIec61360(
-    that: AasTypes.DataSpecificationIec61360
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  parts.push(openTag("preferredName"));
-    for (const itemPreferredName of that.preferredName) {
-      writeClassElement(parts, this.transform(itemPreferredName));
-    }
-    parts.push(closeTag("preferredName"));
-
-  if (that.shortName !== null) {
-      parts.push(openTag("shortName"));
-      for (const itemShortName of that.shortName) {
-        writeClassElement(parts, this.transform(itemShortName));
-      }
-      parts.push(closeTag("shortName"));
-    }
-
-  if (that.unit !== null) {
-      writeVElement(parts, "unit", serializeStringText(that.unit));
-    }
-
-  if (that.unitId !== null) {
-      const serializedUnitId = this.transform(that.unitId);
-      parts.push(openTag("unitId"));
-      parts.push(serializedUnitId.innerXml);
-      parts.push(closeTag("unitId"));
-    }
-
-  if (that.sourceOfDefinition !== null) {
-      writeVElement(parts, "sourceOfDefinition", serializeStringText(that.sourceOfDefinition));
-    }
-
-  if (that.symbol !== null) {
-      writeVElement(parts, "symbol", serializeStringText(that.symbol));
-    }
-
-  if (that.dataType !== null) {
-      writeVElement(parts, "dataType", serializeDataTypeIec61360Text(that.dataType));
-    }
-
-  if (that.definition !== null) {
-      parts.push(openTag("definition"));
-      for (const itemDefinition of that.definition) {
-        writeClassElement(parts, this.transform(itemDefinition));
-      }
-      parts.push(closeTag("definition"));
-    }
-
-  if (that.valueFormat !== null) {
-      writeVElement(parts, "valueFormat", serializeStringText(that.valueFormat));
-    }
-
-  if (that.valueList !== null) {
-      const serializedValueList = this.transform(that.valueList);
-      parts.push(openTag("valueList"));
-      parts.push(serializedValueList.innerXml);
-      parts.push(closeTag("valueList"));
-    }
-
-  if (that.value !== null) {
-      writeVElement(parts, "value", serializeStringText(that.value));
-    }
-
-  if (that.levelType !== null) {
-      const serializedLevelType = this.transform(that.levelType);
-      parts.push(openTag("levelType"));
-      parts.push(serializedLevelType.innerXml);
-      parts.push(closeTag("levelType"));
-    }
-
-  return {
-      localName: "dataSpecificationIec61360",
-      innerXml: parts.join("")
-    };
+  visitDataSpecificationIec61360WithContext(
+    that: AasTypes.DataSpecificationIec61360,
+    parts: Array<string>
+  ): void {
+    writeElement(
+      parts,
+      "dataSpecificationIec61360",
+      that,
+      writeDataSpecificationIec61360AsSequence
+    );
   }
 }
 
@@ -11425,13 +10599,12 @@ const SERIALIZER = new Serializer();
  *
  * @param that - AAS instance to serialize
  * @returns serialized XML string
+ * @throws {@link SerializationError} if `that` can not be serialized, *e.g.*, if
+ * a property expected to be an integer holds a fractional number
  */
 export function toXmlString(that: AasTypes.Class): string {
-  const serialized = SERIALIZER.transform(that);
   const parts = new Array<string>();
-  parts.push(openTag(serialized.localName, true));
-  parts.push(serialized.innerXml);
-  parts.push(closeTag(serialized.localName));
+  writeClass(parts, that);
   return parts.join("");
 }
 
