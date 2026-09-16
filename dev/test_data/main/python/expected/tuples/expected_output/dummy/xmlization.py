@@ -29,6 +29,12 @@ For writing, use the function :py:func:`dummy.xmlization.write` which
 translates the instance of the model into an XML document and writes it in one pass
 to the stream.
 
+The writing raises a :py:class:`SerializationException` if it can not serialize
+the instance, be it because the stream failed or because a value could not be
+written. The path of the exception points to the culprit as a Python access
+expression, *e.g.*, ``.submodels[0].id``, so that you can find it in the instance
+which you handed over.
+
 Here is an example usage how to de-serialize from a file:
 
 .. code-block::
@@ -69,6 +75,7 @@ Here is another code example where we serialize the instance:
 
 
 import base64
+import enum
 import io
 import math
 import os
@@ -80,6 +87,7 @@ from typing import (
     Iterator,
     List,
     Mapping,
+    NoReturn,
     Optional,
     Sequence,
     TextIO,
@@ -2312,8 +2320,138 @@ _READERS_FOR_SOMETHING: Mapping[
 # region Serialization
 
 
+class SerializationException(Exception):
+    """Signal that the XML serialization could not be performed."""
+
+    #: Human-readable explanation of the exception's cause
+    cause: Final[str]
+
+    def __init__(
+            self,
+            cause: str
+    ) -> None:
+        """Initialize with the given :paramref:`cause` and an empty path."""
+        self.cause = cause
+        self._segments = []  # type: List[str]
+
+    @property
+    def path(self) -> str:
+        """
+        Render the path to the erroneous value as a Python access expression.
+
+        The path points into the instance which you handed over for
+        the serialization, and *not* into an XML document -- at the point of
+        the failure, there is no document yet. For example, ``.submodels[0].id``
+        tells you that the serialization broke on ``that.submodels[0].id``.
+
+        Mind that the elements which the XML representation adds on top of
+        the instance contribute no segment, as they correspond to no attribute
+        access. This concerns the element enclosing the instance itself, and
+        the element which designates the model type of the value of a property.
+        """
+        return ''.join(self._segments)
+
+    def _prepend_property(self, name: str) -> None:
+        """Insert the access to the property :paramref:`name` before the path."""
+        self._segments.insert(0, f'.{name}')
+
+    def _prepend_index(self, index: int) -> None:
+        """Insert the access to the item at :paramref:`index` before the path."""
+        self._segments.insert(0, f'[{index}]')
+
+    def __str__(self) -> str:
+        if len(self._segments) == 0:
+            return self.cause
+
+        return f'{self.path}: {self.cause}'
+
+
+def _attribute_to_property(
+        exception: Exception,
+        prop_name: Optional[str]
+) -> NoReturn:
+    """
+    Re-raise the :paramref:`exception` as a failure of the property
+    :paramref:`prop_name`.
+
+    Every writer funnels its failures through this function, so that the path to
+    the culprit is built up as the stack unwinds: a writer knows the property whose
+    value it writes, and nothing below it does.
+
+    A :paramref:`prop_name` of ``None`` prepends nothing to the path. It does *not*
+    mean that no property is involved. It means that the access which leads to
+    the value is recorded by a writer further up the stack, so recording it here
+    as well would spell one step of the path twice.
+
+    For example, the writer of an item of a list is given no property name. The list
+    writer records its own property and the loop over the items records the index, so
+    that ``.submodel_elements[3]`` is assembled from ``submodel_elements`` above and
+    ``3`` around the item. Were the item to contribute ``submodel_elements`` as well,
+    the path would read ``.submodel_elements[3].submodel_elements``.
+
+    Likewise, an instance nested in the element of a property is written by
+    a dispatch on its run-time type, and a dispatch knows nothing about where
+    the instance came from. It is :py:func:`_write_nested_element` above it which
+    knows that the instance sits in ``.value``, so the writer which the dispatch
+    selects contributes no segment of its own.
+
+    The path therefore stays empty only when the value which broke *is* the one you
+    handed over, which is the failure :py:func:`write` funnels here: there is no
+    access leading to it to report.
+
+    We deliberately catch *any* exception, and not only the failures of
+    the underlying stream. The type annotations are not enforced at run-time, so
+    a property can hold a value which we can not serialize, and telling you where
+    that value sits is much more helpful than the bare exception. The original
+    exception is kept as the cause of the raised one.
+
+    :param exception: to be re-raised
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
+    :raise: :py:class:`SerializationException` always
+    """
+    if isinstance(exception, SerializationException):
+        if prop_name is not None:
+            exception._prepend_property(prop_name)
+
+        raise exception
+
+    failure = SerializationException(str(exception))
+    if prop_name is not None:
+        failure._prepend_property(prop_name)
+
+    raise failure from exception
+
+
+def _attribute_to_item(
+        exception: Exception,
+        index: int
+) -> NoReturn:
+    """
+    Re-raise the :paramref:`exception` as a failure of the item at
+    :paramref:`index`.
+
+    This is the counterpart of :py:func:`_attribute_to_property` for the items of
+    a list and of a tuple. The item's own element contributes no segment to
+    the path: an item is selected by its position, and not by its element tag.
+
+    :param exception: to be re-raised
+    :param index: of the item which was being written
+    :raise: :py:class:`SerializationException` always
+    """
+    if isinstance(exception, SerializationException):
+        exception._prepend_index(index)
+        raise exception
+
+    failure = SerializationException(str(exception))
+    failure._prepend_index(index)
+    raise failure from exception
+
+
 def _write_int_as_element(
     name: str,
+    prop_name: Optional[str],
     value: int,
     serializer: '_Serializer'
 ) -> None:
@@ -2322,16 +2460,24 @@ def _write_int_as_element(
     the :paramref:`name` element.
 
     :param name: of the corresponding element tag
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param value: to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    serializer.stream.write(str(value))
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        serializer.stream.write(str(value))
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_str_as_element(
     name: str,
+    prop_name: Optional[str],
     value: str,
     serializer: '_Serializer'
 ) -> None:
@@ -2340,27 +2486,65 @@ def _write_str_as_element(
     the :paramref:`name` element.
 
     :param name: of the corresponding element tag
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param value: to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
+    try:
+        serializer._write_start_element(name)
 
-    # NOTE (mristin, 2022-10-14):
-    # We ran ``timeit`` on manual code which escaped XML special characters with
-    # a dictionary, and on another snippet which called three ``.replace()``.
-    # The code with ``.replace()`` was an order of magnitude faster on our computers.
-    #
-    # The escaping is written out here, and not put in a function of its own, since
-    # a string is the commonest value in a meta-model and a call is not free.
-    serializer.stream.write(
-        value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    )
+        # NOTE (mristin, 2022-10-14):
+        # We ran ``timeit`` on manual code which escaped XML special characters with
+        # a dictionary, and on another snippet which called three ``.replace()``.
+        # The code with ``.replace()`` was an order of magnitude faster on our
+        # computers.
+        #
+        # The escaping is written out here, and not put in a function of its own,
+        # since a string is the commonest value in a meta-model and a call is not free.
+        serializer.stream.write(
+            value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        )
 
-    serializer._write_end_element(name)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
+
+
+def _write_enum_as_element(
+    name: str,
+    prop_name: Optional[str],
+    value: enum.Enum,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write the literal :paramref:`value` enclosed in the :paramref:`name` element.
+
+    A literal is written as the text of the element, so this one writer serves every
+    enumeration of the meta-model. The access to the literal's value is deliberately
+    *not* spelled out at the call site: a :paramref:`value` which is not a literal
+    of the enumeration would then break *before* this function is entered, and
+    the failure could no longer be attributed to :paramref:`prop_name`.
+
+    :param name: of the corresponding element tag
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
+    :param value: to be serialized
+    :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
+    """
+    try:
+        _write_str_as_element(name, None, value.value, serializer)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_tuple2_of__abstract_item__abstract_item(
     name: str,
+    prop_name: Optional[str],
     value: Tuple[aas_types.AbstractItem, aas_types.AbstractItem],
     serializer: '_Serializer'
 ) -> None:
@@ -2369,17 +2553,34 @@ def _write_tuple2_of__abstract_item__abstract_item(
     the :paramref:`name` element.
 
     :param name: of the enclosing element
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param value: to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    serializer.visit(value[0])
-    serializer.visit(value[1])
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+
+        try:
+            serializer.visit(value[0])
+        except Exception as exception:
+            _attribute_to_item(exception, 0)
+
+        try:
+            serializer.visit(value[1])
+        except Exception as exception:
+            _attribute_to_item(exception, 1)
+
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_tuple2_of__str__int(
     name: str,
+    prop_name: Optional[str],
     value: Tuple[str, int],
     serializer: '_Serializer'
 ) -> None:
@@ -2388,17 +2589,34 @@ def _write_tuple2_of__str__int(
     the :paramref:`name` element.
 
     :param name: of the enclosing element
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param value: to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_str_as_element('v1', value[0], serializer)
-    _write_int_as_element('v2', value[1], serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+
+        try:
+            _write_str_as_element('v1', None, value[0], serializer)
+        except Exception as exception:
+            _attribute_to_item(exception, 0)
+
+        try:
+            _write_int_as_element('v2', None, value[1], serializer)
+        except Exception as exception:
+            _attribute_to_item(exception, 1)
+
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_tuple6_of__int__some_item__abstract_item__some_item__int__result(
     name: str,
+    prop_name: Optional[str],
     value: Tuple[
         int,
         aas_types.SomeItem,
@@ -2414,21 +2632,54 @@ def _write_tuple6_of__int__some_item__abstract_item__some_item__int__result(
     the :paramref:`name` element.
 
     :param name: of the enclosing element
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param value: to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_int_as_element('v1', value[0], serializer)
-    serializer.visit(value[1])
-    serializer.visit(value[2])
-    serializer.visit(value[3])
-    _write_int_as_element('v5', value[4], serializer)
-    _write_str_as_element('v6', value[5].value, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+
+        try:
+            _write_int_as_element('v1', None, value[0], serializer)
+        except Exception as exception:
+            _attribute_to_item(exception, 0)
+
+        try:
+            serializer.visit(value[1])
+        except Exception as exception:
+            _attribute_to_item(exception, 1)
+
+        try:
+            serializer.visit(value[2])
+        except Exception as exception:
+            _attribute_to_item(exception, 2)
+
+        try:
+            serializer.visit(value[3])
+        except Exception as exception:
+            _attribute_to_item(exception, 3)
+
+        try:
+            _write_int_as_element('v5', None, value[4], serializer)
+        except Exception as exception:
+            _attribute_to_item(exception, 4)
+
+        try:
+            _write_enum_as_element('v6', None, value[5], serializer)
+        except Exception as exception:
+            _attribute_to_item(exception, 5)
+
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_some_item_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.SomeItem,
     serializer: '_Serializer'
 ) -> None:
@@ -2436,16 +2687,24 @@ def _write_some_item_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_str_as_element('name', that.name, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        _write_str_as_element('name', 'name', that.name, serializer)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_another_item_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.AnotherItem,
     serializer: '_Serializer'
 ) -> None:
@@ -2453,16 +2712,26 @@ def _write_another_item_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_int_as_element('serialNumber', that.serial_number, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        _write_int_as_element(
+            'serialNumber', 'serial_number', that.serial_number, serializer
+        )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_something_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.Something,
     serializer: '_Serializer'
 ) -> None:
@@ -2470,16 +2739,25 @@ def _write_something_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_tuple2_of__str__int('pair', that.pair, serializer)
-    _write_tuple2_of__abstract_item__abstract_item('items', that.items, serializer)
-    _write_tuple6_of__int__some_item__abstract_item__some_item__int__result(
-        'tricky', that.tricky, serializer
-    )
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        _write_tuple2_of__str__int('pair', 'pair', that.pair, serializer)
+        _write_tuple2_of__abstract_item__abstract_item(
+            'items', 'items', that.items, serializer
+        )
+        _write_tuple6_of__int__some_item__abstract_item__some_item__int__result(
+            'tricky', 'tricky', that.tricky, serializer
+        )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 class _Serializer(aas_types.AbstractVisitor):
@@ -2640,7 +2918,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_some_item_as_element('someItem', that, self)
+        _write_some_item_as_element('someItem', None, that, self)
 
     def visit_another_item(
         self,
@@ -2654,7 +2932,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_another_item_as_element('anotherItem', that, self)
+        _write_another_item_as_element('anotherItem', None, that, self)
 
     def visit_something(
         self,
@@ -2668,7 +2946,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_something_as_element('something', that, self)
+        _write_something_as_element('something', None, that, self)
 
 
 def write(instance: aas_types.Class, stream: TextIO) -> None:
@@ -2694,9 +2972,16 @@ def write(instance: aas_types.Class, stream: TextIO) -> None:
 
     :param instance: to be serialized
     :param stream: to write to
+    :raise:
+        :py:class:`SerializationException` if :paramref:`instance` could not be
+        serialized
     """
     serializer = _Serializer(stream)
-    serializer.visit(instance)
+
+    try:
+        serializer.visit(instance)
+    except Exception as exception:
+        _attribute_to_property(exception, None)
 
 
 def to_str(that: aas_types.Class) -> str:
@@ -2704,6 +2989,9 @@ def to_str(that: aas_types.Class) -> str:
     Serialize :paramref:`that` to an XML-encoded text.
 
     :param that: instance to be serialized
+    :raise:
+        :py:class:`SerializationException` if :paramref:`that` could not be
+        serialized
     :return: :paramref:`that` serialized to XML serialized to text
     """
     writer = io.StringIO()
