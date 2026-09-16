@@ -35,156 +35,191 @@ namespace AasCore.Aas3_0
         /// we distinguish the implementation, realized in
         /// <see cref="DeserializeImplementation" />, and the facade given in
         /// <see cref="Deserialize" /> class.
+        ///
+        /// Every value is de-serialized through one and the same shape,
+        /// <c>Deserializer&lt;T&gt;</c>, so that the de-serialization of a list or of
+        /// a tuple can be composed out of the de-serialization of its items. A value
+        /// is returned as a plain <c>T</c>, meaningless unless the <c>error</c> is
+        /// null, since a <c>T?</c> can not be written down for an unconstrained
+        /// <c>T</c>.
         /// </remarks>
         internal static class DeserializeImplementation
         {
-            /// <summary>Convert <paramref name="node" /> to a boolean.</summary>
+            /// <summary>
+            /// Describe <paramref name="node" /> in an error message.
+            /// </summary>
+            /// <remarks>
+            /// A JSON null is represented as a null node, so every "expected ..., but
+            /// got ..." message has to account for it. Doing so here, once, is what lets
+            /// a de-serializer take a nullable node and reject a null itself, instead of
+            /// every one of its callers checking for a null before calling it.
+            /// </remarks>
+            /// <param name="node">JSON node to be described</param>
+            private static string Describe(Nodes.JsonNode? node)
+            {
+                return (node == null)
+                    ? "a null"
+                    : node.GetType().ToString();
+            }
+
+            /// <summary>
+            /// Convert <paramref name="node" /> to a boolean.
+            /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static bool? BoolFrom(
-                Nodes.JsonNode node,
+            internal static bool BoolFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
+
                 Nodes.JsonValue? value = node as Nodes.JsonValue;
                 if (value == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonValue, but got {node.GetType()}");
-                    return null;
+                        $"Expected a boolean, but got {Describe(node)}");
+                    return default!;
                 }
+
                 bool ok = value.TryGetValue<bool>(out bool result);
                 if (!ok)
                 {
                     error = new Reporting.Error(
                         "Expected a boolean, but the conversion failed " +
                         $"from {value.ToJsonString()}");
-                    return null;
+                    return default!;
                 }
                 return result;
             }
 
             /// <summary>
-            /// Convert the <paramref name="node" /> to a long 64-bit integer.
+            /// Convert <paramref name="node" /> to a 64-bit long integer.
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static long? LongFrom(
-                Nodes.JsonNode node,
+            internal static long LongFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
+
                 Nodes.JsonValue? value = node as Nodes.JsonValue;
                 if (value == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonValue, but got {node.GetType()}");
-                    return null;
+                        $"Expected a 64-bit long integer, but got {Describe(node)}");
+                    return default!;
                 }
+
                 bool ok = value.TryGetValue<long>(out long result);
                 if (!ok)
                 {
                     error = new Reporting.Error(
                         "Expected a 64-bit long integer, but the conversion failed " +
                         $"from {value.ToJsonString()}");
-                    return null;
+                    return default!;
                 }
                 return result;
             }
 
             /// <summary>
-            /// Convert the <paramref name="node" /> to a double-precision 64-bit float.
+            /// Convert <paramref name="node" /> to a 64-bit double-precision float.
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static double? DoubleFrom(
-                Nodes.JsonNode node,
+            internal static double DoubleFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
+
                 Nodes.JsonValue? value = node as Nodes.JsonValue;
                 if (value == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonValue, but got {node.GetType()}");
-                    return null;
+                        $"Expected a 64-bit double-precision float, but got {Describe(node)}");
+                    return default!;
                 }
+
                 bool ok = value.TryGetValue<double>(out double result);
                 if (!ok)
                 {
                     error = new Reporting.Error(
-                        "Expected a 64-bit double-precision float, " +
-                        "but the conversion failed " +
+                        "Expected a 64-bit double-precision float, but the conversion failed " +
                         $"from {value.ToJsonString()}");
-                    return null;
+                    return default!;
                 }
                 return result;
             }
 
             /// <summary>
-            /// Convert the <paramref name="node" /> to a string.
+            /// Convert <paramref name="node" /> to a string.
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static string? StringFrom(
-                Nodes.JsonNode node,
+            internal static string StringFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
+
                 Nodes.JsonValue? value = node as Nodes.JsonValue;
                 if (value == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonValue, but got {node.GetType()}");
-                    return null;
+                        $"Expected a string, but got {Describe(node)}");
+                    return default!;
                 }
+
                 bool ok = value.TryGetValue<string>(out string? result);
                 if (!ok)
                 {
                     error = new Reporting.Error(
                         "Expected a string, but the conversion failed " +
                         $"from {value.ToJsonString()}");
-                    return null;
+                    return default!;
                 }
                 if (result == null)
                 {
                     error = new Reporting.Error(
                         "Expected a string, but got a null");
-                    return null;
+                    return default!;
                 }
                 return result;
             }
 
             /// <summary>
-            /// Convert the <paramref name="node" /> to bytes.
+            /// Convert <paramref name="node" /> to Base-64 encoded bytes.
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static byte[]? BytesFrom(
-                Nodes.JsonNode node,
+            internal static byte[] BytesFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
+
                 Nodes.JsonValue? value = node as Nodes.JsonValue;
                 if (value == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonValue, but got {node.GetType()}");
-                    return null;
+                        $"Expected Base-64 encoded bytes, but got {Describe(node)}");
+                    return default!;
                 }
+
                 bool ok = value.TryGetValue<string>(out string? text);
                 if (!ok)
                 {
                     error = new Reporting.Error(
-                        "Expected a string, but the conversion failed " +
+                        "Expected Base-64 encoded bytes, but the conversion failed " +
                         $"from {value.ToJsonString()}");
-                    return null;
+                    return default!;
                 }
                 if (text == null)
                 {
                     error = new Reporting.Error(
-                        "Expected a string, but got a null");
-                    return null;
+                        "Expected Base-64 encoded bytes, but got a null");
+                    return default!;
                 }
                 try
                 {
@@ -195,135 +230,209 @@ namespace AasCore.Aas3_0
                     error = new Reporting.Error(
                         "Expected Base-64 encoded bytes, but the conversion failed " +
                         $"because: {exception}");
-                    return null;
+                    return default!;
                 }
             }
 
             /// <summary>
-            /// Read a single array item.
+            /// De-serialize a value from <paramref name="node" />.
             /// </summary>
-            /// <typeparam name="T">Type of the parsed item</typeparam>
-            private delegate T? JsonClassItemDeserializer<T>(
-                Nodes.JsonNode node,
-                out Reporting.Error? error
-                ) where T : class;
+            /// <remarks>
+            /// This is the one shape of every de-serialization, which is what lets
+            /// the de-serializations be composed: an <c>As*</c> combinator turns
+            /// the de-serializers of the items into the de-serializer of a list or
+            /// of a tuple of them, and the <c>...From</c> function of a primitive,
+            /// an enumeration, a class, an interface or a named union already is one.
+            ///
+            /// Return the value; on failure it is meaningless and
+            /// <paramref name="error" /> says why. A plain <c>T</c> rather than
+            /// a <c>T?</c>, so that one unconstrained delegate serves both the value
+            /// and the reference types: for a value type an unconstrained <c>T?</c>
+            /// erases to plain <c>T</c> rather than to <c>System.Nullable&lt;T&gt;</c>,
+            /// so a <c>T?</c> would have to be split into a <c>class</c>- and
+            /// a <c>struct</c>-constrained variant, and anything ranging over both --
+            /// such as the items of a tuple -- would then need an adapter between them.
+            ///
+            /// The <paramref name="node" /> is nullable since a JSON null is represented
+            /// as a null node. Each de-serializer rejects it with a message of its own,
+            /// so that the check is paid once per type instead of once per property.
+            ///
+            /// <typeparamref name="T" /> is covariant, so that the de-serializer of
+            /// a concrete class can be used as the de-serializer of an item of a list of
+            /// its interface.
+            /// </remarks>
+            /// <typeparam name="T">Type of the de-serialized value</typeparam>
+            private delegate T Deserializer<out T>(
+                Nodes.JsonNode? node,
+                out Reporting.Error? error);
 
             /// <summary>
-            /// Parse every item of <paramref name="array" /> with
+            /// De-serialize every item of a JSON array with
             /// <paramref name="deserializeItem" />.
             /// </summary>
             /// <remarks>
-            /// This is shared by all the list-typed constructor arguments whose items are
-            /// de-serialized into a reference type (<em>e.g.</em>, a string, a byte array
-            /// or a class instance).
+            /// This is shared by all the list-typed constructor arguments, regardless of
+            /// whether their items de-serialize into a reference or into a value type.
+            /// The result is cached in a <c>static readonly</c> field per item type
+            /// (see <c>Parse_ListOf_*</c>), so that composing it costs nothing at
+            /// the point of use.
             /// </remarks>
             /// <typeparam name="T">Type of a single array item</typeparam>
-            private static List<T> ParseArrayOfClass<T>(
-                Nodes.JsonArray array,
-                JsonClassItemDeserializer<T> deserializeItem,
-                out Reporting.Error? error
-                ) where T : class
+            private static Deserializer<List<T>> AsArrayOf<T>(
+                Deserializer<T> deserializeItem)
             {
-                error = null;
-                List<T> result = new List<T>(array.Count);
-
-                int index = 0;
-                foreach (Nodes.JsonNode? item in array)
-                {
-                    if (item == null)
+                return (
+                    Nodes.JsonNode? node,
+                    out Reporting.Error? error) =>
                     {
-                        error = new Reporting.Error(
-                            "Expected a non-null item, but got a null");
-                        error.PrependSegment(
-                            new Reporting.IndexSegment(
-                                index));
+                        error = null;
+
+                        Nodes.JsonArray? array = node as Nodes.JsonArray;
+                        if (array == null)
+                        {
+                            error = new Reporting.Error(
+                                $"Expected a JsonArray, but got {Describe(node)}");
+                            return default!;
+                        }
+
+                        List<T> result = new List<T>(array.Count);
+
+                        int index = 0;
+                        foreach (Nodes.JsonNode? item in array)
+                        {
+                            T parsedItem = deserializeItem(item, out error);
+                            if (error != null)
+                            {
+                                error.PrependSegment(
+                                    new Reporting.IndexSegment(
+                                        index));
+                                return default!;
+                            }
+
+                            result.Add(parsedItem);
+
+                            index++;
+                        }
+
                         return result;
-                    }
-
-                    T? parsedItem = deserializeItem(
-                        item ?? throw new System.InvalidOperationException(),
-                        out error);
-                    if (error != null)
-                    {
-                        error.PrependSegment(
-                            new Reporting.IndexSegment(
-                                index));
-                        return result;
-                    }
-
-                    result.Add(
-                        parsedItem
-                            ?? throw new System.InvalidOperationException(
-                                "Unexpected result null when error is null"));
-
-                    index++;
-                }
-
-                return result;
+                    };
             }
 
             /// <summary>
-            /// Read a single array item.
+            /// Extract the <c>modelType</c> property of <paramref name="obj" />.
             /// </summary>
-            /// <typeparam name="T">Type of the parsed item</typeparam>
-            private delegate T? JsonStructItemDeserializer<T>(
-                Nodes.JsonNode node,
-                out Reporting.Error? error
-                ) where T : struct;
-
-            /// <summary>
-            /// Parse every item of <paramref name="array" /> with
-            /// <paramref name="deserializeItem" />.
-            /// </summary>
-            /// <remarks>
-            /// This is shared by all the list-typed constructor arguments whose items are
-            /// de-serialized into a value type (<em>e.g.</em>, a bool, a number or
-            /// an enumeration literal).
-            /// </remarks>
-            /// <typeparam name="T">Type of a single array item</typeparam>
-            private static List<T> ParseArrayOfStruct<T>(
-                Nodes.JsonArray array,
-                JsonStructItemDeserializer<T> deserializeItem,
-                out Reporting.Error? error
-                ) where T : struct
+            /// <param name="obj">JSON object to be inspected</param>
+            /// <param name="error">Error, if any, during the deserialization</param>
+            private static string ModelTypeFrom(
+                Nodes.JsonObject obj,
+                out Reporting.Error? error)
             {
-                error = null;
-                List<T> result = new List<T>(array.Count);
-
-                int index = 0;
-                foreach (Nodes.JsonNode? item in array)
+                Nodes.JsonNode? modelTypeNode = obj["modelType"];
+                if (modelTypeNode == null)
                 {
-                    if (item == null)
-                    {
-                        error = new Reporting.Error(
-                            "Expected a non-null item, but got a null");
-                        error.PrependSegment(
-                            new Reporting.IndexSegment(
-                                index));
-                        return result;
-                    }
-
-                    T? parsedItem = deserializeItem(
-                        item ?? throw new System.InvalidOperationException(),
-                        out error);
-                    if (error != null)
-                    {
-                        error.PrependSegment(
-                            new Reporting.IndexSegment(
-                                index));
-                        return result;
-                    }
-
-                    result.Add(
-                        parsedItem
-                            ?? throw new System.InvalidOperationException(
-                                "Unexpected result null when error is null"));
-
-                    index++;
+                    error = new Reporting.Error(
+                        "Expected a model type, but none is present");
+                    return default!;
                 }
 
-                return result;
+                return StringFrom(modelTypeNode, out error);
             }
+
+            private static readonly Deserializer<List<IReference>> Parse_ListOf_IReference = (
+                AsArrayOf<IReference>(
+                    ReferenceFrom));
+
+            private static readonly Deserializer<
+                List<IEmbeddedDataSpecification>
+            > Parse_ListOf_IEmbeddedDataSpecification = (
+                AsArrayOf<IEmbeddedDataSpecification>(
+                    EmbeddedDataSpecificationFrom));
+
+            private static readonly Deserializer<List<IExtension>> Parse_ListOf_IExtension = (
+                AsArrayOf<IExtension>(
+                    ExtensionFrom));
+
+            private static readonly Deserializer<
+                List<ILangStringNameType>
+            > Parse_ListOf_ILangStringNameType = (
+                AsArrayOf<ILangStringNameType>(
+                    LangStringNameTypeFrom));
+
+            private static readonly Deserializer<
+                List<ILangStringTextType>
+            > Parse_ListOf_ILangStringTextType = (
+                AsArrayOf<ILangStringTextType>(
+                    LangStringTextTypeFrom));
+
+            private static readonly Deserializer<
+                List<ISpecificAssetId>
+            > Parse_ListOf_ISpecificAssetId = (
+                AsArrayOf<ISpecificAssetId>(
+                    SpecificAssetIdFrom));
+
+            private static readonly Deserializer<List<IQualifier>> Parse_ListOf_IQualifier = (
+                AsArrayOf<IQualifier>(
+                    QualifierFrom));
+
+            private static readonly Deserializer<
+                List<ISubmodelElement>
+            > Parse_ListOf_ISubmodelElement = (
+                AsArrayOf<ISubmodelElement>(
+                    ISubmodelElementFrom));
+
+            private static readonly Deserializer<List<IDataElement>> Parse_ListOf_IDataElement = (
+                AsArrayOf<IDataElement>(
+                    IDataElementFrom));
+
+            private static readonly Deserializer<
+                List<IOperationVariable>
+            > Parse_ListOf_IOperationVariable = (
+                AsArrayOf<IOperationVariable>(
+                    OperationVariableFrom));
+
+            private static readonly Deserializer<List<IKey>> Parse_ListOf_IKey = (
+                AsArrayOf<IKey>(
+                    KeyFrom));
+
+            private static readonly Deserializer<
+                List<IAssetAdministrationShell>
+            > Parse_ListOf_IAssetAdministrationShell = (
+                AsArrayOf<IAssetAdministrationShell>(
+                    AssetAdministrationShellFrom));
+
+            private static readonly Deserializer<List<ISubmodel>> Parse_ListOf_ISubmodel = (
+                AsArrayOf<ISubmodel>(
+                    SubmodelFrom));
+
+            private static readonly Deserializer<
+                List<IConceptDescription>
+            > Parse_ListOf_IConceptDescription = (
+                AsArrayOf<IConceptDescription>(
+                    ConceptDescriptionFrom));
+
+            private static readonly Deserializer<
+                List<IValueReferencePair>
+            > Parse_ListOf_IValueReferencePair = (
+                AsArrayOf<IValueReferencePair>(
+                    ValueReferencePairFrom));
+
+            private static readonly Deserializer<
+                List<ILangStringPreferredNameTypeIec61360>
+            > Parse_ListOf_ILangStringPreferredNameTypeIec61360 = (
+                AsArrayOf<ILangStringPreferredNameTypeIec61360>(
+                    LangStringPreferredNameTypeIec61360From));
+
+            private static readonly Deserializer<
+                List<ILangStringShortNameTypeIec61360>
+            > Parse_ListOf_ILangStringShortNameTypeIec61360 = (
+                AsArrayOf<ILangStringShortNameTypeIec61360>(
+                    LangStringShortNameTypeIec61360From));
+
+            private static readonly Deserializer<
+                List<ILangStringDefinitionTypeIec61360>
+            > Parse_ListOf_ILangStringDefinitionTypeIec61360 = (
+                AsArrayOf<ILangStringDefinitionTypeIec61360>(
+                    LangStringDefinitionTypeIec61360From));
 
             /// <summary>
             /// Deserialize an instance of IHasSemantics by dispatching
@@ -332,99 +441,84 @@ namespace AasCore.Aas3_0
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            public static Aas.IHasSemantics? IHasSemanticsFrom(
-                Nodes.JsonNode node,
+            public static Aas.IHasSemantics IHasSemanticsFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-
-                var obj = node as Nodes.JsonObject;
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected Nodes.JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing IHasSemantics, but got {Describe(node)}");
+                    return default!;
                 }
 
-                Nodes.JsonNode? modelTypeNode = obj["modelType"];
-                if (modelTypeNode == null)
-                {
-                    error = new Reporting.Error(
-                        "Expected a model type, but none is present");
-                    return null;
-                }
-                string? modelType = DeserializeImplementation.StringFrom(
-                    modelTypeNode, out error);
+                string modelType = ModelTypeFrom(obj, out error);
                 if (error != null)
                 {
-                    return null;
-                }
-                if (modelType == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected modelType null when error null");
+                    return default!;
                 }
 
                 switch (modelType)
                 {
-                    case "RelationshipElement":
-                        return RelationshipElementFrom(
-                            node, out error);
-                    case "AnnotatedRelationshipElement":
-                        return AnnotatedRelationshipElementFrom(
-                            node, out error);
-                    case "BasicEventElement":
-                        return BasicEventElementFrom(
-                            node, out error);
-                    case "Blob":
-                        return BlobFrom(
-                            node, out error);
-                    case "Capability":
-                        return CapabilityFrom(
-                            node, out error);
-                    case "Entity":
-                        return EntityFrom(
-                            node, out error);
-                    case "Extension":
-                        return ExtensionFrom(
-                            node, out error);
-                    case "File":
-                        return FileFrom(
-                            node, out error);
-                    case "MultiLanguageProperty":
-                        return MultiLanguagePropertyFrom(
-                            node, out error);
-                    case "Operation":
-                        return OperationFrom(
-                            node, out error);
-                    case "Property":
-                        return PropertyFrom(
-                            node, out error);
-                    case "Qualifier":
-                        return QualifierFrom(
-                            node, out error);
-                    case "Range":
-                        return RangeFrom(
-                            node, out error);
-                    case "ReferenceElement":
-                        return ReferenceElementFrom(
-                            node, out error);
-                    case "SpecificAssetId":
-                        return SpecificAssetIdFrom(
-                            node, out error);
-                    case "Submodel":
-                        return SubmodelFrom(
-                            node, out error);
-                    case "SubmodelElementCollection":
-                        return SubmodelElementCollectionFrom(
-                            node, out error);
-                    case "SubmodelElementList":
-                        return SubmodelElementListFrom(
-                            node, out error);
-                    default:
-                        error = new Reporting.Error(
-                            $"Unexpected model type for IHasSemantics: {modelType}");
-                        return null;
+                case "RelationshipElement":
+                    return RelationshipElementFrom(
+                        node, out error);
+                case "AnnotatedRelationshipElement":
+                    return AnnotatedRelationshipElementFrom(
+                        node, out error);
+                case "BasicEventElement":
+                    return BasicEventElementFrom(
+                        node, out error);
+                case "Blob":
+                    return BlobFrom(
+                        node, out error);
+                case "Capability":
+                    return CapabilityFrom(
+                        node, out error);
+                case "Entity":
+                    return EntityFrom(
+                        node, out error);
+                case "Extension":
+                    return ExtensionFrom(
+                        node, out error);
+                case "File":
+                    return FileFrom(
+                        node, out error);
+                case "MultiLanguageProperty":
+                    return MultiLanguagePropertyFrom(
+                        node, out error);
+                case "Operation":
+                    return OperationFrom(
+                        node, out error);
+                case "Property":
+                    return PropertyFrom(
+                        node, out error);
+                case "Qualifier":
+                    return QualifierFrom(
+                        node, out error);
+                case "Range":
+                    return RangeFrom(
+                        node, out error);
+                case "ReferenceElement":
+                    return ReferenceElementFrom(
+                        node, out error);
+                case "SpecificAssetId":
+                    return SpecificAssetIdFrom(
+                        node, out error);
+                case "Submodel":
+                    return SubmodelFrom(
+                        node, out error);
+                case "SubmodelElementCollection":
+                    return SubmodelElementCollectionFrom(
+                        node, out error);
+                case "SubmodelElementList":
+                    return SubmodelElementListFrom(
+                        node, out error);
+                default:
+                    error = new Reporting.Error(
+                        $"Unexpected model type for IHasSemantics: {modelType}");
+                    return default!;
                 }
             }  // public static Aas.IHasSemantics IHasSemanticsFrom
 
@@ -433,8 +527,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.Extension? ExtensionFrom(
-                Nodes.JsonNode node,
+            internal static Aas.Extension ExtensionFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -443,8 +537,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing Extension, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theName = null;
@@ -459,200 +553,41 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "name":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "name"));
-                                return null;
-                            }
-
-                            theName = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "name"));
-                                return null;
-                            }
-                            if (theName == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theName null when error is also null");
-                            }
+                            theName = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "semanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-
-                            theSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-                            if (theSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSemanticId null when error is also null");
-                            }
+                            theSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "supplementalSemanticIds":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySupplementalSemanticIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySupplementalSemanticIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-                            theSupplementalSemanticIds = ParseArrayOfClass<IReference>(
-                                arraySupplementalSemanticIds,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
+                            theSupplementalSemanticIds = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "valueType":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueType"));
-                                return null;
-                            }
-
-                            theValueType = DeserializeImplementation.DataTypeDefXsdFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueType"));
-                                return null;
-                            }
-                            if (theValueType == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValueType null when error is also null");
-                            }
+                            theValueType = DataTypeDefXsdFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "value":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-
-                            theValue = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-                            if (theValue == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValue null when error is also null");
-                            }
+                            theValue = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "refersTo":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "refersTo"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayRefersTo = keyValue.Value as Nodes.JsonArray;
-                            if (arrayRefersTo == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "refersTo"));
-                                return null;
-                            }
-                            theRefersTo = ParseArrayOfClass<IReference>(
-                                arrayRefersTo,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "refersTo"));
-                                return null;
-                            }
+                            theRefersTo = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -660,7 +595,7 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"name\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.Extension(
@@ -681,96 +616,81 @@ namespace AasCore.Aas3_0
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            public static Aas.IHasExtensions? IHasExtensionsFrom(
-                Nodes.JsonNode node,
+            public static Aas.IHasExtensions IHasExtensionsFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-
-                var obj = node as Nodes.JsonObject;
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected Nodes.JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing IHasExtensions, but got {Describe(node)}");
+                    return default!;
                 }
 
-                Nodes.JsonNode? modelTypeNode = obj["modelType"];
-                if (modelTypeNode == null)
-                {
-                    error = new Reporting.Error(
-                        "Expected a model type, but none is present");
-                    return null;
-                }
-                string? modelType = DeserializeImplementation.StringFrom(
-                    modelTypeNode, out error);
+                string modelType = ModelTypeFrom(obj, out error);
                 if (error != null)
                 {
-                    return null;
-                }
-                if (modelType == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected modelType null when error null");
+                    return default!;
                 }
 
                 switch (modelType)
                 {
-                    case "RelationshipElement":
-                        return RelationshipElementFrom(
-                            node, out error);
-                    case "AnnotatedRelationshipElement":
-                        return AnnotatedRelationshipElementFrom(
-                            node, out error);
-                    case "AssetAdministrationShell":
-                        return AssetAdministrationShellFrom(
-                            node, out error);
-                    case "BasicEventElement":
-                        return BasicEventElementFrom(
-                            node, out error);
-                    case "Blob":
-                        return BlobFrom(
-                            node, out error);
-                    case "Capability":
-                        return CapabilityFrom(
-                            node, out error);
-                    case "ConceptDescription":
-                        return ConceptDescriptionFrom(
-                            node, out error);
-                    case "Entity":
-                        return EntityFrom(
-                            node, out error);
-                    case "File":
-                        return FileFrom(
-                            node, out error);
-                    case "MultiLanguageProperty":
-                        return MultiLanguagePropertyFrom(
-                            node, out error);
-                    case "Operation":
-                        return OperationFrom(
-                            node, out error);
-                    case "Property":
-                        return PropertyFrom(
-                            node, out error);
-                    case "Range":
-                        return RangeFrom(
-                            node, out error);
-                    case "ReferenceElement":
-                        return ReferenceElementFrom(
-                            node, out error);
-                    case "Submodel":
-                        return SubmodelFrom(
-                            node, out error);
-                    case "SubmodelElementCollection":
-                        return SubmodelElementCollectionFrom(
-                            node, out error);
-                    case "SubmodelElementList":
-                        return SubmodelElementListFrom(
-                            node, out error);
-                    default:
-                        error = new Reporting.Error(
-                            $"Unexpected model type for IHasExtensions: {modelType}");
-                        return null;
+                case "RelationshipElement":
+                    return RelationshipElementFrom(
+                        node, out error);
+                case "AnnotatedRelationshipElement":
+                    return AnnotatedRelationshipElementFrom(
+                        node, out error);
+                case "AssetAdministrationShell":
+                    return AssetAdministrationShellFrom(
+                        node, out error);
+                case "BasicEventElement":
+                    return BasicEventElementFrom(
+                        node, out error);
+                case "Blob":
+                    return BlobFrom(
+                        node, out error);
+                case "Capability":
+                    return CapabilityFrom(
+                        node, out error);
+                case "ConceptDescription":
+                    return ConceptDescriptionFrom(
+                        node, out error);
+                case "Entity":
+                    return EntityFrom(
+                        node, out error);
+                case "File":
+                    return FileFrom(
+                        node, out error);
+                case "MultiLanguageProperty":
+                    return MultiLanguagePropertyFrom(
+                        node, out error);
+                case "Operation":
+                    return OperationFrom(
+                        node, out error);
+                case "Property":
+                    return PropertyFrom(
+                        node, out error);
+                case "Range":
+                    return RangeFrom(
+                        node, out error);
+                case "ReferenceElement":
+                    return ReferenceElementFrom(
+                        node, out error);
+                case "Submodel":
+                    return SubmodelFrom(
+                        node, out error);
+                case "SubmodelElementCollection":
+                    return SubmodelElementCollectionFrom(
+                        node, out error);
+                case "SubmodelElementList":
+                    return SubmodelElementListFrom(
+                        node, out error);
+                default:
+                    error = new Reporting.Error(
+                        $"Unexpected model type for IHasExtensions: {modelType}");
+                    return default!;
                 }
             }  // public static Aas.IHasExtensions IHasExtensionsFrom
 
@@ -781,96 +701,81 @@ namespace AasCore.Aas3_0
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            public static Aas.IReferable? IReferableFrom(
-                Nodes.JsonNode node,
+            public static Aas.IReferable IReferableFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-
-                var obj = node as Nodes.JsonObject;
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected Nodes.JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing IReferable, but got {Describe(node)}");
+                    return default!;
                 }
 
-                Nodes.JsonNode? modelTypeNode = obj["modelType"];
-                if (modelTypeNode == null)
-                {
-                    error = new Reporting.Error(
-                        "Expected a model type, but none is present");
-                    return null;
-                }
-                string? modelType = DeserializeImplementation.StringFrom(
-                    modelTypeNode, out error);
+                string modelType = ModelTypeFrom(obj, out error);
                 if (error != null)
                 {
-                    return null;
-                }
-                if (modelType == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected modelType null when error null");
+                    return default!;
                 }
 
                 switch (modelType)
                 {
-                    case "RelationshipElement":
-                        return RelationshipElementFrom(
-                            node, out error);
-                    case "AnnotatedRelationshipElement":
-                        return AnnotatedRelationshipElementFrom(
-                            node, out error);
-                    case "AssetAdministrationShell":
-                        return AssetAdministrationShellFrom(
-                            node, out error);
-                    case "BasicEventElement":
-                        return BasicEventElementFrom(
-                            node, out error);
-                    case "Blob":
-                        return BlobFrom(
-                            node, out error);
-                    case "Capability":
-                        return CapabilityFrom(
-                            node, out error);
-                    case "ConceptDescription":
-                        return ConceptDescriptionFrom(
-                            node, out error);
-                    case "Entity":
-                        return EntityFrom(
-                            node, out error);
-                    case "File":
-                        return FileFrom(
-                            node, out error);
-                    case "MultiLanguageProperty":
-                        return MultiLanguagePropertyFrom(
-                            node, out error);
-                    case "Operation":
-                        return OperationFrom(
-                            node, out error);
-                    case "Property":
-                        return PropertyFrom(
-                            node, out error);
-                    case "Range":
-                        return RangeFrom(
-                            node, out error);
-                    case "ReferenceElement":
-                        return ReferenceElementFrom(
-                            node, out error);
-                    case "Submodel":
-                        return SubmodelFrom(
-                            node, out error);
-                    case "SubmodelElementCollection":
-                        return SubmodelElementCollectionFrom(
-                            node, out error);
-                    case "SubmodelElementList":
-                        return SubmodelElementListFrom(
-                            node, out error);
-                    default:
-                        error = new Reporting.Error(
-                            $"Unexpected model type for IReferable: {modelType}");
-                        return null;
+                case "RelationshipElement":
+                    return RelationshipElementFrom(
+                        node, out error);
+                case "AnnotatedRelationshipElement":
+                    return AnnotatedRelationshipElementFrom(
+                        node, out error);
+                case "AssetAdministrationShell":
+                    return AssetAdministrationShellFrom(
+                        node, out error);
+                case "BasicEventElement":
+                    return BasicEventElementFrom(
+                        node, out error);
+                case "Blob":
+                    return BlobFrom(
+                        node, out error);
+                case "Capability":
+                    return CapabilityFrom(
+                        node, out error);
+                case "ConceptDescription":
+                    return ConceptDescriptionFrom(
+                        node, out error);
+                case "Entity":
+                    return EntityFrom(
+                        node, out error);
+                case "File":
+                    return FileFrom(
+                        node, out error);
+                case "MultiLanguageProperty":
+                    return MultiLanguagePropertyFrom(
+                        node, out error);
+                case "Operation":
+                    return OperationFrom(
+                        node, out error);
+                case "Property":
+                    return PropertyFrom(
+                        node, out error);
+                case "Range":
+                    return RangeFrom(
+                        node, out error);
+                case "ReferenceElement":
+                    return ReferenceElementFrom(
+                        node, out error);
+                case "Submodel":
+                    return SubmodelFrom(
+                        node, out error);
+                case "SubmodelElementCollection":
+                    return SubmodelElementCollectionFrom(
+                        node, out error);
+                case "SubmodelElementList":
+                    return SubmodelElementListFrom(
+                        node, out error);
+                default:
+                    error = new Reporting.Error(
+                        $"Unexpected model type for IReferable: {modelType}");
+                    return default!;
                 }
             }  // public static Aas.IReferable IReferableFrom
 
@@ -881,54 +786,39 @@ namespace AasCore.Aas3_0
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            public static Aas.IIdentifiable? IIdentifiableFrom(
-                Nodes.JsonNode node,
+            public static Aas.IIdentifiable IIdentifiableFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-
-                var obj = node as Nodes.JsonObject;
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected Nodes.JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing IIdentifiable, but got {Describe(node)}");
+                    return default!;
                 }
 
-                Nodes.JsonNode? modelTypeNode = obj["modelType"];
-                if (modelTypeNode == null)
-                {
-                    error = new Reporting.Error(
-                        "Expected a model type, but none is present");
-                    return null;
-                }
-                string? modelType = DeserializeImplementation.StringFrom(
-                    modelTypeNode, out error);
+                string modelType = ModelTypeFrom(obj, out error);
                 if (error != null)
                 {
-                    return null;
-                }
-                if (modelType == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected modelType null when error null");
+                    return default!;
                 }
 
                 switch (modelType)
                 {
-                    case "AssetAdministrationShell":
-                        return AssetAdministrationShellFrom(
-                            node, out error);
-                    case "ConceptDescription":
-                        return ConceptDescriptionFrom(
-                            node, out error);
-                    case "Submodel":
-                        return SubmodelFrom(
-                            node, out error);
-                    default:
-                        error = new Reporting.Error(
-                            $"Unexpected model type for IIdentifiable: {modelType}");
-                        return null;
+                case "AssetAdministrationShell":
+                    return AssetAdministrationShellFrom(
+                        node, out error);
+                case "ConceptDescription":
+                    return ConceptDescriptionFrom(
+                        node, out error);
+                case "Submodel":
+                    return SubmodelFrom(
+                        node, out error);
+                default:
+                    error = new Reporting.Error(
+                        $"Unexpected model type for IIdentifiable: {modelType}");
+                    return default!;
                 }
             }  // public static Aas.IIdentifiable IIdentifiableFrom
 
@@ -937,29 +827,25 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.ModellingKind? ModellingKindFrom(
-                Nodes.JsonNode node,
+            internal static Aas.ModellingKind ModellingKindFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-                string? text = DeserializeImplementation.StringFrom(
-                    node, out error);
+                string text = StringFrom(node, out error);
                 if (error != null)
                 {
-                    return null;
+                    return default!;
                 }
-                if (text == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected text null if error null");
-                }
+
                 Aas.ModellingKind? result = Stringification.ModellingKindFromString(text);
                 if (result == null)
                 {
                     error = new Reporting.Error(
                         "Not a valid JSON representation of ModellingKind");
+                    return default!;
                 }
-                return result;
+
+                return result.Value;
             }  // internal static ModellingKindFrom
 
             /// <summary>
@@ -969,48 +855,33 @@ namespace AasCore.Aas3_0
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            public static Aas.IHasKind? IHasKindFrom(
-                Nodes.JsonNode node,
+            public static Aas.IHasKind IHasKindFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-
-                var obj = node as Nodes.JsonObject;
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected Nodes.JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing IHasKind, but got {Describe(node)}");
+                    return default!;
                 }
 
-                Nodes.JsonNode? modelTypeNode = obj["modelType"];
-                if (modelTypeNode == null)
-                {
-                    error = new Reporting.Error(
-                        "Expected a model type, but none is present");
-                    return null;
-                }
-                string? modelType = DeserializeImplementation.StringFrom(
-                    modelTypeNode, out error);
+                string modelType = ModelTypeFrom(obj, out error);
                 if (error != null)
                 {
-                    return null;
-                }
-                if (modelType == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected modelType null when error null");
+                    return default!;
                 }
 
                 switch (modelType)
                 {
-                    case "Submodel":
-                        return SubmodelFrom(
-                            node, out error);
-                    default:
-                        error = new Reporting.Error(
-                            $"Unexpected model type for IHasKind: {modelType}");
-                        return null;
+                case "Submodel":
+                    return SubmodelFrom(
+                        node, out error);
+                default:
+                    error = new Reporting.Error(
+                        $"Unexpected model type for IHasKind: {modelType}");
+                    return default!;
                 }
             }  // public static Aas.IHasKind IHasKindFrom
 
@@ -1021,99 +892,84 @@ namespace AasCore.Aas3_0
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            public static Aas.IHasDataSpecification? IHasDataSpecificationFrom(
-                Nodes.JsonNode node,
+            public static Aas.IHasDataSpecification IHasDataSpecificationFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-
-                var obj = node as Nodes.JsonObject;
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected Nodes.JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing IHasDataSpecification, but got {Describe(node)}");
+                    return default!;
                 }
 
-                Nodes.JsonNode? modelTypeNode = obj["modelType"];
-                if (modelTypeNode == null)
-                {
-                    error = new Reporting.Error(
-                        "Expected a model type, but none is present");
-                    return null;
-                }
-                string? modelType = DeserializeImplementation.StringFrom(
-                    modelTypeNode, out error);
+                string modelType = ModelTypeFrom(obj, out error);
                 if (error != null)
                 {
-                    return null;
-                }
-                if (modelType == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected modelType null when error null");
+                    return default!;
                 }
 
                 switch (modelType)
                 {
-                    case "AdministrativeInformation":
-                        return AdministrativeInformationFrom(
-                            node, out error);
-                    case "RelationshipElement":
-                        return RelationshipElementFrom(
-                            node, out error);
-                    case "AnnotatedRelationshipElement":
-                        return AnnotatedRelationshipElementFrom(
-                            node, out error);
-                    case "AssetAdministrationShell":
-                        return AssetAdministrationShellFrom(
-                            node, out error);
-                    case "BasicEventElement":
-                        return BasicEventElementFrom(
-                            node, out error);
-                    case "Blob":
-                        return BlobFrom(
-                            node, out error);
-                    case "Capability":
-                        return CapabilityFrom(
-                            node, out error);
-                    case "ConceptDescription":
-                        return ConceptDescriptionFrom(
-                            node, out error);
-                    case "Entity":
-                        return EntityFrom(
-                            node, out error);
-                    case "File":
-                        return FileFrom(
-                            node, out error);
-                    case "MultiLanguageProperty":
-                        return MultiLanguagePropertyFrom(
-                            node, out error);
-                    case "Operation":
-                        return OperationFrom(
-                            node, out error);
-                    case "Property":
-                        return PropertyFrom(
-                            node, out error);
-                    case "Range":
-                        return RangeFrom(
-                            node, out error);
-                    case "ReferenceElement":
-                        return ReferenceElementFrom(
-                            node, out error);
-                    case "Submodel":
-                        return SubmodelFrom(
-                            node, out error);
-                    case "SubmodelElementCollection":
-                        return SubmodelElementCollectionFrom(
-                            node, out error);
-                    case "SubmodelElementList":
-                        return SubmodelElementListFrom(
-                            node, out error);
-                    default:
-                        error = new Reporting.Error(
-                            $"Unexpected model type for IHasDataSpecification: {modelType}");
-                        return null;
+                case "AdministrativeInformation":
+                    return AdministrativeInformationFrom(
+                        node, out error);
+                case "RelationshipElement":
+                    return RelationshipElementFrom(
+                        node, out error);
+                case "AnnotatedRelationshipElement":
+                    return AnnotatedRelationshipElementFrom(
+                        node, out error);
+                case "AssetAdministrationShell":
+                    return AssetAdministrationShellFrom(
+                        node, out error);
+                case "BasicEventElement":
+                    return BasicEventElementFrom(
+                        node, out error);
+                case "Blob":
+                    return BlobFrom(
+                        node, out error);
+                case "Capability":
+                    return CapabilityFrom(
+                        node, out error);
+                case "ConceptDescription":
+                    return ConceptDescriptionFrom(
+                        node, out error);
+                case "Entity":
+                    return EntityFrom(
+                        node, out error);
+                case "File":
+                    return FileFrom(
+                        node, out error);
+                case "MultiLanguageProperty":
+                    return MultiLanguagePropertyFrom(
+                        node, out error);
+                case "Operation":
+                    return OperationFrom(
+                        node, out error);
+                case "Property":
+                    return PropertyFrom(
+                        node, out error);
+                case "Range":
+                    return RangeFrom(
+                        node, out error);
+                case "ReferenceElement":
+                    return ReferenceElementFrom(
+                        node, out error);
+                case "Submodel":
+                    return SubmodelFrom(
+                        node, out error);
+                case "SubmodelElementCollection":
+                    return SubmodelElementCollectionFrom(
+                        node, out error);
+                case "SubmodelElementList":
+                    return SubmodelElementListFrom(
+                        node, out error);
+                default:
+                    error = new Reporting.Error(
+                        $"Unexpected model type for IHasDataSpecification: {modelType}");
+                    return default!;
                 }
             }  // public static Aas.IHasDataSpecification IHasDataSpecificationFrom
 
@@ -1122,8 +978,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.AdministrativeInformation? AdministrativeInformationFrom(
-                Nodes.JsonNode node,
+            internal static Aas.AdministrativeInformation AdministrativeInformationFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -1132,8 +988,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing AdministrativeInformation, but got {Describe(node)}");
+                    return default!;
                 }
 
                 List<IEmbeddedDataSpecification>? theEmbeddedDataSpecifications = null;
@@ -1147,169 +1003,39 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "embeddedDataSpecifications":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayEmbeddedDataSpecifications = keyValue.Value as Nodes.JsonArray;
-                            if (arrayEmbeddedDataSpecifications == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-                            theEmbeddedDataSpecifications = ParseArrayOfClass<IEmbeddedDataSpecification>(
-                                arrayEmbeddedDataSpecifications,
-                                DeserializeImplementation.EmbeddedDataSpecificationFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
+                            theEmbeddedDataSpecifications = Parse_ListOf_IEmbeddedDataSpecification(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "version":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "version"));
-                                return null;
-                            }
-
-                            theVersion = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "version"));
-                                return null;
-                            }
-                            if (theVersion == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theVersion null when error is also null");
-                            }
+                            theVersion = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "revision":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "revision"));
-                                return null;
-                            }
-
-                            theRevision = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "revision"));
-                                return null;
-                            }
-                            if (theRevision == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theRevision null when error is also null");
-                            }
+                            theRevision = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "creator":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "creator"));
-                                return null;
-                            }
-
-                            theCreator = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "creator"));
-                                return null;
-                            }
-                            if (theCreator == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theCreator null when error is also null");
-                            }
+                            theCreator = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "templateId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "templateId"));
-                                return null;
-                            }
-
-                            theTemplateId = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "templateId"));
-                                return null;
-                            }
-                            if (theTemplateId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theTemplateId null when error is also null");
-                            }
+                            theTemplateId = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
-
-
 
                 return new Aas.AdministrativeInformation(
                     theEmbeddedDataSpecifications,
@@ -1326,90 +1052,75 @@ namespace AasCore.Aas3_0
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            public static Aas.IQualifiable? IQualifiableFrom(
-                Nodes.JsonNode node,
+            public static Aas.IQualifiable IQualifiableFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-
-                var obj = node as Nodes.JsonObject;
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected Nodes.JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing IQualifiable, but got {Describe(node)}");
+                    return default!;
                 }
 
-                Nodes.JsonNode? modelTypeNode = obj["modelType"];
-                if (modelTypeNode == null)
-                {
-                    error = new Reporting.Error(
-                        "Expected a model type, but none is present");
-                    return null;
-                }
-                string? modelType = DeserializeImplementation.StringFrom(
-                    modelTypeNode, out error);
+                string modelType = ModelTypeFrom(obj, out error);
                 if (error != null)
                 {
-                    return null;
-                }
-                if (modelType == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected modelType null when error null");
+                    return default!;
                 }
 
                 switch (modelType)
                 {
-                    case "RelationshipElement":
-                        return RelationshipElementFrom(
-                            node, out error);
-                    case "AnnotatedRelationshipElement":
-                        return AnnotatedRelationshipElementFrom(
-                            node, out error);
-                    case "BasicEventElement":
-                        return BasicEventElementFrom(
-                            node, out error);
-                    case "Blob":
-                        return BlobFrom(
-                            node, out error);
-                    case "Capability":
-                        return CapabilityFrom(
-                            node, out error);
-                    case "Entity":
-                        return EntityFrom(
-                            node, out error);
-                    case "File":
-                        return FileFrom(
-                            node, out error);
-                    case "MultiLanguageProperty":
-                        return MultiLanguagePropertyFrom(
-                            node, out error);
-                    case "Operation":
-                        return OperationFrom(
-                            node, out error);
-                    case "Property":
-                        return PropertyFrom(
-                            node, out error);
-                    case "Range":
-                        return RangeFrom(
-                            node, out error);
-                    case "ReferenceElement":
-                        return ReferenceElementFrom(
-                            node, out error);
-                    case "Submodel":
-                        return SubmodelFrom(
-                            node, out error);
-                    case "SubmodelElementCollection":
-                        return SubmodelElementCollectionFrom(
-                            node, out error);
-                    case "SubmodelElementList":
-                        return SubmodelElementListFrom(
-                            node, out error);
-                    default:
-                        error = new Reporting.Error(
-                            $"Unexpected model type for IQualifiable: {modelType}");
-                        return null;
+                case "RelationshipElement":
+                    return RelationshipElementFrom(
+                        node, out error);
+                case "AnnotatedRelationshipElement":
+                    return AnnotatedRelationshipElementFrom(
+                        node, out error);
+                case "BasicEventElement":
+                    return BasicEventElementFrom(
+                        node, out error);
+                case "Blob":
+                    return BlobFrom(
+                        node, out error);
+                case "Capability":
+                    return CapabilityFrom(
+                        node, out error);
+                case "Entity":
+                    return EntityFrom(
+                        node, out error);
+                case "File":
+                    return FileFrom(
+                        node, out error);
+                case "MultiLanguageProperty":
+                    return MultiLanguagePropertyFrom(
+                        node, out error);
+                case "Operation":
+                    return OperationFrom(
+                        node, out error);
+                case "Property":
+                    return PropertyFrom(
+                        node, out error);
+                case "Range":
+                    return RangeFrom(
+                        node, out error);
+                case "ReferenceElement":
+                    return ReferenceElementFrom(
+                        node, out error);
+                case "Submodel":
+                    return SubmodelFrom(
+                        node, out error);
+                case "SubmodelElementCollection":
+                    return SubmodelElementCollectionFrom(
+                        node, out error);
+                case "SubmodelElementList":
+                    return SubmodelElementListFrom(
+                        node, out error);
+                default:
+                    error = new Reporting.Error(
+                        $"Unexpected model type for IQualifiable: {modelType}");
+                    return default!;
                 }
             }  // public static Aas.IQualifiable IQualifiableFrom
 
@@ -1418,29 +1129,25 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.QualifierKind? QualifierKindFrom(
-                Nodes.JsonNode node,
+            internal static Aas.QualifierKind QualifierKindFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-                string? text = DeserializeImplementation.StringFrom(
-                    node, out error);
+                string text = StringFrom(node, out error);
                 if (error != null)
                 {
-                    return null;
+                    return default!;
                 }
-                if (text == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected text null if error null");
-                }
+
                 Aas.QualifierKind? result = Stringification.QualifierKindFromString(text);
                 if (result == null)
                 {
                     error = new Reporting.Error(
                         "Not a valid JSON representation of QualifierKind");
+                    return default!;
                 }
-                return result;
+
+                return result.Value;
             }  // internal static QualifierKindFrom
 
             /// <summary>
@@ -1448,8 +1155,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.Qualifier? QualifierFrom(
-                Nodes.JsonNode node,
+            internal static Aas.Qualifier QualifierFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -1458,8 +1165,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing Qualifier, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theType = null;
@@ -1475,223 +1182,45 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "type":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "type"));
-                                return null;
-                            }
-
-                            theType = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "type"));
-                                return null;
-                            }
-                            if (theType == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theType null when error is also null");
-                            }
+                            theType = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "valueType":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueType"));
-                                return null;
-                            }
-
-                            theValueType = DeserializeImplementation.DataTypeDefXsdFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueType"));
-                                return null;
-                            }
-                            if (theValueType == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValueType null when error is also null");
-                            }
+                            theValueType = DataTypeDefXsdFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "semanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-
-                            theSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-                            if (theSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSemanticId null when error is also null");
-                            }
+                            theSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "supplementalSemanticIds":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySupplementalSemanticIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySupplementalSemanticIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-                            theSupplementalSemanticIds = ParseArrayOfClass<IReference>(
-                                arraySupplementalSemanticIds,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
+                            theSupplementalSemanticIds = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "kind":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "kind"));
-                                return null;
-                            }
-
-                            theKind = DeserializeImplementation.QualifierKindFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "kind"));
-                                return null;
-                            }
-                            if (theKind == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theKind null when error is also null");
-                            }
+                            theKind = QualifierKindFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "value":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-
-                            theValue = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-                            if (theValue == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValue null when error is also null");
-                            }
+                            theValue = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "valueId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueId"));
-                                return null;
-                            }
-
-                            theValueId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueId"));
-                                return null;
-                            }
-                            if (theValueId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValueId null when error is also null");
-                            }
+                            theValueId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -1699,14 +1228,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"type\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theValueType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"valueType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.Qualifier(
@@ -1728,8 +1257,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.AssetAdministrationShell? AssetAdministrationShellFrom(
-                Nodes.JsonNode node,
+            internal static Aas.AssetAdministrationShell AssetAdministrationShellFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -1738,8 +1267,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing AssetAdministrationShell, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theId = null;
@@ -1761,398 +1290,71 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "id":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "id"));
-                                return null;
-                            }
-
-                            theId = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "id"));
-                                return null;
-                            }
-                            if (theId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theId null when error is also null");
-                            }
+                            theId = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "assetInformation":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "assetInformation"));
-                                return null;
-                            }
-
-                            theAssetInformation = DeserializeImplementation.AssetInformationFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "assetInformation"));
-                                return null;
-                            }
-                            if (theAssetInformation == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theAssetInformation null when error is also null");
-                            }
+                            theAssetInformation = AssetInformationFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "extensions":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayExtensions = keyValue.Value as Nodes.JsonArray;
-                            if (arrayExtensions == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-                            theExtensions = ParseArrayOfClass<IExtension>(
-                                arrayExtensions,
-                                DeserializeImplementation.ExtensionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
+                            theExtensions = Parse_ListOf_IExtension(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "category":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-
-                            theCategory = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-                            if (theCategory == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theCategory null when error is also null");
-                            }
+                            theCategory = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "idShort":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-
-                            theIdShort = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-                            if (theIdShort == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theIdShort null when error is also null");
-                            }
+                            theIdShort = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "displayName":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDisplayName = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDisplayName == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-                            theDisplayName = ParseArrayOfClass<ILangStringNameType>(
-                                arrayDisplayName,
-                                DeserializeImplementation.LangStringNameTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
+                            theDisplayName = Parse_ListOf_ILangStringNameType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "description":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDescription = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDescription == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-                            theDescription = ParseArrayOfClass<ILangStringTextType>(
-                                arrayDescription,
-                                DeserializeImplementation.LangStringTextTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
+                            theDescription = Parse_ListOf_ILangStringTextType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "administration":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "administration"));
-                                return null;
-                            }
-
-                            theAdministration = DeserializeImplementation.AdministrativeInformationFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "administration"));
-                                return null;
-                            }
-                            if (theAdministration == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theAdministration null when error is also null");
-                            }
+                            theAdministration = AdministrativeInformationFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "embeddedDataSpecifications":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayEmbeddedDataSpecifications = keyValue.Value as Nodes.JsonArray;
-                            if (arrayEmbeddedDataSpecifications == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-                            theEmbeddedDataSpecifications = ParseArrayOfClass<IEmbeddedDataSpecification>(
-                                arrayEmbeddedDataSpecifications,
-                                DeserializeImplementation.EmbeddedDataSpecificationFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
+                            theEmbeddedDataSpecifications = Parse_ListOf_IEmbeddedDataSpecification(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "derivedFrom":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "derivedFrom"));
-                                return null;
-                            }
-
-                            theDerivedFrom = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "derivedFrom"));
-                                return null;
-                            }
-                            if (theDerivedFrom == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theDerivedFrom null when error is also null");
-                            }
+                            theDerivedFrom = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "submodels":
-                        {
-                            if (keyValue.Value == null)
+                            theSubmodels = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "AssetAdministrationShell")
                             {
                                 error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "submodels"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySubmodels = keyValue.Value as Nodes.JsonArray;
-                            if (arraySubmodels == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "submodels"));
-                                return null;
-                            }
-                            theSubmodels = ParseArrayOfClass<IReference>(
-                                arraySubmodels,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "submodels"));
-                                return null;
+                                    "Expected the model type 'AssetAdministrationShell', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "AssetAdministrationShell")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'AssetAdministrationShell', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -2160,21 +1362,21 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"id\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theAssetInformation == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"assetInformation\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.AssetAdministrationShell(
@@ -2200,8 +1402,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.AssetInformation? AssetInformationFrom(
-                Nodes.JsonNode node,
+            internal static Aas.AssetInformation AssetInformationFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -2210,8 +1412,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing AssetInformation, but got {Describe(node)}");
+                    return default!;
                 }
 
                 AssetKind? theAssetKind = null;
@@ -2225,164 +1427,37 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "assetKind":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "assetKind"));
-                                return null;
-                            }
-
-                            theAssetKind = DeserializeImplementation.AssetKindFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "assetKind"));
-                                return null;
-                            }
-                            if (theAssetKind == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theAssetKind null when error is also null");
-                            }
+                            theAssetKind = AssetKindFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "globalAssetId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "globalAssetId"));
-                                return null;
-                            }
-
-                            theGlobalAssetId = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "globalAssetId"));
-                                return null;
-                            }
-                            if (theGlobalAssetId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theGlobalAssetId null when error is also null");
-                            }
+                            theGlobalAssetId = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "specificAssetIds":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "specificAssetIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySpecificAssetIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySpecificAssetIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "specificAssetIds"));
-                                return null;
-                            }
-                            theSpecificAssetIds = ParseArrayOfClass<ISpecificAssetId>(
-                                arraySpecificAssetIds,
-                                DeserializeImplementation.SpecificAssetIdFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "specificAssetIds"));
-                                return null;
-                            }
+                            theSpecificAssetIds = Parse_ListOf_ISpecificAssetId(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "assetType":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "assetType"));
-                                return null;
-                            }
-
-                            theAssetType = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "assetType"));
-                                return null;
-                            }
-                            if (theAssetType == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theAssetType null when error is also null");
-                            }
+                            theAssetType = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "defaultThumbnail":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "defaultThumbnail"));
-                                return null;
-                            }
-
-                            theDefaultThumbnail = DeserializeImplementation.ResourceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "defaultThumbnail"));
-                                return null;
-                            }
-                            if (theDefaultThumbnail == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theDefaultThumbnail null when error is also null");
-                            }
+                            theDefaultThumbnail = ResourceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -2390,7 +1465,7 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"assetKind\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.AssetInformation(
@@ -2408,8 +1483,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.Resource? ResourceFrom(
-                Nodes.JsonNode node,
+            internal static Aas.Resource ResourceFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -2418,8 +1493,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing Resource, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? thePath = null;
@@ -2430,68 +1505,25 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "path":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "path"));
-                                return null;
-                            }
-
-                            thePath = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "path"));
-                                return null;
-                            }
-                            if (thePath == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected thePath null when error is also null");
-                            }
+                            thePath = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "contentType":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "contentType"));
-                                return null;
-                            }
-
-                            theContentType = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "contentType"));
-                                return null;
-                            }
-                            if (theContentType == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theContentType null when error is also null");
-                            }
+                            theContentType = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -2499,7 +1531,7 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"path\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.Resource(
@@ -2514,29 +1546,25 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.AssetKind? AssetKindFrom(
-                Nodes.JsonNode node,
+            internal static Aas.AssetKind AssetKindFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-                string? text = DeserializeImplementation.StringFrom(
-                    node, out error);
+                string text = StringFrom(node, out error);
                 if (error != null)
                 {
-                    return null;
+                    return default!;
                 }
-                if (text == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected text null if error null");
-                }
+
                 Aas.AssetKind? result = Stringification.AssetKindFromString(text);
                 if (result == null)
                 {
                     error = new Reporting.Error(
                         "Not a valid JSON representation of AssetKind");
+                    return default!;
                 }
-                return result;
+
+                return result.Value;
             }  // internal static AssetKindFrom
 
             /// <summary>
@@ -2544,8 +1572,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.SpecificAssetId? SpecificAssetIdFrom(
-                Nodes.JsonNode node,
+            internal static Aas.SpecificAssetId SpecificAssetIdFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -2554,8 +1582,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing SpecificAssetId, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theName = null;
@@ -2569,163 +1597,37 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "name":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "name"));
-                                return null;
-                            }
-
-                            theName = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "name"));
-                                return null;
-                            }
-                            if (theName == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theName null when error is also null");
-                            }
+                            theName = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "value":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-
-                            theValue = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-                            if (theValue == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValue null when error is also null");
-                            }
+                            theValue = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "semanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-
-                            theSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-                            if (theSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSemanticId null when error is also null");
-                            }
+                            theSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "supplementalSemanticIds":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySupplementalSemanticIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySupplementalSemanticIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-                            theSupplementalSemanticIds = ParseArrayOfClass<IReference>(
-                                arraySupplementalSemanticIds,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
+                            theSupplementalSemanticIds = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "externalSubjectId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "externalSubjectId"));
-                                return null;
-                            }
-
-                            theExternalSubjectId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "externalSubjectId"));
-                                return null;
-                            }
-                            if (theExternalSubjectId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theExternalSubjectId null when error is also null");
-                            }
+                            theExternalSubjectId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -2733,14 +1635,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"name\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theValue == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"value\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.SpecificAssetId(
@@ -2760,8 +1662,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.Submodel? SubmodelFrom(
-                Nodes.JsonNode node,
+            internal static Aas.Submodel SubmodelFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -2770,8 +1672,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing Submodel, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theId = null;
@@ -2795,471 +1697,79 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "id":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "id"));
-                                return null;
-                            }
-
-                            theId = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "id"));
-                                return null;
-                            }
-                            if (theId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theId null when error is also null");
-                            }
+                            theId = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "extensions":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayExtensions = keyValue.Value as Nodes.JsonArray;
-                            if (arrayExtensions == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-                            theExtensions = ParseArrayOfClass<IExtension>(
-                                arrayExtensions,
-                                DeserializeImplementation.ExtensionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
+                            theExtensions = Parse_ListOf_IExtension(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "category":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-
-                            theCategory = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-                            if (theCategory == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theCategory null when error is also null");
-                            }
+                            theCategory = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "idShort":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-
-                            theIdShort = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-                            if (theIdShort == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theIdShort null when error is also null");
-                            }
+                            theIdShort = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "displayName":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDisplayName = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDisplayName == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-                            theDisplayName = ParseArrayOfClass<ILangStringNameType>(
-                                arrayDisplayName,
-                                DeserializeImplementation.LangStringNameTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
+                            theDisplayName = Parse_ListOf_ILangStringNameType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "description":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDescription = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDescription == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-                            theDescription = ParseArrayOfClass<ILangStringTextType>(
-                                arrayDescription,
-                                DeserializeImplementation.LangStringTextTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
+                            theDescription = Parse_ListOf_ILangStringTextType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "administration":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "administration"));
-                                return null;
-                            }
-
-                            theAdministration = DeserializeImplementation.AdministrativeInformationFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "administration"));
-                                return null;
-                            }
-                            if (theAdministration == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theAdministration null when error is also null");
-                            }
+                            theAdministration = AdministrativeInformationFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "kind":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "kind"));
-                                return null;
-                            }
-
-                            theKind = DeserializeImplementation.ModellingKindFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "kind"));
-                                return null;
-                            }
-                            if (theKind == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theKind null when error is also null");
-                            }
+                            theKind = ModellingKindFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "semanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-
-                            theSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-                            if (theSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSemanticId null when error is also null");
-                            }
+                            theSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "supplementalSemanticIds":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySupplementalSemanticIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySupplementalSemanticIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-                            theSupplementalSemanticIds = ParseArrayOfClass<IReference>(
-                                arraySupplementalSemanticIds,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
+                            theSupplementalSemanticIds = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "qualifiers":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayQualifiers = keyValue.Value as Nodes.JsonArray;
-                            if (arrayQualifiers == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-                            theQualifiers = ParseArrayOfClass<IQualifier>(
-                                arrayQualifiers,
-                                DeserializeImplementation.QualifierFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
+                            theQualifiers = Parse_ListOf_IQualifier(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "embeddedDataSpecifications":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayEmbeddedDataSpecifications = keyValue.Value as Nodes.JsonArray;
-                            if (arrayEmbeddedDataSpecifications == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-                            theEmbeddedDataSpecifications = ParseArrayOfClass<IEmbeddedDataSpecification>(
-                                arrayEmbeddedDataSpecifications,
-                                DeserializeImplementation.EmbeddedDataSpecificationFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
+                            theEmbeddedDataSpecifications = Parse_ListOf_IEmbeddedDataSpecification(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "submodelElements":
-                        {
-                            if (keyValue.Value == null)
+                            theSubmodelElements = Parse_ListOf_ISubmodelElement(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "Submodel")
                             {
                                 error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "submodelElements"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySubmodelElements = keyValue.Value as Nodes.JsonArray;
-                            if (arraySubmodelElements == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "submodelElements"));
-                                return null;
-                            }
-                            theSubmodelElements = ParseArrayOfClass<ISubmodelElement>(
-                                arraySubmodelElements,
-                                DeserializeImplementation.ISubmodelElementFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "submodelElements"));
-                                return null;
+                                    "Expected the model type 'Submodel', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "Submodel")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'Submodel', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -3267,14 +1777,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"id\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.Submodel(
@@ -3302,87 +1812,72 @@ namespace AasCore.Aas3_0
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            public static Aas.ISubmodelElement? ISubmodelElementFrom(
-                Nodes.JsonNode node,
+            public static Aas.ISubmodelElement ISubmodelElementFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-
-                var obj = node as Nodes.JsonObject;
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected Nodes.JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing ISubmodelElement, but got {Describe(node)}");
+                    return default!;
                 }
 
-                Nodes.JsonNode? modelTypeNode = obj["modelType"];
-                if (modelTypeNode == null)
-                {
-                    error = new Reporting.Error(
-                        "Expected a model type, but none is present");
-                    return null;
-                }
-                string? modelType = DeserializeImplementation.StringFrom(
-                    modelTypeNode, out error);
+                string modelType = ModelTypeFrom(obj, out error);
                 if (error != null)
                 {
-                    return null;
-                }
-                if (modelType == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected modelType null when error null");
+                    return default!;
                 }
 
                 switch (modelType)
                 {
-                    case "RelationshipElement":
-                        return RelationshipElementFrom(
-                            node, out error);
-                    case "AnnotatedRelationshipElement":
-                        return AnnotatedRelationshipElementFrom(
-                            node, out error);
-                    case "BasicEventElement":
-                        return BasicEventElementFrom(
-                            node, out error);
-                    case "Blob":
-                        return BlobFrom(
-                            node, out error);
-                    case "Capability":
-                        return CapabilityFrom(
-                            node, out error);
-                    case "Entity":
-                        return EntityFrom(
-                            node, out error);
-                    case "File":
-                        return FileFrom(
-                            node, out error);
-                    case "MultiLanguageProperty":
-                        return MultiLanguagePropertyFrom(
-                            node, out error);
-                    case "Operation":
-                        return OperationFrom(
-                            node, out error);
-                    case "Property":
-                        return PropertyFrom(
-                            node, out error);
-                    case "Range":
-                        return RangeFrom(
-                            node, out error);
-                    case "ReferenceElement":
-                        return ReferenceElementFrom(
-                            node, out error);
-                    case "SubmodelElementCollection":
-                        return SubmodelElementCollectionFrom(
-                            node, out error);
-                    case "SubmodelElementList":
-                        return SubmodelElementListFrom(
-                            node, out error);
-                    default:
-                        error = new Reporting.Error(
-                            $"Unexpected model type for ISubmodelElement: {modelType}");
-                        return null;
+                case "RelationshipElement":
+                    return RelationshipElementFrom(
+                        node, out error);
+                case "AnnotatedRelationshipElement":
+                    return AnnotatedRelationshipElementFrom(
+                        node, out error);
+                case "BasicEventElement":
+                    return BasicEventElementFrom(
+                        node, out error);
+                case "Blob":
+                    return BlobFrom(
+                        node, out error);
+                case "Capability":
+                    return CapabilityFrom(
+                        node, out error);
+                case "Entity":
+                    return EntityFrom(
+                        node, out error);
+                case "File":
+                    return FileFrom(
+                        node, out error);
+                case "MultiLanguageProperty":
+                    return MultiLanguagePropertyFrom(
+                        node, out error);
+                case "Operation":
+                    return OperationFrom(
+                        node, out error);
+                case "Property":
+                    return PropertyFrom(
+                        node, out error);
+                case "Range":
+                    return RangeFrom(
+                        node, out error);
+                case "ReferenceElement":
+                    return ReferenceElementFrom(
+                        node, out error);
+                case "SubmodelElementCollection":
+                    return SubmodelElementCollectionFrom(
+                        node, out error);
+                case "SubmodelElementList":
+                    return SubmodelElementListFrom(
+                        node, out error);
+                default:
+                    error = new Reporting.Error(
+                        $"Unexpected model type for ISubmodelElement: {modelType}");
+                    return default!;
                 }
             }  // public static Aas.ISubmodelElement ISubmodelElementFrom
 
@@ -3393,51 +1888,36 @@ namespace AasCore.Aas3_0
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            public static Aas.IRelationshipElement? IRelationshipElementFrom(
-                Nodes.JsonNode node,
+            public static Aas.IRelationshipElement IRelationshipElementFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-
-                var obj = node as Nodes.JsonObject;
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected Nodes.JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing IRelationshipElement, but got {Describe(node)}");
+                    return default!;
                 }
 
-                Nodes.JsonNode? modelTypeNode = obj["modelType"];
-                if (modelTypeNode == null)
-                {
-                    error = new Reporting.Error(
-                        "Expected a model type, but none is present");
-                    return null;
-                }
-                string? modelType = DeserializeImplementation.StringFrom(
-                    modelTypeNode, out error);
+                string modelType = ModelTypeFrom(obj, out error);
                 if (error != null)
                 {
-                    return null;
-                }
-                if (modelType == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected modelType null when error null");
+                    return default!;
                 }
 
                 switch (modelType)
                 {
-                    case "AnnotatedRelationshipElement":
-                        return AnnotatedRelationshipElementFrom(
-                            node, out error);
-                    case "RelationshipElement":
-                        return RelationshipElementFrom(
-                            node, out error);
-                    default:
-                        error = new Reporting.Error(
-                            $"Unexpected model type for IRelationshipElement: {modelType}");
-                        return null;
+                case "AnnotatedRelationshipElement":
+                    return AnnotatedRelationshipElementFrom(
+                        node, out error);
+                case "RelationshipElement":
+                    return RelationshipElementFrom(
+                        node, out error);
+                default:
+                    error = new Reporting.Error(
+                        $"Unexpected model type for IRelationshipElement: {modelType}");
+                    return default!;
                 }
             }  // public static Aas.IRelationshipElement IRelationshipElementFrom
 
@@ -3446,8 +1926,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.RelationshipElement? RelationshipElementFrom(
-                Nodes.JsonNode node,
+            internal static Aas.RelationshipElement RelationshipElementFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -3456,8 +1936,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing RelationshipElement, but got {Describe(node)}");
+                    return default!;
                 }
 
                 IReference? theFirst = null;
@@ -3479,404 +1959,71 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "first":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "first"));
-                                return null;
-                            }
-
-                            theFirst = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "first"));
-                                return null;
-                            }
-                            if (theFirst == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theFirst null when error is also null");
-                            }
+                            theFirst = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "second":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "second"));
-                                return null;
-                            }
-
-                            theSecond = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "second"));
-                                return null;
-                            }
-                            if (theSecond == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSecond null when error is also null");
-                            }
+                            theSecond = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "extensions":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayExtensions = keyValue.Value as Nodes.JsonArray;
-                            if (arrayExtensions == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-                            theExtensions = ParseArrayOfClass<IExtension>(
-                                arrayExtensions,
-                                DeserializeImplementation.ExtensionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
+                            theExtensions = Parse_ListOf_IExtension(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "category":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-
-                            theCategory = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-                            if (theCategory == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theCategory null when error is also null");
-                            }
+                            theCategory = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "idShort":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-
-                            theIdShort = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-                            if (theIdShort == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theIdShort null when error is also null");
-                            }
+                            theIdShort = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "displayName":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDisplayName = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDisplayName == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-                            theDisplayName = ParseArrayOfClass<ILangStringNameType>(
-                                arrayDisplayName,
-                                DeserializeImplementation.LangStringNameTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
+                            theDisplayName = Parse_ListOf_ILangStringNameType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "description":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDescription = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDescription == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-                            theDescription = ParseArrayOfClass<ILangStringTextType>(
-                                arrayDescription,
-                                DeserializeImplementation.LangStringTextTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
+                            theDescription = Parse_ListOf_ILangStringTextType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "semanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-
-                            theSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-                            if (theSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSemanticId null when error is also null");
-                            }
+                            theSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "supplementalSemanticIds":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySupplementalSemanticIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySupplementalSemanticIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-                            theSupplementalSemanticIds = ParseArrayOfClass<IReference>(
-                                arraySupplementalSemanticIds,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
+                            theSupplementalSemanticIds = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "qualifiers":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayQualifiers = keyValue.Value as Nodes.JsonArray;
-                            if (arrayQualifiers == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-                            theQualifiers = ParseArrayOfClass<IQualifier>(
-                                arrayQualifiers,
-                                DeserializeImplementation.QualifierFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
+                            theQualifiers = Parse_ListOf_IQualifier(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "embeddedDataSpecifications":
-                        {
-                            if (keyValue.Value == null)
+                            theEmbeddedDataSpecifications = Parse_ListOf_IEmbeddedDataSpecification(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "RelationshipElement")
                             {
                                 error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayEmbeddedDataSpecifications = keyValue.Value as Nodes.JsonArray;
-                            if (arrayEmbeddedDataSpecifications == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-                            theEmbeddedDataSpecifications = ParseArrayOfClass<IEmbeddedDataSpecification>(
-                                arrayEmbeddedDataSpecifications,
-                                DeserializeImplementation.EmbeddedDataSpecificationFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
+                                    "Expected the model type 'RelationshipElement', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "RelationshipElement")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'RelationshipElement', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -3884,21 +2031,21 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"first\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theSecond == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"second\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.RelationshipElement(
@@ -3924,29 +2071,25 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.AasSubmodelElements? AasSubmodelElementsFrom(
-                Nodes.JsonNode node,
+            internal static Aas.AasSubmodelElements AasSubmodelElementsFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-                string? text = DeserializeImplementation.StringFrom(
-                    node, out error);
+                string text = StringFrom(node, out error);
                 if (error != null)
                 {
-                    return null;
+                    return default!;
                 }
-                if (text == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected text null if error null");
-                }
+
                 Aas.AasSubmodelElements? result = Stringification.AasSubmodelElementsFromString(text);
                 if (result == null)
                 {
                     error = new Reporting.Error(
                         "Not a valid JSON representation of AasSubmodelElements");
+                    return default!;
                 }
-                return result;
+
+                return result.Value;
             }  // internal static AasSubmodelElementsFrom
 
             /// <summary>
@@ -3954,8 +2097,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.SubmodelElementList? SubmodelElementListFrom(
-                Nodes.JsonNode node,
+            internal static Aas.SubmodelElementList SubmodelElementListFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -3964,8 +2107,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing SubmodelElementList, but got {Describe(node)}");
+                    return default!;
                 }
 
                 AasSubmodelElements? theTypeValueListElement = null;
@@ -3990,501 +2133,83 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "typeValueListElement":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "typeValueListElement"));
-                                return null;
-                            }
-
-                            theTypeValueListElement = DeserializeImplementation.AasSubmodelElementsFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "typeValueListElement"));
-                                return null;
-                            }
-                            if (theTypeValueListElement == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theTypeValueListElement null when error is also null");
-                            }
+                            theTypeValueListElement = AasSubmodelElementsFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "extensions":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayExtensions = keyValue.Value as Nodes.JsonArray;
-                            if (arrayExtensions == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-                            theExtensions = ParseArrayOfClass<IExtension>(
-                                arrayExtensions,
-                                DeserializeImplementation.ExtensionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
+                            theExtensions = Parse_ListOf_IExtension(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "category":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-
-                            theCategory = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-                            if (theCategory == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theCategory null when error is also null");
-                            }
+                            theCategory = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "idShort":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-
-                            theIdShort = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-                            if (theIdShort == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theIdShort null when error is also null");
-                            }
+                            theIdShort = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "displayName":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDisplayName = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDisplayName == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-                            theDisplayName = ParseArrayOfClass<ILangStringNameType>(
-                                arrayDisplayName,
-                                DeserializeImplementation.LangStringNameTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
+                            theDisplayName = Parse_ListOf_ILangStringNameType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "description":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDescription = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDescription == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-                            theDescription = ParseArrayOfClass<ILangStringTextType>(
-                                arrayDescription,
-                                DeserializeImplementation.LangStringTextTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
+                            theDescription = Parse_ListOf_ILangStringTextType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "semanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-
-                            theSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-                            if (theSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSemanticId null when error is also null");
-                            }
+                            theSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "supplementalSemanticIds":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySupplementalSemanticIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySupplementalSemanticIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-                            theSupplementalSemanticIds = ParseArrayOfClass<IReference>(
-                                arraySupplementalSemanticIds,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
+                            theSupplementalSemanticIds = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "qualifiers":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayQualifiers = keyValue.Value as Nodes.JsonArray;
-                            if (arrayQualifiers == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-                            theQualifiers = ParseArrayOfClass<IQualifier>(
-                                arrayQualifiers,
-                                DeserializeImplementation.QualifierFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
+                            theQualifiers = Parse_ListOf_IQualifier(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "embeddedDataSpecifications":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayEmbeddedDataSpecifications = keyValue.Value as Nodes.JsonArray;
-                            if (arrayEmbeddedDataSpecifications == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-                            theEmbeddedDataSpecifications = ParseArrayOfClass<IEmbeddedDataSpecification>(
-                                arrayEmbeddedDataSpecifications,
-                                DeserializeImplementation.EmbeddedDataSpecificationFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
+                            theEmbeddedDataSpecifications = Parse_ListOf_IEmbeddedDataSpecification(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "orderRelevant":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "orderRelevant"));
-                                return null;
-                            }
-
-                            theOrderRelevant = DeserializeImplementation.BoolFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "orderRelevant"));
-                                return null;
-                            }
-                            if (theOrderRelevant == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theOrderRelevant null when error is also null");
-                            }
+                            theOrderRelevant = BoolFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "semanticIdListElement":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticIdListElement"));
-                                return null;
-                            }
-
-                            theSemanticIdListElement = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticIdListElement"));
-                                return null;
-                            }
-                            if (theSemanticIdListElement == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSemanticIdListElement null when error is also null");
-                            }
+                            theSemanticIdListElement = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "valueTypeListElement":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueTypeListElement"));
-                                return null;
-                            }
-
-                            theValueTypeListElement = DeserializeImplementation.DataTypeDefXsdFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueTypeListElement"));
-                                return null;
-                            }
-                            if (theValueTypeListElement == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValueTypeListElement null when error is also null");
-                            }
+                            theValueTypeListElement = DataTypeDefXsdFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "value":
-                        {
-                            if (keyValue.Value == null)
+                            theValue = Parse_ListOf_ISubmodelElement(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "SubmodelElementList")
                             {
                                 error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayValue = keyValue.Value as Nodes.JsonArray;
-                            if (arrayValue == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-                            theValue = ParseArrayOfClass<ISubmodelElement>(
-                                arrayValue,
-                                DeserializeImplementation.ISubmodelElementFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
+                                    "Expected the model type 'SubmodelElementList', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "SubmodelElementList")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'SubmodelElementList', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -4492,14 +2217,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"typeValueListElement\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.SubmodelElementList(
@@ -4526,8 +2251,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.SubmodelElementCollection? SubmodelElementCollectionFrom(
-                Nodes.JsonNode node,
+            internal static Aas.SubmodelElementCollection SubmodelElementCollectionFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -4536,8 +2261,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing SubmodelElementCollection, but got {Describe(node)}");
+                    return default!;
                 }
 
                 List<IExtension>? theExtensions = null;
@@ -4558,392 +2283,75 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "extensions":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayExtensions = keyValue.Value as Nodes.JsonArray;
-                            if (arrayExtensions == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-                            theExtensions = ParseArrayOfClass<IExtension>(
-                                arrayExtensions,
-                                DeserializeImplementation.ExtensionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
+                            theExtensions = Parse_ListOf_IExtension(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "category":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-
-                            theCategory = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-                            if (theCategory == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theCategory null when error is also null");
-                            }
+                            theCategory = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "idShort":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-
-                            theIdShort = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-                            if (theIdShort == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theIdShort null when error is also null");
-                            }
+                            theIdShort = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "displayName":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDisplayName = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDisplayName == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-                            theDisplayName = ParseArrayOfClass<ILangStringNameType>(
-                                arrayDisplayName,
-                                DeserializeImplementation.LangStringNameTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
+                            theDisplayName = Parse_ListOf_ILangStringNameType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "description":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDescription = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDescription == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-                            theDescription = ParseArrayOfClass<ILangStringTextType>(
-                                arrayDescription,
-                                DeserializeImplementation.LangStringTextTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
+                            theDescription = Parse_ListOf_ILangStringTextType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "semanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-
-                            theSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-                            if (theSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSemanticId null when error is also null");
-                            }
+                            theSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "supplementalSemanticIds":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySupplementalSemanticIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySupplementalSemanticIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-                            theSupplementalSemanticIds = ParseArrayOfClass<IReference>(
-                                arraySupplementalSemanticIds,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
+                            theSupplementalSemanticIds = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "qualifiers":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayQualifiers = keyValue.Value as Nodes.JsonArray;
-                            if (arrayQualifiers == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-                            theQualifiers = ParseArrayOfClass<IQualifier>(
-                                arrayQualifiers,
-                                DeserializeImplementation.QualifierFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
+                            theQualifiers = Parse_ListOf_IQualifier(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "embeddedDataSpecifications":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayEmbeddedDataSpecifications = keyValue.Value as Nodes.JsonArray;
-                            if (arrayEmbeddedDataSpecifications == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-                            theEmbeddedDataSpecifications = ParseArrayOfClass<IEmbeddedDataSpecification>(
-                                arrayEmbeddedDataSpecifications,
-                                DeserializeImplementation.EmbeddedDataSpecificationFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
+                            theEmbeddedDataSpecifications = Parse_ListOf_IEmbeddedDataSpecification(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "value":
-                        {
-                            if (keyValue.Value == null)
+                            theValue = Parse_ListOf_ISubmodelElement(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "SubmodelElementCollection")
                             {
                                 error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayValue = keyValue.Value as Nodes.JsonArray;
-                            if (arrayValue == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-                            theValue = ParseArrayOfClass<ISubmodelElement>(
-                                arrayValue,
-                                DeserializeImplementation.ISubmodelElementFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
+                                    "Expected the model type 'SubmodelElementCollection', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "SubmodelElementCollection")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'SubmodelElementCollection', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
-
-
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.SubmodelElementCollection(
@@ -4966,63 +2374,48 @@ namespace AasCore.Aas3_0
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            public static Aas.IDataElement? IDataElementFrom(
-                Nodes.JsonNode node,
+            public static Aas.IDataElement IDataElementFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-
-                var obj = node as Nodes.JsonObject;
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected Nodes.JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing IDataElement, but got {Describe(node)}");
+                    return default!;
                 }
 
-                Nodes.JsonNode? modelTypeNode = obj["modelType"];
-                if (modelTypeNode == null)
-                {
-                    error = new Reporting.Error(
-                        "Expected a model type, but none is present");
-                    return null;
-                }
-                string? modelType = DeserializeImplementation.StringFrom(
-                    modelTypeNode, out error);
+                string modelType = ModelTypeFrom(obj, out error);
                 if (error != null)
                 {
-                    return null;
-                }
-                if (modelType == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected modelType null when error null");
+                    return default!;
                 }
 
                 switch (modelType)
                 {
-                    case "Blob":
-                        return BlobFrom(
-                            node, out error);
-                    case "File":
-                        return FileFrom(
-                            node, out error);
-                    case "MultiLanguageProperty":
-                        return MultiLanguagePropertyFrom(
-                            node, out error);
-                    case "Property":
-                        return PropertyFrom(
-                            node, out error);
-                    case "Range":
-                        return RangeFrom(
-                            node, out error);
-                    case "ReferenceElement":
-                        return ReferenceElementFrom(
-                            node, out error);
-                    default:
-                        error = new Reporting.Error(
-                            $"Unexpected model type for IDataElement: {modelType}");
-                        return null;
+                case "Blob":
+                    return BlobFrom(
+                        node, out error);
+                case "File":
+                    return FileFrom(
+                        node, out error);
+                case "MultiLanguageProperty":
+                    return MultiLanguagePropertyFrom(
+                        node, out error);
+                case "Property":
+                    return PropertyFrom(
+                        node, out error);
+                case "Range":
+                    return RangeFrom(
+                        node, out error);
+                case "ReferenceElement":
+                    return ReferenceElementFrom(
+                        node, out error);
+                default:
+                    error = new Reporting.Error(
+                        $"Unexpected model type for IDataElement: {modelType}");
+                    return default!;
                 }
             }  // public static Aas.IDataElement IDataElementFrom
 
@@ -5031,8 +2424,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.Property? PropertyFrom(
-                Nodes.JsonNode node,
+            internal static Aas.Property PropertyFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -5041,8 +2434,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing Property, but got {Describe(node)}");
+                    return default!;
                 }
 
                 DataTypeDefXsd? theValueType = null;
@@ -5065,435 +2458,75 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "valueType":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueType"));
-                                return null;
-                            }
-
-                            theValueType = DeserializeImplementation.DataTypeDefXsdFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueType"));
-                                return null;
-                            }
-                            if (theValueType == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValueType null when error is also null");
-                            }
+                            theValueType = DataTypeDefXsdFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "extensions":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayExtensions = keyValue.Value as Nodes.JsonArray;
-                            if (arrayExtensions == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-                            theExtensions = ParseArrayOfClass<IExtension>(
-                                arrayExtensions,
-                                DeserializeImplementation.ExtensionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
+                            theExtensions = Parse_ListOf_IExtension(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "category":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-
-                            theCategory = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-                            if (theCategory == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theCategory null when error is also null");
-                            }
+                            theCategory = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "idShort":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-
-                            theIdShort = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-                            if (theIdShort == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theIdShort null when error is also null");
-                            }
+                            theIdShort = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "displayName":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDisplayName = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDisplayName == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-                            theDisplayName = ParseArrayOfClass<ILangStringNameType>(
-                                arrayDisplayName,
-                                DeserializeImplementation.LangStringNameTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
+                            theDisplayName = Parse_ListOf_ILangStringNameType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "description":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDescription = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDescription == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-                            theDescription = ParseArrayOfClass<ILangStringTextType>(
-                                arrayDescription,
-                                DeserializeImplementation.LangStringTextTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
+                            theDescription = Parse_ListOf_ILangStringTextType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "semanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-
-                            theSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-                            if (theSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSemanticId null when error is also null");
-                            }
+                            theSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "supplementalSemanticIds":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySupplementalSemanticIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySupplementalSemanticIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-                            theSupplementalSemanticIds = ParseArrayOfClass<IReference>(
-                                arraySupplementalSemanticIds,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
+                            theSupplementalSemanticIds = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "qualifiers":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayQualifiers = keyValue.Value as Nodes.JsonArray;
-                            if (arrayQualifiers == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-                            theQualifiers = ParseArrayOfClass<IQualifier>(
-                                arrayQualifiers,
-                                DeserializeImplementation.QualifierFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
+                            theQualifiers = Parse_ListOf_IQualifier(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "embeddedDataSpecifications":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayEmbeddedDataSpecifications = keyValue.Value as Nodes.JsonArray;
-                            if (arrayEmbeddedDataSpecifications == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-                            theEmbeddedDataSpecifications = ParseArrayOfClass<IEmbeddedDataSpecification>(
-                                arrayEmbeddedDataSpecifications,
-                                DeserializeImplementation.EmbeddedDataSpecificationFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
+                            theEmbeddedDataSpecifications = Parse_ListOf_IEmbeddedDataSpecification(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "value":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-
-                            theValue = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-                            if (theValue == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValue null when error is also null");
-                            }
+                            theValue = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "valueId":
-                        {
-                            if (keyValue.Value == null)
+                            theValueId = ReferenceFrom(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "Property")
                             {
                                 error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueId"));
-                                return null;
-                            }
-
-                            theValueId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueId"));
-                                return null;
-                            }
-                            if (theValueId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValueId null when error is also null");
+                                    "Expected the model type 'Property', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "Property")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'Property', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -5501,14 +2534,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"valueType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.Property(
@@ -5533,8 +2566,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.MultiLanguageProperty? MultiLanguagePropertyFrom(
-                Nodes.JsonNode node,
+            internal static Aas.MultiLanguageProperty MultiLanguagePropertyFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -5543,8 +2576,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing MultiLanguageProperty, but got {Describe(node)}");
+                    return default!;
                 }
 
                 List<IExtension>? theExtensions = null;
@@ -5566,422 +2599,79 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "extensions":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayExtensions = keyValue.Value as Nodes.JsonArray;
-                            if (arrayExtensions == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-                            theExtensions = ParseArrayOfClass<IExtension>(
-                                arrayExtensions,
-                                DeserializeImplementation.ExtensionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
+                            theExtensions = Parse_ListOf_IExtension(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "category":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-
-                            theCategory = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-                            if (theCategory == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theCategory null when error is also null");
-                            }
+                            theCategory = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "idShort":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-
-                            theIdShort = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-                            if (theIdShort == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theIdShort null when error is also null");
-                            }
+                            theIdShort = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "displayName":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDisplayName = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDisplayName == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-                            theDisplayName = ParseArrayOfClass<ILangStringNameType>(
-                                arrayDisplayName,
-                                DeserializeImplementation.LangStringNameTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
+                            theDisplayName = Parse_ListOf_ILangStringNameType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "description":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDescription = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDescription == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-                            theDescription = ParseArrayOfClass<ILangStringTextType>(
-                                arrayDescription,
-                                DeserializeImplementation.LangStringTextTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
+                            theDescription = Parse_ListOf_ILangStringTextType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "semanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-
-                            theSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-                            if (theSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSemanticId null when error is also null");
-                            }
+                            theSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "supplementalSemanticIds":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySupplementalSemanticIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySupplementalSemanticIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-                            theSupplementalSemanticIds = ParseArrayOfClass<IReference>(
-                                arraySupplementalSemanticIds,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
+                            theSupplementalSemanticIds = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "qualifiers":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayQualifiers = keyValue.Value as Nodes.JsonArray;
-                            if (arrayQualifiers == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-                            theQualifiers = ParseArrayOfClass<IQualifier>(
-                                arrayQualifiers,
-                                DeserializeImplementation.QualifierFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
+                            theQualifiers = Parse_ListOf_IQualifier(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "embeddedDataSpecifications":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayEmbeddedDataSpecifications = keyValue.Value as Nodes.JsonArray;
-                            if (arrayEmbeddedDataSpecifications == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-                            theEmbeddedDataSpecifications = ParseArrayOfClass<IEmbeddedDataSpecification>(
-                                arrayEmbeddedDataSpecifications,
-                                DeserializeImplementation.EmbeddedDataSpecificationFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
+                            theEmbeddedDataSpecifications = Parse_ListOf_IEmbeddedDataSpecification(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "value":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayValue = keyValue.Value as Nodes.JsonArray;
-                            if (arrayValue == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-                            theValue = ParseArrayOfClass<ILangStringTextType>(
-                                arrayValue,
-                                DeserializeImplementation.LangStringTextTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
+                            theValue = Parse_ListOf_ILangStringTextType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "valueId":
-                        {
-                            if (keyValue.Value == null)
+                            theValueId = ReferenceFrom(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "MultiLanguageProperty")
                             {
                                 error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueId"));
-                                return null;
-                            }
-
-                            theValueId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueId"));
-                                return null;
-                            }
-                            if (theValueId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValueId null when error is also null");
+                                    "Expected the model type 'MultiLanguageProperty', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "MultiLanguageProperty")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'MultiLanguageProperty', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
-
-
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.MultiLanguageProperty(
@@ -6003,8 +2693,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.Range? RangeFrom(
-                Nodes.JsonNode node,
+            internal static Aas.Range RangeFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -6013,8 +2703,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing Range, but got {Describe(node)}");
+                    return default!;
                 }
 
                 DataTypeDefXsd? theValueType = null;
@@ -6037,435 +2727,75 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "valueType":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueType"));
-                                return null;
-                            }
-
-                            theValueType = DeserializeImplementation.DataTypeDefXsdFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueType"));
-                                return null;
-                            }
-                            if (theValueType == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValueType null when error is also null");
-                            }
+                            theValueType = DataTypeDefXsdFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "extensions":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayExtensions = keyValue.Value as Nodes.JsonArray;
-                            if (arrayExtensions == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-                            theExtensions = ParseArrayOfClass<IExtension>(
-                                arrayExtensions,
-                                DeserializeImplementation.ExtensionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
+                            theExtensions = Parse_ListOf_IExtension(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "category":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-
-                            theCategory = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-                            if (theCategory == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theCategory null when error is also null");
-                            }
+                            theCategory = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "idShort":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-
-                            theIdShort = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-                            if (theIdShort == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theIdShort null when error is also null");
-                            }
+                            theIdShort = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "displayName":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDisplayName = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDisplayName == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-                            theDisplayName = ParseArrayOfClass<ILangStringNameType>(
-                                arrayDisplayName,
-                                DeserializeImplementation.LangStringNameTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
+                            theDisplayName = Parse_ListOf_ILangStringNameType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "description":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDescription = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDescription == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-                            theDescription = ParseArrayOfClass<ILangStringTextType>(
-                                arrayDescription,
-                                DeserializeImplementation.LangStringTextTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
+                            theDescription = Parse_ListOf_ILangStringTextType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "semanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-
-                            theSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-                            if (theSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSemanticId null when error is also null");
-                            }
+                            theSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "supplementalSemanticIds":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySupplementalSemanticIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySupplementalSemanticIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-                            theSupplementalSemanticIds = ParseArrayOfClass<IReference>(
-                                arraySupplementalSemanticIds,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
+                            theSupplementalSemanticIds = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "qualifiers":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayQualifiers = keyValue.Value as Nodes.JsonArray;
-                            if (arrayQualifiers == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-                            theQualifiers = ParseArrayOfClass<IQualifier>(
-                                arrayQualifiers,
-                                DeserializeImplementation.QualifierFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
+                            theQualifiers = Parse_ListOf_IQualifier(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "embeddedDataSpecifications":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayEmbeddedDataSpecifications = keyValue.Value as Nodes.JsonArray;
-                            if (arrayEmbeddedDataSpecifications == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-                            theEmbeddedDataSpecifications = ParseArrayOfClass<IEmbeddedDataSpecification>(
-                                arrayEmbeddedDataSpecifications,
-                                DeserializeImplementation.EmbeddedDataSpecificationFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
+                            theEmbeddedDataSpecifications = Parse_ListOf_IEmbeddedDataSpecification(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "min":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "min"));
-                                return null;
-                            }
-
-                            theMin = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "min"));
-                                return null;
-                            }
-                            if (theMin == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theMin null when error is also null");
-                            }
+                            theMin = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "max":
-                        {
-                            if (keyValue.Value == null)
+                            theMax = StringFrom(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "Range")
                             {
                                 error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "max"));
-                                return null;
-                            }
-
-                            theMax = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "max"));
-                                return null;
-                            }
-                            if (theMax == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theMax null when error is also null");
+                                    "Expected the model type 'Range', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "Range")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'Range', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -6473,14 +2803,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"valueType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.Range(
@@ -6505,8 +2835,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.ReferenceElement? ReferenceElementFrom(
-                Nodes.JsonNode node,
+            internal static Aas.ReferenceElement ReferenceElementFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -6515,8 +2845,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing ReferenceElement, but got {Describe(node)}");
+                    return default!;
                 }
 
                 List<IExtension>? theExtensions = null;
@@ -6537,386 +2867,75 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "extensions":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayExtensions = keyValue.Value as Nodes.JsonArray;
-                            if (arrayExtensions == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-                            theExtensions = ParseArrayOfClass<IExtension>(
-                                arrayExtensions,
-                                DeserializeImplementation.ExtensionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
+                            theExtensions = Parse_ListOf_IExtension(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "category":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-
-                            theCategory = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-                            if (theCategory == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theCategory null when error is also null");
-                            }
+                            theCategory = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "idShort":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-
-                            theIdShort = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-                            if (theIdShort == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theIdShort null when error is also null");
-                            }
+                            theIdShort = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "displayName":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDisplayName = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDisplayName == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-                            theDisplayName = ParseArrayOfClass<ILangStringNameType>(
-                                arrayDisplayName,
-                                DeserializeImplementation.LangStringNameTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
+                            theDisplayName = Parse_ListOf_ILangStringNameType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "description":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDescription = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDescription == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-                            theDescription = ParseArrayOfClass<ILangStringTextType>(
-                                arrayDescription,
-                                DeserializeImplementation.LangStringTextTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
+                            theDescription = Parse_ListOf_ILangStringTextType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "semanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-
-                            theSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-                            if (theSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSemanticId null when error is also null");
-                            }
+                            theSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "supplementalSemanticIds":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySupplementalSemanticIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySupplementalSemanticIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-                            theSupplementalSemanticIds = ParseArrayOfClass<IReference>(
-                                arraySupplementalSemanticIds,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
+                            theSupplementalSemanticIds = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "qualifiers":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayQualifiers = keyValue.Value as Nodes.JsonArray;
-                            if (arrayQualifiers == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-                            theQualifiers = ParseArrayOfClass<IQualifier>(
-                                arrayQualifiers,
-                                DeserializeImplementation.QualifierFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
+                            theQualifiers = Parse_ListOf_IQualifier(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "embeddedDataSpecifications":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayEmbeddedDataSpecifications = keyValue.Value as Nodes.JsonArray;
-                            if (arrayEmbeddedDataSpecifications == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-                            theEmbeddedDataSpecifications = ParseArrayOfClass<IEmbeddedDataSpecification>(
-                                arrayEmbeddedDataSpecifications,
-                                DeserializeImplementation.EmbeddedDataSpecificationFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
+                            theEmbeddedDataSpecifications = Parse_ListOf_IEmbeddedDataSpecification(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "value":
-                        {
-                            if (keyValue.Value == null)
+                            theValue = ReferenceFrom(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "ReferenceElement")
                             {
                                 error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-
-                            theValue = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-                            if (theValue == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValue null when error is also null");
+                                    "Expected the model type 'ReferenceElement', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "ReferenceElement")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'ReferenceElement', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
-
-
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.ReferenceElement(
@@ -6937,8 +2956,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.Blob? BlobFrom(
-                Nodes.JsonNode node,
+            internal static Aas.Blob BlobFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -6947,8 +2966,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing Blob, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theContentType = null;
@@ -6970,405 +2989,71 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "contentType":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "contentType"));
-                                return null;
-                            }
-
-                            theContentType = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "contentType"));
-                                return null;
-                            }
-                            if (theContentType == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theContentType null when error is also null");
-                            }
+                            theContentType = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "extensions":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayExtensions = keyValue.Value as Nodes.JsonArray;
-                            if (arrayExtensions == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-                            theExtensions = ParseArrayOfClass<IExtension>(
-                                arrayExtensions,
-                                DeserializeImplementation.ExtensionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
+                            theExtensions = Parse_ListOf_IExtension(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "category":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-
-                            theCategory = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-                            if (theCategory == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theCategory null when error is also null");
-                            }
+                            theCategory = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "idShort":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-
-                            theIdShort = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-                            if (theIdShort == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theIdShort null when error is also null");
-                            }
+                            theIdShort = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "displayName":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDisplayName = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDisplayName == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-                            theDisplayName = ParseArrayOfClass<ILangStringNameType>(
-                                arrayDisplayName,
-                                DeserializeImplementation.LangStringNameTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
+                            theDisplayName = Parse_ListOf_ILangStringNameType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "description":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDescription = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDescription == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-                            theDescription = ParseArrayOfClass<ILangStringTextType>(
-                                arrayDescription,
-                                DeserializeImplementation.LangStringTextTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
+                            theDescription = Parse_ListOf_ILangStringTextType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "semanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-
-                            theSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-                            if (theSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSemanticId null when error is also null");
-                            }
+                            theSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "supplementalSemanticIds":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySupplementalSemanticIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySupplementalSemanticIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-                            theSupplementalSemanticIds = ParseArrayOfClass<IReference>(
-                                arraySupplementalSemanticIds,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
+                            theSupplementalSemanticIds = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "qualifiers":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayQualifiers = keyValue.Value as Nodes.JsonArray;
-                            if (arrayQualifiers == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-                            theQualifiers = ParseArrayOfClass<IQualifier>(
-                                arrayQualifiers,
-                                DeserializeImplementation.QualifierFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
+                            theQualifiers = Parse_ListOf_IQualifier(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "embeddedDataSpecifications":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayEmbeddedDataSpecifications = keyValue.Value as Nodes.JsonArray;
-                            if (arrayEmbeddedDataSpecifications == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-                            theEmbeddedDataSpecifications = ParseArrayOfClass<IEmbeddedDataSpecification>(
-                                arrayEmbeddedDataSpecifications,
-                                DeserializeImplementation.EmbeddedDataSpecificationFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
+                            theEmbeddedDataSpecifications = Parse_ListOf_IEmbeddedDataSpecification(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "value":
-                        {
-                            if (keyValue.Value == null)
+                            theValue = BytesFrom(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "Blob")
                             {
                                 error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-
-                            theValue = DeserializeImplementation.BytesFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-                            if (theValue == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValue null when error is also null");
+                                    "Expected the model type 'Blob', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "Blob")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'Blob', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -7376,14 +3061,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"contentType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.Blob(
@@ -7407,8 +3092,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.File? FileFrom(
-                Nodes.JsonNode node,
+            internal static Aas.File FileFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -7417,8 +3102,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing File, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theContentType = null;
@@ -7440,405 +3125,71 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "contentType":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "contentType"));
-                                return null;
-                            }
-
-                            theContentType = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "contentType"));
-                                return null;
-                            }
-                            if (theContentType == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theContentType null when error is also null");
-                            }
+                            theContentType = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "extensions":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayExtensions = keyValue.Value as Nodes.JsonArray;
-                            if (arrayExtensions == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-                            theExtensions = ParseArrayOfClass<IExtension>(
-                                arrayExtensions,
-                                DeserializeImplementation.ExtensionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
+                            theExtensions = Parse_ListOf_IExtension(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "category":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-
-                            theCategory = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-                            if (theCategory == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theCategory null when error is also null");
-                            }
+                            theCategory = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "idShort":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-
-                            theIdShort = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-                            if (theIdShort == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theIdShort null when error is also null");
-                            }
+                            theIdShort = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "displayName":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDisplayName = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDisplayName == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-                            theDisplayName = ParseArrayOfClass<ILangStringNameType>(
-                                arrayDisplayName,
-                                DeserializeImplementation.LangStringNameTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
+                            theDisplayName = Parse_ListOf_ILangStringNameType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "description":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDescription = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDescription == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-                            theDescription = ParseArrayOfClass<ILangStringTextType>(
-                                arrayDescription,
-                                DeserializeImplementation.LangStringTextTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
+                            theDescription = Parse_ListOf_ILangStringTextType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "semanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-
-                            theSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-                            if (theSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSemanticId null when error is also null");
-                            }
+                            theSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "supplementalSemanticIds":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySupplementalSemanticIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySupplementalSemanticIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-                            theSupplementalSemanticIds = ParseArrayOfClass<IReference>(
-                                arraySupplementalSemanticIds,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
+                            theSupplementalSemanticIds = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "qualifiers":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayQualifiers = keyValue.Value as Nodes.JsonArray;
-                            if (arrayQualifiers == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-                            theQualifiers = ParseArrayOfClass<IQualifier>(
-                                arrayQualifiers,
-                                DeserializeImplementation.QualifierFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
+                            theQualifiers = Parse_ListOf_IQualifier(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "embeddedDataSpecifications":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayEmbeddedDataSpecifications = keyValue.Value as Nodes.JsonArray;
-                            if (arrayEmbeddedDataSpecifications == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-                            theEmbeddedDataSpecifications = ParseArrayOfClass<IEmbeddedDataSpecification>(
-                                arrayEmbeddedDataSpecifications,
-                                DeserializeImplementation.EmbeddedDataSpecificationFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
+                            theEmbeddedDataSpecifications = Parse_ListOf_IEmbeddedDataSpecification(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "value":
-                        {
-                            if (keyValue.Value == null)
+                            theValue = StringFrom(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "File")
                             {
                                 error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-
-                            theValue = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-                            if (theValue == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValue null when error is also null");
+                                    "Expected the model type 'File', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "File")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'File', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -7846,14 +3197,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"contentType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.File(
@@ -7877,8 +3228,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.AnnotatedRelationshipElement? AnnotatedRelationshipElementFrom(
-                Nodes.JsonNode node,
+            internal static Aas.AnnotatedRelationshipElement AnnotatedRelationshipElementFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -7887,8 +3238,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing AnnotatedRelationshipElement, but got {Describe(node)}");
+                    return default!;
                 }
 
                 IReference? theFirst = null;
@@ -7911,440 +3262,75 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "first":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "first"));
-                                return null;
-                            }
-
-                            theFirst = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "first"));
-                                return null;
-                            }
-                            if (theFirst == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theFirst null when error is also null");
-                            }
+                            theFirst = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "second":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "second"));
-                                return null;
-                            }
-
-                            theSecond = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "second"));
-                                return null;
-                            }
-                            if (theSecond == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSecond null when error is also null");
-                            }
+                            theSecond = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "extensions":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayExtensions = keyValue.Value as Nodes.JsonArray;
-                            if (arrayExtensions == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-                            theExtensions = ParseArrayOfClass<IExtension>(
-                                arrayExtensions,
-                                DeserializeImplementation.ExtensionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
+                            theExtensions = Parse_ListOf_IExtension(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "category":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-
-                            theCategory = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-                            if (theCategory == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theCategory null when error is also null");
-                            }
+                            theCategory = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "idShort":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-
-                            theIdShort = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-                            if (theIdShort == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theIdShort null when error is also null");
-                            }
+                            theIdShort = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "displayName":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDisplayName = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDisplayName == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-                            theDisplayName = ParseArrayOfClass<ILangStringNameType>(
-                                arrayDisplayName,
-                                DeserializeImplementation.LangStringNameTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
+                            theDisplayName = Parse_ListOf_ILangStringNameType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "description":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDescription = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDescription == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-                            theDescription = ParseArrayOfClass<ILangStringTextType>(
-                                arrayDescription,
-                                DeserializeImplementation.LangStringTextTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
+                            theDescription = Parse_ListOf_ILangStringTextType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "semanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-
-                            theSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-                            if (theSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSemanticId null when error is also null");
-                            }
+                            theSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "supplementalSemanticIds":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySupplementalSemanticIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySupplementalSemanticIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-                            theSupplementalSemanticIds = ParseArrayOfClass<IReference>(
-                                arraySupplementalSemanticIds,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
+                            theSupplementalSemanticIds = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "qualifiers":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayQualifiers = keyValue.Value as Nodes.JsonArray;
-                            if (arrayQualifiers == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-                            theQualifiers = ParseArrayOfClass<IQualifier>(
-                                arrayQualifiers,
-                                DeserializeImplementation.QualifierFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
+                            theQualifiers = Parse_ListOf_IQualifier(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "embeddedDataSpecifications":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayEmbeddedDataSpecifications = keyValue.Value as Nodes.JsonArray;
-                            if (arrayEmbeddedDataSpecifications == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-                            theEmbeddedDataSpecifications = ParseArrayOfClass<IEmbeddedDataSpecification>(
-                                arrayEmbeddedDataSpecifications,
-                                DeserializeImplementation.EmbeddedDataSpecificationFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
+                            theEmbeddedDataSpecifications = Parse_ListOf_IEmbeddedDataSpecification(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "annotations":
-                        {
-                            if (keyValue.Value == null)
+                            theAnnotations = Parse_ListOf_IDataElement(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "AnnotatedRelationshipElement")
                             {
                                 error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "annotations"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayAnnotations = keyValue.Value as Nodes.JsonArray;
-                            if (arrayAnnotations == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "annotations"));
-                                return null;
-                            }
-                            theAnnotations = ParseArrayOfClass<IDataElement>(
-                                arrayAnnotations,
-                                DeserializeImplementation.IDataElementFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "annotations"));
-                                return null;
+                                    "Expected the model type 'AnnotatedRelationshipElement', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "AnnotatedRelationshipElement")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'AnnotatedRelationshipElement', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -8352,21 +3338,21 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"first\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theSecond == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"second\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.AnnotatedRelationshipElement(
@@ -8393,8 +3379,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.Entity? EntityFrom(
-                Nodes.JsonNode node,
+            internal static Aas.Entity EntityFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -8403,8 +3389,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing Entity, but got {Describe(node)}");
+                    return default!;
                 }
 
                 EntityType? theEntityType = null;
@@ -8428,477 +3414,79 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "entityType":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "entityType"));
-                                return null;
-                            }
-
-                            theEntityType = DeserializeImplementation.EntityTypeFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "entityType"));
-                                return null;
-                            }
-                            if (theEntityType == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theEntityType null when error is also null");
-                            }
+                            theEntityType = EntityTypeFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "extensions":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayExtensions = keyValue.Value as Nodes.JsonArray;
-                            if (arrayExtensions == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-                            theExtensions = ParseArrayOfClass<IExtension>(
-                                arrayExtensions,
-                                DeserializeImplementation.ExtensionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
+                            theExtensions = Parse_ListOf_IExtension(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "category":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-
-                            theCategory = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-                            if (theCategory == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theCategory null when error is also null");
-                            }
+                            theCategory = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "idShort":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-
-                            theIdShort = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-                            if (theIdShort == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theIdShort null when error is also null");
-                            }
+                            theIdShort = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "displayName":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDisplayName = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDisplayName == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-                            theDisplayName = ParseArrayOfClass<ILangStringNameType>(
-                                arrayDisplayName,
-                                DeserializeImplementation.LangStringNameTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
+                            theDisplayName = Parse_ListOf_ILangStringNameType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "description":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDescription = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDescription == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-                            theDescription = ParseArrayOfClass<ILangStringTextType>(
-                                arrayDescription,
-                                DeserializeImplementation.LangStringTextTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
+                            theDescription = Parse_ListOf_ILangStringTextType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "semanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-
-                            theSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-                            if (theSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSemanticId null when error is also null");
-                            }
+                            theSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "supplementalSemanticIds":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySupplementalSemanticIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySupplementalSemanticIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-                            theSupplementalSemanticIds = ParseArrayOfClass<IReference>(
-                                arraySupplementalSemanticIds,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
+                            theSupplementalSemanticIds = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "qualifiers":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayQualifiers = keyValue.Value as Nodes.JsonArray;
-                            if (arrayQualifiers == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-                            theQualifiers = ParseArrayOfClass<IQualifier>(
-                                arrayQualifiers,
-                                DeserializeImplementation.QualifierFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
+                            theQualifiers = Parse_ListOf_IQualifier(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "embeddedDataSpecifications":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayEmbeddedDataSpecifications = keyValue.Value as Nodes.JsonArray;
-                            if (arrayEmbeddedDataSpecifications == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-                            theEmbeddedDataSpecifications = ParseArrayOfClass<IEmbeddedDataSpecification>(
-                                arrayEmbeddedDataSpecifications,
-                                DeserializeImplementation.EmbeddedDataSpecificationFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
+                            theEmbeddedDataSpecifications = Parse_ListOf_IEmbeddedDataSpecification(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "statements":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "statements"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayStatements = keyValue.Value as Nodes.JsonArray;
-                            if (arrayStatements == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "statements"));
-                                return null;
-                            }
-                            theStatements = ParseArrayOfClass<ISubmodelElement>(
-                                arrayStatements,
-                                DeserializeImplementation.ISubmodelElementFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "statements"));
-                                return null;
-                            }
+                            theStatements = Parse_ListOf_ISubmodelElement(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "globalAssetId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "globalAssetId"));
-                                return null;
-                            }
-
-                            theGlobalAssetId = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "globalAssetId"));
-                                return null;
-                            }
-                            if (theGlobalAssetId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theGlobalAssetId null when error is also null");
-                            }
+                            theGlobalAssetId = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "specificAssetIds":
-                        {
-                            if (keyValue.Value == null)
+                            theSpecificAssetIds = Parse_ListOf_ISpecificAssetId(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "Entity")
                             {
                                 error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "specificAssetIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySpecificAssetIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySpecificAssetIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "specificAssetIds"));
-                                return null;
-                            }
-                            theSpecificAssetIds = ParseArrayOfClass<ISpecificAssetId>(
-                                arraySpecificAssetIds,
-                                DeserializeImplementation.SpecificAssetIdFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "specificAssetIds"));
-                                return null;
+                                    "Expected the model type 'Entity', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "Entity")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'Entity', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -8906,14 +3494,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"entityType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.Entity(
@@ -8939,29 +3527,25 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.EntityType? EntityTypeFrom(
-                Nodes.JsonNode node,
+            internal static Aas.EntityType EntityTypeFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-                string? text = DeserializeImplementation.StringFrom(
-                    node, out error);
+                string text = StringFrom(node, out error);
                 if (error != null)
                 {
-                    return null;
+                    return default!;
                 }
-                if (text == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected text null if error null");
-                }
+
                 Aas.EntityType? result = Stringification.EntityTypeFromString(text);
                 if (result == null)
                 {
                     error = new Reporting.Error(
                         "Not a valid JSON representation of EntityType");
+                    return default!;
                 }
-                return result;
+
+                return result.Value;
             }  // internal static EntityTypeFrom
 
             /// <summary>
@@ -8969,29 +3553,25 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.Direction? DirectionFrom(
-                Nodes.JsonNode node,
+            internal static Aas.Direction DirectionFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-                string? text = DeserializeImplementation.StringFrom(
-                    node, out error);
+                string text = StringFrom(node, out error);
                 if (error != null)
                 {
-                    return null;
+                    return default!;
                 }
-                if (text == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected text null if error null");
-                }
+
                 Aas.Direction? result = Stringification.DirectionFromString(text);
                 if (result == null)
                 {
                     error = new Reporting.Error(
                         "Not a valid JSON representation of Direction");
+                    return default!;
                 }
-                return result;
+
+                return result.Value;
             }  // internal static DirectionFrom
 
             /// <summary>
@@ -8999,29 +3579,25 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.StateOfEvent? StateOfEventFrom(
-                Nodes.JsonNode node,
+            internal static Aas.StateOfEvent StateOfEventFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-                string? text = DeserializeImplementation.StringFrom(
-                    node, out error);
+                string text = StringFrom(node, out error);
                 if (error != null)
                 {
-                    return null;
+                    return default!;
                 }
-                if (text == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected text null if error null");
-                }
+
                 Aas.StateOfEvent? result = Stringification.StateOfEventFromString(text);
                 if (result == null)
                 {
                     error = new Reporting.Error(
                         "Not a valid JSON representation of StateOfEvent");
+                    return default!;
                 }
-                return result;
+
+                return result.Value;
             }  // internal static StateOfEventFrom
 
             /// <summary>
@@ -9029,8 +3605,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.EventPayload? EventPayloadFrom(
-                Nodes.JsonNode node,
+            internal static Aas.EventPayload EventPayloadFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -9039,8 +3615,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing EventPayload, but got {Describe(node)}");
+                    return default!;
                 }
 
                 IReference? theSource = null;
@@ -9057,246 +3633,49 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "source":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "source"));
-                                return null;
-                            }
-
-                            theSource = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "source"));
-                                return null;
-                            }
-                            if (theSource == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSource null when error is also null");
-                            }
+                            theSource = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "observableReference":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "observableReference"));
-                                return null;
-                            }
-
-                            theObservableReference = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "observableReference"));
-                                return null;
-                            }
-                            if (theObservableReference == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theObservableReference null when error is also null");
-                            }
+                            theObservableReference = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "timeStamp":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "timeStamp"));
-                                return null;
-                            }
-
-                            theTimeStamp = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "timeStamp"));
-                                return null;
-                            }
-                            if (theTimeStamp == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theTimeStamp null when error is also null");
-                            }
+                            theTimeStamp = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "sourceSemanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "sourceSemanticId"));
-                                return null;
-                            }
-
-                            theSourceSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "sourceSemanticId"));
-                                return null;
-                            }
-                            if (theSourceSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSourceSemanticId null when error is also null");
-                            }
+                            theSourceSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "observableSemanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "observableSemanticId"));
-                                return null;
-                            }
-
-                            theObservableSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "observableSemanticId"));
-                                return null;
-                            }
-                            if (theObservableSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theObservableSemanticId null when error is also null");
-                            }
+                            theObservableSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "topic":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "topic"));
-                                return null;
-                            }
-
-                            theTopic = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "topic"));
-                                return null;
-                            }
-                            if (theTopic == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theTopic null when error is also null");
-                            }
+                            theTopic = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "subjectId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "subjectId"));
-                                return null;
-                            }
-
-                            theSubjectId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "subjectId"));
-                                return null;
-                            }
-                            if (theSubjectId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSubjectId null when error is also null");
-                            }
+                            theSubjectId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "payload":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "payload"));
-                                return null;
-                            }
-
-                            thePayload = DeserializeImplementation.BytesFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "payload"));
-                                return null;
-                            }
-                            if (thePayload == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected thePayload null when error is also null");
-                            }
+                            thePayload = BytesFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -9304,21 +3683,21 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"source\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theObservableReference == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"observableReference\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theTimeStamp == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"timeStamp\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.EventPayload(
@@ -9345,48 +3724,33 @@ namespace AasCore.Aas3_0
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            public static Aas.IEventElement? IEventElementFrom(
-                Nodes.JsonNode node,
+            public static Aas.IEventElement IEventElementFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-
-                var obj = node as Nodes.JsonObject;
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected Nodes.JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing IEventElement, but got {Describe(node)}");
+                    return default!;
                 }
 
-                Nodes.JsonNode? modelTypeNode = obj["modelType"];
-                if (modelTypeNode == null)
-                {
-                    error = new Reporting.Error(
-                        "Expected a model type, but none is present");
-                    return null;
-                }
-                string? modelType = DeserializeImplementation.StringFrom(
-                    modelTypeNode, out error);
+                string modelType = ModelTypeFrom(obj, out error);
                 if (error != null)
                 {
-                    return null;
-                }
-                if (modelType == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected modelType null when error null");
+                    return default!;
                 }
 
                 switch (modelType)
                 {
-                    case "BasicEventElement":
-                        return BasicEventElementFrom(
-                            node, out error);
-                    default:
-                        error = new Reporting.Error(
-                            $"Unexpected model type for IEventElement: {modelType}");
-                        return null;
+                case "BasicEventElement":
+                    return BasicEventElementFrom(
+                        node, out error);
+                default:
+                    error = new Reporting.Error(
+                        $"Unexpected model type for IEventElement: {modelType}");
+                    return default!;
                 }
             }  // public static Aas.IEventElement IEventElementFrom
 
@@ -9395,8 +3759,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.BasicEventElement? BasicEventElementFrom(
-                Nodes.JsonNode node,
+            internal static Aas.BasicEventElement BasicEventElementFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -9405,8 +3769,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing BasicEventElement, but got {Describe(node)}");
+                    return default!;
                 }
 
                 IReference? theObserved = null;
@@ -9434,583 +3798,95 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "observed":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "observed"));
-                                return null;
-                            }
-
-                            theObserved = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "observed"));
-                                return null;
-                            }
-                            if (theObserved == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theObserved null when error is also null");
-                            }
+                            theObserved = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "direction":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "direction"));
-                                return null;
-                            }
-
-                            theDirection = DeserializeImplementation.DirectionFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "direction"));
-                                return null;
-                            }
-                            if (theDirection == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theDirection null when error is also null");
-                            }
+                            theDirection = DirectionFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "state":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "state"));
-                                return null;
-                            }
-
-                            theState = DeserializeImplementation.StateOfEventFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "state"));
-                                return null;
-                            }
-                            if (theState == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theState null when error is also null");
-                            }
+                            theState = StateOfEventFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "extensions":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayExtensions = keyValue.Value as Nodes.JsonArray;
-                            if (arrayExtensions == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-                            theExtensions = ParseArrayOfClass<IExtension>(
-                                arrayExtensions,
-                                DeserializeImplementation.ExtensionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
+                            theExtensions = Parse_ListOf_IExtension(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "category":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-
-                            theCategory = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-                            if (theCategory == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theCategory null when error is also null");
-                            }
+                            theCategory = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "idShort":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-
-                            theIdShort = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-                            if (theIdShort == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theIdShort null when error is also null");
-                            }
+                            theIdShort = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "displayName":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDisplayName = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDisplayName == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-                            theDisplayName = ParseArrayOfClass<ILangStringNameType>(
-                                arrayDisplayName,
-                                DeserializeImplementation.LangStringNameTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
+                            theDisplayName = Parse_ListOf_ILangStringNameType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "description":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDescription = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDescription == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-                            theDescription = ParseArrayOfClass<ILangStringTextType>(
-                                arrayDescription,
-                                DeserializeImplementation.LangStringTextTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
+                            theDescription = Parse_ListOf_ILangStringTextType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "semanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-
-                            theSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-                            if (theSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSemanticId null when error is also null");
-                            }
+                            theSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "supplementalSemanticIds":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySupplementalSemanticIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySupplementalSemanticIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-                            theSupplementalSemanticIds = ParseArrayOfClass<IReference>(
-                                arraySupplementalSemanticIds,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
+                            theSupplementalSemanticIds = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "qualifiers":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayQualifiers = keyValue.Value as Nodes.JsonArray;
-                            if (arrayQualifiers == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-                            theQualifiers = ParseArrayOfClass<IQualifier>(
-                                arrayQualifiers,
-                                DeserializeImplementation.QualifierFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
+                            theQualifiers = Parse_ListOf_IQualifier(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "embeddedDataSpecifications":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayEmbeddedDataSpecifications = keyValue.Value as Nodes.JsonArray;
-                            if (arrayEmbeddedDataSpecifications == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-                            theEmbeddedDataSpecifications = ParseArrayOfClass<IEmbeddedDataSpecification>(
-                                arrayEmbeddedDataSpecifications,
-                                DeserializeImplementation.EmbeddedDataSpecificationFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
+                            theEmbeddedDataSpecifications = Parse_ListOf_IEmbeddedDataSpecification(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "messageTopic":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "messageTopic"));
-                                return null;
-                            }
-
-                            theMessageTopic = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "messageTopic"));
-                                return null;
-                            }
-                            if (theMessageTopic == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theMessageTopic null when error is also null");
-                            }
+                            theMessageTopic = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "messageBroker":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "messageBroker"));
-                                return null;
-                            }
-
-                            theMessageBroker = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "messageBroker"));
-                                return null;
-                            }
-                            if (theMessageBroker == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theMessageBroker null when error is also null");
-                            }
+                            theMessageBroker = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "lastUpdate":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "lastUpdate"));
-                                return null;
-                            }
-
-                            theLastUpdate = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "lastUpdate"));
-                                return null;
-                            }
-                            if (theLastUpdate == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theLastUpdate null when error is also null");
-                            }
+                            theLastUpdate = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "minInterval":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "minInterval"));
-                                return null;
-                            }
-
-                            theMinInterval = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "minInterval"));
-                                return null;
-                            }
-                            if (theMinInterval == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theMinInterval null when error is also null");
-                            }
+                            theMinInterval = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "maxInterval":
-                        {
-                            if (keyValue.Value == null)
+                            theMaxInterval = StringFrom(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "BasicEventElement")
                             {
                                 error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "maxInterval"));
-                                return null;
-                            }
-
-                            theMaxInterval = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "maxInterval"));
-                                return null;
-                            }
-                            if (theMaxInterval == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theMaxInterval null when error is also null");
+                                    "Expected the model type 'BasicEventElement', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "BasicEventElement")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'BasicEventElement', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -10018,28 +3894,28 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"observed\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theDirection == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"direction\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theState == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"state\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.BasicEventElement(
@@ -10073,8 +3949,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.Operation? OperationFrom(
-                Nodes.JsonNode node,
+            internal static Aas.Operation OperationFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -10083,8 +3959,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing Operation, but got {Describe(node)}");
+                    return default!;
                 }
 
                 List<IExtension>? theExtensions = null;
@@ -10107,464 +3983,83 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "extensions":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayExtensions = keyValue.Value as Nodes.JsonArray;
-                            if (arrayExtensions == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-                            theExtensions = ParseArrayOfClass<IExtension>(
-                                arrayExtensions,
-                                DeserializeImplementation.ExtensionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
+                            theExtensions = Parse_ListOf_IExtension(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "category":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-
-                            theCategory = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-                            if (theCategory == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theCategory null when error is also null");
-                            }
+                            theCategory = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "idShort":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-
-                            theIdShort = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-                            if (theIdShort == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theIdShort null when error is also null");
-                            }
+                            theIdShort = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "displayName":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDisplayName = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDisplayName == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-                            theDisplayName = ParseArrayOfClass<ILangStringNameType>(
-                                arrayDisplayName,
-                                DeserializeImplementation.LangStringNameTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
+                            theDisplayName = Parse_ListOf_ILangStringNameType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "description":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDescription = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDescription == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-                            theDescription = ParseArrayOfClass<ILangStringTextType>(
-                                arrayDescription,
-                                DeserializeImplementation.LangStringTextTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
+                            theDescription = Parse_ListOf_ILangStringTextType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "semanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-
-                            theSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-                            if (theSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSemanticId null when error is also null");
-                            }
+                            theSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "supplementalSemanticIds":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySupplementalSemanticIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySupplementalSemanticIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-                            theSupplementalSemanticIds = ParseArrayOfClass<IReference>(
-                                arraySupplementalSemanticIds,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
+                            theSupplementalSemanticIds = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "qualifiers":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayQualifiers = keyValue.Value as Nodes.JsonArray;
-                            if (arrayQualifiers == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-                            theQualifiers = ParseArrayOfClass<IQualifier>(
-                                arrayQualifiers,
-                                DeserializeImplementation.QualifierFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
+                            theQualifiers = Parse_ListOf_IQualifier(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "embeddedDataSpecifications":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayEmbeddedDataSpecifications = keyValue.Value as Nodes.JsonArray;
-                            if (arrayEmbeddedDataSpecifications == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-                            theEmbeddedDataSpecifications = ParseArrayOfClass<IEmbeddedDataSpecification>(
-                                arrayEmbeddedDataSpecifications,
-                                DeserializeImplementation.EmbeddedDataSpecificationFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
+                            theEmbeddedDataSpecifications = Parse_ListOf_IEmbeddedDataSpecification(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "inputVariables":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "inputVariables"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayInputVariables = keyValue.Value as Nodes.JsonArray;
-                            if (arrayInputVariables == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "inputVariables"));
-                                return null;
-                            }
-                            theInputVariables = ParseArrayOfClass<IOperationVariable>(
-                                arrayInputVariables,
-                                DeserializeImplementation.OperationVariableFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "inputVariables"));
-                                return null;
-                            }
+                            theInputVariables = Parse_ListOf_IOperationVariable(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "outputVariables":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "outputVariables"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayOutputVariables = keyValue.Value as Nodes.JsonArray;
-                            if (arrayOutputVariables == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "outputVariables"));
-                                return null;
-                            }
-                            theOutputVariables = ParseArrayOfClass<IOperationVariable>(
-                                arrayOutputVariables,
-                                DeserializeImplementation.OperationVariableFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "outputVariables"));
-                                return null;
-                            }
+                            theOutputVariables = Parse_ListOf_IOperationVariable(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "inoutputVariables":
-                        {
-                            if (keyValue.Value == null)
+                            theInoutputVariables = Parse_ListOf_IOperationVariable(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "Operation")
                             {
                                 error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "inoutputVariables"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayInoutputVariables = keyValue.Value as Nodes.JsonArray;
-                            if (arrayInoutputVariables == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "inoutputVariables"));
-                                return null;
-                            }
-                            theInoutputVariables = ParseArrayOfClass<IOperationVariable>(
-                                arrayInoutputVariables,
-                                DeserializeImplementation.OperationVariableFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "inoutputVariables"));
-                                return null;
+                                    "Expected the model type 'Operation', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "Operation")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'Operation', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
-
-
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.Operation(
@@ -10587,8 +4082,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.OperationVariable? OperationVariableFrom(
-                Nodes.JsonNode node,
+            internal static Aas.OperationVariable OperationVariableFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -10597,8 +4092,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing OperationVariable, but got {Describe(node)}");
+                    return default!;
                 }
 
                 ISubmodelElement? theValue = null;
@@ -10608,38 +4103,21 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "value":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-
-                            theValue = DeserializeImplementation.ISubmodelElementFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-                            if (theValue == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValue null when error is also null");
-                            }
+                            theValue = ISubmodelElementFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -10647,7 +4125,7 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"value\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.OperationVariable(
@@ -10661,8 +4139,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.Capability? CapabilityFrom(
-                Nodes.JsonNode node,
+            internal static Aas.Capability CapabilityFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -10671,8 +4149,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing Capability, but got {Describe(node)}");
+                    return default!;
                 }
 
                 List<IExtension>? theExtensions = null;
@@ -10692,356 +4170,71 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "extensions":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayExtensions = keyValue.Value as Nodes.JsonArray;
-                            if (arrayExtensions == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-                            theExtensions = ParseArrayOfClass<IExtension>(
-                                arrayExtensions,
-                                DeserializeImplementation.ExtensionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
+                            theExtensions = Parse_ListOf_IExtension(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "category":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-
-                            theCategory = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-                            if (theCategory == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theCategory null when error is also null");
-                            }
+                            theCategory = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "idShort":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-
-                            theIdShort = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-                            if (theIdShort == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theIdShort null when error is also null");
-                            }
+                            theIdShort = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "displayName":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDisplayName = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDisplayName == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-                            theDisplayName = ParseArrayOfClass<ILangStringNameType>(
-                                arrayDisplayName,
-                                DeserializeImplementation.LangStringNameTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
+                            theDisplayName = Parse_ListOf_ILangStringNameType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "description":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDescription = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDescription == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-                            theDescription = ParseArrayOfClass<ILangStringTextType>(
-                                arrayDescription,
-                                DeserializeImplementation.LangStringTextTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
+                            theDescription = Parse_ListOf_ILangStringTextType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "semanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-
-                            theSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "semanticId"));
-                                return null;
-                            }
-                            if (theSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSemanticId null when error is also null");
-                            }
+                            theSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "supplementalSemanticIds":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySupplementalSemanticIds = keyValue.Value as Nodes.JsonArray;
-                            if (arraySupplementalSemanticIds == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
-                            theSupplementalSemanticIds = ParseArrayOfClass<IReference>(
-                                arraySupplementalSemanticIds,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "supplementalSemanticIds"));
-                                return null;
-                            }
+                            theSupplementalSemanticIds = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "qualifiers":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayQualifiers = keyValue.Value as Nodes.JsonArray;
-                            if (arrayQualifiers == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
-                            theQualifiers = ParseArrayOfClass<IQualifier>(
-                                arrayQualifiers,
-                                DeserializeImplementation.QualifierFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "qualifiers"));
-                                return null;
-                            }
+                            theQualifiers = Parse_ListOf_IQualifier(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "embeddedDataSpecifications":
-                        {
-                            if (keyValue.Value == null)
+                            theEmbeddedDataSpecifications = Parse_ListOf_IEmbeddedDataSpecification(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "Capability")
                             {
                                 error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayEmbeddedDataSpecifications = keyValue.Value as Nodes.JsonArray;
-                            if (arrayEmbeddedDataSpecifications == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-                            theEmbeddedDataSpecifications = ParseArrayOfClass<IEmbeddedDataSpecification>(
-                                arrayEmbeddedDataSpecifications,
-                                DeserializeImplementation.EmbeddedDataSpecificationFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
+                                    "Expected the model type 'Capability', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "Capability")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'Capability', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
-
-
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.Capability(
@@ -11061,8 +4254,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.ConceptDescription? ConceptDescriptionFrom(
-                Nodes.JsonNode node,
+            internal static Aas.ConceptDescription ConceptDescriptionFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -11071,8 +4264,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing ConceptDescription, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theId = null;
@@ -11092,339 +4285,63 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "id":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "id"));
-                                return null;
-                            }
-
-                            theId = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "id"));
-                                return null;
-                            }
-                            if (theId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theId null when error is also null");
-                            }
+                            theId = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "extensions":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayExtensions = keyValue.Value as Nodes.JsonArray;
-                            if (arrayExtensions == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
-                            theExtensions = ParseArrayOfClass<IExtension>(
-                                arrayExtensions,
-                                DeserializeImplementation.ExtensionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "extensions"));
-                                return null;
-                            }
+                            theExtensions = Parse_ListOf_IExtension(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "category":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-
-                            theCategory = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "category"));
-                                return null;
-                            }
-                            if (theCategory == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theCategory null when error is also null");
-                            }
+                            theCategory = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "idShort":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-
-                            theIdShort = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "idShort"));
-                                return null;
-                            }
-                            if (theIdShort == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theIdShort null when error is also null");
-                            }
+                            theIdShort = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "displayName":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDisplayName = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDisplayName == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
-                            theDisplayName = ParseArrayOfClass<ILangStringNameType>(
-                                arrayDisplayName,
-                                DeserializeImplementation.LangStringNameTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "displayName"));
-                                return null;
-                            }
+                            theDisplayName = Parse_ListOf_ILangStringNameType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "description":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDescription = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDescription == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
-                            theDescription = ParseArrayOfClass<ILangStringTextType>(
-                                arrayDescription,
-                                DeserializeImplementation.LangStringTextTypeFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "description"));
-                                return null;
-                            }
+                            theDescription = Parse_ListOf_ILangStringTextType(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "administration":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "administration"));
-                                return null;
-                            }
-
-                            theAdministration = DeserializeImplementation.AdministrativeInformationFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "administration"));
-                                return null;
-                            }
-                            if (theAdministration == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theAdministration null when error is also null");
-                            }
+                            theAdministration = AdministrativeInformationFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "embeddedDataSpecifications":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayEmbeddedDataSpecifications = keyValue.Value as Nodes.JsonArray;
-                            if (arrayEmbeddedDataSpecifications == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
-                            theEmbeddedDataSpecifications = ParseArrayOfClass<IEmbeddedDataSpecification>(
-                                arrayEmbeddedDataSpecifications,
-                                DeserializeImplementation.EmbeddedDataSpecificationFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "embeddedDataSpecifications"));
-                                return null;
-                            }
+                            theEmbeddedDataSpecifications = Parse_ListOf_IEmbeddedDataSpecification(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "isCaseOf":
-                        {
-                            if (keyValue.Value == null)
+                            theIsCaseOf = Parse_ListOf_IReference(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "ConceptDescription")
                             {
                                 error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "isCaseOf"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayIsCaseOf = keyValue.Value as Nodes.JsonArray;
-                            if (arrayIsCaseOf == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "isCaseOf"));
-                                return null;
-                            }
-                            theIsCaseOf = ParseArrayOfClass<IReference>(
-                                arrayIsCaseOf,
-                                DeserializeImplementation.ReferenceFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "isCaseOf"));
-                                return null;
+                                    "Expected the model type 'ConceptDescription', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "ConceptDescription")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'ConceptDescription', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -11432,14 +4349,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"id\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.ConceptDescription(
@@ -11461,29 +4378,25 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.ReferenceTypes? ReferenceTypesFrom(
-                Nodes.JsonNode node,
+            internal static Aas.ReferenceTypes ReferenceTypesFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-                string? text = DeserializeImplementation.StringFrom(
-                    node, out error);
+                string text = StringFrom(node, out error);
                 if (error != null)
                 {
-                    return null;
+                    return default!;
                 }
-                if (text == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected text null if error null");
-                }
+
                 Aas.ReferenceTypes? result = Stringification.ReferenceTypesFromString(text);
                 if (result == null)
                 {
                     error = new Reporting.Error(
                         "Not a valid JSON representation of ReferenceTypes");
+                    return default!;
                 }
-                return result;
+
+                return result.Value;
             }  // internal static ReferenceTypesFrom
 
             /// <summary>
@@ -11491,8 +4404,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.Reference? ReferenceFrom(
-                Nodes.JsonNode node,
+            internal static Aas.Reference ReferenceFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -11501,8 +4414,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing Reference, but got {Describe(node)}");
+                    return default!;
                 }
 
                 ReferenceTypes? theType = null;
@@ -11514,103 +4427,29 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "type":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "type"));
-                                return null;
-                            }
-
-                            theType = DeserializeImplementation.ReferenceTypesFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "type"));
-                                return null;
-                            }
-                            if (theType == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theType null when error is also null");
-                            }
+                            theType = ReferenceTypesFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "keys":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "keys"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayKeys = keyValue.Value as Nodes.JsonArray;
-                            if (arrayKeys == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "keys"));
-                                return null;
-                            }
-                            theKeys = ParseArrayOfClass<IKey>(
-                                arrayKeys,
-                                DeserializeImplementation.KeyFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "keys"));
-                                return null;
-                            }
+                            theKeys = Parse_ListOf_IKey(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "referredSemanticId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "referredSemanticId"));
-                                return null;
-                            }
-
-                            theReferredSemanticId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "referredSemanticId"));
-                                return null;
-                            }
-                            if (theReferredSemanticId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theReferredSemanticId null when error is also null");
-                            }
+                            theReferredSemanticId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -11618,14 +4457,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"type\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theKeys == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"keys\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.Reference(
@@ -11643,8 +4482,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.Key? KeyFrom(
-                Nodes.JsonNode node,
+            internal static Aas.Key KeyFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -11653,8 +4492,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing Key, but got {Describe(node)}");
+                    return default!;
                 }
 
                 KeyTypes? theType = null;
@@ -11665,67 +4504,25 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "type":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "type"));
-                                return null;
-                            }
-
-                            theType = DeserializeImplementation.KeyTypesFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "type"));
-                                return null;
-                            }
-                            if (theType == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theType null when error is also null");
-                            }
+                            theType = KeyTypesFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "value":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-
-                            theValue = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-                            if (theValue == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValue null when error is also null");
-                            }
+                            theValue = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -11733,14 +4530,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"type\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theValue == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"value\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.Key(
@@ -11757,29 +4554,25 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.KeyTypes? KeyTypesFrom(
-                Nodes.JsonNode node,
+            internal static Aas.KeyTypes KeyTypesFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-                string? text = DeserializeImplementation.StringFrom(
-                    node, out error);
+                string text = StringFrom(node, out error);
                 if (error != null)
                 {
-                    return null;
+                    return default!;
                 }
-                if (text == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected text null if error null");
-                }
+
                 Aas.KeyTypes? result = Stringification.KeyTypesFromString(text);
                 if (result == null)
                 {
                     error = new Reporting.Error(
                         "Not a valid JSON representation of KeyTypes");
+                    return default!;
                 }
-                return result;
+
+                return result.Value;
             }  // internal static KeyTypesFrom
 
             /// <summary>
@@ -11787,29 +4580,25 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.DataTypeDefXsd? DataTypeDefXsdFrom(
-                Nodes.JsonNode node,
+            internal static Aas.DataTypeDefXsd DataTypeDefXsdFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-                string? text = DeserializeImplementation.StringFrom(
-                    node, out error);
+                string text = StringFrom(node, out error);
                 if (error != null)
                 {
-                    return null;
+                    return default!;
                 }
-                if (text == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected text null if error null");
-                }
+
                 Aas.DataTypeDefXsd? result = Stringification.DataTypeDefXsdFromString(text);
                 if (result == null)
                 {
                     error = new Reporting.Error(
                         "Not a valid JSON representation of DataTypeDefXsd");
+                    return default!;
                 }
-                return result;
+
+                return result.Value;
             }  // internal static DataTypeDefXsdFrom
 
             /// <summary>
@@ -11819,60 +4608,45 @@ namespace AasCore.Aas3_0
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            public static Aas.IAbstractLangString? IAbstractLangStringFrom(
-                Nodes.JsonNode node,
+            public static Aas.IAbstractLangString IAbstractLangStringFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-
-                var obj = node as Nodes.JsonObject;
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected Nodes.JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing IAbstractLangString, but got {Describe(node)}");
+                    return default!;
                 }
 
-                Nodes.JsonNode? modelTypeNode = obj["modelType"];
-                if (modelTypeNode == null)
-                {
-                    error = new Reporting.Error(
-                        "Expected a model type, but none is present");
-                    return null;
-                }
-                string? modelType = DeserializeImplementation.StringFrom(
-                    modelTypeNode, out error);
+                string modelType = ModelTypeFrom(obj, out error);
                 if (error != null)
                 {
-                    return null;
-                }
-                if (modelType == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected modelType null when error null");
+                    return default!;
                 }
 
                 switch (modelType)
                 {
-                    case "LangStringDefinitionTypeIec61360":
-                        return LangStringDefinitionTypeIec61360From(
-                            node, out error);
-                    case "LangStringNameType":
-                        return LangStringNameTypeFrom(
-                            node, out error);
-                    case "LangStringPreferredNameTypeIec61360":
-                        return LangStringPreferredNameTypeIec61360From(
-                            node, out error);
-                    case "LangStringShortNameTypeIec61360":
-                        return LangStringShortNameTypeIec61360From(
-                            node, out error);
-                    case "LangStringTextType":
-                        return LangStringTextTypeFrom(
-                            node, out error);
-                    default:
-                        error = new Reporting.Error(
-                            $"Unexpected model type for IAbstractLangString: {modelType}");
-                        return null;
+                case "LangStringDefinitionTypeIec61360":
+                    return LangStringDefinitionTypeIec61360From(
+                        node, out error);
+                case "LangStringNameType":
+                    return LangStringNameTypeFrom(
+                        node, out error);
+                case "LangStringPreferredNameTypeIec61360":
+                    return LangStringPreferredNameTypeIec61360From(
+                        node, out error);
+                case "LangStringShortNameTypeIec61360":
+                    return LangStringShortNameTypeIec61360From(
+                        node, out error);
+                case "LangStringTextType":
+                    return LangStringTextTypeFrom(
+                        node, out error);
+                default:
+                    error = new Reporting.Error(
+                        $"Unexpected model type for IAbstractLangString: {modelType}");
+                    return default!;
                 }
             }  // public static Aas.IAbstractLangString IAbstractLangStringFrom
 
@@ -11881,8 +4655,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.LangStringNameType? LangStringNameTypeFrom(
-                Nodes.JsonNode node,
+            internal static Aas.LangStringNameType LangStringNameTypeFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -11891,8 +4665,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing LangStringNameType, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theLanguage = null;
@@ -11903,67 +4677,25 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "language":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "language"));
-                                return null;
-                            }
-
-                            theLanguage = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "language"));
-                                return null;
-                            }
-                            if (theLanguage == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theLanguage null when error is also null");
-                            }
+                            theLanguage = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "text":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "text"));
-                                return null;
-                            }
-
-                            theText = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "text"));
-                                return null;
-                            }
-                            if (theText == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theText null when error is also null");
-                            }
+                            theText = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -11971,14 +4703,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"language\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theText == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"text\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.LangStringNameType(
@@ -11995,8 +4727,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.LangStringTextType? LangStringTextTypeFrom(
-                Nodes.JsonNode node,
+            internal static Aas.LangStringTextType LangStringTextTypeFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -12005,8 +4737,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing LangStringTextType, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theLanguage = null;
@@ -12017,67 +4749,25 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "language":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "language"));
-                                return null;
-                            }
-
-                            theLanguage = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "language"));
-                                return null;
-                            }
-                            if (theLanguage == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theLanguage null when error is also null");
-                            }
+                            theLanguage = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "text":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "text"));
-                                return null;
-                            }
-
-                            theText = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "text"));
-                                return null;
-                            }
-                            if (theText == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theText null when error is also null");
-                            }
+                            theText = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -12085,14 +4775,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"language\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theText == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"text\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.LangStringTextType(
@@ -12109,8 +4799,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.Environment? EnvironmentFrom(
-                Nodes.JsonNode node,
+            internal static Aas.Environment EnvironmentFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -12119,8 +4809,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing Environment, but got {Describe(node)}");
+                    return default!;
                 }
 
                 List<IAssetAdministrationShell>? theAssetAdministrationShells = null;
@@ -12132,121 +4822,31 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "assetAdministrationShells":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "assetAdministrationShells"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayAssetAdministrationShells = keyValue.Value as Nodes.JsonArray;
-                            if (arrayAssetAdministrationShells == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "assetAdministrationShells"));
-                                return null;
-                            }
-                            theAssetAdministrationShells = ParseArrayOfClass<IAssetAdministrationShell>(
-                                arrayAssetAdministrationShells,
-                                DeserializeImplementation.AssetAdministrationShellFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "assetAdministrationShells"));
-                                return null;
-                            }
+                            theAssetAdministrationShells = Parse_ListOf_IAssetAdministrationShell(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "submodels":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "submodels"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arraySubmodels = keyValue.Value as Nodes.JsonArray;
-                            if (arraySubmodels == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "submodels"));
-                                return null;
-                            }
-                            theSubmodels = ParseArrayOfClass<ISubmodel>(
-                                arraySubmodels,
-                                DeserializeImplementation.SubmodelFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "submodels"));
-                                return null;
-                            }
+                            theSubmodels = Parse_ListOf_ISubmodel(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "conceptDescriptions":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "conceptDescriptions"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayConceptDescriptions = keyValue.Value as Nodes.JsonArray;
-                            if (arrayConceptDescriptions == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "conceptDescriptions"));
-                                return null;
-                            }
-                            theConceptDescriptions = ParseArrayOfClass<IConceptDescription>(
-                                arrayConceptDescriptions,
-                                DeserializeImplementation.ConceptDescriptionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "conceptDescriptions"));
-                                return null;
-                            }
+                            theConceptDescriptions = Parse_ListOf_IConceptDescription(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
-
-
 
                 return new Aas.Environment(
                     theAssetAdministrationShells,
@@ -12261,48 +4861,33 @@ namespace AasCore.Aas3_0
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            public static Aas.IDataSpecificationContent? IDataSpecificationContentFrom(
-                Nodes.JsonNode node,
+            public static Aas.IDataSpecificationContent IDataSpecificationContentFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-
-                var obj = node as Nodes.JsonObject;
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected Nodes.JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing IDataSpecificationContent, but got {Describe(node)}");
+                    return default!;
                 }
 
-                Nodes.JsonNode? modelTypeNode = obj["modelType"];
-                if (modelTypeNode == null)
-                {
-                    error = new Reporting.Error(
-                        "Expected a model type, but none is present");
-                    return null;
-                }
-                string? modelType = DeserializeImplementation.StringFrom(
-                    modelTypeNode, out error);
+                string modelType = ModelTypeFrom(obj, out error);
                 if (error != null)
                 {
-                    return null;
-                }
-                if (modelType == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected modelType null when error null");
+                    return default!;
                 }
 
                 switch (modelType)
                 {
-                    case "DataSpecificationIec61360":
-                        return DataSpecificationIec61360From(
-                            node, out error);
-                    default:
-                        error = new Reporting.Error(
-                            $"Unexpected model type for IDataSpecificationContent: {modelType}");
-                        return null;
+                case "DataSpecificationIec61360":
+                    return DataSpecificationIec61360From(
+                        node, out error);
+                default:
+                    error = new Reporting.Error(
+                        $"Unexpected model type for IDataSpecificationContent: {modelType}");
+                    return default!;
                 }
             }  // public static Aas.IDataSpecificationContent IDataSpecificationContentFrom
 
@@ -12311,8 +4896,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.EmbeddedDataSpecification? EmbeddedDataSpecificationFrom(
-                Nodes.JsonNode node,
+            internal static Aas.EmbeddedDataSpecification EmbeddedDataSpecificationFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -12321,8 +4906,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing EmbeddedDataSpecification, but got {Describe(node)}");
+                    return default!;
                 }
 
                 IReference? theDataSpecification = null;
@@ -12333,67 +4918,25 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "dataSpecification":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "dataSpecification"));
-                                return null;
-                            }
-
-                            theDataSpecification = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "dataSpecification"));
-                                return null;
-                            }
-                            if (theDataSpecification == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theDataSpecification null when error is also null");
-                            }
+                            theDataSpecification = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "dataSpecificationContent":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "dataSpecificationContent"));
-                                return null;
-                            }
-
-                            theDataSpecificationContent = DeserializeImplementation.IDataSpecificationContentFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "dataSpecificationContent"));
-                                return null;
-                            }
-                            if (theDataSpecificationContent == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theDataSpecificationContent null when error is also null");
-                            }
+                            theDataSpecificationContent = IDataSpecificationContentFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -12401,14 +4944,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"dataSpecification\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theDataSpecificationContent == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"dataSpecificationContent\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.EmbeddedDataSpecification(
@@ -12425,29 +4968,25 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.DataTypeIec61360? DataTypeIec61360From(
-                Nodes.JsonNode node,
+            internal static Aas.DataTypeIec61360 DataTypeIec61360From(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-                string? text = DeserializeImplementation.StringFrom(
-                    node, out error);
+                string text = StringFrom(node, out error);
                 if (error != null)
                 {
-                    return null;
+                    return default!;
                 }
-                if (text == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected text null if error null");
-                }
+
                 Aas.DataTypeIec61360? result = Stringification.DataTypeIec61360FromString(text);
                 if (result == null)
                 {
                     error = new Reporting.Error(
                         "Not a valid JSON representation of DataTypeIec61360");
+                    return default!;
                 }
-                return result;
+
+                return result.Value;
             }  // internal static DataTypeIec61360From
 
             /// <summary>
@@ -12455,8 +4994,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.LevelType? LevelTypeFrom(
-                Nodes.JsonNode node,
+            internal static Aas.LevelType LevelTypeFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -12465,8 +5004,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing LevelType, but got {Describe(node)}");
+                    return default!;
                 }
 
                 bool? theMin = null;
@@ -12479,125 +5018,33 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "min":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "min"));
-                                return null;
-                            }
-
-                            theMin = DeserializeImplementation.BoolFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "min"));
-                                return null;
-                            }
-                            if (theMin == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theMin null when error is also null");
-                            }
+                            theMin = BoolFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "nom":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "nom"));
-                                return null;
-                            }
-
-                            theNom = DeserializeImplementation.BoolFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "nom"));
-                                return null;
-                            }
-                            if (theNom == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theNom null when error is also null");
-                            }
+                            theNom = BoolFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "typ":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "typ"));
-                                return null;
-                            }
-
-                            theTyp = DeserializeImplementation.BoolFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "typ"));
-                                return null;
-                            }
-                            if (theTyp == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theTyp null when error is also null");
-                            }
+                            theTyp = BoolFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "max":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "max"));
-                                return null;
-                            }
-
-                            theMax = DeserializeImplementation.BoolFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "max"));
-                                return null;
-                            }
-                            if (theMax == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theMax null when error is also null");
-                            }
+                            theMax = BoolFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -12605,28 +5052,28 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"min\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theNom == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"nom\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theTyp == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"typ\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theMax == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"max\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.LevelType(
@@ -12649,8 +5096,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.ValueReferencePair? ValueReferencePairFrom(
-                Nodes.JsonNode node,
+            internal static Aas.ValueReferencePair ValueReferencePairFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -12659,8 +5106,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing ValueReferencePair, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theValue = null;
@@ -12671,67 +5118,25 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "value":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-
-                            theValue = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-                            if (theValue == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValue null when error is also null");
-                            }
+                            theValue = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "valueId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueId"));
-                                return null;
-                            }
-
-                            theValueId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueId"));
-                                return null;
-                            }
-                            if (theValueId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValueId null when error is also null");
-                            }
+                            theValueId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -12739,14 +5144,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"value\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theValueId == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"valueId\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.ValueReferencePair(
@@ -12763,8 +5168,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.ValueList? ValueListFrom(
-                Nodes.JsonNode node,
+            internal static Aas.ValueList ValueListFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -12773,8 +5178,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing ValueList, but got {Describe(node)}");
+                    return default!;
                 }
 
                 List<IValueReferencePair>? theValueReferencePairs = null;
@@ -12784,44 +5189,21 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "valueReferencePairs":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueReferencePairs"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayValueReferencePairs = keyValue.Value as Nodes.JsonArray;
-                            if (arrayValueReferencePairs == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueReferencePairs"));
-                                return null;
-                            }
-                            theValueReferencePairs = ParseArrayOfClass<IValueReferencePair>(
-                                arrayValueReferencePairs,
-                                DeserializeImplementation.ValueReferencePairFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueReferencePairs"));
-                                return null;
-                            }
+                            theValueReferencePairs = Parse_ListOf_IValueReferencePair(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -12829,7 +5211,7 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"valueReferencePairs\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.ValueList(
@@ -12843,8 +5225,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.LangStringPreferredNameTypeIec61360? LangStringPreferredNameTypeIec61360From(
-                Nodes.JsonNode node,
+            internal static Aas.LangStringPreferredNameTypeIec61360 LangStringPreferredNameTypeIec61360From(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -12853,8 +5235,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing LangStringPreferredNameTypeIec61360, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theLanguage = null;
@@ -12865,67 +5247,25 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "language":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "language"));
-                                return null;
-                            }
-
-                            theLanguage = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "language"));
-                                return null;
-                            }
-                            if (theLanguage == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theLanguage null when error is also null");
-                            }
+                            theLanguage = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "text":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "text"));
-                                return null;
-                            }
-
-                            theText = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "text"));
-                                return null;
-                            }
-                            if (theText == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theText null when error is also null");
-                            }
+                            theText = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -12933,14 +5273,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"language\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theText == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"text\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.LangStringPreferredNameTypeIec61360(
@@ -12957,8 +5297,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.LangStringShortNameTypeIec61360? LangStringShortNameTypeIec61360From(
-                Nodes.JsonNode node,
+            internal static Aas.LangStringShortNameTypeIec61360 LangStringShortNameTypeIec61360From(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -12967,8 +5307,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing LangStringShortNameTypeIec61360, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theLanguage = null;
@@ -12979,67 +5319,25 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "language":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "language"));
-                                return null;
-                            }
-
-                            theLanguage = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "language"));
-                                return null;
-                            }
-                            if (theLanguage == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theLanguage null when error is also null");
-                            }
+                            theLanguage = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "text":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "text"));
-                                return null;
-                            }
-
-                            theText = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "text"));
-                                return null;
-                            }
-                            if (theText == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theText null when error is also null");
-                            }
+                            theText = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -13047,14 +5345,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"language\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theText == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"text\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.LangStringShortNameTypeIec61360(
@@ -13071,8 +5369,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.LangStringDefinitionTypeIec61360? LangStringDefinitionTypeIec61360From(
-                Nodes.JsonNode node,
+            internal static Aas.LangStringDefinitionTypeIec61360 LangStringDefinitionTypeIec61360From(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -13081,8 +5379,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing LangStringDefinitionTypeIec61360, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theLanguage = null;
@@ -13093,67 +5391,25 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "language":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "language"));
-                                return null;
-                            }
-
-                            theLanguage = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "language"));
-                                return null;
-                            }
-                            if (theLanguage == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theLanguage null when error is also null");
-                            }
+                            theLanguage = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "text":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "text"));
-                                return null;
-                            }
-
-                            theText = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "text"));
-                                return null;
-                            }
-                            if (theText == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theText null when error is also null");
-                            }
+                            theText = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -13161,14 +5417,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"language\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theText == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"text\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.LangStringDefinitionTypeIec61360(
@@ -13185,8 +5441,8 @@ namespace AasCore.Aas3_0
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.DataSpecificationIec61360? DataSpecificationIec61360From(
-                Nodes.JsonNode node,
+            internal static Aas.DataSpecificationIec61360 DataSpecificationIec61360From(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -13195,8 +5451,8 @@ namespace AasCore.Aas3_0
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing DataSpecificationIec61360, but got {Describe(node)}");
+                    return default!;
                 }
 
                 List<ILangStringPreferredNameTypeIec61360>? thePreferredName = null;
@@ -13219,417 +5475,75 @@ namespace AasCore.Aas3_0
                     switch (keyValue.Key)
                     {
                         case "preferredName":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "preferredName"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayPreferredName = keyValue.Value as Nodes.JsonArray;
-                            if (arrayPreferredName == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "preferredName"));
-                                return null;
-                            }
-                            thePreferredName = ParseArrayOfClass<ILangStringPreferredNameTypeIec61360>(
-                                arrayPreferredName,
-                                DeserializeImplementation.LangStringPreferredNameTypeIec61360From,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "preferredName"));
-                                return null;
-                            }
+                            thePreferredName = Parse_ListOf_ILangStringPreferredNameTypeIec61360(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "shortName":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "shortName"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayShortName = keyValue.Value as Nodes.JsonArray;
-                            if (arrayShortName == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "shortName"));
-                                return null;
-                            }
-                            theShortName = ParseArrayOfClass<ILangStringShortNameTypeIec61360>(
-                                arrayShortName,
-                                DeserializeImplementation.LangStringShortNameTypeIec61360From,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "shortName"));
-                                return null;
-                            }
+                            theShortName = Parse_ListOf_ILangStringShortNameTypeIec61360(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "unit":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "unit"));
-                                return null;
-                            }
-
-                            theUnit = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "unit"));
-                                return null;
-                            }
-                            if (theUnit == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theUnit null when error is also null");
-                            }
+                            theUnit = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "unitId":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "unitId"));
-                                return null;
-                            }
-
-                            theUnitId = DeserializeImplementation.ReferenceFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "unitId"));
-                                return null;
-                            }
-                            if (theUnitId == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theUnitId null when error is also null");
-                            }
+                            theUnitId = ReferenceFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "sourceOfDefinition":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "sourceOfDefinition"));
-                                return null;
-                            }
-
-                            theSourceOfDefinition = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "sourceOfDefinition"));
-                                return null;
-                            }
-                            if (theSourceOfDefinition == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSourceOfDefinition null when error is also null");
-                            }
+                            theSourceOfDefinition = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "symbol":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "symbol"));
-                                return null;
-                            }
-
-                            theSymbol = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "symbol"));
-                                return null;
-                            }
-                            if (theSymbol == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSymbol null when error is also null");
-                            }
+                            theSymbol = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "dataType":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "dataType"));
-                                return null;
-                            }
-
-                            theDataType = DeserializeImplementation.DataTypeIec61360From(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "dataType"));
-                                return null;
-                            }
-                            if (theDataType == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theDataType null when error is also null");
-                            }
+                            theDataType = DataTypeIec61360From(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "definition":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "definition"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayDefinition = keyValue.Value as Nodes.JsonArray;
-                            if (arrayDefinition == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "definition"));
-                                return null;
-                            }
-                            theDefinition = ParseArrayOfClass<ILangStringDefinitionTypeIec61360>(
-                                arrayDefinition,
-                                DeserializeImplementation.LangStringDefinitionTypeIec61360From,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "definition"));
-                                return null;
-                            }
+                            theDefinition = Parse_ListOf_ILangStringDefinitionTypeIec61360(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "valueFormat":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueFormat"));
-                                return null;
-                            }
-
-                            theValueFormat = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueFormat"));
-                                return null;
-                            }
-                            if (theValueFormat == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValueFormat null when error is also null");
-                            }
+                            theValueFormat = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "valueList":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueList"));
-                                return null;
-                            }
-
-                            theValueList = DeserializeImplementation.ValueListFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "valueList"));
-                                return null;
-                            }
-                            if (theValueList == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValueList null when error is also null");
-                            }
+                            theValueList = ValueListFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "value":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-
-                            theValue = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "value"));
-                                return null;
-                            }
-                            if (theValue == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theValue null when error is also null");
-                            }
+                            theValue = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "levelType":
-                        {
-                            if (keyValue.Value == null)
+                            theLevelType = LevelTypeFrom(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "DataSpecificationIec61360")
                             {
                                 error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "levelType"));
-                                return null;
-                            }
-
-                            theLevelType = DeserializeImplementation.LevelTypeFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "levelType"));
-                                return null;
-                            }
-                            if (theLevelType == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theLevelType null when error is also null");
+                                    "Expected the model type 'DataSpecificationIec61360', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "DataSpecificationIec61360")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'DataSpecificationIec61360', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -13637,14 +5551,14 @@ namespace AasCore.Aas3_0
                 {
                     error = new Reporting.Error(
                         "Required property \"preferredName\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.DataSpecificationIec61360(
@@ -13706,7 +5620,7 @@ namespace AasCore.Aas3_0
             public static Aas.IHasSemantics IHasSemanticsFrom(
                 Nodes.JsonNode node)
             {
-                Aas.IHasSemantics? result = DeserializeImplementation.IHasSemanticsFrom(
+                Aas.IHasSemantics result = DeserializeImplementation.IHasSemanticsFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -13715,9 +5629,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -13731,7 +5643,7 @@ namespace AasCore.Aas3_0
             public static Aas.Extension ExtensionFrom(
                 Nodes.JsonNode node)
             {
-                Aas.Extension? result = DeserializeImplementation.ExtensionFrom(
+                Aas.Extension result = DeserializeImplementation.ExtensionFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -13740,9 +5652,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -13757,7 +5667,7 @@ namespace AasCore.Aas3_0
             public static Aas.IHasExtensions IHasExtensionsFrom(
                 Nodes.JsonNode node)
             {
-                Aas.IHasExtensions? result = DeserializeImplementation.IHasExtensionsFrom(
+                Aas.IHasExtensions result = DeserializeImplementation.IHasExtensionsFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -13766,9 +5676,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -13783,7 +5691,7 @@ namespace AasCore.Aas3_0
             public static Aas.IReferable IReferableFrom(
                 Nodes.JsonNode node)
             {
-                Aas.IReferable? result = DeserializeImplementation.IReferableFrom(
+                Aas.IReferable result = DeserializeImplementation.IReferableFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -13792,9 +5700,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -13809,7 +5715,7 @@ namespace AasCore.Aas3_0
             public static Aas.IIdentifiable IIdentifiableFrom(
                 Nodes.JsonNode node)
             {
-                Aas.IIdentifiable? result = DeserializeImplementation.IIdentifiableFrom(
+                Aas.IIdentifiable result = DeserializeImplementation.IIdentifiableFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -13818,9 +5724,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -13834,7 +5738,7 @@ namespace AasCore.Aas3_0
             public static Aas.ModellingKind ModellingKindFrom(
                 Nodes.JsonNode node)
             {
-                Aas.ModellingKind? result = DeserializeImplementation.ModellingKindFrom(
+                Aas.ModellingKind result = DeserializeImplementation.ModellingKindFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -13843,9 +5747,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -13860,7 +5762,7 @@ namespace AasCore.Aas3_0
             public static Aas.IHasKind IHasKindFrom(
                 Nodes.JsonNode node)
             {
-                Aas.IHasKind? result = DeserializeImplementation.IHasKindFrom(
+                Aas.IHasKind result = DeserializeImplementation.IHasKindFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -13869,9 +5771,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -13886,7 +5786,7 @@ namespace AasCore.Aas3_0
             public static Aas.IHasDataSpecification IHasDataSpecificationFrom(
                 Nodes.JsonNode node)
             {
-                Aas.IHasDataSpecification? result = DeserializeImplementation.IHasDataSpecificationFrom(
+                Aas.IHasDataSpecification result = DeserializeImplementation.IHasDataSpecificationFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -13895,9 +5795,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -13911,7 +5809,7 @@ namespace AasCore.Aas3_0
             public static Aas.AdministrativeInformation AdministrativeInformationFrom(
                 Nodes.JsonNode node)
             {
-                Aas.AdministrativeInformation? result = DeserializeImplementation.AdministrativeInformationFrom(
+                Aas.AdministrativeInformation result = DeserializeImplementation.AdministrativeInformationFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -13920,9 +5818,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -13937,7 +5833,7 @@ namespace AasCore.Aas3_0
             public static Aas.IQualifiable IQualifiableFrom(
                 Nodes.JsonNode node)
             {
-                Aas.IQualifiable? result = DeserializeImplementation.IQualifiableFrom(
+                Aas.IQualifiable result = DeserializeImplementation.IQualifiableFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -13946,9 +5842,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -13962,7 +5856,7 @@ namespace AasCore.Aas3_0
             public static Aas.QualifierKind QualifierKindFrom(
                 Nodes.JsonNode node)
             {
-                Aas.QualifierKind? result = DeserializeImplementation.QualifierKindFrom(
+                Aas.QualifierKind result = DeserializeImplementation.QualifierKindFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -13971,9 +5865,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -13987,7 +5879,7 @@ namespace AasCore.Aas3_0
             public static Aas.Qualifier QualifierFrom(
                 Nodes.JsonNode node)
             {
-                Aas.Qualifier? result = DeserializeImplementation.QualifierFrom(
+                Aas.Qualifier result = DeserializeImplementation.QualifierFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -13996,9 +5888,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14012,7 +5902,7 @@ namespace AasCore.Aas3_0
             public static Aas.AssetAdministrationShell AssetAdministrationShellFrom(
                 Nodes.JsonNode node)
             {
-                Aas.AssetAdministrationShell? result = DeserializeImplementation.AssetAdministrationShellFrom(
+                Aas.AssetAdministrationShell result = DeserializeImplementation.AssetAdministrationShellFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14021,9 +5911,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14037,7 +5925,7 @@ namespace AasCore.Aas3_0
             public static Aas.AssetInformation AssetInformationFrom(
                 Nodes.JsonNode node)
             {
-                Aas.AssetInformation? result = DeserializeImplementation.AssetInformationFrom(
+                Aas.AssetInformation result = DeserializeImplementation.AssetInformationFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14046,9 +5934,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14062,7 +5948,7 @@ namespace AasCore.Aas3_0
             public static Aas.Resource ResourceFrom(
                 Nodes.JsonNode node)
             {
-                Aas.Resource? result = DeserializeImplementation.ResourceFrom(
+                Aas.Resource result = DeserializeImplementation.ResourceFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14071,9 +5957,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14087,7 +5971,7 @@ namespace AasCore.Aas3_0
             public static Aas.AssetKind AssetKindFrom(
                 Nodes.JsonNode node)
             {
-                Aas.AssetKind? result = DeserializeImplementation.AssetKindFrom(
+                Aas.AssetKind result = DeserializeImplementation.AssetKindFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14096,9 +5980,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14112,7 +5994,7 @@ namespace AasCore.Aas3_0
             public static Aas.SpecificAssetId SpecificAssetIdFrom(
                 Nodes.JsonNode node)
             {
-                Aas.SpecificAssetId? result = DeserializeImplementation.SpecificAssetIdFrom(
+                Aas.SpecificAssetId result = DeserializeImplementation.SpecificAssetIdFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14121,9 +6003,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14137,7 +6017,7 @@ namespace AasCore.Aas3_0
             public static Aas.Submodel SubmodelFrom(
                 Nodes.JsonNode node)
             {
-                Aas.Submodel? result = DeserializeImplementation.SubmodelFrom(
+                Aas.Submodel result = DeserializeImplementation.SubmodelFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14146,9 +6026,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14163,7 +6041,7 @@ namespace AasCore.Aas3_0
             public static Aas.ISubmodelElement ISubmodelElementFrom(
                 Nodes.JsonNode node)
             {
-                Aas.ISubmodelElement? result = DeserializeImplementation.ISubmodelElementFrom(
+                Aas.ISubmodelElement result = DeserializeImplementation.ISubmodelElementFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14172,9 +6050,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14189,7 +6065,7 @@ namespace AasCore.Aas3_0
             public static Aas.IRelationshipElement IRelationshipElementFrom(
                 Nodes.JsonNode node)
             {
-                Aas.IRelationshipElement? result = DeserializeImplementation.IRelationshipElementFrom(
+                Aas.IRelationshipElement result = DeserializeImplementation.IRelationshipElementFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14198,9 +6074,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14214,7 +6088,7 @@ namespace AasCore.Aas3_0
             public static Aas.RelationshipElement RelationshipElementFrom(
                 Nodes.JsonNode node)
             {
-                Aas.RelationshipElement? result = DeserializeImplementation.RelationshipElementFrom(
+                Aas.RelationshipElement result = DeserializeImplementation.RelationshipElementFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14223,9 +6097,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14239,7 +6111,7 @@ namespace AasCore.Aas3_0
             public static Aas.AasSubmodelElements AasSubmodelElementsFrom(
                 Nodes.JsonNode node)
             {
-                Aas.AasSubmodelElements? result = DeserializeImplementation.AasSubmodelElementsFrom(
+                Aas.AasSubmodelElements result = DeserializeImplementation.AasSubmodelElementsFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14248,9 +6120,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14264,7 +6134,7 @@ namespace AasCore.Aas3_0
             public static Aas.SubmodelElementList SubmodelElementListFrom(
                 Nodes.JsonNode node)
             {
-                Aas.SubmodelElementList? result = DeserializeImplementation.SubmodelElementListFrom(
+                Aas.SubmodelElementList result = DeserializeImplementation.SubmodelElementListFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14273,9 +6143,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14289,7 +6157,7 @@ namespace AasCore.Aas3_0
             public static Aas.SubmodelElementCollection SubmodelElementCollectionFrom(
                 Nodes.JsonNode node)
             {
-                Aas.SubmodelElementCollection? result = DeserializeImplementation.SubmodelElementCollectionFrom(
+                Aas.SubmodelElementCollection result = DeserializeImplementation.SubmodelElementCollectionFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14298,9 +6166,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14315,7 +6181,7 @@ namespace AasCore.Aas3_0
             public static Aas.IDataElement IDataElementFrom(
                 Nodes.JsonNode node)
             {
-                Aas.IDataElement? result = DeserializeImplementation.IDataElementFrom(
+                Aas.IDataElement result = DeserializeImplementation.IDataElementFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14324,9 +6190,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14340,7 +6204,7 @@ namespace AasCore.Aas3_0
             public static Aas.Property PropertyFrom(
                 Nodes.JsonNode node)
             {
-                Aas.Property? result = DeserializeImplementation.PropertyFrom(
+                Aas.Property result = DeserializeImplementation.PropertyFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14349,9 +6213,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14365,7 +6227,7 @@ namespace AasCore.Aas3_0
             public static Aas.MultiLanguageProperty MultiLanguagePropertyFrom(
                 Nodes.JsonNode node)
             {
-                Aas.MultiLanguageProperty? result = DeserializeImplementation.MultiLanguagePropertyFrom(
+                Aas.MultiLanguageProperty result = DeserializeImplementation.MultiLanguagePropertyFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14374,9 +6236,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14390,7 +6250,7 @@ namespace AasCore.Aas3_0
             public static Aas.Range RangeFrom(
                 Nodes.JsonNode node)
             {
-                Aas.Range? result = DeserializeImplementation.RangeFrom(
+                Aas.Range result = DeserializeImplementation.RangeFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14399,9 +6259,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14415,7 +6273,7 @@ namespace AasCore.Aas3_0
             public static Aas.ReferenceElement ReferenceElementFrom(
                 Nodes.JsonNode node)
             {
-                Aas.ReferenceElement? result = DeserializeImplementation.ReferenceElementFrom(
+                Aas.ReferenceElement result = DeserializeImplementation.ReferenceElementFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14424,9 +6282,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14440,7 +6296,7 @@ namespace AasCore.Aas3_0
             public static Aas.Blob BlobFrom(
                 Nodes.JsonNode node)
             {
-                Aas.Blob? result = DeserializeImplementation.BlobFrom(
+                Aas.Blob result = DeserializeImplementation.BlobFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14449,9 +6305,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14465,7 +6319,7 @@ namespace AasCore.Aas3_0
             public static Aas.File FileFrom(
                 Nodes.JsonNode node)
             {
-                Aas.File? result = DeserializeImplementation.FileFrom(
+                Aas.File result = DeserializeImplementation.FileFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14474,9 +6328,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14490,7 +6342,7 @@ namespace AasCore.Aas3_0
             public static Aas.AnnotatedRelationshipElement AnnotatedRelationshipElementFrom(
                 Nodes.JsonNode node)
             {
-                Aas.AnnotatedRelationshipElement? result = DeserializeImplementation.AnnotatedRelationshipElementFrom(
+                Aas.AnnotatedRelationshipElement result = DeserializeImplementation.AnnotatedRelationshipElementFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14499,9 +6351,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14515,7 +6365,7 @@ namespace AasCore.Aas3_0
             public static Aas.Entity EntityFrom(
                 Nodes.JsonNode node)
             {
-                Aas.Entity? result = DeserializeImplementation.EntityFrom(
+                Aas.Entity result = DeserializeImplementation.EntityFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14524,9 +6374,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14540,7 +6388,7 @@ namespace AasCore.Aas3_0
             public static Aas.EntityType EntityTypeFrom(
                 Nodes.JsonNode node)
             {
-                Aas.EntityType? result = DeserializeImplementation.EntityTypeFrom(
+                Aas.EntityType result = DeserializeImplementation.EntityTypeFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14549,9 +6397,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14565,7 +6411,7 @@ namespace AasCore.Aas3_0
             public static Aas.Direction DirectionFrom(
                 Nodes.JsonNode node)
             {
-                Aas.Direction? result = DeserializeImplementation.DirectionFrom(
+                Aas.Direction result = DeserializeImplementation.DirectionFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14574,9 +6420,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14590,7 +6434,7 @@ namespace AasCore.Aas3_0
             public static Aas.StateOfEvent StateOfEventFrom(
                 Nodes.JsonNode node)
             {
-                Aas.StateOfEvent? result = DeserializeImplementation.StateOfEventFrom(
+                Aas.StateOfEvent result = DeserializeImplementation.StateOfEventFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14599,9 +6443,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14615,7 +6457,7 @@ namespace AasCore.Aas3_0
             public static Aas.EventPayload EventPayloadFrom(
                 Nodes.JsonNode node)
             {
-                Aas.EventPayload? result = DeserializeImplementation.EventPayloadFrom(
+                Aas.EventPayload result = DeserializeImplementation.EventPayloadFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14624,9 +6466,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14641,7 +6481,7 @@ namespace AasCore.Aas3_0
             public static Aas.IEventElement IEventElementFrom(
                 Nodes.JsonNode node)
             {
-                Aas.IEventElement? result = DeserializeImplementation.IEventElementFrom(
+                Aas.IEventElement result = DeserializeImplementation.IEventElementFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14650,9 +6490,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14666,7 +6504,7 @@ namespace AasCore.Aas3_0
             public static Aas.BasicEventElement BasicEventElementFrom(
                 Nodes.JsonNode node)
             {
-                Aas.BasicEventElement? result = DeserializeImplementation.BasicEventElementFrom(
+                Aas.BasicEventElement result = DeserializeImplementation.BasicEventElementFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14675,9 +6513,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14691,7 +6527,7 @@ namespace AasCore.Aas3_0
             public static Aas.Operation OperationFrom(
                 Nodes.JsonNode node)
             {
-                Aas.Operation? result = DeserializeImplementation.OperationFrom(
+                Aas.Operation result = DeserializeImplementation.OperationFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14700,9 +6536,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14716,7 +6550,7 @@ namespace AasCore.Aas3_0
             public static Aas.OperationVariable OperationVariableFrom(
                 Nodes.JsonNode node)
             {
-                Aas.OperationVariable? result = DeserializeImplementation.OperationVariableFrom(
+                Aas.OperationVariable result = DeserializeImplementation.OperationVariableFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14725,9 +6559,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14741,7 +6573,7 @@ namespace AasCore.Aas3_0
             public static Aas.Capability CapabilityFrom(
                 Nodes.JsonNode node)
             {
-                Aas.Capability? result = DeserializeImplementation.CapabilityFrom(
+                Aas.Capability result = DeserializeImplementation.CapabilityFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14750,9 +6582,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14766,7 +6596,7 @@ namespace AasCore.Aas3_0
             public static Aas.ConceptDescription ConceptDescriptionFrom(
                 Nodes.JsonNode node)
             {
-                Aas.ConceptDescription? result = DeserializeImplementation.ConceptDescriptionFrom(
+                Aas.ConceptDescription result = DeserializeImplementation.ConceptDescriptionFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14775,9 +6605,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14791,7 +6619,7 @@ namespace AasCore.Aas3_0
             public static Aas.ReferenceTypes ReferenceTypesFrom(
                 Nodes.JsonNode node)
             {
-                Aas.ReferenceTypes? result = DeserializeImplementation.ReferenceTypesFrom(
+                Aas.ReferenceTypes result = DeserializeImplementation.ReferenceTypesFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14800,9 +6628,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14816,7 +6642,7 @@ namespace AasCore.Aas3_0
             public static Aas.Reference ReferenceFrom(
                 Nodes.JsonNode node)
             {
-                Aas.Reference? result = DeserializeImplementation.ReferenceFrom(
+                Aas.Reference result = DeserializeImplementation.ReferenceFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14825,9 +6651,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14841,7 +6665,7 @@ namespace AasCore.Aas3_0
             public static Aas.Key KeyFrom(
                 Nodes.JsonNode node)
             {
-                Aas.Key? result = DeserializeImplementation.KeyFrom(
+                Aas.Key result = DeserializeImplementation.KeyFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14850,9 +6674,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14866,7 +6688,7 @@ namespace AasCore.Aas3_0
             public static Aas.KeyTypes KeyTypesFrom(
                 Nodes.JsonNode node)
             {
-                Aas.KeyTypes? result = DeserializeImplementation.KeyTypesFrom(
+                Aas.KeyTypes result = DeserializeImplementation.KeyTypesFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14875,9 +6697,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14891,7 +6711,7 @@ namespace AasCore.Aas3_0
             public static Aas.DataTypeDefXsd DataTypeDefXsdFrom(
                 Nodes.JsonNode node)
             {
-                Aas.DataTypeDefXsd? result = DeserializeImplementation.DataTypeDefXsdFrom(
+                Aas.DataTypeDefXsd result = DeserializeImplementation.DataTypeDefXsdFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14900,9 +6720,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14917,7 +6735,7 @@ namespace AasCore.Aas3_0
             public static Aas.IAbstractLangString IAbstractLangStringFrom(
                 Nodes.JsonNode node)
             {
-                Aas.IAbstractLangString? result = DeserializeImplementation.IAbstractLangStringFrom(
+                Aas.IAbstractLangString result = DeserializeImplementation.IAbstractLangStringFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14926,9 +6744,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14942,7 +6758,7 @@ namespace AasCore.Aas3_0
             public static Aas.LangStringNameType LangStringNameTypeFrom(
                 Nodes.JsonNode node)
             {
-                Aas.LangStringNameType? result = DeserializeImplementation.LangStringNameTypeFrom(
+                Aas.LangStringNameType result = DeserializeImplementation.LangStringNameTypeFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14951,9 +6767,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14967,7 +6781,7 @@ namespace AasCore.Aas3_0
             public static Aas.LangStringTextType LangStringTextTypeFrom(
                 Nodes.JsonNode node)
             {
-                Aas.LangStringTextType? result = DeserializeImplementation.LangStringTextTypeFrom(
+                Aas.LangStringTextType result = DeserializeImplementation.LangStringTextTypeFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -14976,9 +6790,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -14992,7 +6804,7 @@ namespace AasCore.Aas3_0
             public static Aas.Environment EnvironmentFrom(
                 Nodes.JsonNode node)
             {
-                Aas.Environment? result = DeserializeImplementation.EnvironmentFrom(
+                Aas.Environment result = DeserializeImplementation.EnvironmentFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -15001,9 +6813,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -15018,7 +6828,7 @@ namespace AasCore.Aas3_0
             public static Aas.IDataSpecificationContent IDataSpecificationContentFrom(
                 Nodes.JsonNode node)
             {
-                Aas.IDataSpecificationContent? result = DeserializeImplementation.IDataSpecificationContentFrom(
+                Aas.IDataSpecificationContent result = DeserializeImplementation.IDataSpecificationContentFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -15027,9 +6837,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -15043,7 +6851,7 @@ namespace AasCore.Aas3_0
             public static Aas.EmbeddedDataSpecification EmbeddedDataSpecificationFrom(
                 Nodes.JsonNode node)
             {
-                Aas.EmbeddedDataSpecification? result = DeserializeImplementation.EmbeddedDataSpecificationFrom(
+                Aas.EmbeddedDataSpecification result = DeserializeImplementation.EmbeddedDataSpecificationFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -15052,9 +6860,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -15068,7 +6874,7 @@ namespace AasCore.Aas3_0
             public static Aas.DataTypeIec61360 DataTypeIec61360From(
                 Nodes.JsonNode node)
             {
-                Aas.DataTypeIec61360? result = DeserializeImplementation.DataTypeIec61360From(
+                Aas.DataTypeIec61360 result = DeserializeImplementation.DataTypeIec61360From(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -15077,9 +6883,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -15093,7 +6897,7 @@ namespace AasCore.Aas3_0
             public static Aas.LevelType LevelTypeFrom(
                 Nodes.JsonNode node)
             {
-                Aas.LevelType? result = DeserializeImplementation.LevelTypeFrom(
+                Aas.LevelType result = DeserializeImplementation.LevelTypeFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -15102,9 +6906,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -15118,7 +6920,7 @@ namespace AasCore.Aas3_0
             public static Aas.ValueReferencePair ValueReferencePairFrom(
                 Nodes.JsonNode node)
             {
-                Aas.ValueReferencePair? result = DeserializeImplementation.ValueReferencePairFrom(
+                Aas.ValueReferencePair result = DeserializeImplementation.ValueReferencePairFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -15127,9 +6929,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -15143,7 +6943,7 @@ namespace AasCore.Aas3_0
             public static Aas.ValueList ValueListFrom(
                 Nodes.JsonNode node)
             {
-                Aas.ValueList? result = DeserializeImplementation.ValueListFrom(
+                Aas.ValueList result = DeserializeImplementation.ValueListFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -15152,9 +6952,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -15168,7 +6966,7 @@ namespace AasCore.Aas3_0
             public static Aas.LangStringPreferredNameTypeIec61360 LangStringPreferredNameTypeIec61360From(
                 Nodes.JsonNode node)
             {
-                Aas.LangStringPreferredNameTypeIec61360? result = DeserializeImplementation.LangStringPreferredNameTypeIec61360From(
+                Aas.LangStringPreferredNameTypeIec61360 result = DeserializeImplementation.LangStringPreferredNameTypeIec61360From(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -15177,9 +6975,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -15193,7 +6989,7 @@ namespace AasCore.Aas3_0
             public static Aas.LangStringShortNameTypeIec61360 LangStringShortNameTypeIec61360From(
                 Nodes.JsonNode node)
             {
-                Aas.LangStringShortNameTypeIec61360? result = DeserializeImplementation.LangStringShortNameTypeIec61360From(
+                Aas.LangStringShortNameTypeIec61360 result = DeserializeImplementation.LangStringShortNameTypeIec61360From(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -15202,9 +6998,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -15218,7 +7012,7 @@ namespace AasCore.Aas3_0
             public static Aas.LangStringDefinitionTypeIec61360 LangStringDefinitionTypeIec61360From(
                 Nodes.JsonNode node)
             {
-                Aas.LangStringDefinitionTypeIec61360? result = DeserializeImplementation.LangStringDefinitionTypeIec61360From(
+                Aas.LangStringDefinitionTypeIec61360 result = DeserializeImplementation.LangStringDefinitionTypeIec61360From(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -15227,9 +7021,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -15243,7 +7035,7 @@ namespace AasCore.Aas3_0
             public static Aas.DataSpecificationIec61360 DataSpecificationIec61360From(
                 Nodes.JsonNode node)
             {
-                Aas.DataSpecificationIec61360? result = DeserializeImplementation.DataSpecificationIec61360From(
+                Aas.DataSpecificationIec61360 result = DeserializeImplementation.DataSpecificationIec61360From(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -15252,9 +7044,7 @@ namespace AasCore.Aas3_0
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
         }  // public static class Deserialize
 

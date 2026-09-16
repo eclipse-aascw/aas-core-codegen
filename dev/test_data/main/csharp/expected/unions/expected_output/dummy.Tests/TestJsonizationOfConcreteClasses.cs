@@ -144,7 +144,9 @@ namespace dummy.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing StructuralFirst, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -302,7 +304,9 @@ namespace dummy.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing StructuralSecond, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -460,7 +464,9 @@ namespace dummy.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing MixedAbstractDescendantOne, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -618,7 +624,9 @@ namespace dummy.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing MixedAbstractDescendantTwo, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -776,7 +784,9 @@ namespace dummy.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing MixedConcreteWithDescendants, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -934,7 +944,9 @@ namespace dummy.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing MixedConcreteWithDescendantsChild, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -1092,7 +1104,9 @@ namespace dummy.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing MixedConcreteLeaf, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -1250,7 +1264,9 @@ namespace dummy.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing ModelTypedFirst, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -1408,7 +1424,9 @@ namespace dummy.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing ModelTypedSecond, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -1566,7 +1584,9 @@ namespace dummy.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing Something, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");

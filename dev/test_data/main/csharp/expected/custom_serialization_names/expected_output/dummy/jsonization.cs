@@ -35,156 +35,191 @@ namespace dummy
         /// we distinguish the implementation, realized in
         /// <see cref="DeserializeImplementation" />, and the facade given in
         /// <see cref="Deserialize" /> class.
+        ///
+        /// Every value is de-serialized through one and the same shape,
+        /// <c>Deserializer&lt;T&gt;</c>, so that the de-serialization of a list or of
+        /// a tuple can be composed out of the de-serialization of its items. A value
+        /// is returned as a plain <c>T</c>, meaningless unless the <c>error</c> is
+        /// null, since a <c>T?</c> can not be written down for an unconstrained
+        /// <c>T</c>.
         /// </remarks>
         internal static class DeserializeImplementation
         {
-            /// <summary>Convert <paramref name="node" /> to a boolean.</summary>
+            /// <summary>
+            /// Describe <paramref name="node" /> in an error message.
+            /// </summary>
+            /// <remarks>
+            /// A JSON null is represented as a null node, so every "expected ..., but
+            /// got ..." message has to account for it. Doing so here, once, is what lets
+            /// a de-serializer take a nullable node and reject a null itself, instead of
+            /// every one of its callers checking for a null before calling it.
+            /// </remarks>
+            /// <param name="node">JSON node to be described</param>
+            private static string Describe(Nodes.JsonNode? node)
+            {
+                return (node == null)
+                    ? "a null"
+                    : node.GetType().ToString();
+            }
+
+            /// <summary>
+            /// Convert <paramref name="node" /> to a boolean.
+            /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static bool? BoolFrom(
-                Nodes.JsonNode node,
+            internal static bool BoolFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
+
                 Nodes.JsonValue? value = node as Nodes.JsonValue;
                 if (value == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonValue, but got {node.GetType()}");
-                    return null;
+                        $"Expected a boolean, but got {Describe(node)}");
+                    return default!;
                 }
+
                 bool ok = value.TryGetValue<bool>(out bool result);
                 if (!ok)
                 {
                     error = new Reporting.Error(
                         "Expected a boolean, but the conversion failed " +
                         $"from {value.ToJsonString()}");
-                    return null;
+                    return default!;
                 }
                 return result;
             }
 
             /// <summary>
-            /// Convert the <paramref name="node" /> to a long 64-bit integer.
+            /// Convert <paramref name="node" /> to a 64-bit long integer.
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static long? LongFrom(
-                Nodes.JsonNode node,
+            internal static long LongFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
+
                 Nodes.JsonValue? value = node as Nodes.JsonValue;
                 if (value == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonValue, but got {node.GetType()}");
-                    return null;
+                        $"Expected a 64-bit long integer, but got {Describe(node)}");
+                    return default!;
                 }
+
                 bool ok = value.TryGetValue<long>(out long result);
                 if (!ok)
                 {
                     error = new Reporting.Error(
                         "Expected a 64-bit long integer, but the conversion failed " +
                         $"from {value.ToJsonString()}");
-                    return null;
+                    return default!;
                 }
                 return result;
             }
 
             /// <summary>
-            /// Convert the <paramref name="node" /> to a double-precision 64-bit float.
+            /// Convert <paramref name="node" /> to a 64-bit double-precision float.
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static double? DoubleFrom(
-                Nodes.JsonNode node,
+            internal static double DoubleFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
+
                 Nodes.JsonValue? value = node as Nodes.JsonValue;
                 if (value == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonValue, but got {node.GetType()}");
-                    return null;
+                        $"Expected a 64-bit double-precision float, but got {Describe(node)}");
+                    return default!;
                 }
+
                 bool ok = value.TryGetValue<double>(out double result);
                 if (!ok)
                 {
                     error = new Reporting.Error(
-                        "Expected a 64-bit double-precision float, " +
-                        "but the conversion failed " +
+                        "Expected a 64-bit double-precision float, but the conversion failed " +
                         $"from {value.ToJsonString()}");
-                    return null;
+                    return default!;
                 }
                 return result;
             }
 
             /// <summary>
-            /// Convert the <paramref name="node" /> to a string.
+            /// Convert <paramref name="node" /> to a string.
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static string? StringFrom(
-                Nodes.JsonNode node,
+            internal static string StringFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
+
                 Nodes.JsonValue? value = node as Nodes.JsonValue;
                 if (value == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonValue, but got {node.GetType()}");
-                    return null;
+                        $"Expected a string, but got {Describe(node)}");
+                    return default!;
                 }
+
                 bool ok = value.TryGetValue<string>(out string? result);
                 if (!ok)
                 {
                     error = new Reporting.Error(
                         "Expected a string, but the conversion failed " +
                         $"from {value.ToJsonString()}");
-                    return null;
+                    return default!;
                 }
                 if (result == null)
                 {
                     error = new Reporting.Error(
                         "Expected a string, but got a null");
-                    return null;
+                    return default!;
                 }
                 return result;
             }
 
             /// <summary>
-            /// Convert the <paramref name="node" /> to bytes.
+            /// Convert <paramref name="node" /> to Base-64 encoded bytes.
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static byte[]? BytesFrom(
-                Nodes.JsonNode node,
+            internal static byte[] BytesFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
+
                 Nodes.JsonValue? value = node as Nodes.JsonValue;
                 if (value == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonValue, but got {node.GetType()}");
-                    return null;
+                        $"Expected Base-64 encoded bytes, but got {Describe(node)}");
+                    return default!;
                 }
+
                 bool ok = value.TryGetValue<string>(out string? text);
                 if (!ok)
                 {
                     error = new Reporting.Error(
-                        "Expected a string, but the conversion failed " +
+                        "Expected Base-64 encoded bytes, but the conversion failed " +
                         $"from {value.ToJsonString()}");
-                    return null;
+                    return default!;
                 }
                 if (text == null)
                 {
                     error = new Reporting.Error(
-                        "Expected a string, but got a null");
-                    return null;
+                        "Expected Base-64 encoded bytes, but got a null");
+                    return default!;
                 }
                 try
                 {
@@ -195,134 +230,8 @@ namespace dummy
                     error = new Reporting.Error(
                         "Expected Base-64 encoded bytes, but the conversion failed " +
                         $"because: {exception}");
-                    return null;
+                    return default!;
                 }
-            }
-
-            /// <summary>
-            /// Read a single array item.
-            /// </summary>
-            /// <typeparam name="T">Type of the parsed item</typeparam>
-            private delegate T? JsonClassItemDeserializer<T>(
-                Nodes.JsonNode node,
-                out Reporting.Error? error
-                ) where T : class;
-
-            /// <summary>
-            /// Parse every item of <paramref name="array" /> with
-            /// <paramref name="deserializeItem" />.
-            /// </summary>
-            /// <remarks>
-            /// This is shared by all the list-typed constructor arguments whose items are
-            /// de-serialized into a reference type (<em>e.g.</em>, a string, a byte array
-            /// or a class instance).
-            /// </remarks>
-            /// <typeparam name="T">Type of a single array item</typeparam>
-            private static List<T> ParseArrayOfClass<T>(
-                Nodes.JsonArray array,
-                JsonClassItemDeserializer<T> deserializeItem,
-                out Reporting.Error? error
-                ) where T : class
-            {
-                error = null;
-                List<T> result = new List<T>(array.Count);
-
-                int index = 0;
-                foreach (Nodes.JsonNode? item in array)
-                {
-                    if (item == null)
-                    {
-                        error = new Reporting.Error(
-                            "Expected a non-null item, but got a null");
-                        error.PrependSegment(
-                            new Reporting.IndexSegment(
-                                index));
-                        return result;
-                    }
-
-                    T? parsedItem = deserializeItem(
-                        item ?? throw new System.InvalidOperationException(),
-                        out error);
-                    if (error != null)
-                    {
-                        error.PrependSegment(
-                            new Reporting.IndexSegment(
-                                index));
-                        return result;
-                    }
-
-                    result.Add(
-                        parsedItem
-                            ?? throw new System.InvalidOperationException(
-                                "Unexpected result null when error is null"));
-
-                    index++;
-                }
-
-                return result;
-            }
-
-            /// <summary>
-            /// Read a single array item.
-            /// </summary>
-            /// <typeparam name="T">Type of the parsed item</typeparam>
-            private delegate T? JsonStructItemDeserializer<T>(
-                Nodes.JsonNode node,
-                out Reporting.Error? error
-                ) where T : struct;
-
-            /// <summary>
-            /// Parse every item of <paramref name="array" /> with
-            /// <paramref name="deserializeItem" />.
-            /// </summary>
-            /// <remarks>
-            /// This is shared by all the list-typed constructor arguments whose items are
-            /// de-serialized into a value type (<em>e.g.</em>, a bool, a number or
-            /// an enumeration literal).
-            /// </remarks>
-            /// <typeparam name="T">Type of a single array item</typeparam>
-            private static List<T> ParseArrayOfStruct<T>(
-                Nodes.JsonArray array,
-                JsonStructItemDeserializer<T> deserializeItem,
-                out Reporting.Error? error
-                ) where T : struct
-            {
-                error = null;
-                List<T> result = new List<T>(array.Count);
-
-                int index = 0;
-                foreach (Nodes.JsonNode? item in array)
-                {
-                    if (item == null)
-                    {
-                        error = new Reporting.Error(
-                            "Expected a non-null item, but got a null");
-                        error.PrependSegment(
-                            new Reporting.IndexSegment(
-                                index));
-                        return result;
-                    }
-
-                    T? parsedItem = deserializeItem(
-                        item ?? throw new System.InvalidOperationException(),
-                        out error);
-                    if (error != null)
-                    {
-                        error.PrependSegment(
-                            new Reporting.IndexSegment(
-                                index));
-                        return result;
-                    }
-
-                    result.Add(
-                        parsedItem
-                            ?? throw new System.InvalidOperationException(
-                                "Unexpected result null when error is null"));
-
-                    index++;
-                }
-
-                return result;
             }
 
             /// <summary>
@@ -330,8 +239,8 @@ namespace dummy
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.QueryCondition? QueryConditionFrom(
-                Nodes.JsonNode node,
+            internal static Aas.QueryCondition QueryConditionFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -340,8 +249,8 @@ namespace dummy
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing QueryCondition, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theEq = null;
@@ -352,73 +261,27 @@ namespace dummy
                     switch (keyValue.Key)
                     {
                         case "$eq":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "$eq"));
-                                return null;
-                            }
-
-                            theEq = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "$eq"));
-                                return null;
-                            }
-                            if (theEq == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theEq null when error is also null");
-                            }
+                            theEq = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "$ne":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "$ne"));
-                                return null;
-                            }
-
-                            theNotEq = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "$ne"));
-                                return null;
-                            }
-                            if (theNotEq == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theNotEq null when error is also null");
-                            }
+                            theNotEq = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
-
-
 
                 return new Aas.QueryCondition(
                     theEq,
@@ -466,7 +329,7 @@ namespace dummy
             public static Aas.QueryCondition QueryConditionFrom(
                 Nodes.JsonNode node)
             {
-                Aas.QueryCondition? result = DeserializeImplementation.QueryConditionFrom(
+                Aas.QueryCondition result = DeserializeImplementation.QueryConditionFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -475,9 +338,7 @@ namespace dummy
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
         }  // public static class Deserialize
 

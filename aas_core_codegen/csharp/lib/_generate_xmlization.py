@@ -309,7 +309,9 @@ private static ContentReader<{tuple_type}> AsTuple{arity}<{type_params_joined}>(
     )
 
 
-_CONTENT_READER_BY_PRIMITIVE = {
+_CONTENT_READER_BY_PRIMITIVE: Final[
+    Mapping[intermediate.PrimitiveType, Tuple[str, str, str]]
+] = {
     intermediate.PrimitiveType.BOOL: (
         "ReadContentAsBoolean",
         "bool",
@@ -346,7 +348,7 @@ assert all(
 # whereas the other primitives have no content to convert at all and so it is
 # an error. Where a primitive has such an empty value, it is spelled out here
 # and the reading goes through the ``...OrEmpty`` variant of the skeleton.
-_EMPTY_VALUE_BY_PRIMITIVE = {
+_EMPTY_VALUE_BY_PRIMITIVE: Final[Mapping[intermediate.PrimitiveType, str]] = {
     intermediate.PrimitiveType.STR: '""',
     intermediate.PrimitiveType.BYTEARRAY: "new byte[0]",
 }
@@ -1083,73 +1085,6 @@ private static ContentReader<T> AsElement<T>(
     )
 
 
-# NOTE (mristin):
-# A C# primitive is not a valid part of an identifier as it is spelled
-# (``byte[]``), so the primitives need monikers of their own. The monikers are
-# *lower-case* on purpose: every one of our types is named through
-# :py:func:`aas_core_codegen.naming.capitalized_camel_case`, which always
-# yields an upper-case initial, so a primitive moniker can never be confused
-# for one of our types -- not even for an enumeration which somebody named
-# ``String``. They are keyed by the meta-model primitive rather than by
-# the C# spelling, so that the mapping is total by construction.
-_PRIMITIVE_TYPE_TO_MONIKER: Final[Mapping[intermediate.PrimitiveType, str]] = {
-    intermediate.PrimitiveType.BOOL: "bool",
-    intermediate.PrimitiveType.INT: "long",
-    intermediate.PrimitiveType.FLOAT: "double",
-    intermediate.PrimitiveType.STR: "string",
-    intermediate.PrimitiveType.BYTEARRAY: "bytes",
-}
-assert all(
-    primitive_type in _PRIMITIVE_TYPE_TO_MONIKER
-    for primitive_type in intermediate.PrimitiveType
-)
-assert all(
-    moniker.islower() for moniker in _PRIMITIVE_TYPE_TO_MONIKER.values()
-), "The primitive monikers have to be lower-case, see the note above"
-
-
-@ensure(lambda result: "_" not in result)
-def _leaf_moniker(type_anno: intermediate.TypeAnnotationUnion) -> str:
-    """
-    Name a type which is neither a list nor a tuple.
-
-    The result must not contain an underscore, since the underscore is what
-    separates the tokens of a compound moniker. See :py:func:`_type_moniker`.
-    """
-    primitive_type = intermediate.try_primitive_type(type_anno)
-    if primitive_type is not None:
-        return _PRIMITIVE_TYPE_TO_MONIKER[primitive_type]
-
-    # NOTE (mristin):
-    # We name our types by ``generate_type`` so that the name of a reader can
-    # not drift apart from the type of that very reader -- spelling the names
-    # out here once caused exactly that.
-    return csharp_common.generate_type(type_anno)
-
-
-def _type_moniker(type_anno: intermediate.TypeAnnotationUnion) -> str:
-    """
-    Name the type in a way usable as a part of a C# identifier.
-
-    The monikers are a Polish notation over ``_``-separated tokens: ``ListOf``
-    takes exactly one argument, ``TupleOf{N}`` exactly ``N`` of them, and
-    everything else is a leaf. A leaf token never contains an underscore
-    (see :py:func:`_leaf_moniker`), so the encoding is injective -- two
-    different types can not be given the same moniker, and hence neither can
-    two different de/serializers be given the same name, nor can two different
-    types be conflated when the fields are de-duplicated by their moniker
-    (see :py:func:`_content_types_in_initialization_order`).
-    """
-    if isinstance(type_anno, intermediate.ListTypeAnnotation):
-        return f"ListOf_{_type_moniker(type_anno.items)}"
-
-    if isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        joined = "_".join(_type_moniker(item) for item in type_anno.items)
-        return f"TupleOf{len(type_anno.items)}_{joined}"
-
-    return _leaf_moniker(type_anno)
-
-
 def _from_element_name(our_type: intermediate.OurType) -> str:
     """
     Name the function reading a whole element of ``our_type``.
@@ -1185,7 +1120,7 @@ def _content_reader_name(type_anno: intermediate.TypeAnnotationUnion) -> Identif
     :py:func:`aas_core_codegen.naming.capitalized_camel_case`, which never
     emits an underscore.
     """
-    return Identifier(f"Read_{_type_moniker(type_anno)}")
+    return Identifier(f"Read_{csharp_common.type_moniker(type_anno)}")
 
 
 def _element_reader_expr(
@@ -1286,15 +1221,16 @@ AsTuple{len(type_anno.items)}<{item_types}>(
 # NOTE (mristin):
 # The generated code is indented by the emitter after the fact, so
 # the generator has to compare against what is left of a line at the depth
-# where the snippet will end up.
+# where the snippet will end up. That depth is spelled out as ``len(I) * N``
+# at each comparison, since it differs from one snippet to the next: a field
+# lands three levels in -- the namespace, ``Xmlization`` and the inner class
+# -- and the arguments of a property five, or six beneath a condition.
 #
 # The name of a de/serializer field spells out the name of its type, so both
 # occur twice in its declaration -- a list of a long class name alone runs to
 # some 145 characters. Where a declaration does not fit, the type argument is
 # broken out onto a line of its own.
-_MAX_LINE_LENGTH = 100
-_FIELD_INDENTATION = len(I) * 3
-_PROPERTY_INDENTATION = len(I) * 4
+_MAX_LINE_LENGTH: Final[int] = 100
 
 
 def _generate_from_element_fields(
@@ -1323,7 +1259,7 @@ def _generate_from_element_fields(
         declaration = (
             f"internal static readonly ElementReader<Aas.{name}> {name}FromElement = ("
         )
-        if len(declaration) + _FIELD_INDENTATION > _MAX_LINE_LENGTH:
+        if len(declaration) + len(I) * 3 > _MAX_LINE_LENGTH:
             declaration = f"""\
 internal static readonly ElementReader<
 {I}Aas.{name}
@@ -1359,7 +1295,7 @@ def _content_types_in_initialization_order(
     The order and the de-duplication are the same for the reading and for
     the writing, so both field generators walk this one list. The moniker is
     the de-duplication key, which is sound only because it is injective --
-    see :py:func:`_type_moniker`.
+    see :py:func:`aas_core_codegen.csharp.common.type_moniker`.
     """
     observed = set()  # type: Set[str]
     result = []  # type: List[intermediate.TypeAnnotationUnion]
@@ -1390,7 +1326,7 @@ def _content_types_in_initialization_order(
 
             register(item_type_anno)
 
-        moniker = _type_moniker(type_anno)
+        moniker = csharp_common.type_moniker(type_anno)
         if moniker in observed:
             return
 
@@ -1423,7 +1359,7 @@ def _generate_content_reader_fields(
         name = _content_reader_name(type_anno)
 
         declaration = f"private static readonly ContentReader<{csharp_type}> {name} = ("
-        if len(declaration) + _FIELD_INDENTATION > _MAX_LINE_LENGTH:
+        if len(declaration) + len(I) * 3 > _MAX_LINE_LENGTH:
             declaration = f"""\
 private static readonly ContentReader<
 {I}{csharp_type}
@@ -2664,7 +2600,7 @@ def _content_writer_name(type_anno: intermediate.TypeAnnotationUnion) -> Identif
     The moniker comes last, after an underscore, for the same reason as in
     :py:func:`_content_reader_name`.
     """
-    return Identifier(f"Write_{_type_moniker(type_anno)}")
+    return Identifier(f"Write_{csharp_common.type_moniker(type_anno)}")
 
 
 def _item_writer_expr(
@@ -2780,7 +2716,7 @@ def _generate_content_writer_fields(
         name = _content_writer_name(type_anno)
 
         declaration = f"private static readonly ContentWriter<{csharp_type}> {name} = ("
-        if len(declaration) + _FIELD_INDENTATION > _MAX_LINE_LENGTH:
+        if len(declaration) + len(I) * 3 > _MAX_LINE_LENGTH:
             declaration = f"""\
 private static readonly ContentWriter<
 {I}{csharp_type}
@@ -2845,7 +2781,7 @@ def _generate_serialize_property(
     # The arguments go on a single line, so that a property costs five lines
     # at most -- but not at the price of an unreadable one, so a property
     # whose names do not fit gets an argument per line instead.
-    indentation = _PROPERTY_INDENTATION + len(I)
+    indentation = len(I) * 5
     if condition is not None:
         indentation += len(I)
 

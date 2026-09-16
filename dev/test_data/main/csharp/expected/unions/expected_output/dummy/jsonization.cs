@@ -35,156 +35,191 @@ namespace dummy
         /// we distinguish the implementation, realized in
         /// <see cref="DeserializeImplementation" />, and the facade given in
         /// <see cref="Deserialize" /> class.
+        ///
+        /// Every value is de-serialized through one and the same shape,
+        /// <c>Deserializer&lt;T&gt;</c>, so that the de-serialization of a list or of
+        /// a tuple can be composed out of the de-serialization of its items. A value
+        /// is returned as a plain <c>T</c>, meaningless unless the <c>error</c> is
+        /// null, since a <c>T?</c> can not be written down for an unconstrained
+        /// <c>T</c>.
         /// </remarks>
         internal static class DeserializeImplementation
         {
-            /// <summary>Convert <paramref name="node" /> to a boolean.</summary>
+            /// <summary>
+            /// Describe <paramref name="node" /> in an error message.
+            /// </summary>
+            /// <remarks>
+            /// A JSON null is represented as a null node, so every "expected ..., but
+            /// got ..." message has to account for it. Doing so here, once, is what lets
+            /// a de-serializer take a nullable node and reject a null itself, instead of
+            /// every one of its callers checking for a null before calling it.
+            /// </remarks>
+            /// <param name="node">JSON node to be described</param>
+            private static string Describe(Nodes.JsonNode? node)
+            {
+                return (node == null)
+                    ? "a null"
+                    : node.GetType().ToString();
+            }
+
+            /// <summary>
+            /// Convert <paramref name="node" /> to a boolean.
+            /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static bool? BoolFrom(
-                Nodes.JsonNode node,
+            internal static bool BoolFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
+
                 Nodes.JsonValue? value = node as Nodes.JsonValue;
                 if (value == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonValue, but got {node.GetType()}");
-                    return null;
+                        $"Expected a boolean, but got {Describe(node)}");
+                    return default!;
                 }
+
                 bool ok = value.TryGetValue<bool>(out bool result);
                 if (!ok)
                 {
                     error = new Reporting.Error(
                         "Expected a boolean, but the conversion failed " +
                         $"from {value.ToJsonString()}");
-                    return null;
+                    return default!;
                 }
                 return result;
             }
 
             /// <summary>
-            /// Convert the <paramref name="node" /> to a long 64-bit integer.
+            /// Convert <paramref name="node" /> to a 64-bit long integer.
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static long? LongFrom(
-                Nodes.JsonNode node,
+            internal static long LongFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
+
                 Nodes.JsonValue? value = node as Nodes.JsonValue;
                 if (value == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonValue, but got {node.GetType()}");
-                    return null;
+                        $"Expected a 64-bit long integer, but got {Describe(node)}");
+                    return default!;
                 }
+
                 bool ok = value.TryGetValue<long>(out long result);
                 if (!ok)
                 {
                     error = new Reporting.Error(
                         "Expected a 64-bit long integer, but the conversion failed " +
                         $"from {value.ToJsonString()}");
-                    return null;
+                    return default!;
                 }
                 return result;
             }
 
             /// <summary>
-            /// Convert the <paramref name="node" /> to a double-precision 64-bit float.
+            /// Convert <paramref name="node" /> to a 64-bit double-precision float.
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static double? DoubleFrom(
-                Nodes.JsonNode node,
+            internal static double DoubleFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
+
                 Nodes.JsonValue? value = node as Nodes.JsonValue;
                 if (value == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonValue, but got {node.GetType()}");
-                    return null;
+                        $"Expected a 64-bit double-precision float, but got {Describe(node)}");
+                    return default!;
                 }
+
                 bool ok = value.TryGetValue<double>(out double result);
                 if (!ok)
                 {
                     error = new Reporting.Error(
-                        "Expected a 64-bit double-precision float, " +
-                        "but the conversion failed " +
+                        "Expected a 64-bit double-precision float, but the conversion failed " +
                         $"from {value.ToJsonString()}");
-                    return null;
+                    return default!;
                 }
                 return result;
             }
 
             /// <summary>
-            /// Convert the <paramref name="node" /> to a string.
+            /// Convert <paramref name="node" /> to a string.
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static string? StringFrom(
-                Nodes.JsonNode node,
+            internal static string StringFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
+
                 Nodes.JsonValue? value = node as Nodes.JsonValue;
                 if (value == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonValue, but got {node.GetType()}");
-                    return null;
+                        $"Expected a string, but got {Describe(node)}");
+                    return default!;
                 }
+
                 bool ok = value.TryGetValue<string>(out string? result);
                 if (!ok)
                 {
                     error = new Reporting.Error(
                         "Expected a string, but the conversion failed " +
                         $"from {value.ToJsonString()}");
-                    return null;
+                    return default!;
                 }
                 if (result == null)
                 {
                     error = new Reporting.Error(
                         "Expected a string, but got a null");
-                    return null;
+                    return default!;
                 }
                 return result;
             }
 
             /// <summary>
-            /// Convert the <paramref name="node" /> to bytes.
+            /// Convert <paramref name="node" /> to Base-64 encoded bytes.
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static byte[]? BytesFrom(
-                Nodes.JsonNode node,
+            internal static byte[] BytesFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
+
                 Nodes.JsonValue? value = node as Nodes.JsonValue;
                 if (value == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonValue, but got {node.GetType()}");
-                    return null;
+                        $"Expected Base-64 encoded bytes, but got {Describe(node)}");
+                    return default!;
                 }
+
                 bool ok = value.TryGetValue<string>(out string? text);
                 if (!ok)
                 {
                     error = new Reporting.Error(
-                        "Expected a string, but the conversion failed " +
+                        "Expected Base-64 encoded bytes, but the conversion failed " +
                         $"from {value.ToJsonString()}");
-                    return null;
+                    return default!;
                 }
                 if (text == null)
                 {
                     error = new Reporting.Error(
-                        "Expected a string, but got a null");
-                    return null;
+                        "Expected Base-64 encoded bytes, but got a null");
+                    return default!;
                 }
                 try
                 {
@@ -195,336 +230,213 @@ namespace dummy
                     error = new Reporting.Error(
                         "Expected Base-64 encoded bytes, but the conversion failed " +
                         $"because: {exception}");
-                    return null;
+                    return default!;
                 }
             }
 
             /// <summary>
-            /// Read a single array item.
-            /// </summary>
-            /// <typeparam name="T">Type of the parsed item</typeparam>
-            private delegate T? JsonClassItemDeserializer<T>(
-                Nodes.JsonNode node,
-                out Reporting.Error? error
-                ) where T : class;
-
-            /// <summary>
-            /// Parse every item of <paramref name="array" /> with
-            /// <paramref name="deserializeItem" />.
+            /// De-serialize a value from <paramref name="node" />.
             /// </summary>
             /// <remarks>
-            /// This is shared by all the list-typed constructor arguments whose items are
-            /// de-serialized into a reference type (<em>e.g.</em>, a string, a byte array
-            /// or a class instance).
-            /// </remarks>
-            /// <typeparam name="T">Type of a single array item</typeparam>
-            private static List<T> ParseArrayOfClass<T>(
-                Nodes.JsonArray array,
-                JsonClassItemDeserializer<T> deserializeItem,
-                out Reporting.Error? error
-                ) where T : class
-            {
-                error = null;
-                List<T> result = new List<T>(array.Count);
-
-                int index = 0;
-                foreach (Nodes.JsonNode? item in array)
-                {
-                    if (item == null)
-                    {
-                        error = new Reporting.Error(
-                            "Expected a non-null item, but got a null");
-                        error.PrependSegment(
-                            new Reporting.IndexSegment(
-                                index));
-                        return result;
-                    }
-
-                    T? parsedItem = deserializeItem(
-                        item ?? throw new System.InvalidOperationException(),
-                        out error);
-                    if (error != null)
-                    {
-                        error.PrependSegment(
-                            new Reporting.IndexSegment(
-                                index));
-                        return result;
-                    }
-
-                    result.Add(
-                        parsedItem
-                            ?? throw new System.InvalidOperationException(
-                                "Unexpected result null when error is null"));
-
-                    index++;
-                }
-
-                return result;
-            }
-
-            /// <summary>
-            /// Read a single array item.
-            /// </summary>
-            /// <typeparam name="T">Type of the parsed item</typeparam>
-            private delegate T? JsonStructItemDeserializer<T>(
-                Nodes.JsonNode node,
-                out Reporting.Error? error
-                ) where T : struct;
-
-            /// <summary>
-            /// Parse every item of <paramref name="array" /> with
-            /// <paramref name="deserializeItem" />.
-            /// </summary>
-            /// <remarks>
-            /// This is shared by all the list-typed constructor arguments whose items are
-            /// de-serialized into a value type (<em>e.g.</em>, a bool, a number or
-            /// an enumeration literal).
-            /// </remarks>
-            /// <typeparam name="T">Type of a single array item</typeparam>
-            private static List<T> ParseArrayOfStruct<T>(
-                Nodes.JsonArray array,
-                JsonStructItemDeserializer<T> deserializeItem,
-                out Reporting.Error? error
-                ) where T : struct
-            {
-                error = null;
-                List<T> result = new List<T>(array.Count);
-
-                int index = 0;
-                foreach (Nodes.JsonNode? item in array)
-                {
-                    if (item == null)
-                    {
-                        error = new Reporting.Error(
-                            "Expected a non-null item, but got a null");
-                        error.PrependSegment(
-                            new Reporting.IndexSegment(
-                                index));
-                        return result;
-                    }
-
-                    T? parsedItem = deserializeItem(
-                        item ?? throw new System.InvalidOperationException(),
-                        out error);
-                    if (error != null)
-                    {
-                        error.PrependSegment(
-                            new Reporting.IndexSegment(
-                                index));
-                        return result;
-                    }
-
-                    result.Add(
-                        parsedItem
-                            ?? throw new System.InvalidOperationException(
-                                "Unexpected result null when error is null"));
-
-                    index++;
-                }
-
-                return result;
-            }
-
-            /// <summary>
-            /// Parse a single tuple item.
-            /// </summary>
-            /// <remarks>
-            /// A tuple-typed property is parsed by <c>ParseTupleN</c> (see
-            /// <see cref="ParseTuple2{T0, T1}" /> for the arity-2 case, *etc.*), one
-            /// function shared by *every* tuple-typed property of a given arity,
-            /// regardless of which mix of reference and value types appears at each
-            /// position. If <c>ParseTupleN</c> demanded the same
-            /// <c>JsonClassItemDeserializer&lt;T&gt;</c>/<c>JsonStructItemDeserializer&lt;T&gt;</c>
-            /// shape already used for list items (a nullable return, constrained to
-            /// <c>class</c> or <c>struct</c>), its own type parameters would need that
-            /// constraint fixed once per position -- which breaks the moment two
-            /// different tuple-typed properties of the same arity mix reference and
-            /// value types differently at the same position (<em>e.g.</em>,
-            /// <c>(string, long)</c> at one property and <c>(long, string)</c> at
-            /// another could not share one <c>ParseTuple2</c>).
+            /// This is the one shape of every de-serialization, which is what lets
+            /// the de-serializations be composed: an <c>As*</c> combinator turns
+            /// the de-serializers of the items into the de-serializer of a list or
+            /// of a tuple of them, and the <c>...From</c> function of a primitive,
+            /// an enumeration, a class, an interface or a named union already is one.
             ///
-            /// A single unconstrained <c>T? Method(Nodes.JsonNode node, out Reporting.Error? error)</c>
-            /// shape shared by both reference and value types does not work around this
-            /// either: for a value type, an unconstrained <c>T?</c> erases to plain
-            /// <c>T</c> (not <c>System.Nullable&lt;T&gt;</c>), so a method returning
-            /// <c>long?</c> can not even be assigned to it.
+            /// Return the value; on failure it is meaningless and
+            /// <paramref name="error" /> says why. A plain <c>T</c> rather than
+            /// a <c>T?</c>, so that one unconstrained delegate serves both the value
+            /// and the reference types: for a value type an unconstrained <c>T?</c>
+            /// erases to plain <c>T</c> rather than to <c>System.Nullable&lt;T&gt;</c>,
+            /// so a <c>T?</c> would have to be split into a <c>class</c>- and
+            /// a <c>struct</c>-constrained variant, and anything ranging over both --
+            /// such as the items of a tuple -- would then need an adapter between them.
             ///
-            /// <c>TupleItemDeserializer&lt;T&gt;</c> sidesteps the class/struct split
-            /// entirely by using an <c>out</c> parameter for the value instead of a
-            /// nullable return, at the cost of needing an adapter --
-            /// <see cref="AsTupleItemDeserializer{T}(JsonClassItemDeserializer{T})" /> --
-            /// to convert an existing item parser (such as a bare <c>StringFrom</c> or
-            /// <c>LongFrom</c> method group) into one.
+            /// The <paramref name="node" /> is nullable since a JSON null is represented
+            /// as a null node. Each de-serializer rejects it with a message of its own,
+            /// so that the check is paid once per type instead of once per property.
+            ///
+            /// <typeparamref name="T" /> is covariant, so that the de-serializer of
+            /// a concrete class can be used as the de-serializer of an item of a list of
+            /// its interface.
             /// </remarks>
-            /// <typeparam name="T">Type of the parsed item</typeparam>
-            private delegate void TupleItemDeserializer<T>(
-                Nodes.JsonNode node,
-                out T value,
+            /// <typeparam name="T">Type of the de-serialized value</typeparam>
+            private delegate T Deserializer<out T>(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error);
 
             /// <summary>
-            /// Adapt <paramref name="deserializeItem" /> -- a reference-type item parser
-            /// as used for list-typed properties -- into a <see cref="TupleItemDeserializer{T}" />
-            /// for use in a tuple-typed property.
+            /// De-serialize every item of a JSON array with
+            /// <paramref name="deserializeItem" />.
             /// </summary>
             /// <remarks>
-            /// See the remarks on <see cref="TupleItemDeserializer{T}" /> for why this
-            /// adapter -- rather than a shared constraint on <c>ParseTupleN</c> itself --
-            /// is necessary. This overload and its <c>JsonStructItemDeserializer&lt;T&gt;</c>
-            /// counterpart are dispatched on the parameter's delegate type alone, so a
-            /// caller never has to pick between them by name; each encapsulates the
-            /// "unwrap the nullable result, or propagate the error" check exactly once,
-            /// mirroring how <see cref="ParseArrayOfClass{T}" />/
-            /// <see cref="ParseArrayOfStruct{T}" /> encapsulate the very same check
-            /// once for lists instead of repeating it at every call site.
+            /// This is shared by all the list-typed constructor arguments, regardless of
+            /// whether their items de-serialize into a reference or into a value type.
+            /// The result is cached in a <c>static readonly</c> field per item type
+            /// (see <c>Parse_ListOf_*</c>), so that composing it costs nothing at
+            /// the point of use.
             /// </remarks>
-            /// <typeparam name="T">Type of the parsed item</typeparam>
-            private static TupleItemDeserializer<T> AsTupleItemDeserializer<T>(
-                JsonClassItemDeserializer<T> deserializeItem
-                ) where T : class
+            /// <typeparam name="T">Type of a single array item</typeparam>
+            private static Deserializer<List<T>> AsArrayOf<T>(
+                Deserializer<T> deserializeItem)
             {
                 return (
-                    Nodes.JsonNode node,
-                    out T value,
+                    Nodes.JsonNode? node,
                     out Reporting.Error? error) =>
                     {
-                        T? parsed = deserializeItem(node, out error);
-                        if (error != null)
+                        error = null;
+
+                        Nodes.JsonArray? array = node as Nodes.JsonArray;
+                        if (array == null)
                         {
-                            value = default!;
-                            return;
+                            error = new Reporting.Error(
+                                $"Expected a JsonArray, but got {Describe(node)}");
+                            return default!;
                         }
-                        value = parsed
-                            ?? throw new System.InvalidOperationException(
-                                "Unexpected result null when error is null");
+
+                        List<T> result = new List<T>(array.Count);
+
+                        int index = 0;
+                        foreach (Nodes.JsonNode? item in array)
+                        {
+                            T parsedItem = deserializeItem(item, out error);
+                            if (error != null)
+                            {
+                                error.PrependSegment(
+                                    new Reporting.IndexSegment(
+                                        index));
+                                return default!;
+                            }
+
+                            result.Add(parsedItem);
+
+                            index++;
+                        }
+
+                        return result;
                     };
             }
 
             /// <summary>
-            /// Adapt <paramref name="deserializeItem" /> -- a value-type item parser
-            /// as used for list-typed properties -- into a <see cref="TupleItemDeserializer{T}" />
-            /// for use in a tuple-typed property.
-            /// </summary>
-            /// <remarks>
-            /// See <see cref="AsTupleItemDeserializer{T}(JsonClassItemDeserializer{T})" />
-            /// for why this adapter is necessary.
-            /// </remarks>
-            /// <typeparam name="T">Type of the parsed item</typeparam>
-            private static TupleItemDeserializer<T> AsTupleItemDeserializer<T>(
-                JsonStructItemDeserializer<T> deserializeItem
-                ) where T : struct
-            {
-                return (
-                    Nodes.JsonNode node,
-                    out T value,
-                    out Reporting.Error? error) =>
-                    {
-                        T? parsed = deserializeItem(node, out error);
-                        if (error != null)
-                        {
-                            value = default;
-                            return;
-                        }
-                        value = parsed
-                            ?? throw new System.InvalidOperationException(
-                                "Unexpected result null when error is null");
-                    };
-            }
-
-            /// <summary>
-            /// Parse every item of <paramref name="array" /> as a tuple of 3 item(s).
+            /// De-serialize a JSON array as a tuple of 3 item(s).
             /// </summary>
             /// <remarks>
             /// This is shared by all the tuple-typed properties of arity 3.
             /// </remarks>
-            private static (T0, T1, T2) ParseTuple3<T0, T1, T2>(
-                Nodes.JsonArray array,
-                TupleItemDeserializer<T0> deserializeItem0,
-                TupleItemDeserializer<T1> deserializeItem1,
-                TupleItemDeserializer<T2> deserializeItem2,
+            private static Deserializer<(T0, T1, T2)> AsTuple3<T0, T1, T2>(
+                Deserializer<T0> deserializeItem0,
+                Deserializer<T1> deserializeItem1,
+                Deserializer<T2> deserializeItem2)
+            {
+                return (
+                    Nodes.JsonNode? node,
+                    out Reporting.Error? error) =>
+                    {
+                        error = null;
+
+                        Nodes.JsonArray? array = node as Nodes.JsonArray;
+                        if (array == null)
+                        {
+                            error = new Reporting.Error(
+                                $"Expected a JsonArray, but got {Describe(node)}");
+                            return default!;
+                        }
+
+                        if (array.Count != 3)
+                        {
+                            error = new Reporting.Error(
+                                $"Expected exactly 3 item(s) in the JsonArray, " +
+                                $"but got: {array.Count}");
+                            return default!;
+                        }
+
+                        T0 item0 = deserializeItem0(array[0], out error);
+                        if (error != null)
+                        {
+                            error.PrependSegment(
+                                new Reporting.IndexSegment(
+                                    0));
+                            return default!;
+                        }
+
+                        T1 item1 = deserializeItem1(array[1], out error);
+                        if (error != null)
+                        {
+                            error.PrependSegment(
+                                new Reporting.IndexSegment(
+                                    1));
+                            return default!;
+                        }
+
+                        T2 item2 = deserializeItem2(array[2], out error);
+                        if (error != null)
+                        {
+                            error.PrependSegment(
+                                new Reporting.IndexSegment(
+                                    2));
+                            return default!;
+                        }
+
+                        return (
+                            item0,
+                            item1,
+                            item2
+                        );
+                    };
+            }
+
+            /// <summary>
+            /// Extract the <c>modelType</c> property of <paramref name="obj" />.
+            /// </summary>
+            /// <param name="obj">JSON object to be inspected</param>
+            /// <param name="error">Error, if any, during the deserialization</param>
+            private static string ModelTypeFrom(
+                Nodes.JsonObject obj,
                 out Reporting.Error? error)
             {
-                error = null;
-
-                if (array.Count != 3)
+                Nodes.JsonNode? modelTypeNode = obj["modelType"];
+                if (modelTypeNode == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected exactly 3 item(s) in the JsonArray, " +
-                        $"but got: {array.Count}");
+                        "Expected a model type, but none is present");
                     return default!;
                 }
 
-                Nodes.JsonNode? node0 = array[0];
-                if (node0 == null)
-                {
-                    error = new Reporting.Error(
-                        "Expected a non-null item, but got a null");
-                    error.PrependSegment(
-                        new Reporting.IndexSegment(
-                            0));
-                    return default!;
-                }
-                deserializeItem0(node0, out T0 item0, out error);
-                if (error != null)
-                {
-                    error.PrependSegment(
-                        new Reporting.IndexSegment(
-                            0));
-                    return default!;
-                }
-
-                Nodes.JsonNode? node1 = array[1];
-                if (node1 == null)
-                {
-                    error = new Reporting.Error(
-                        "Expected a non-null item, but got a null");
-                    error.PrependSegment(
-                        new Reporting.IndexSegment(
-                            1));
-                    return default!;
-                }
-                deserializeItem1(node1, out T1 item1, out error);
-                if (error != null)
-                {
-                    error.PrependSegment(
-                        new Reporting.IndexSegment(
-                            1));
-                    return default!;
-                }
-
-                Nodes.JsonNode? node2 = array[2];
-                if (node2 == null)
-                {
-                    error = new Reporting.Error(
-                        "Expected a non-null item, but got a null");
-                    error.PrependSegment(
-                        new Reporting.IndexSegment(
-                            2));
-                    return default!;
-                }
-                deserializeItem2(node2, out T2 item2, out error);
-                if (error != null)
-                {
-                    error.PrependSegment(
-                        new Reporting.IndexSegment(
-                            2));
-                    return default!;
-                }
-
-                return (
-                    item0,
-                    item1,
-                    item2
-                );
+                return StringFrom(modelTypeNode, out error);
             }
+
+            private static readonly Deserializer<
+                List<StructuralUnion>
+            > Parse_ListOf_StructuralUnion = (
+                AsArrayOf<StructuralUnion>(
+                    StructuralUnionFrom));
+
+            private static readonly Deserializer<List<MixedUnion>> Parse_ListOf_MixedUnion = (
+                AsArrayOf<MixedUnion>(
+                    MixedUnionFrom));
+
+            private static readonly Deserializer<
+                List<ModelTypedUnion>
+            > Parse_ListOf_ModelTypedUnion = (
+                AsArrayOf<ModelTypedUnion>(
+                    ModelTypedUnionFrom));
+
+            private static readonly Deserializer<
+                (StructuralUnion, MixedUnion, ModelTypedUnion)
+            > Parse_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion = (
+                AsTuple3<StructuralUnion, MixedUnion, ModelTypedUnion>(
+                    StructuralUnionFrom,
+                    MixedUnionFrom,
+                    ModelTypedUnionFrom));
 
             /// <summary>
             /// Deserialize an instance of StructuralFirst from <paramref name="node" />.
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.StructuralFirst? StructuralFirstFrom(
-                Nodes.JsonNode node,
+            internal static Aas.StructuralFirst StructuralFirstFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -533,8 +445,8 @@ namespace dummy
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing StructuralFirst, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theUniqueToFirst = null;
@@ -544,38 +456,21 @@ namespace dummy
                     switch (keyValue.Key)
                     {
                         case "uniqueToFirst":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "uniqueToFirst"));
-                                return null;
-                            }
-
-                            theUniqueToFirst = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "uniqueToFirst"));
-                                return null;
-                            }
-                            if (theUniqueToFirst == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theUniqueToFirst null when error is also null");
-                            }
+                            theUniqueToFirst = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -583,7 +478,7 @@ namespace dummy
                 {
                     error = new Reporting.Error(
                         "Required property \"uniqueToFirst\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.StructuralFirst(
@@ -597,8 +492,8 @@ namespace dummy
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.StructuralSecond? StructuralSecondFrom(
-                Nodes.JsonNode node,
+            internal static Aas.StructuralSecond StructuralSecondFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -607,8 +502,8 @@ namespace dummy
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing StructuralSecond, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theUniqueToSecond = null;
@@ -618,38 +513,21 @@ namespace dummy
                     switch (keyValue.Key)
                     {
                         case "uniqueToSecond":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "uniqueToSecond"));
-                                return null;
-                            }
-
-                            theUniqueToSecond = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "uniqueToSecond"));
-                                return null;
-                            }
-                            if (theUniqueToSecond == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theUniqueToSecond null when error is also null");
-                            }
+                            theUniqueToSecond = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -657,7 +535,7 @@ namespace dummy
                 {
                     error = new Reporting.Error(
                         "Required property \"uniqueToSecond\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.StructuralSecond(
@@ -673,48 +551,38 @@ namespace dummy
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            public static Aas.StructuralUnion? StructuralUnionFrom(
-                Nodes.JsonNode node,
+            public static Aas.StructuralUnion StructuralUnionFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
 
-                var obj = node as Nodes.JsonObject;
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected Nodes.JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing StructuralUnion, but got {Describe(node)}");
+                    return default!;
                 }
 
                 if (obj.ContainsKey("uniqueToFirst"))
                 {
-                    Aas.StructuralFirst? instance = StructuralFirstFrom(
+                    Aas.StructuralFirst instance = StructuralFirstFrom(
                         node, out error);
                     if (error != null)
                     {
-                        return null;
-                    }
-                    if (instance == null)
-                    {
-                        throw new System.InvalidOperationException(
-                            "Unexpected instance null when error null");
+                        return default!;
                     }
                     return Aas.StructuralUnion.FromStructuralFirst(instance);
                 }
 
                 if (obj.ContainsKey("uniqueToSecond"))
                 {
-                    Aas.StructuralSecond? instance = StructuralSecondFrom(
+                    Aas.StructuralSecond instance = StructuralSecondFrom(
                         node, out error);
                     if (error != null)
                     {
-                        return null;
-                    }
-                    if (instance == null)
-                    {
-                        throw new System.InvalidOperationException(
-                            "Unexpected instance null when error null");
+                        return default!;
                     }
                     return Aas.StructuralUnion.FromStructuralSecond(instance);
                 }
@@ -722,7 +590,7 @@ namespace dummy
                 error = new Reporting.Error(
                     "Could not determine the concrete type of the union StructuralUnion " +
                     "from the given JSON object; none of its implementers matched");
-                return null;
+                return default!;
             }  // public static Aas.StructuralUnion StructuralUnionFrom
 
             /// <summary>
@@ -732,51 +600,36 @@ namespace dummy
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            public static Aas.IMixedAbstractMember? IMixedAbstractMemberFrom(
-                Nodes.JsonNode node,
+            public static Aas.IMixedAbstractMember IMixedAbstractMemberFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-
-                var obj = node as Nodes.JsonObject;
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected Nodes.JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing IMixedAbstractMember, but got {Describe(node)}");
+                    return default!;
                 }
 
-                Nodes.JsonNode? modelTypeNode = obj["modelType"];
-                if (modelTypeNode == null)
-                {
-                    error = new Reporting.Error(
-                        "Expected a model type, but none is present");
-                    return null;
-                }
-                string? modelType = DeserializeImplementation.StringFrom(
-                    modelTypeNode, out error);
+                string modelType = ModelTypeFrom(obj, out error);
                 if (error != null)
                 {
-                    return null;
-                }
-                if (modelType == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected modelType null when error null");
+                    return default!;
                 }
 
                 switch (modelType)
                 {
-                    case "MixedAbstractDescendantOne":
-                        return MixedAbstractDescendantOneFrom(
-                            node, out error);
-                    case "MixedAbstractDescendantTwo":
-                        return MixedAbstractDescendantTwoFrom(
-                            node, out error);
-                    default:
-                        error = new Reporting.Error(
-                            $"Unexpected model type for IMixedAbstractMember: {modelType}");
-                        return null;
+                case "MixedAbstractDescendantOne":
+                    return MixedAbstractDescendantOneFrom(
+                        node, out error);
+                case "MixedAbstractDescendantTwo":
+                    return MixedAbstractDescendantTwoFrom(
+                        node, out error);
+                default:
+                    error = new Reporting.Error(
+                        $"Unexpected model type for IMixedAbstractMember: {modelType}");
+                    return default!;
                 }
             }  // public static Aas.IMixedAbstractMember IMixedAbstractMemberFrom
 
@@ -785,8 +638,8 @@ namespace dummy
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.MixedAbstractDescendantOne? MixedAbstractDescendantOneFrom(
-                Nodes.JsonNode node,
+            internal static Aas.MixedAbstractDescendantOne MixedAbstractDescendantOneFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -795,8 +648,8 @@ namespace dummy
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing MixedAbstractDescendantOne, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theUniqueToAbstractDescendantOne = null;
@@ -806,38 +659,21 @@ namespace dummy
                     switch (keyValue.Key)
                     {
                         case "uniqueToAbstractDescendantOne":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "uniqueToAbstractDescendantOne"));
-                                return null;
-                            }
-
-                            theUniqueToAbstractDescendantOne = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "uniqueToAbstractDescendantOne"));
-                                return null;
-                            }
-                            if (theUniqueToAbstractDescendantOne == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theUniqueToAbstractDescendantOne null when error is also null");
-                            }
+                            theUniqueToAbstractDescendantOne = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -845,7 +681,7 @@ namespace dummy
                 {
                     error = new Reporting.Error(
                         "Required property \"uniqueToAbstractDescendantOne\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.MixedAbstractDescendantOne(
@@ -859,8 +695,8 @@ namespace dummy
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.MixedAbstractDescendantTwo? MixedAbstractDescendantTwoFrom(
-                Nodes.JsonNode node,
+            internal static Aas.MixedAbstractDescendantTwo MixedAbstractDescendantTwoFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -869,8 +705,8 @@ namespace dummy
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing MixedAbstractDescendantTwo, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theUniqueToAbstractDescendantTwo = null;
@@ -880,38 +716,21 @@ namespace dummy
                     switch (keyValue.Key)
                     {
                         case "uniqueToAbstractDescendantTwo":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "uniqueToAbstractDescendantTwo"));
-                                return null;
-                            }
-
-                            theUniqueToAbstractDescendantTwo = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "uniqueToAbstractDescendantTwo"));
-                                return null;
-                            }
-                            if (theUniqueToAbstractDescendantTwo == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theUniqueToAbstractDescendantTwo null when error is also null");
-                            }
+                            theUniqueToAbstractDescendantTwo = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -919,7 +738,7 @@ namespace dummy
                 {
                     error = new Reporting.Error(
                         "Required property \"uniqueToAbstractDescendantTwo\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.MixedAbstractDescendantTwo(
@@ -935,51 +754,36 @@ namespace dummy
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
             [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-            public static Aas.IMixedConcreteWithDescendants? IMixedConcreteWithDescendantsFrom(
-                Nodes.JsonNode node,
+            public static Aas.IMixedConcreteWithDescendants IMixedConcreteWithDescendantsFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
-                error = null;
-
-                var obj = node as Nodes.JsonObject;
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected Nodes.JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing IMixedConcreteWithDescendants, but got {Describe(node)}");
+                    return default!;
                 }
 
-                Nodes.JsonNode? modelTypeNode = obj["modelType"];
-                if (modelTypeNode == null)
-                {
-                    error = new Reporting.Error(
-                        "Expected a model type, but none is present");
-                    return null;
-                }
-                string? modelType = DeserializeImplementation.StringFrom(
-                    modelTypeNode, out error);
+                string modelType = ModelTypeFrom(obj, out error);
                 if (error != null)
                 {
-                    return null;
-                }
-                if (modelType == null)
-                {
-                    throw new System.InvalidOperationException(
-                        "Unexpected modelType null when error null");
+                    return default!;
                 }
 
                 switch (modelType)
                 {
-                    case "MixedConcreteWithDescendantsChild":
-                        return MixedConcreteWithDescendantsChildFrom(
-                            node, out error);
-                    case "MixedConcreteWithDescendants":
-                        return MixedConcreteWithDescendantsFrom(
-                            node, out error);
-                    default:
-                        error = new Reporting.Error(
-                            $"Unexpected model type for IMixedConcreteWithDescendants: {modelType}");
-                        return null;
+                case "MixedConcreteWithDescendantsChild":
+                    return MixedConcreteWithDescendantsChildFrom(
+                        node, out error);
+                case "MixedConcreteWithDescendants":
+                    return MixedConcreteWithDescendantsFrom(
+                        node, out error);
+                default:
+                    error = new Reporting.Error(
+                        $"Unexpected model type for IMixedConcreteWithDescendants: {modelType}");
+                    return default!;
                 }
             }  // public static Aas.IMixedConcreteWithDescendants IMixedConcreteWithDescendantsFrom
 
@@ -988,8 +792,8 @@ namespace dummy
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.MixedConcreteWithDescendants? MixedConcreteWithDescendantsFrom(
-                Nodes.JsonNode node,
+            internal static Aas.MixedConcreteWithDescendants MixedConcreteWithDescendantsFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -998,8 +802,8 @@ namespace dummy
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing MixedConcreteWithDescendants, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theSomeBaseProperty = null;
@@ -1011,69 +815,31 @@ namespace dummy
                     switch (keyValue.Key)
                     {
                         case "someBaseProperty":
-                        {
-                            if (keyValue.Value == null)
+                            theSomeBaseProperty = StringFrom(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "MixedConcreteWithDescendants")
                             {
                                 error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "someBaseProperty"));
-                                return null;
-                            }
-
-                            theSomeBaseProperty = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "someBaseProperty"));
-                                return null;
-                            }
-                            if (theSomeBaseProperty == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSomeBaseProperty null when error is also null");
+                                    "Expected the model type 'MixedConcreteWithDescendants', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "MixedConcreteWithDescendants")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'MixedConcreteWithDescendants', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -1081,14 +847,14 @@ namespace dummy
                 {
                     error = new Reporting.Error(
                         "Required property \"someBaseProperty\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.MixedConcreteWithDescendants(
@@ -1102,8 +868,8 @@ namespace dummy
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.MixedConcreteWithDescendantsChild? MixedConcreteWithDescendantsChildFrom(
-                Nodes.JsonNode node,
+            internal static Aas.MixedConcreteWithDescendantsChild MixedConcreteWithDescendantsChildFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -1112,8 +878,8 @@ namespace dummy
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing MixedConcreteWithDescendantsChild, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theSomeBaseProperty = null;
@@ -1126,98 +892,35 @@ namespace dummy
                     switch (keyValue.Key)
                     {
                         case "someBaseProperty":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "someBaseProperty"));
-                                return null;
-                            }
-
-                            theSomeBaseProperty = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "someBaseProperty"));
-                                return null;
-                            }
-                            if (theSomeBaseProperty == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSomeBaseProperty null when error is also null");
-                            }
+                            theSomeBaseProperty = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "someChildProperty":
-                        {
-                            if (keyValue.Value == null)
+                            theSomeChildProperty = StringFrom(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "MixedConcreteWithDescendantsChild")
                             {
                                 error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "someChildProperty"));
-                                return null;
-                            }
-
-                            theSomeChildProperty = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "someChildProperty"));
-                                return null;
-                            }
-                            if (theSomeChildProperty == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSomeChildProperty null when error is also null");
+                                    "Expected the model type 'MixedConcreteWithDescendantsChild', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "MixedConcreteWithDescendantsChild")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'MixedConcreteWithDescendantsChild', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -1225,21 +928,21 @@ namespace dummy
                 {
                     error = new Reporting.Error(
                         "Required property \"someBaseProperty\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theSomeChildProperty == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"someChildProperty\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.MixedConcreteWithDescendantsChild(
@@ -1256,8 +959,8 @@ namespace dummy
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.MixedConcreteLeaf? MixedConcreteLeafFrom(
-                Nodes.JsonNode node,
+            internal static Aas.MixedConcreteLeaf MixedConcreteLeafFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -1266,8 +969,8 @@ namespace dummy
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing MixedConcreteLeaf, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theUniqueToConcreteLeaf = null;
@@ -1277,38 +980,21 @@ namespace dummy
                     switch (keyValue.Key)
                     {
                         case "uniqueToConcreteLeaf":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "uniqueToConcreteLeaf"));
-                                return null;
-                            }
-
-                            theUniqueToConcreteLeaf = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "uniqueToConcreteLeaf"));
-                                return null;
-                            }
-                            if (theUniqueToConcreteLeaf == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theUniqueToConcreteLeaf null when error is also null");
-                            }
+                            theUniqueToConcreteLeaf = StringFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -1316,7 +1002,7 @@ namespace dummy
                 {
                     error = new Reporting.Error(
                         "Required property \"uniqueToConcreteLeaf\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.MixedConcreteLeaf(
@@ -1332,135 +1018,8 @@ namespace dummy
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            public static Aas.MixedUnion? MixedUnionFrom(
-                Nodes.JsonNode node,
-                out Reporting.Error? error)
-            {
-                error = null;
-
-                var obj = node as Nodes.JsonObject;
-                if (obj == null)
-                {
-                    error = new Reporting.Error(
-                        $"Expected Nodes.JsonObject, but got {node.GetType()}");
-                    return null;
-                }
-
-                Nodes.JsonNode? modelTypeNode = obj["modelType"];
-                if (modelTypeNode != null)
-                {
-                    string? modelType = DeserializeImplementation.StringFrom(
-                        modelTypeNode, out error);
-                    if (error != null)
-                    {
-                        return null;
-                    }
-                    if (modelType == null)
-                    {
-                        throw new System.InvalidOperationException(
-                            "Unexpected modelType null when error null");
-                    }
-
-                    switch (modelType)
-                    {
-                        case "MixedConcreteWithDescendantsChild":
-                        {
-                            Aas.MixedConcreteWithDescendantsChild? instance = MixedConcreteWithDescendantsChildFrom(
-                                node, out error);
-                            if (error != null)
-                            {
-                                return null;
-                            }
-                            if (instance == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected instance null when error null");
-                            }
-                            return Aas.MixedUnion.FromMixedConcreteWithDescendantsChild(instance);
-                        }
-                        case "MixedConcreteWithDescendants":
-                        {
-                            Aas.MixedConcreteWithDescendants? instance = MixedConcreteWithDescendantsFrom(
-                                node, out error);
-                            if (error != null)
-                            {
-                                return null;
-                            }
-                            if (instance == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected instance null when error null");
-                            }
-                            return Aas.MixedUnion.FromMixedConcreteWithDescendants(instance);
-                        }
-                        default:
-                            error = new Reporting.Error(
-                                $"Unexpected model type for the union MixedUnion: {modelType}");
-                            return null;
-                    }
-                }
-
-                if (obj.ContainsKey("uniqueToAbstractDescendantOne"))
-                {
-                    Aas.MixedAbstractDescendantOne? instance = MixedAbstractDescendantOneFrom(
-                        node, out error);
-                    if (error != null)
-                    {
-                        return null;
-                    }
-                    if (instance == null)
-                    {
-                        throw new System.InvalidOperationException(
-                            "Unexpected instance null when error null");
-                    }
-                    return Aas.MixedUnion.FromMixedAbstractDescendantOne(instance);
-                }
-
-                if (obj.ContainsKey("uniqueToAbstractDescendantTwo"))
-                {
-                    Aas.MixedAbstractDescendantTwo? instance = MixedAbstractDescendantTwoFrom(
-                        node, out error);
-                    if (error != null)
-                    {
-                        return null;
-                    }
-                    if (instance == null)
-                    {
-                        throw new System.InvalidOperationException(
-                            "Unexpected instance null when error null");
-                    }
-                    return Aas.MixedUnion.FromMixedAbstractDescendantTwo(instance);
-                }
-
-                if (obj.ContainsKey("uniqueToConcreteLeaf"))
-                {
-                    Aas.MixedConcreteLeaf? instance = MixedConcreteLeafFrom(
-                        node, out error);
-                    if (error != null)
-                    {
-                        return null;
-                    }
-                    if (instance == null)
-                    {
-                        throw new System.InvalidOperationException(
-                            "Unexpected instance null when error null");
-                    }
-                    return Aas.MixedUnion.FromMixedConcreteLeaf(instance);
-                }
-
-                error = new Reporting.Error(
-                    "Could not determine the concrete type of the union MixedUnion " +
-                    "from the given JSON object; none of its implementers matched");
-                return null;
-            }  // public static Aas.MixedUnion MixedUnionFrom
-
-            /// <summary>
-            /// Deserialize an instance of ModelTypedFirst from <paramref name="node" />.
-            /// </summary>
-            /// <param name="node">JSON node to be parsed</param>
-            /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.ModelTypedFirst? ModelTypedFirstFrom(
-                Nodes.JsonNode node,
+            public static Aas.MixedUnion MixedUnionFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -1469,8 +1028,104 @@ namespace dummy
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing MixedUnion, but got {Describe(node)}");
+                    return default!;
+                }
+
+                Nodes.JsonNode? modelTypeNode = obj["modelType"];
+                if (modelTypeNode != null)
+                {
+                    string modelType = StringFrom(modelTypeNode, out error);
+                    if (error != null)
+                    {
+                        return default!;
+                    }
+
+                    switch (modelType)
+                    {
+                        case "MixedConcreteWithDescendantsChild":
+                        {
+                            Aas.MixedConcreteWithDescendantsChild instance = MixedConcreteWithDescendantsChildFrom(
+                                node, out error);
+                            if (error != null)
+                            {
+                                return default!;
+                            }
+                            return Aas.MixedUnion.FromMixedConcreteWithDescendantsChild(instance);
+                        }
+                        case "MixedConcreteWithDescendants":
+                        {
+                            Aas.MixedConcreteWithDescendants instance = MixedConcreteWithDescendantsFrom(
+                                node, out error);
+                            if (error != null)
+                            {
+                                return default!;
+                            }
+                            return Aas.MixedUnion.FromMixedConcreteWithDescendants(instance);
+                        }
+                        default:
+                            error = new Reporting.Error(
+                                $"Unexpected model type for the union MixedUnion: {modelType}");
+                            return default!;
+                    }
+                }
+
+                if (obj.ContainsKey("uniqueToAbstractDescendantOne"))
+                {
+                    Aas.MixedAbstractDescendantOne instance = MixedAbstractDescendantOneFrom(
+                        node, out error);
+                    if (error != null)
+                    {
+                        return default!;
+                    }
+                    return Aas.MixedUnion.FromMixedAbstractDescendantOne(instance);
+                }
+
+                if (obj.ContainsKey("uniqueToAbstractDescendantTwo"))
+                {
+                    Aas.MixedAbstractDescendantTwo instance = MixedAbstractDescendantTwoFrom(
+                        node, out error);
+                    if (error != null)
+                    {
+                        return default!;
+                    }
+                    return Aas.MixedUnion.FromMixedAbstractDescendantTwo(instance);
+                }
+
+                if (obj.ContainsKey("uniqueToConcreteLeaf"))
+                {
+                    Aas.MixedConcreteLeaf instance = MixedConcreteLeafFrom(
+                        node, out error);
+                    if (error != null)
+                    {
+                        return default!;
+                    }
+                    return Aas.MixedUnion.FromMixedConcreteLeaf(instance);
+                }
+
+                error = new Reporting.Error(
+                    "Could not determine the concrete type of the union MixedUnion " +
+                    "from the given JSON object; none of its implementers matched");
+                return default!;
+            }  // public static Aas.MixedUnion MixedUnionFrom
+
+            /// <summary>
+            /// Deserialize an instance of ModelTypedFirst from <paramref name="node" />.
+            /// </summary>
+            /// <param name="node">JSON node to be parsed</param>
+            /// <param name="error">Error, if any, during the deserialization</param>
+            internal static Aas.ModelTypedFirst ModelTypedFirstFrom(
+                Nodes.JsonNode? node,
+                out Reporting.Error? error)
+            {
+                error = null;
+
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
+                if (obj == null)
+                {
+                    error = new Reporting.Error(
+                        $"Expected a JsonObject representing ModelTypedFirst, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theSomeProperty = null;
@@ -1482,69 +1137,31 @@ namespace dummy
                     switch (keyValue.Key)
                     {
                         case "someProperty":
-                        {
-                            if (keyValue.Value == null)
+                            theSomeProperty = StringFrom(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "ModelTypedFirst")
                             {
                                 error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "someProperty"));
-                                return null;
-                            }
-
-                            theSomeProperty = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "someProperty"));
-                                return null;
-                            }
-                            if (theSomeProperty == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSomeProperty null when error is also null");
+                                    "Expected the model type 'ModelTypedFirst', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "ModelTypedFirst")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'ModelTypedFirst', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -1552,14 +1169,14 @@ namespace dummy
                 {
                     error = new Reporting.Error(
                         "Required property \"someProperty\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.ModelTypedFirst(
@@ -1573,8 +1190,8 @@ namespace dummy
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.ModelTypedSecond? ModelTypedSecondFrom(
-                Nodes.JsonNode node,
+            internal static Aas.ModelTypedSecond ModelTypedSecondFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -1583,8 +1200,8 @@ namespace dummy
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing ModelTypedSecond, but got {Describe(node)}");
+                    return default!;
                 }
 
                 string? theSomeProperty = null;
@@ -1596,69 +1213,31 @@ namespace dummy
                     switch (keyValue.Key)
                     {
                         case "someProperty":
-                        {
-                            if (keyValue.Value == null)
+                            theSomeProperty = StringFrom(
+                                keyValue.Value, out error);
+                            break;
+                        case "modelType":
+                            modelType = StringFrom(
+                                keyValue.Value, out error);
+                            if (error == null && modelType != "ModelTypedSecond")
                             {
                                 error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "someProperty"));
-                                return null;
-                            }
-
-                            theSomeProperty = DeserializeImplementation.StringFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "someProperty"));
-                                return null;
-                            }
-                            if (theSomeProperty == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theSomeProperty null when error is also null");
+                                    "Expected the model type 'ModelTypedSecond', " +
+                                    $"but got {modelType}");
                             }
                             break;
-                        }
-                        case "modelType":
-                            {
-                                if (keyValue.Value == null)
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected a model type, but got null");
-                                    return null;
-                                }
-                                modelType = DeserializeImplementation.StringFrom(
-                                    keyValue.Value,
-                                    out error);
-                                if (error != null)
-                                {
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-
-                                if (modelType != "ModelTypedSecond")
-                                {
-                                    error = new Reporting.Error(
-                                        "Expected the model type 'ModelTypedSecond', " +
-                                        $"but got {modelType}");
-                                    error.PrependSegment(
-                                        new Reporting.NameSegment(
-                                            "modelType"));
-                                    return null;
-                                }
-                                break;
-                            }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -1666,14 +1245,14 @@ namespace dummy
                 {
                     error = new Reporting.Error(
                         "Required property \"someProperty\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (modelType == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelType\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.ModelTypedSecond(
@@ -1689,87 +1268,8 @@ namespace dummy
             /// </summary>
             /// <param name="node">JSON node to be parsed</param>
             /// <param name="error">Error, if any, during the deserialization</param>
-            public static Aas.ModelTypedUnion? ModelTypedUnionFrom(
-                Nodes.JsonNode node,
-                out Reporting.Error? error)
-            {
-                error = null;
-
-                var obj = node as Nodes.JsonObject;
-                if (obj == null)
-                {
-                    error = new Reporting.Error(
-                        $"Expected Nodes.JsonObject, but got {node.GetType()}");
-                    return null;
-                }
-
-                Nodes.JsonNode? modelTypeNode = obj["modelType"];
-                if (modelTypeNode != null)
-                {
-                    string? modelType = DeserializeImplementation.StringFrom(
-                        modelTypeNode, out error);
-                    if (error != null)
-                    {
-                        return null;
-                    }
-                    if (modelType == null)
-                    {
-                        throw new System.InvalidOperationException(
-                            "Unexpected modelType null when error null");
-                    }
-
-                    switch (modelType)
-                    {
-                        case "ModelTypedFirst":
-                        {
-                            Aas.ModelTypedFirst? instance = ModelTypedFirstFrom(
-                                node, out error);
-                            if (error != null)
-                            {
-                                return null;
-                            }
-                            if (instance == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected instance null when error null");
-                            }
-                            return Aas.ModelTypedUnion.FromModelTypedFirst(instance);
-                        }
-                        case "ModelTypedSecond":
-                        {
-                            Aas.ModelTypedSecond? instance = ModelTypedSecondFrom(
-                                node, out error);
-                            if (error != null)
-                            {
-                                return null;
-                            }
-                            if (instance == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected instance null when error null");
-                            }
-                            return Aas.ModelTypedUnion.FromModelTypedSecond(instance);
-                        }
-                        default:
-                            error = new Reporting.Error(
-                                $"Unexpected model type for the union ModelTypedUnion: {modelType}");
-                            return null;
-                    }
-                }
-
-                error = new Reporting.Error(
-                    "Could not determine the concrete type of the union ModelTypedUnion " +
-                    "from the given JSON object; none of its implementers matched");
-                return null;
-            }  // public static Aas.ModelTypedUnion ModelTypedUnionFrom
-
-            /// <summary>
-            /// Deserialize an instance of Something from <paramref name="node" />.
-            /// </summary>
-            /// <param name="node">JSON node to be parsed</param>
-            /// <param name="error">Error, if any, during the deserialization</param>
-            internal static Aas.Something? SomethingFrom(
-                Nodes.JsonNode node,
+            public static Aas.ModelTypedUnion ModelTypedUnionFrom(
+                Nodes.JsonNode? node,
                 out Reporting.Error? error)
             {
                 error = null;
@@ -1778,8 +1278,71 @@ namespace dummy
                 if (obj == null)
                 {
                     error = new Reporting.Error(
-                        $"Expected a JsonObject, but got {node.GetType()}");
-                    return null;
+                        $"Expected a JsonObject representing ModelTypedUnion, but got {Describe(node)}");
+                    return default!;
+                }
+
+                Nodes.JsonNode? modelTypeNode = obj["modelType"];
+                if (modelTypeNode != null)
+                {
+                    string modelType = StringFrom(modelTypeNode, out error);
+                    if (error != null)
+                    {
+                        return default!;
+                    }
+
+                    switch (modelType)
+                    {
+                        case "ModelTypedFirst":
+                        {
+                            Aas.ModelTypedFirst instance = ModelTypedFirstFrom(
+                                node, out error);
+                            if (error != null)
+                            {
+                                return default!;
+                            }
+                            return Aas.ModelTypedUnion.FromModelTypedFirst(instance);
+                        }
+                        case "ModelTypedSecond":
+                        {
+                            Aas.ModelTypedSecond instance = ModelTypedSecondFrom(
+                                node, out error);
+                            if (error != null)
+                            {
+                                return default!;
+                            }
+                            return Aas.ModelTypedUnion.FromModelTypedSecond(instance);
+                        }
+                        default:
+                            error = new Reporting.Error(
+                                $"Unexpected model type for the union ModelTypedUnion: {modelType}");
+                            return default!;
+                    }
+                }
+
+                error = new Reporting.Error(
+                    "Could not determine the concrete type of the union ModelTypedUnion " +
+                    "from the given JSON object; none of its implementers matched");
+                return default!;
+            }  // public static Aas.ModelTypedUnion ModelTypedUnionFrom
+
+            /// <summary>
+            /// Deserialize an instance of Something from <paramref name="node" />.
+            /// </summary>
+            /// <param name="node">JSON node to be parsed</param>
+            /// <param name="error">Error, if any, during the deserialization</param>
+            internal static Aas.Something SomethingFrom(
+                Nodes.JsonNode? node,
+                out Reporting.Error? error)
+            {
+                error = null;
+
+                Nodes.JsonObject? obj = node as Nodes.JsonObject;
+                if (obj == null)
+                {
+                    error = new Reporting.Error(
+                        $"Expected a JsonObject representing Something, but got {Describe(node)}");
+                    return default!;
                 }
 
                 StructuralUnion? theStructuralProperty = null;
@@ -1798,328 +1361,57 @@ namespace dummy
                     switch (keyValue.Key)
                     {
                         case "structuralProperty":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "structuralProperty"));
-                                return null;
-                            }
-
-                            theStructuralProperty = DeserializeImplementation.StructuralUnionFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "structuralProperty"));
-                                return null;
-                            }
-                            if (theStructuralProperty == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theStructuralProperty null when error is also null");
-                            }
+                            theStructuralProperty = StructuralUnionFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "mixedProperty":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "mixedProperty"));
-                                return null;
-                            }
-
-                            theMixedProperty = DeserializeImplementation.MixedUnionFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "mixedProperty"));
-                                return null;
-                            }
-                            if (theMixedProperty == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theMixedProperty null when error is also null");
-                            }
+                            theMixedProperty = MixedUnionFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "modelTypedProperty":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "modelTypedProperty"));
-                                return null;
-                            }
-
-                            theModelTypedProperty = DeserializeImplementation.ModelTypedUnionFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "modelTypedProperty"));
-                                return null;
-                            }
-                            if (theModelTypedProperty == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theModelTypedProperty null when error is also null");
-                            }
+                            theModelTypedProperty = ModelTypedUnionFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "listStructuralProperty":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "listStructuralProperty"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayListStructuralProperty = keyValue.Value as Nodes.JsonArray;
-                            if (arrayListStructuralProperty == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "listStructuralProperty"));
-                                return null;
-                            }
-                            theListStructuralProperty = ParseArrayOfClass<StructuralUnion>(
-                                arrayListStructuralProperty,
-                                DeserializeImplementation.StructuralUnionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "listStructuralProperty"));
-                                return null;
-                            }
+                            theListStructuralProperty = Parse_ListOf_StructuralUnion(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "listMixedProperty":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "listMixedProperty"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayListMixedProperty = keyValue.Value as Nodes.JsonArray;
-                            if (arrayListMixedProperty == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "listMixedProperty"));
-                                return null;
-                            }
-                            theListMixedProperty = ParseArrayOfClass<MixedUnion>(
-                                arrayListMixedProperty,
-                                DeserializeImplementation.MixedUnionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "listMixedProperty"));
-                                return null;
-                            }
+                            theListMixedProperty = Parse_ListOf_MixedUnion(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "listModelTypedProperty":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "listModelTypedProperty"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayListModelTypedProperty = keyValue.Value as Nodes.JsonArray;
-                            if (arrayListModelTypedProperty == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "listModelTypedProperty"));
-                                return null;
-                            }
-                            theListModelTypedProperty = ParseArrayOfClass<ModelTypedUnion>(
-                                arrayListModelTypedProperty,
-                                DeserializeImplementation.ModelTypedUnionFrom,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "listModelTypedProperty"));
-                                return null;
-                            }
+                            theListModelTypedProperty = Parse_ListOf_ModelTypedUnion(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "tupleProperty":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Unexpected null for a required property");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "tupleProperty"));
-                                return null;
-                            }
-
-                            Nodes.JsonArray? arrayTupleProperty = keyValue.Value as Nodes.JsonArray;
-                            if (arrayTupleProperty == null)
-                            {
-                                error = new Reporting.Error(
-                                    $"Expected a JsonArray, but got {keyValue.Value.GetType()}");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "tupleProperty"));
-                                return null;
-                            }
-                            theTupleProperty = ParseTuple3(
-                                arrayTupleProperty,
-                                AsTupleItemDeserializer(DeserializeImplementation.StructuralUnionFrom),
-                                AsTupleItemDeserializer(DeserializeImplementation.MixedUnionFrom),
-                                AsTupleItemDeserializer(DeserializeImplementation.ModelTypedUnionFrom),
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "tupleProperty"));
-                                return null;
-                            }
+                            theTupleProperty = Parse_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "optionalStructuralProperty":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "optionalStructuralProperty"));
-                                return null;
-                            }
-
-                            theOptionalStructuralProperty = DeserializeImplementation.StructuralUnionFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "optionalStructuralProperty"));
-                                return null;
-                            }
-                            if (theOptionalStructuralProperty == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theOptionalStructuralProperty null when error is also null");
-                            }
+                            theOptionalStructuralProperty = StructuralUnionFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "optionalMixedProperty":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "optionalMixedProperty"));
-                                return null;
-                            }
-
-                            theOptionalMixedProperty = DeserializeImplementation.MixedUnionFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "optionalMixedProperty"));
-                                return null;
-                            }
-                            if (theOptionalMixedProperty == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theOptionalMixedProperty null when error is also null");
-                            }
+                            theOptionalMixedProperty = MixedUnionFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         case "optionalModelTypedProperty":
-                        {
-                            if (keyValue.Value == null)
-                            {
-                                error = new Reporting.Error(
-                                    "Expected optional property to be absent, " +
-                                    "but got null instead");
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "optionalModelTypedProperty"));
-                                return null;
-                            }
-
-                            theOptionalModelTypedProperty = DeserializeImplementation.ModelTypedUnionFrom(
-                                keyValue.Value,
-                                out error);
-                            if (error != null)
-                            {
-                                error.PrependSegment(
-                                    new Reporting.NameSegment(
-                                        "optionalModelTypedProperty"));
-                                return null;
-                            }
-                            if (theOptionalModelTypedProperty == null)
-                            {
-                                throw new System.InvalidOperationException(
-                                    "Unexpected theOptionalModelTypedProperty null when error is also null");
-                            }
+                            theOptionalModelTypedProperty = ModelTypedUnionFrom(
+                                keyValue.Value, out error);
                             break;
-                        }
                         default:
                             error = new Reporting.Error(
                                 $"Unexpected property: {keyValue.Key}");
-                            return null;
+                            return default!;
+                    }
+
+                    if (error != null)
+                    {
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                keyValue.Key));
+                        return default!;
                     }
                 }
 
@@ -2127,49 +1419,49 @@ namespace dummy
                 {
                     error = new Reporting.Error(
                         "Required property \"structuralProperty\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theMixedProperty == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"mixedProperty\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theModelTypedProperty == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"modelTypedProperty\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theListStructuralProperty == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"listStructuralProperty\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theListMixedProperty == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"listMixedProperty\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theListModelTypedProperty == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"listModelTypedProperty\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 if (theTupleProperty == null)
                 {
                     error = new Reporting.Error(
                         "Required property \"tupleProperty\" is missing");
-                    return null;
+                    return default!;
                 }
 
                 return new Aas.Something(
@@ -2240,7 +1532,7 @@ namespace dummy
             public static Aas.StructuralFirst StructuralFirstFrom(
                 Nodes.JsonNode node)
             {
-                Aas.StructuralFirst? result = DeserializeImplementation.StructuralFirstFrom(
+                Aas.StructuralFirst result = DeserializeImplementation.StructuralFirstFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -2249,9 +1541,7 @@ namespace dummy
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -2265,7 +1555,7 @@ namespace dummy
             public static Aas.StructuralSecond StructuralSecondFrom(
                 Nodes.JsonNode node)
             {
-                Aas.StructuralSecond? result = DeserializeImplementation.StructuralSecondFrom(
+                Aas.StructuralSecond result = DeserializeImplementation.StructuralSecondFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -2274,9 +1564,7 @@ namespace dummy
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -2290,7 +1578,7 @@ namespace dummy
             public static Aas.StructuralUnion StructuralUnionFrom(
                 Nodes.JsonNode node)
             {
-                Aas.StructuralUnion? result = DeserializeImplementation.StructuralUnionFrom(
+                Aas.StructuralUnion result = DeserializeImplementation.StructuralUnionFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -2299,9 +1587,7 @@ namespace dummy
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -2316,7 +1602,7 @@ namespace dummy
             public static Aas.IMixedAbstractMember IMixedAbstractMemberFrom(
                 Nodes.JsonNode node)
             {
-                Aas.IMixedAbstractMember? result = DeserializeImplementation.IMixedAbstractMemberFrom(
+                Aas.IMixedAbstractMember result = DeserializeImplementation.IMixedAbstractMemberFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -2325,9 +1611,7 @@ namespace dummy
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -2341,7 +1625,7 @@ namespace dummy
             public static Aas.MixedAbstractDescendantOne MixedAbstractDescendantOneFrom(
                 Nodes.JsonNode node)
             {
-                Aas.MixedAbstractDescendantOne? result = DeserializeImplementation.MixedAbstractDescendantOneFrom(
+                Aas.MixedAbstractDescendantOne result = DeserializeImplementation.MixedAbstractDescendantOneFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -2350,9 +1634,7 @@ namespace dummy
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -2366,7 +1648,7 @@ namespace dummy
             public static Aas.MixedAbstractDescendantTwo MixedAbstractDescendantTwoFrom(
                 Nodes.JsonNode node)
             {
-                Aas.MixedAbstractDescendantTwo? result = DeserializeImplementation.MixedAbstractDescendantTwoFrom(
+                Aas.MixedAbstractDescendantTwo result = DeserializeImplementation.MixedAbstractDescendantTwoFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -2375,9 +1657,7 @@ namespace dummy
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -2392,7 +1672,7 @@ namespace dummy
             public static Aas.IMixedConcreteWithDescendants IMixedConcreteWithDescendantsFrom(
                 Nodes.JsonNode node)
             {
-                Aas.IMixedConcreteWithDescendants? result = DeserializeImplementation.IMixedConcreteWithDescendantsFrom(
+                Aas.IMixedConcreteWithDescendants result = DeserializeImplementation.IMixedConcreteWithDescendantsFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -2401,9 +1681,7 @@ namespace dummy
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -2417,7 +1695,7 @@ namespace dummy
             public static Aas.MixedConcreteWithDescendants MixedConcreteWithDescendantsFrom(
                 Nodes.JsonNode node)
             {
-                Aas.MixedConcreteWithDescendants? result = DeserializeImplementation.MixedConcreteWithDescendantsFrom(
+                Aas.MixedConcreteWithDescendants result = DeserializeImplementation.MixedConcreteWithDescendantsFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -2426,9 +1704,7 @@ namespace dummy
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -2442,7 +1718,7 @@ namespace dummy
             public static Aas.MixedConcreteWithDescendantsChild MixedConcreteWithDescendantsChildFrom(
                 Nodes.JsonNode node)
             {
-                Aas.MixedConcreteWithDescendantsChild? result = DeserializeImplementation.MixedConcreteWithDescendantsChildFrom(
+                Aas.MixedConcreteWithDescendantsChild result = DeserializeImplementation.MixedConcreteWithDescendantsChildFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -2451,9 +1727,7 @@ namespace dummy
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -2467,7 +1741,7 @@ namespace dummy
             public static Aas.MixedConcreteLeaf MixedConcreteLeafFrom(
                 Nodes.JsonNode node)
             {
-                Aas.MixedConcreteLeaf? result = DeserializeImplementation.MixedConcreteLeafFrom(
+                Aas.MixedConcreteLeaf result = DeserializeImplementation.MixedConcreteLeafFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -2476,9 +1750,7 @@ namespace dummy
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -2492,7 +1764,7 @@ namespace dummy
             public static Aas.MixedUnion MixedUnionFrom(
                 Nodes.JsonNode node)
             {
-                Aas.MixedUnion? result = DeserializeImplementation.MixedUnionFrom(
+                Aas.MixedUnion result = DeserializeImplementation.MixedUnionFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -2501,9 +1773,7 @@ namespace dummy
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -2517,7 +1787,7 @@ namespace dummy
             public static Aas.ModelTypedFirst ModelTypedFirstFrom(
                 Nodes.JsonNode node)
             {
-                Aas.ModelTypedFirst? result = DeserializeImplementation.ModelTypedFirstFrom(
+                Aas.ModelTypedFirst result = DeserializeImplementation.ModelTypedFirstFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -2526,9 +1796,7 @@ namespace dummy
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -2542,7 +1810,7 @@ namespace dummy
             public static Aas.ModelTypedSecond ModelTypedSecondFrom(
                 Nodes.JsonNode node)
             {
-                Aas.ModelTypedSecond? result = DeserializeImplementation.ModelTypedSecondFrom(
+                Aas.ModelTypedSecond result = DeserializeImplementation.ModelTypedSecondFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -2551,9 +1819,7 @@ namespace dummy
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -2567,7 +1833,7 @@ namespace dummy
             public static Aas.ModelTypedUnion ModelTypedUnionFrom(
                 Nodes.JsonNode node)
             {
-                Aas.ModelTypedUnion? result = DeserializeImplementation.ModelTypedUnionFrom(
+                Aas.ModelTypedUnion result = DeserializeImplementation.ModelTypedUnionFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -2576,9 +1842,7 @@ namespace dummy
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
 
             /// <summary>
@@ -2592,7 +1856,7 @@ namespace dummy
             public static Aas.Something SomethingFrom(
                 Nodes.JsonNode node)
             {
-                Aas.Something? result = DeserializeImplementation.SomethingFrom(
+                Aas.Something result = DeserializeImplementation.SomethingFrom(
                     node,
                     out Reporting.Error? error);
                 if (error != null)
@@ -2601,9 +1865,7 @@ namespace dummy
                         Reporting.GenerateJsonPath(error.PathSegments),
                         error.Cause);
                 }
-                return result
-                    ?? throw new System.InvalidOperationException(
-                        "Unexpected output null when error is null");
+                return result;
             }
         }  // public static class Deserialize
 
