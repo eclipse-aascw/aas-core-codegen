@@ -1085,44 +1085,69 @@ private static ContentReader<T> AsElement<T>(
 
 # NOTE (mristin):
 # A C# primitive is not a valid part of an identifier as it is spelled
-# (``byte[]``, and the lower-case names read badly), so the primitives are
-# the only types which have to be renamed. They are keyed by the meta-model
-# primitive rather than by the C# spelling, so that the mapping is total by
-# construction.
+# (``byte[]``), so the primitives need monikers of their own. The monikers are
+# *lower-case* on purpose: every one of our types is named through
+# :py:func:`aas_core_codegen.naming.capitalized_camel_case`, which always
+# yields an upper-case initial, so a primitive moniker can never be confused
+# for one of our types -- not even for an enumeration which somebody named
+# ``String``. They are keyed by the meta-model primitive rather than by
+# the C# spelling, so that the mapping is total by construction.
 _PRIMITIVE_TYPE_TO_MONIKER: Final[Mapping[intermediate.PrimitiveType, str]] = {
-    intermediate.PrimitiveType.BOOL: "Bool",
-    intermediate.PrimitiveType.INT: "Long",
-    intermediate.PrimitiveType.FLOAT: "Double",
-    intermediate.PrimitiveType.STR: "String",
-    intermediate.PrimitiveType.BYTEARRAY: "Bytes",
+    intermediate.PrimitiveType.BOOL: "bool",
+    intermediate.PrimitiveType.INT: "long",
+    intermediate.PrimitiveType.FLOAT: "double",
+    intermediate.PrimitiveType.STR: "string",
+    intermediate.PrimitiveType.BYTEARRAY: "bytes",
 }
 assert all(
     primitive_type in _PRIMITIVE_TYPE_TO_MONIKER
     for primitive_type in intermediate.PrimitiveType
 )
+assert all(
+    moniker.islower() for moniker in _PRIMITIVE_TYPE_TO_MONIKER.values()
+), "The primitive monikers have to be lower-case, see the note above"
+
+
+@ensure(lambda result: "_" not in result)
+def _leaf_moniker(type_anno: intermediate.TypeAnnotationUnion) -> str:
+    """
+    Name a type which is neither a list nor a tuple.
+
+    The result must not contain an underscore, since the underscore is what
+    separates the tokens of a compound moniker. See :py:func:`_type_moniker`.
+    """
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        return _PRIMITIVE_TYPE_TO_MONIKER[primitive_type]
+
+    # NOTE (mristin):
+    # We name our types by ``generate_type`` so that the name of a reader can
+    # not drift apart from the type of that very reader -- spelling the names
+    # out here once caused exactly that.
+    return csharp_common.generate_type(type_anno)
 
 
 def _type_moniker(type_anno: intermediate.TypeAnnotationUnion) -> str:
     """
     Name the type in a way usable as a part of a C# identifier.
 
-    Everything which is not a primitive is named by
-    ``csharp_common.generate_type``, so that the name of a reader can not
-    drift apart from the type of that very reader -- spelling the names out
-    here once caused exactly that.
+    The monikers are a Polish notation over ``_``-separated tokens: ``ListOf``
+    takes exactly one argument, ``TupleOf{N}`` exactly ``N`` of them, and
+    everything else is a leaf. A leaf token never contains an underscore
+    (see :py:func:`_leaf_moniker`), so the encoding is injective -- two
+    different types can not be given the same moniker, and hence neither can
+    two different de/serializers be given the same name, nor can two different
+    types be conflated when the fields are de-duplicated by their moniker
+    (see :py:func:`_content_types_in_initialization_order`).
     """
     if isinstance(type_anno, intermediate.ListTypeAnnotation):
-        return f"ListOf{_type_moniker(type_anno.items)}"
+        return f"ListOf_{_type_moniker(type_anno.items)}"
 
     if isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        joined = "".join(_type_moniker(item) for item in type_anno.items)
-        return f"TupleOf{joined}"
+        joined = "_".join(_type_moniker(item) for item in type_anno.items)
+        return f"TupleOf{len(type_anno.items)}_{joined}"
 
-    primitive_type = intermediate.try_primitive_type(type_anno)
-    if primitive_type is not None:
-        return _PRIMITIVE_TYPE_TO_MONIKER[primitive_type]
-
-    return csharp_common.generate_type(type_anno)
+    return _leaf_moniker(type_anno)
 
 
 def _from_element_name(our_type: intermediate.OurType) -> str:
@@ -1150,8 +1175,17 @@ def _from_element_name(our_type: intermediate.OurType) -> str:
 
 
 def _content_reader_name(type_anno: intermediate.TypeAnnotationUnion) -> Identifier:
-    """Name the field holding the reader of the content of ``type_anno``."""
-    return Identifier(f"Read{_type_moniker(type_anno)}")
+    """
+    Name the field holding the reader of the content of ``type_anno``.
+
+    The moniker comes last, after an underscore, so that the name of a reader
+    can never coincide with one of the ``...FromElement`` and
+    ``...FromSequence`` fields: those are keyed by one of our symbols, and
+    a symbol is named through
+    :py:func:`aas_core_codegen.naming.capitalized_camel_case`, which never
+    emits an underscore.
+    """
+    return Identifier(f"Read_{_type_moniker(type_anno)}")
 
 
 def _element_reader_expr(
@@ -1215,7 +1249,7 @@ AsEnum<Aas.{enum_name}>(
         ):
             return Stripped(
                 f"""\
-AsElement<Aas.{_type_moniker(type_anno)}>(
+AsElement<Aas.{csharp_common.generate_type(type_anno)}>(
 {I}{_from_element_name(our_type)})"""
             )
 
@@ -1323,7 +1357,9 @@ def _content_types_in_initialization_order(
     a field.
 
     The order and the de-duplication are the same for the reading and for
-    the writing, so both field generators walk this one list.
+    the writing, so both field generators walk this one list. The moniker is
+    the de-duplication key, which is sound only because it is injective --
+    see :py:func:`_type_moniker`.
     """
     observed = set()  # type: Set[str]
     result = []  # type: List[intermediate.TypeAnnotationUnion]
@@ -2622,8 +2658,13 @@ assert all(
 
 
 def _content_writer_name(type_anno: intermediate.TypeAnnotationUnion) -> Identifier:
-    """Name the field holding the writer of the content of ``type_anno``."""
-    return Identifier(f"Write{_type_moniker(type_anno)}")
+    """
+    Name the field holding the writer of the content of ``type_anno``.
+
+    The moniker comes last, after an underscore, for the same reason as in
+    :py:func:`_content_reader_name`.
+    """
+    return Identifier(f"Write_{_type_moniker(type_anno)}")
 
 
 def _item_writer_expr(

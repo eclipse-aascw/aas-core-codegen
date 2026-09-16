@@ -194,7 +194,7 @@ func readText(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsBoolean(
+func readTextAs_bool(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value bool, next xml.Token, err error) {
@@ -236,7 +236,7 @@ func readTextAsBoolean(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsLong(
+func readTextAs_long(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value int64, next xml.Token, err error) {
@@ -296,7 +296,7 @@ func isValidXsDouble(text string) bool {
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsDouble(
+func readTextAs_double(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value float64, next xml.Token, err error) {
@@ -350,7 +350,7 @@ func readTextAsDouble(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsBase64EncodedBytes(
+func readTextAs_bytes(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value []byte, next xml.Token, err error) {
@@ -719,8 +719,8 @@ func readListOf[T any](
 // The arguments are the *results* of a read, not the reader itself. Go passes
 // a multi-valued call on as a complete argument list, so this composes with any read,
 // no matter how many arguments that read takes on its own --
-// `readOptional(readTextAsLong(decoder, current))` just as much as
-// `readOptional(readTuple2(decoder, current, readXAtV1, readYAtV2))`, which no
+// `readOptional(readTextAs_long(decoder, current))` just as much as
+// `readOptional(readTuple2(decoder, current, readAtV1_X, readAtV2_Y))`, which no
 // reader-taking signature could express, since the item readers of a tuple vary in
 // number and in type.
 func readOptional[T any](
@@ -831,7 +831,7 @@ func concludeProperty(
 //
 // The `current` token is expected to point to the content of that element, and
 // the resulting `next` token points to its end element.
-func readStringAtV(
+func readAtV_string(
 	decoder *xml.Decoder,
 	current xml.Token,
 	local string,
@@ -879,7 +879,7 @@ func readSomethingAsSequence(
 		switch local {
 		case "someNames":
 			theSomeNames, current, valueErr = readListOf(
-				decoder, current, readStringAtV,
+				decoder, current, readAtV_string,
 			)
 			foundSomeNames = true
 		default:
@@ -1044,7 +1044,7 @@ func writeText(
 // Write the `value` as a `xs:boolean` in a text element.
 //
 // Do not flush.
-func writeBooleanAsText(
+func writeAsText_bool(
 	encoder *xml.Encoder,
 	value bool,
 ) (err error) {
@@ -1059,7 +1059,7 @@ func writeBooleanAsText(
 // Write the `value` as a `xs:long` in a text element.
 //
 // Do not flush.
-func writeLongAsText(
+func writeAsText_long(
 	encoder *xml.Encoder,
 	value int64,
 ) (err error) {
@@ -1071,7 +1071,7 @@ func writeLongAsText(
 // Write the `value` as a `xs:double` in a text element.
 //
 // Do not flush.
-func writeDoubleAsText(
+func writeAsText_double(
 	encoder *xml.Encoder,
 	value float64,
 ) (err error) {
@@ -1098,7 +1098,7 @@ func writeDoubleAsText(
 // Write the `value` as a `xs:string` in a text element.
 //
 // Do not flush.
-func writeStringAsText(
+func writeAsText_string(
 	encoder *xml.Encoder,
 	value string,
 ) (err error) {
@@ -1109,7 +1109,7 @@ func writeStringAsText(
 // Write the `value` as a base64-encoded bytes in a text element.
 //
 // Do not flush.
-func writeBytesAsText(
+func writeAsText_bytes(
 	encoder *xml.Encoder,
 	value []byte,
 ) (err error) {
@@ -1344,24 +1344,24 @@ func writeClassElement[T any](
 // Write the scalar `value` in the element `v`.
 //
 // Do not flush.
-func writeStringAtV(
+func writeAtV_string(
 	encoder *xml.Encoder,
 	value string,
 ) error {
 	return writeElement(
-		encoder, "v", value, writeStringAsText,
+		encoder, "v", value, writeAsText_string,
 	)
 }
 
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfString(
+func writeListOf_string(
 	encoder *xml.Encoder,
 	list []string,
 ) error {
 	return writeList(
-		encoder, list, writeStringAtV,
+		encoder, list, writeAtV_string,
 	)
 }
 
@@ -1380,7 +1380,7 @@ func writeSomethingAsSequence(
 	err = finishProperty(
 		"SomeNames()",
 		writeElement(
-			encoder, "someNames", that.SomeNames(), writeListOfString,
+			encoder, "someNames", that.SomeNames(), writeListOf_string,
 		),
 	)
 	if err != nil {

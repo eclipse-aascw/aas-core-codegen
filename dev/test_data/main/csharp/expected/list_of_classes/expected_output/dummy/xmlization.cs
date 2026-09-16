@@ -544,17 +544,17 @@ namespace dummy
                 AtElement<Aas.Something>(
                     SomethingFromSequence, "something"));
 
-            private static readonly ContentReader<string> ReadString = (
+            private static readonly ContentReader<string> Read_string = (
                 AsText<string>(ReadContentAsString, ""));
 
-            private static readonly ContentReader<long> ReadLong = (
+            private static readonly ContentReader<long> Read_long = (
                 AsText<long>(ReadContentAsLong));
 
-            private static readonly ContentReader<List<IAbstractItem>> ReadListOfIAbstractItem = (
+            private static readonly ContentReader<List<IAbstractItem>> Read_ListOf_IAbstractItem = (
                 AsList<IAbstractItem>(
                     IAbstractItemFromElement));
 
-            private static readonly ContentReader<List<ISimple>> ReadListOfISimple = (
+            private static readonly ContentReader<List<ISimple>> Read_ListOf_ISimple = (
                 AsList<ISimple>(
                     SimpleFromElement));
 
@@ -625,7 +625,7 @@ namespace dummy
                         switch (elementName)
                         {
                             case "name":
-                                theName = ReadString(
+                                theName = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -716,7 +716,7 @@ namespace dummy
                         switch (elementName)
                         {
                             case "serialNumber":
-                                theSerialNumber = ReadLong(
+                                theSerialNumber = Read_long(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -807,7 +807,7 @@ namespace dummy
                         switch (elementName)
                         {
                             case "name":
-                                theName = ReadString(
+                                theName = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -899,11 +899,11 @@ namespace dummy
                         switch (elementName)
                         {
                             case "someItems":
-                                theSomeItems = ReadListOfIAbstractItem(
+                                theSomeItems = Read_ListOf_IAbstractItem(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "someSimples":
-                                theSomeSimples = ReadListOfISimple(
+                                theSomeSimples = Read_ListOf_ISimple(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -1279,17 +1279,19 @@ namespace dummy
                 that.Accept(_instance, writer);
             }
 
-            private static readonly ContentWriter<string> WriteString = (
+            private static readonly ContentWriter<string> Write_string = (
                 (that, writer) => writer.WriteValue(that));
 
-            private static readonly ContentWriter<long> WriteLong = (
+            private static readonly ContentWriter<long> Write_long = (
                 (that, writer) => writer.WriteValue(that));
 
-            private static readonly ContentWriter<List<IAbstractItem>> WriteListOfIAbstractItem = (
+            private static readonly ContentWriter<
+                List<IAbstractItem>
+            > Write_ListOf_IAbstractItem = (
                 WriteList<IAbstractItem>(
                     WriteIClass));
 
-            private static readonly ContentWriter<List<ISimple>> WriteListOfISimple = (
+            private static readonly ContentWriter<List<ISimple>> Write_ListOf_ISimple = (
                 WriteList<ISimple>(
                     WriteIClass));
 
@@ -1298,7 +1300,7 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "name", that.Name, writer, WriteString);
+                    "name", that.Name, writer, Write_string);
             }  // private static void SomeItemToSequence
 
             public override void VisitSomeItem(
@@ -1319,7 +1321,7 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "serialNumber", that.SerialNumber, writer, WriteLong);
+                    "serialNumber", that.SerialNumber, writer, Write_long);
             }  // private static void AnotherItemToSequence
 
             public override void VisitAnotherItem(
@@ -1340,7 +1342,7 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "name", that.Name, writer, WriteString);
+                    "name", that.Name, writer, Write_string);
             }  // private static void SimpleToSequence
 
             public override void VisitSimple(
@@ -1361,10 +1363,10 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "someItems", that.SomeItems, writer, WriteListOfIAbstractItem);
+                    "someItems", that.SomeItems, writer, Write_ListOf_IAbstractItem);
 
                 WriteElement(
-                    "someSimples", that.SomeSimples, writer, WriteListOfISimple);
+                    "someSimples", that.SomeSimples, writer, Write_ListOf_ISimple);
             }  // private static void SomethingToSequence
 
             public override void VisitSomething(

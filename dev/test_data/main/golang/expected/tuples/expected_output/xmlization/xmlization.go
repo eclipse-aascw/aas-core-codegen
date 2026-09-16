@@ -194,7 +194,7 @@ func readText(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsBoolean(
+func readTextAs_bool(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value bool, next xml.Token, err error) {
@@ -236,7 +236,7 @@ func readTextAsBoolean(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsLong(
+func readTextAs_long(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value int64, next xml.Token, err error) {
@@ -296,7 +296,7 @@ func isValidXsDouble(text string) bool {
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsDouble(
+func readTextAs_double(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value float64, next xml.Token, err error) {
@@ -350,7 +350,7 @@ func readTextAsDouble(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsBase64EncodedBytes(
+func readTextAs_bytes(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value []byte, next xml.Token, err error) {
@@ -719,8 +719,8 @@ func readListOf[T any](
 // The arguments are the *results* of a read, not the reader itself. Go passes
 // a multi-valued call on as a complete argument list, so this composes with any read,
 // no matter how many arguments that read takes on its own --
-// `readOptional(readTextAsLong(decoder, current))` just as much as
-// `readOptional(readTuple2(decoder, current, readXAtV1, readYAtV2))`, which no
+// `readOptional(readTextAs_long(decoder, current))` just as much as
+// `readOptional(readTuple2(decoder, current, readAtV1_X, readAtV2_Y))`, which no
 // reader-taking signature could express, since the item readers of a tuple vary in
 // number and in type.
 func readOptional[T any](
@@ -831,7 +831,7 @@ func concludeProperty(
 //
 // The `current` token is expected to point to the content of that element, and
 // the resulting `next` token points to its end element.
-func readStringAtV1(
+func readAtV1_string(
 	decoder *xml.Decoder,
 	current xml.Token,
 	local string,
@@ -851,7 +851,7 @@ func readStringAtV1(
 //
 // The `current` token is expected to point to the content of that element, and
 // the resulting `next` token points to its end element.
-func readLongAtV2(
+func readAtV2_long(
 	decoder *xml.Decoder,
 	current xml.Token,
 	local string,
@@ -864,14 +864,14 @@ func readLongAtV2(
 		return
 	}
 
-	return readTextAsLong(decoder, current)
+	return readTextAs_long(decoder, current)
 }
 
 // Read a scalar item expected in the element `v1`.
 //
 // The `current` token is expected to point to the content of that element, and
 // the resulting `next` token points to its end element.
-func readLongAtV1(
+func readAtV1_long(
 	decoder *xml.Decoder,
 	current xml.Token,
 	local string,
@@ -884,14 +884,14 @@ func readLongAtV1(
 		return
 	}
 
-	return readTextAsLong(decoder, current)
+	return readTextAs_long(decoder, current)
 }
 
 // Read a scalar item expected in the element `v5`.
 //
 // The `current` token is expected to point to the content of that element, and
 // the resulting `next` token points to its end element.
-func readLongAtV5(
+func readAtV5_long(
 	decoder *xml.Decoder,
 	current xml.Token,
 	local string,
@@ -904,14 +904,14 @@ func readLongAtV5(
 		return
 	}
 
-	return readTextAsLong(decoder, current)
+	return readTextAs_long(decoder, current)
 }
 
 // Read a scalar item expected in the element `v6`.
 //
 // The `current` token is expected to point to the content of that element, and
 // the resulting `next` token points to its end element.
-func readResultAtV6(
+func readAtV6_Result(
 	decoder *xml.Decoder,
 	current xml.Token,
 	local string,
@@ -924,7 +924,7 @@ func readResultAtV6(
 		return
 	}
 
-	return readTextAsResult(decoder, current)
+	return readTextAs_Result(decoder, current)
 }
 
 // Read a tuple of 2 item(s) with `readItem1`, `readItem2`, *etc.* on
@@ -1120,7 +1120,7 @@ func readTuple6[T1 any, T2 any, T3 any, T4 any, T5 any, T6 any](
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsResult(
+func readTextAs_Result(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value aastypes.Result,
@@ -1285,7 +1285,7 @@ func readAnotherItemAsSequence(
 		var valueErr error
 		switch local {
 		case "serialNumber":
-			theSerialNumber, current, valueErr = readTextAsLong(
+			theSerialNumber, current, valueErr = readTextAs_long(
 				decoder, current,
 			)
 			foundSerialNumber = true
@@ -1351,8 +1351,8 @@ func readSomethingAsSequence(
 		case "pair":
 			thePair, current, valueErr = readTuple2(
 				decoder, current,
-				readStringAtV1,
-				readLongAtV2,
+				readAtV1_string,
+				readAtV2_long,
 			)
 			foundPair = true
 		case "items":
@@ -1365,12 +1365,12 @@ func readSomethingAsSequence(
 		case "tricky":
 			theTricky, current, valueErr = readTuple6(
 				decoder, current,
-				readLongAtV1,
+				readAtV1_long,
 				readSomeItemDispatched,
 				readAbstractItemDispatched,
 				readSomeItemDispatched,
-				readLongAtV5,
-				readResultAtV6,
+				readAtV5_long,
+				readAtV6_Result,
 			)
 			foundTricky = true
 		default:
@@ -1551,7 +1551,7 @@ func writeText(
 // Write the `value` as a `xs:boolean` in a text element.
 //
 // Do not flush.
-func writeBooleanAsText(
+func writeAsText_bool(
 	encoder *xml.Encoder,
 	value bool,
 ) (err error) {
@@ -1566,7 +1566,7 @@ func writeBooleanAsText(
 // Write the `value` as a `xs:long` in a text element.
 //
 // Do not flush.
-func writeLongAsText(
+func writeAsText_long(
 	encoder *xml.Encoder,
 	value int64,
 ) (err error) {
@@ -1578,7 +1578,7 @@ func writeLongAsText(
 // Write the `value` as a `xs:double` in a text element.
 //
 // Do not flush.
-func writeDoubleAsText(
+func writeAsText_double(
 	encoder *xml.Encoder,
 	value float64,
 ) (err error) {
@@ -1605,7 +1605,7 @@ func writeDoubleAsText(
 // Write the `value` as a `xs:string` in a text element.
 //
 // Do not flush.
-func writeStringAsText(
+func writeAsText_string(
 	encoder *xml.Encoder,
 	value string,
 ) (err error) {
@@ -1616,7 +1616,7 @@ func writeStringAsText(
 // Write the `value` as a base64-encoded bytes in a text element.
 //
 // Do not flush.
-func writeBytesAsText(
+func writeAsText_bytes(
 	encoder *xml.Encoder,
 	value []byte,
 ) (err error) {
@@ -1851,60 +1851,60 @@ func writeClassElement[T any](
 // Write the scalar `value` in the element `v1`.
 //
 // Do not flush.
-func writeStringAtV1(
+func writeAtV1_string(
 	encoder *xml.Encoder,
 	value string,
 ) error {
 	return writeElement(
-		encoder, "v1", value, writeStringAsText,
+		encoder, "v1", value, writeAsText_string,
 	)
 }
 
 // Write the scalar `value` in the element `v2`.
 //
 // Do not flush.
-func writeLongAtV2(
+func writeAtV2_long(
 	encoder *xml.Encoder,
 	value int64,
 ) error {
 	return writeElement(
-		encoder, "v2", value, writeLongAsText,
+		encoder, "v2", value, writeAsText_long,
 	)
 }
 
 // Write the scalar `value` in the element `v1`.
 //
 // Do not flush.
-func writeLongAtV1(
+func writeAtV1_long(
 	encoder *xml.Encoder,
 	value int64,
 ) error {
 	return writeElement(
-		encoder, "v1", value, writeLongAsText,
+		encoder, "v1", value, writeAsText_long,
 	)
 }
 
 // Write the scalar `value` in the element `v5`.
 //
 // Do not flush.
-func writeLongAtV5(
+func writeAtV5_long(
 	encoder *xml.Encoder,
 	value int64,
 ) error {
 	return writeElement(
-		encoder, "v5", value, writeLongAsText,
+		encoder, "v5", value, writeAsText_long,
 	)
 }
 
 // Write the scalar `value` in the element `v6`.
 //
 // Do not flush.
-func writeResultAtV6(
+func writeAtV6_Result(
 	encoder *xml.Encoder,
 	value aastypes.Result,
 ) error {
 	return writeElement(
-		encoder, "v6", value, writeResultAsText,
+		encoder, "v6", value, writeAsText_Result,
 	)
 }
 
@@ -2027,19 +2027,19 @@ func writeTuple6[T1 any, T2 any, T3 any, T4 any, T5 any, T6 any](
 // Write the items of `that` as a sequence of XML elements.
 //
 // Do not flush.
-func writeTupleOfStringLong(
+func writeTupleOf2_string_long(
 	encoder *xml.Encoder,
 	that aascommon.Tuple2[string, int64],
 ) error {
 	return writeTuple2(
-		encoder, that, writeStringAtV1, writeLongAtV2,
+		encoder, that, writeAtV1_string, writeAtV2_long,
 	)
 }
 
 // Write the items of `that` as a sequence of XML elements.
 //
 // Do not flush.
-func writeTupleOfIAbstractItemIAbstractItem(
+func writeTupleOf2_IAbstractItem_IAbstractItem(
 	encoder *xml.Encoder,
 	that aascommon.Tuple2[aastypes.IAbstractItem, aastypes.IAbstractItem],
 ) error {
@@ -2054,19 +2054,19 @@ func writeTupleOfIAbstractItemIAbstractItem(
 // Write the items of `that` as a sequence of XML elements.
 //
 // Do not flush.
-func writeTupleOfLongISomeItemIAbstractItemISomeItemLongResult(
+func writeTupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result(
 	encoder *xml.Encoder,
 	that aascommon.Tuple6[int64, aastypes.ISomeItem, aastypes.IAbstractItem, aastypes.ISomeItem, int64, aastypes.Result],
 ) error {
 	return writeTuple6(
 		encoder,
 		that,
-		writeLongAtV1,
+		writeAtV1_long,
 		writeInstance[aastypes.ISomeItem],
 		writeInstance[aastypes.IAbstractItem],
 		writeInstance[aastypes.ISomeItem],
-		writeLongAtV5,
-		writeResultAtV6,
+		writeAtV5_long,
+		writeAtV6_Result,
 	)
 }
 
@@ -2075,7 +2075,7 @@ func writeTupleOfLongISomeItemIAbstractItemISomeItemLongResult(
 // in a text element.
 //
 // Do not flush.
-func writeResultAsText(
+func writeAsText_Result(
 	encoder *xml.Encoder,
 	value aastypes.Result,
 ) (err error) {
@@ -2111,7 +2111,7 @@ func writeSomeItemAsSequence(
 	err = finishProperty(
 		"Name()",
 		writeElement(
-			encoder, "name", that.Name(), writeStringAsText,
+			encoder, "name", that.Name(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -2136,7 +2136,7 @@ func writeAnotherItemAsSequence(
 	err = finishProperty(
 		"SerialNumber()",
 		writeElement(
-			encoder, "serialNumber", that.SerialNumber(), writeLongAsText,
+			encoder, "serialNumber", that.SerialNumber(), writeAsText_long,
 		),
 	)
 	if err != nil {
@@ -2161,7 +2161,7 @@ func writeSomethingAsSequence(
 	err = finishProperty(
 		"Pair()",
 		writeElement(
-			encoder, "pair", that.Pair(), writeTupleOfStringLong,
+			encoder, "pair", that.Pair(), writeTupleOf2_string_long,
 		),
 	)
 	if err != nil {
@@ -2171,7 +2171,7 @@ func writeSomethingAsSequence(
 	err = finishProperty(
 		"Items()",
 		writeElement(
-			encoder, "items", that.Items(), writeTupleOfIAbstractItemIAbstractItem,
+			encoder, "items", that.Items(), writeTupleOf2_IAbstractItem_IAbstractItem,
 		),
 	)
 	if err != nil {
@@ -2184,7 +2184,7 @@ func writeSomethingAsSequence(
 			encoder,
 			"tricky",
 			that.Tricky(),
-			writeTupleOfLongISomeItemIAbstractItemISomeItemLongResult,
+			writeTupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result,
 		),
 	)
 	if err != nil {

@@ -442,7 +442,7 @@ namespace dummy
                 AtElement<Aas.QueryCondition>(
                     QueryConditionFromSequence, "queryCondition"));
 
-            private static readonly ContentReader<string> ReadString = (
+            private static readonly ContentReader<string> Read_string = (
                 AsText<string>(ReadContentAsString, ""));
 
             /// <summary>
@@ -483,11 +483,11 @@ namespace dummy
                         switch (elementName)
                         {
                             case "eq":
-                                theEq = ReadString(
+                                theEq = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "not-eq":
-                                theNotEq = ReadString(
+                                theNotEq = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -686,7 +686,7 @@ namespace dummy
                 that.Accept(_instance, writer);
             }
 
-            private static readonly ContentWriter<string> WriteString = (
+            private static readonly ContentWriter<string> Write_string = (
                 (that, writer) => writer.WriteValue(that));
 
             private static void QueryConditionToSequence(
@@ -696,13 +696,13 @@ namespace dummy
                 if (that.Eq != null)
                 {
                     WriteElement(
-                        "eq", that.Eq, writer, WriteString);
+                        "eq", that.Eq, writer, Write_string);
                 }
 
                 if (that.NotEq != null)
                 {
                     WriteElement(
-                        "not-eq", that.NotEq, writer, WriteString);
+                        "not-eq", that.NotEq, writer, Write_string);
                 }
             }  // private static void QueryConditionToSequence
 

@@ -943,183 +943,183 @@ namespace AasCore.Aas3_0
                 AtElement<Aas.DataSpecificationIec61360>(
                     DataSpecificationIec61360FromSequence, "dataSpecificationIec61360"));
 
-            private static readonly ContentReader<IReference> ReadIReference = (
+            private static readonly ContentReader<IReference> Read_IReference = (
                 ReferenceFromSequence);
 
-            private static readonly ContentReader<List<IReference>> ReadListOfIReference = (
+            private static readonly ContentReader<List<IReference>> Read_ListOf_IReference = (
                 AsList<IReference>(
                     ReferenceFromElement));
 
-            private static readonly ContentReader<string> ReadString = (
+            private static readonly ContentReader<string> Read_string = (
                 AsText<string>(ReadContentAsString, ""));
 
-            private static readonly ContentReader<DataTypeDefXsd> ReadDataTypeDefXsd = (
+            private static readonly ContentReader<DataTypeDefXsd> Read_DataTypeDefXsd = (
                 AsEnum<Aas.DataTypeDefXsd>(
                     Stringification.DataTypeDefXsdFromString));
 
             private static readonly ContentReader<
                 List<IEmbeddedDataSpecification>
-            > ReadListOfIEmbeddedDataSpecification = (
+            > Read_ListOf_IEmbeddedDataSpecification = (
                 AsList<IEmbeddedDataSpecification>(
                     EmbeddedDataSpecificationFromElement));
 
-            private static readonly ContentReader<QualifierKind> ReadQualifierKind = (
+            private static readonly ContentReader<QualifierKind> Read_QualifierKind = (
                 AsEnum<Aas.QualifierKind>(
                     Stringification.QualifierKindFromString));
 
-            private static readonly ContentReader<List<IExtension>> ReadListOfIExtension = (
+            private static readonly ContentReader<List<IExtension>> Read_ListOf_IExtension = (
                 AsList<IExtension>(
                     ExtensionFromElement));
 
             private static readonly ContentReader<
                 List<ILangStringNameType>
-            > ReadListOfILangStringNameType = (
+            > Read_ListOf_ILangStringNameType = (
                 AsList<ILangStringNameType>(
                     LangStringNameTypeFromElement));
 
             private static readonly ContentReader<
                 List<ILangStringTextType>
-            > ReadListOfILangStringTextType = (
+            > Read_ListOf_ILangStringTextType = (
                 AsList<ILangStringTextType>(
                     LangStringTextTypeFromElement));
 
             private static readonly ContentReader<
                 IAdministrativeInformation
-            > ReadIAdministrativeInformation = (
+            > Read_IAdministrativeInformation = (
                 AdministrativeInformationFromSequence);
 
-            private static readonly ContentReader<IAssetInformation> ReadIAssetInformation = (
+            private static readonly ContentReader<IAssetInformation> Read_IAssetInformation = (
                 AssetInformationFromSequence);
 
-            private static readonly ContentReader<AssetKind> ReadAssetKind = (
+            private static readonly ContentReader<AssetKind> Read_AssetKind = (
                 AsEnum<Aas.AssetKind>(
                     Stringification.AssetKindFromString));
 
             private static readonly ContentReader<
                 List<ISpecificAssetId>
-            > ReadListOfISpecificAssetId = (
+            > Read_ListOf_ISpecificAssetId = (
                 AsList<ISpecificAssetId>(
                     SpecificAssetIdFromElement));
 
-            private static readonly ContentReader<IResource> ReadIResource = (
+            private static readonly ContentReader<IResource> Read_IResource = (
                 ResourceFromSequence);
 
-            private static readonly ContentReader<ModellingKind> ReadModellingKind = (
+            private static readonly ContentReader<ModellingKind> Read_ModellingKind = (
                 AsEnum<Aas.ModellingKind>(
                     Stringification.ModellingKindFromString));
 
-            private static readonly ContentReader<List<IQualifier>> ReadListOfIQualifier = (
+            private static readonly ContentReader<List<IQualifier>> Read_ListOf_IQualifier = (
                 AsList<IQualifier>(
                     QualifierFromElement));
 
             private static readonly ContentReader<
                 List<ISubmodelElement>
-            > ReadListOfISubmodelElement = (
+            > Read_ListOf_ISubmodelElement = (
                 AsList<ISubmodelElement>(
                     ISubmodelElementFromElement));
 
-            private static readonly ContentReader<bool> ReadBool = (
+            private static readonly ContentReader<bool> Read_bool = (
                 AsText<bool>(ReadContentAsBoolean));
 
-            private static readonly ContentReader<AasSubmodelElements> ReadAasSubmodelElements = (
+            private static readonly ContentReader<AasSubmodelElements> Read_AasSubmodelElements = (
                 AsEnum<Aas.AasSubmodelElements>(
                     Stringification.AasSubmodelElementsFromString));
 
-            private static readonly ContentReader<byte[]> ReadBytes = (
+            private static readonly ContentReader<byte[]> Read_bytes = (
                 AsText<byte[]>(ReadContentAsBytes, new byte[0]));
 
-            private static readonly ContentReader<List<IDataElement>> ReadListOfIDataElement = (
+            private static readonly ContentReader<List<IDataElement>> Read_ListOf_IDataElement = (
                 AsList<IDataElement>(
                     IDataElementFromElement));
 
-            private static readonly ContentReader<EntityType> ReadEntityType = (
+            private static readonly ContentReader<EntityType> Read_EntityType = (
                 AsEnum<Aas.EntityType>(
                     Stringification.EntityTypeFromString));
 
-            private static readonly ContentReader<Direction> ReadDirection = (
+            private static readonly ContentReader<Direction> Read_Direction = (
                 AsEnum<Aas.Direction>(
                     Stringification.DirectionFromString));
 
-            private static readonly ContentReader<StateOfEvent> ReadStateOfEvent = (
+            private static readonly ContentReader<StateOfEvent> Read_StateOfEvent = (
                 AsEnum<Aas.StateOfEvent>(
                     Stringification.StateOfEventFromString));
 
             private static readonly ContentReader<
                 List<IOperationVariable>
-            > ReadListOfIOperationVariable = (
+            > Read_ListOf_IOperationVariable = (
                 AsList<IOperationVariable>(
                     OperationVariableFromElement));
 
-            private static readonly ContentReader<ISubmodelElement> ReadISubmodelElement = (
+            private static readonly ContentReader<ISubmodelElement> Read_ISubmodelElement = (
                 AsElement<Aas.ISubmodelElement>(
                     ISubmodelElementFromElement));
 
-            private static readonly ContentReader<ReferenceTypes> ReadReferenceTypes = (
+            private static readonly ContentReader<ReferenceTypes> Read_ReferenceTypes = (
                 AsEnum<Aas.ReferenceTypes>(
                     Stringification.ReferenceTypesFromString));
 
-            private static readonly ContentReader<List<IKey>> ReadListOfIKey = (
+            private static readonly ContentReader<List<IKey>> Read_ListOf_IKey = (
                 AsList<IKey>(
                     KeyFromElement));
 
-            private static readonly ContentReader<KeyTypes> ReadKeyTypes = (
+            private static readonly ContentReader<KeyTypes> Read_KeyTypes = (
                 AsEnum<Aas.KeyTypes>(
                     Stringification.KeyTypesFromString));
 
             private static readonly ContentReader<
                 List<IAssetAdministrationShell>
-            > ReadListOfIAssetAdministrationShell = (
+            > Read_ListOf_IAssetAdministrationShell = (
                 AsList<IAssetAdministrationShell>(
                     AssetAdministrationShellFromElement));
 
-            private static readonly ContentReader<List<ISubmodel>> ReadListOfISubmodel = (
+            private static readonly ContentReader<List<ISubmodel>> Read_ListOf_ISubmodel = (
                 AsList<ISubmodel>(
                     SubmodelFromElement));
 
             private static readonly ContentReader<
                 List<IConceptDescription>
-            > ReadListOfIConceptDescription = (
+            > Read_ListOf_IConceptDescription = (
                 AsList<IConceptDescription>(
                     ConceptDescriptionFromElement));
 
             private static readonly ContentReader<
                 IDataSpecificationContent
-            > ReadIDataSpecificationContent = (
+            > Read_IDataSpecificationContent = (
                 AsElement<Aas.IDataSpecificationContent>(
                     IDataSpecificationContentFromElement));
 
             private static readonly ContentReader<
                 List<IValueReferencePair>
-            > ReadListOfIValueReferencePair = (
+            > Read_ListOf_IValueReferencePair = (
                 AsList<IValueReferencePair>(
                     ValueReferencePairFromElement));
 
             private static readonly ContentReader<
                 List<ILangStringPreferredNameTypeIec61360>
-            > ReadListOfILangStringPreferredNameTypeIec61360 = (
+            > Read_ListOf_ILangStringPreferredNameTypeIec61360 = (
                 AsList<ILangStringPreferredNameTypeIec61360>(
                     LangStringPreferredNameTypeIec61360FromElement));
 
             private static readonly ContentReader<
                 List<ILangStringShortNameTypeIec61360>
-            > ReadListOfILangStringShortNameTypeIec61360 = (
+            > Read_ListOf_ILangStringShortNameTypeIec61360 = (
                 AsList<ILangStringShortNameTypeIec61360>(
                     LangStringShortNameTypeIec61360FromElement));
 
-            private static readonly ContentReader<DataTypeIec61360> ReadDataTypeIec61360 = (
+            private static readonly ContentReader<DataTypeIec61360> Read_DataTypeIec61360 = (
                 AsEnum<Aas.DataTypeIec61360>(
                     Stringification.DataTypeIec61360FromString));
 
             private static readonly ContentReader<
                 List<ILangStringDefinitionTypeIec61360>
-            > ReadListOfILangStringDefinitionTypeIec61360 = (
+            > Read_ListOf_ILangStringDefinitionTypeIec61360 = (
                 AsList<ILangStringDefinitionTypeIec61360>(
                     LangStringDefinitionTypeIec61360FromElement));
 
-            private static readonly ContentReader<IValueList> ReadIValueList = (
+            private static readonly ContentReader<IValueList> Read_IValueList = (
                 ValueListFromSequence);
 
-            private static readonly ContentReader<ILevelType> ReadILevelType = (
+            private static readonly ContentReader<ILevelType> Read_ILevelType = (
                 LevelTypeFromSequence);
 
             /// <summary>
@@ -1242,27 +1242,27 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "semanticId":
-                                theSemanticId = ReadIReference(
+                                theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
-                                theSupplementalSemanticIds = ReadListOfIReference(
+                                theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "name":
-                                theName = ReadString(
+                                theName = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueType":
-                                theValueType = ReadDataTypeDefXsd(
+                                theValueType = Read_DataTypeDefXsd(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
-                                theValue = ReadString(
+                                theValue = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "refersTo":
-                                theRefersTo = ReadListOfIReference(
+                                theRefersTo = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -1650,23 +1650,23 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "embeddedDataSpecifications":
-                                theEmbeddedDataSpecifications = ReadListOfIEmbeddedDataSpecification(
+                                theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "version":
-                                theVersion = ReadString(
+                                theVersion = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "revision":
-                                theRevision = ReadString(
+                                theRevision = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "creator":
-                                theCreator = ReadIReference(
+                                theCreator = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "templateId":
-                                theTemplateId = ReadString(
+                                theTemplateId = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -1826,31 +1826,31 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "semanticId":
-                                theSemanticId = ReadIReference(
+                                theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
-                                theSupplementalSemanticIds = ReadListOfIReference(
+                                theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "kind":
-                                theKind = ReadQualifierKind(
+                                theKind = Read_QualifierKind(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "type":
-                                theType = ReadString(
+                                theType = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueType":
-                                theValueType = ReadDataTypeDefXsd(
+                                theValueType = Read_DataTypeDefXsd(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
-                                theValue = ReadString(
+                                theValue = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueId":
-                                theValueId = ReadIReference(
+                                theValueId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -1967,47 +1967,47 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
-                                theExtensions = ReadListOfIExtension(
+                                theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
-                                theCategory = ReadString(
+                                theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
-                                theIdShort = ReadString(
+                                theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
-                                theDisplayName = ReadListOfILangStringNameType(
+                                theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadListOfILangStringTextType(
+                                theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "administration":
-                                theAdministration = ReadIAdministrativeInformation(
+                                theAdministration = Read_IAdministrativeInformation(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "id":
-                                theId = ReadString(
+                                theId = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
-                                theEmbeddedDataSpecifications = ReadListOfIEmbeddedDataSpecification(
+                                theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "derivedFrom":
-                                theDerivedFrom = ReadIReference(
+                                theDerivedFrom = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "assetInformation":
-                                theAssetInformation = ReadIAssetInformation(
+                                theAssetInformation = Read_IAssetInformation(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "submodels":
-                                theSubmodels = ReadListOfIReference(
+                                theSubmodels = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -2122,23 +2122,23 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "assetKind":
-                                theAssetKind = ReadAssetKind(
+                                theAssetKind = Read_AssetKind(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "globalAssetId":
-                                theGlobalAssetId = ReadString(
+                                theGlobalAssetId = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "specificAssetIds":
-                                theSpecificAssetIds = ReadListOfISpecificAssetId(
+                                theSpecificAssetIds = Read_ListOf_ISpecificAssetId(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "assetType":
-                                theAssetType = ReadString(
+                                theAssetType = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "defaultThumbnail":
-                                theDefaultThumbnail = ReadIResource(
+                                theDefaultThumbnail = Read_IResource(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -2234,11 +2234,11 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "path":
-                                thePath = ReadString(
+                                thePath = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "contentType":
-                                theContentType = ReadString(
+                                theContentType = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -2334,23 +2334,23 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "semanticId":
-                                theSemanticId = ReadIReference(
+                                theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
-                                theSupplementalSemanticIds = ReadListOfIReference(
+                                theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "name":
-                                theName = ReadString(
+                                theName = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
-                                theValue = ReadString(
+                                theValue = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "externalSubjectId":
-                                theExternalSubjectId = ReadIReference(
+                                theExternalSubjectId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -2467,55 +2467,55 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
-                                theExtensions = ReadListOfIExtension(
+                                theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
-                                theCategory = ReadString(
+                                theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
-                                theIdShort = ReadString(
+                                theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
-                                theDisplayName = ReadListOfILangStringNameType(
+                                theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadListOfILangStringTextType(
+                                theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "administration":
-                                theAdministration = ReadIAdministrativeInformation(
+                                theAdministration = Read_IAdministrativeInformation(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "id":
-                                theId = ReadString(
+                                theId = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "kind":
-                                theKind = ReadModellingKind(
+                                theKind = Read_ModellingKind(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
-                                theSemanticId = ReadIReference(
+                                theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
-                                theSupplementalSemanticIds = ReadListOfIReference(
+                                theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
-                                theQualifiers = ReadListOfIQualifier(
+                                theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
-                                theEmbeddedDataSpecifications = ReadListOfIEmbeddedDataSpecification(
+                                theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "submodelElements":
-                                theSubmodelElements = ReadListOfISubmodelElement(
+                                theSubmodelElements = Read_ListOf_ISubmodelElement(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -2694,47 +2694,47 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
-                                theExtensions = ReadListOfIExtension(
+                                theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
-                                theCategory = ReadString(
+                                theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
-                                theIdShort = ReadString(
+                                theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
-                                theDisplayName = ReadListOfILangStringNameType(
+                                theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadListOfILangStringTextType(
+                                theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
-                                theSemanticId = ReadIReference(
+                                theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
-                                theSupplementalSemanticIds = ReadListOfIReference(
+                                theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
-                                theQualifiers = ReadListOfIQualifier(
+                                theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
-                                theEmbeddedDataSpecifications = ReadListOfIEmbeddedDataSpecification(
+                                theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "first":
-                                theFirst = ReadIReference(
+                                theFirst = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "second":
-                                theSecond = ReadIReference(
+                                theSecond = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -2888,59 +2888,59 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
-                                theExtensions = ReadListOfIExtension(
+                                theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
-                                theCategory = ReadString(
+                                theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
-                                theIdShort = ReadString(
+                                theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
-                                theDisplayName = ReadListOfILangStringNameType(
+                                theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadListOfILangStringTextType(
+                                theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
-                                theSemanticId = ReadIReference(
+                                theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
-                                theSupplementalSemanticIds = ReadListOfIReference(
+                                theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
-                                theQualifiers = ReadListOfIQualifier(
+                                theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
-                                theEmbeddedDataSpecifications = ReadListOfIEmbeddedDataSpecification(
+                                theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "orderRelevant":
-                                theOrderRelevant = ReadBool(
+                                theOrderRelevant = Read_bool(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticIdListElement":
-                                theSemanticIdListElement = ReadIReference(
+                                theSemanticIdListElement = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "typeValueListElement":
-                                theTypeValueListElement = ReadAasSubmodelElements(
+                                theTypeValueListElement = Read_AasSubmodelElements(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueTypeListElement":
-                                theValueTypeListElement = ReadDataTypeDefXsd(
+                                theValueTypeListElement = Read_DataTypeDefXsd(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
-                                theValue = ReadListOfISubmodelElement(
+                                theValue = Read_ListOf_ISubmodelElement(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -3053,43 +3053,43 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
-                                theExtensions = ReadListOfIExtension(
+                                theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
-                                theCategory = ReadString(
+                                theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
-                                theIdShort = ReadString(
+                                theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
-                                theDisplayName = ReadListOfILangStringNameType(
+                                theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadListOfILangStringTextType(
+                                theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
-                                theSemanticId = ReadIReference(
+                                theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
-                                theSupplementalSemanticIds = ReadListOfIReference(
+                                theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
-                                theQualifiers = ReadListOfIQualifier(
+                                theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
-                                theEmbeddedDataSpecifications = ReadListOfIEmbeddedDataSpecification(
+                                theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
-                                theValue = ReadListOfISubmodelElement(
+                                theValue = Read_ListOf_ISubmodelElement(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -3232,51 +3232,51 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
-                                theExtensions = ReadListOfIExtension(
+                                theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
-                                theCategory = ReadString(
+                                theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
-                                theIdShort = ReadString(
+                                theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
-                                theDisplayName = ReadListOfILangStringNameType(
+                                theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadListOfILangStringTextType(
+                                theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
-                                theSemanticId = ReadIReference(
+                                theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
-                                theSupplementalSemanticIds = ReadListOfIReference(
+                                theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
-                                theQualifiers = ReadListOfIQualifier(
+                                theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
-                                theEmbeddedDataSpecifications = ReadListOfIEmbeddedDataSpecification(
+                                theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueType":
-                                theValueType = ReadDataTypeDefXsd(
+                                theValueType = Read_DataTypeDefXsd(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
-                                theValue = ReadString(
+                                theValue = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueId":
-                                theValueId = ReadIReference(
+                                theValueId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -3388,47 +3388,47 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
-                                theExtensions = ReadListOfIExtension(
+                                theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
-                                theCategory = ReadString(
+                                theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
-                                theIdShort = ReadString(
+                                theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
-                                theDisplayName = ReadListOfILangStringNameType(
+                                theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadListOfILangStringTextType(
+                                theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
-                                theSemanticId = ReadIReference(
+                                theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
-                                theSupplementalSemanticIds = ReadListOfIReference(
+                                theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
-                                theQualifiers = ReadListOfIQualifier(
+                                theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
-                                theEmbeddedDataSpecifications = ReadListOfIEmbeddedDataSpecification(
+                                theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
-                                theValue = ReadListOfILangStringTextType(
+                                theValue = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueId":
-                                theValueId = ReadIReference(
+                                theValueId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -3530,51 +3530,51 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
-                                theExtensions = ReadListOfIExtension(
+                                theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
-                                theCategory = ReadString(
+                                theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
-                                theIdShort = ReadString(
+                                theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
-                                theDisplayName = ReadListOfILangStringNameType(
+                                theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadListOfILangStringTextType(
+                                theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
-                                theSemanticId = ReadIReference(
+                                theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
-                                theSupplementalSemanticIds = ReadListOfIReference(
+                                theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
-                                theQualifiers = ReadListOfIQualifier(
+                                theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
-                                theEmbeddedDataSpecifications = ReadListOfIEmbeddedDataSpecification(
+                                theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueType":
-                                theValueType = ReadDataTypeDefXsd(
+                                theValueType = Read_DataTypeDefXsd(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "min":
-                                theMin = ReadString(
+                                theMin = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "max":
-                                theMax = ReadString(
+                                theMax = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -3685,43 +3685,43 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
-                                theExtensions = ReadListOfIExtension(
+                                theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
-                                theCategory = ReadString(
+                                theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
-                                theIdShort = ReadString(
+                                theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
-                                theDisplayName = ReadListOfILangStringNameType(
+                                theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadListOfILangStringTextType(
+                                theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
-                                theSemanticId = ReadIReference(
+                                theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
-                                theSupplementalSemanticIds = ReadListOfIReference(
+                                theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
-                                theQualifiers = ReadListOfIQualifier(
+                                theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
-                                theEmbeddedDataSpecifications = ReadListOfIEmbeddedDataSpecification(
+                                theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
-                                theValue = ReadIReference(
+                                theValue = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -3821,47 +3821,47 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
-                                theExtensions = ReadListOfIExtension(
+                                theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
-                                theCategory = ReadString(
+                                theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
-                                theIdShort = ReadString(
+                                theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
-                                theDisplayName = ReadListOfILangStringNameType(
+                                theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadListOfILangStringTextType(
+                                theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
-                                theSemanticId = ReadIReference(
+                                theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
-                                theSupplementalSemanticIds = ReadListOfIReference(
+                                theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
-                                theQualifiers = ReadListOfIQualifier(
+                                theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
-                                theEmbeddedDataSpecifications = ReadListOfIEmbeddedDataSpecification(
+                                theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
-                                theValue = ReadBytes(
+                                theValue = Read_bytes(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "contentType":
-                                theContentType = ReadString(
+                                theContentType = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -3972,47 +3972,47 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
-                                theExtensions = ReadListOfIExtension(
+                                theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
-                                theCategory = ReadString(
+                                theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
-                                theIdShort = ReadString(
+                                theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
-                                theDisplayName = ReadListOfILangStringNameType(
+                                theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadListOfILangStringTextType(
+                                theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
-                                theSemanticId = ReadIReference(
+                                theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
-                                theSupplementalSemanticIds = ReadListOfIReference(
+                                theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
-                                theQualifiers = ReadListOfIQualifier(
+                                theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
-                                theEmbeddedDataSpecifications = ReadListOfIEmbeddedDataSpecification(
+                                theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
-                                theValue = ReadString(
+                                theValue = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "contentType":
-                                theContentType = ReadString(
+                                theContentType = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -4124,51 +4124,51 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
-                                theExtensions = ReadListOfIExtension(
+                                theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
-                                theCategory = ReadString(
+                                theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
-                                theIdShort = ReadString(
+                                theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
-                                theDisplayName = ReadListOfILangStringNameType(
+                                theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadListOfILangStringTextType(
+                                theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
-                                theSemanticId = ReadIReference(
+                                theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
-                                theSupplementalSemanticIds = ReadListOfIReference(
+                                theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
-                                theQualifiers = ReadListOfIQualifier(
+                                theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
-                                theEmbeddedDataSpecifications = ReadListOfIEmbeddedDataSpecification(
+                                theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "first":
-                                theFirst = ReadIReference(
+                                theFirst = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "second":
-                                theSecond = ReadIReference(
+                                theSecond = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "annotations":
-                                theAnnotations = ReadListOfIDataElement(
+                                theAnnotations = Read_ListOf_IDataElement(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -4292,55 +4292,55 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
-                                theExtensions = ReadListOfIExtension(
+                                theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
-                                theCategory = ReadString(
+                                theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
-                                theIdShort = ReadString(
+                                theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
-                                theDisplayName = ReadListOfILangStringNameType(
+                                theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadListOfILangStringTextType(
+                                theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
-                                theSemanticId = ReadIReference(
+                                theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
-                                theSupplementalSemanticIds = ReadListOfIReference(
+                                theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
-                                theQualifiers = ReadListOfIQualifier(
+                                theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
-                                theEmbeddedDataSpecifications = ReadListOfIEmbeddedDataSpecification(
+                                theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "statements":
-                                theStatements = ReadListOfISubmodelElement(
+                                theStatements = Read_ListOf_ISubmodelElement(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "entityType":
-                                theEntityType = ReadEntityType(
+                                theEntityType = Read_EntityType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "globalAssetId":
-                                theGlobalAssetId = ReadString(
+                                theGlobalAssetId = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "specificAssetIds":
-                                theSpecificAssetIds = ReadListOfISpecificAssetId(
+                                theSpecificAssetIds = Read_ListOf_ISpecificAssetId(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -4450,35 +4450,35 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "source":
-                                theSource = ReadIReference(
+                                theSource = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "sourceSemanticId":
-                                theSourceSemanticId = ReadIReference(
+                                theSourceSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "observableReference":
-                                theObservableReference = ReadIReference(
+                                theObservableReference = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "observableSemanticId":
-                                theObservableSemanticId = ReadIReference(
+                                theObservableSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "topic":
-                                theTopic = ReadString(
+                                theTopic = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "subjectId":
-                                theSubjectId = ReadIReference(
+                                theSubjectId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "timeStamp":
-                                theTimeStamp = ReadString(
+                                theTimeStamp = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "payload":
-                                thePayload = ReadBytes(
+                                thePayload = Read_bytes(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -4639,71 +4639,71 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
-                                theExtensions = ReadListOfIExtension(
+                                theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
-                                theCategory = ReadString(
+                                theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
-                                theIdShort = ReadString(
+                                theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
-                                theDisplayName = ReadListOfILangStringNameType(
+                                theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadListOfILangStringTextType(
+                                theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
-                                theSemanticId = ReadIReference(
+                                theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
-                                theSupplementalSemanticIds = ReadListOfIReference(
+                                theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
-                                theQualifiers = ReadListOfIQualifier(
+                                theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
-                                theEmbeddedDataSpecifications = ReadListOfIEmbeddedDataSpecification(
+                                theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "observed":
-                                theObserved = ReadIReference(
+                                theObserved = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "direction":
-                                theDirection = ReadDirection(
+                                theDirection = Read_Direction(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "state":
-                                theState = ReadStateOfEvent(
+                                theState = Read_StateOfEvent(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "messageTopic":
-                                theMessageTopic = ReadString(
+                                theMessageTopic = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "messageBroker":
-                                theMessageBroker = ReadIReference(
+                                theMessageBroker = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "lastUpdate":
-                                theLastUpdate = ReadString(
+                                theLastUpdate = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "minInterval":
-                                theMinInterval = ReadString(
+                                theMinInterval = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "maxInterval":
-                                theMaxInterval = ReadString(
+                                theMaxInterval = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -4841,51 +4841,51 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
-                                theExtensions = ReadListOfIExtension(
+                                theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
-                                theCategory = ReadString(
+                                theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
-                                theIdShort = ReadString(
+                                theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
-                                theDisplayName = ReadListOfILangStringNameType(
+                                theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadListOfILangStringTextType(
+                                theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
-                                theSemanticId = ReadIReference(
+                                theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
-                                theSupplementalSemanticIds = ReadListOfIReference(
+                                theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
-                                theQualifiers = ReadListOfIQualifier(
+                                theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
-                                theEmbeddedDataSpecifications = ReadListOfIEmbeddedDataSpecification(
+                                theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "inputVariables":
-                                theInputVariables = ReadListOfIOperationVariable(
+                                theInputVariables = Read_ListOf_IOperationVariable(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "outputVariables":
-                                theOutputVariables = ReadListOfIOperationVariable(
+                                theOutputVariables = Read_ListOf_IOperationVariable(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "inoutputVariables":
-                                theInoutputVariables = ReadListOfIOperationVariable(
+                                theInoutputVariables = Read_ListOf_IOperationVariable(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -4977,7 +4977,7 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "value":
-                                theValue = ReadISubmodelElement(
+                                theValue = Read_ISubmodelElement(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -5076,39 +5076,39 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
-                                theExtensions = ReadListOfIExtension(
+                                theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
-                                theCategory = ReadString(
+                                theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
-                                theIdShort = ReadString(
+                                theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
-                                theDisplayName = ReadListOfILangStringNameType(
+                                theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadListOfILangStringTextType(
+                                theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
-                                theSemanticId = ReadIReference(
+                                theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
-                                theSupplementalSemanticIds = ReadListOfIReference(
+                                theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
-                                theQualifiers = ReadListOfIQualifier(
+                                theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
-                                theEmbeddedDataSpecifications = ReadListOfIEmbeddedDataSpecification(
+                                theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -5205,39 +5205,39 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
-                                theExtensions = ReadListOfIExtension(
+                                theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
-                                theCategory = ReadString(
+                                theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
-                                theIdShort = ReadString(
+                                theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
-                                theDisplayName = ReadListOfILangStringNameType(
+                                theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadListOfILangStringTextType(
+                                theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "administration":
-                                theAdministration = ReadIAdministrativeInformation(
+                                theAdministration = Read_IAdministrativeInformation(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "id":
-                                theId = ReadString(
+                                theId = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
-                                theEmbeddedDataSpecifications = ReadListOfIEmbeddedDataSpecification(
+                                theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "isCaseOf":
-                                theIsCaseOf = ReadListOfIReference(
+                                theIsCaseOf = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -5338,15 +5338,15 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "type":
-                                theType = ReadReferenceTypes(
+                                theType = Read_ReferenceTypes(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "referredSemanticId":
-                                theReferredSemanticId = ReadIReference(
+                                theReferredSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "keys":
-                                theKeys = ReadListOfIKey(
+                                theKeys = Read_ListOf_IKey(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -5450,11 +5450,11 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "type":
-                                theType = ReadKeyTypes(
+                                theType = Read_KeyTypes(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
-                                theValue = ReadString(
+                                theValue = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -5596,11 +5596,11 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "language":
-                                theLanguage = ReadString(
+                                theLanguage = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "text":
-                                theText = ReadString(
+                                theText = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -5703,11 +5703,11 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "language":
-                                theLanguage = ReadString(
+                                theLanguage = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "text":
-                                theText = ReadString(
+                                theText = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -5811,15 +5811,15 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "assetAdministrationShells":
-                                theAssetAdministrationShells = ReadListOfIAssetAdministrationShell(
+                                theAssetAdministrationShells = Read_ListOf_IAssetAdministrationShell(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "submodels":
-                                theSubmodels = ReadListOfISubmodel(
+                                theSubmodels = Read_ListOf_ISubmodel(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "conceptDescriptions":
-                                theConceptDescriptions = ReadListOfIConceptDescription(
+                                theConceptDescriptions = Read_ListOf_IConceptDescription(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -5930,11 +5930,11 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "dataSpecification":
-                                theDataSpecification = ReadIReference(
+                                theDataSpecification = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "dataSpecificationContent":
-                                theDataSpecificationContent = ReadIDataSpecificationContent(
+                                theDataSpecificationContent = Read_IDataSpecificationContent(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -6039,19 +6039,19 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "min":
-                                theMin = ReadBool(
+                                theMin = Read_bool(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "nom":
-                                theNom = ReadBool(
+                                theNom = Read_bool(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "typ":
-                                theTyp = ReadBool(
+                                theTyp = Read_bool(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "max":
-                                theMax = ReadBool(
+                                theMax = Read_bool(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -6176,11 +6176,11 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "value":
-                                theValue = ReadString(
+                                theValue = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueId":
-                                theValueId = ReadIReference(
+                                theValueId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -6282,7 +6282,7 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "valueReferencePairs":
-                                theValueReferencePairs = ReadListOfIValueReferencePair(
+                                theValueReferencePairs = Read_ListOf_IValueReferencePair(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -6374,11 +6374,11 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "language":
-                                theLanguage = ReadString(
+                                theLanguage = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "text":
-                                theText = ReadString(
+                                theText = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -6481,11 +6481,11 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "language":
-                                theLanguage = ReadString(
+                                theLanguage = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "text":
-                                theText = ReadString(
+                                theText = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -6588,11 +6588,11 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "language":
-                                theLanguage = ReadString(
+                                theLanguage = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "text":
-                                theText = ReadString(
+                                theText = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -6705,51 +6705,51 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "preferredName":
-                                thePreferredName = ReadListOfILangStringPreferredNameTypeIec61360(
+                                thePreferredName = Read_ListOf_ILangStringPreferredNameTypeIec61360(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "shortName":
-                                theShortName = ReadListOfILangStringShortNameTypeIec61360(
+                                theShortName = Read_ListOf_ILangStringShortNameTypeIec61360(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "unit":
-                                theUnit = ReadString(
+                                theUnit = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "unitId":
-                                theUnitId = ReadIReference(
+                                theUnitId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "sourceOfDefinition":
-                                theSourceOfDefinition = ReadString(
+                                theSourceOfDefinition = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "symbol":
-                                theSymbol = ReadString(
+                                theSymbol = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "dataType":
-                                theDataType = ReadDataTypeIec61360(
+                                theDataType = Read_DataTypeIec61360(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "definition":
-                                theDefinition = ReadListOfILangStringDefinitionTypeIec61360(
+                                theDefinition = Read_ListOf_ILangStringDefinitionTypeIec61360(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueFormat":
-                                theValueFormat = ReadString(
+                                theValueFormat = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueList":
-                                theValueList = ReadIValueList(
+                                theValueList = Read_IValueList(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
-                                theValue = ReadString(
+                                theValue = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "levelType":
-                                theLevelType = ReadILevelType(
+                                theLevelType = Read_ILevelType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -8722,181 +8722,181 @@ namespace AasCore.Aas3_0
                 that.Accept(_instance, writer);
             }
 
-            private static readonly ContentWriter<IReference> WriteIReference = (
+            private static readonly ContentWriter<IReference> Write_IReference = (
                 ReferenceToSequence);
 
-            private static readonly ContentWriter<List<IReference>> WriteListOfIReference = (
+            private static readonly ContentWriter<List<IReference>> Write_ListOf_IReference = (
                 WriteList<IReference>(
                     WriteIClass));
 
-            private static readonly ContentWriter<string> WriteString = (
+            private static readonly ContentWriter<string> Write_string = (
                 (that, writer) => writer.WriteValue(that));
 
-            private static readonly ContentWriter<DataTypeDefXsd> WriteDataTypeDefXsd = (
+            private static readonly ContentWriter<DataTypeDefXsd> Write_DataTypeDefXsd = (
                 WriteEnum<Aas.DataTypeDefXsd>(
                     Stringification.ToString));
 
             private static readonly ContentWriter<
                 List<IEmbeddedDataSpecification>
-            > WriteListOfIEmbeddedDataSpecification = (
+            > Write_ListOf_IEmbeddedDataSpecification = (
                 WriteList<IEmbeddedDataSpecification>(
                     WriteIClass));
 
-            private static readonly ContentWriter<QualifierKind> WriteQualifierKind = (
+            private static readonly ContentWriter<QualifierKind> Write_QualifierKind = (
                 WriteEnum<Aas.QualifierKind>(
                     Stringification.ToString));
 
-            private static readonly ContentWriter<List<IExtension>> WriteListOfIExtension = (
+            private static readonly ContentWriter<List<IExtension>> Write_ListOf_IExtension = (
                 WriteList<IExtension>(
                     WriteIClass));
 
             private static readonly ContentWriter<
                 List<ILangStringNameType>
-            > WriteListOfILangStringNameType = (
+            > Write_ListOf_ILangStringNameType = (
                 WriteList<ILangStringNameType>(
                     WriteIClass));
 
             private static readonly ContentWriter<
                 List<ILangStringTextType>
-            > WriteListOfILangStringTextType = (
+            > Write_ListOf_ILangStringTextType = (
                 WriteList<ILangStringTextType>(
                     WriteIClass));
 
             private static readonly ContentWriter<
                 IAdministrativeInformation
-            > WriteIAdministrativeInformation = (
+            > Write_IAdministrativeInformation = (
                 AdministrativeInformationToSequence);
 
-            private static readonly ContentWriter<IAssetInformation> WriteIAssetInformation = (
+            private static readonly ContentWriter<IAssetInformation> Write_IAssetInformation = (
                 AssetInformationToSequence);
 
-            private static readonly ContentWriter<AssetKind> WriteAssetKind = (
+            private static readonly ContentWriter<AssetKind> Write_AssetKind = (
                 WriteEnum<Aas.AssetKind>(
                     Stringification.ToString));
 
             private static readonly ContentWriter<
                 List<ISpecificAssetId>
-            > WriteListOfISpecificAssetId = (
+            > Write_ListOf_ISpecificAssetId = (
                 WriteList<ISpecificAssetId>(
                     WriteIClass));
 
-            private static readonly ContentWriter<IResource> WriteIResource = (
+            private static readonly ContentWriter<IResource> Write_IResource = (
                 ResourceToSequence);
 
-            private static readonly ContentWriter<ModellingKind> WriteModellingKind = (
+            private static readonly ContentWriter<ModellingKind> Write_ModellingKind = (
                 WriteEnum<Aas.ModellingKind>(
                     Stringification.ToString));
 
-            private static readonly ContentWriter<List<IQualifier>> WriteListOfIQualifier = (
+            private static readonly ContentWriter<List<IQualifier>> Write_ListOf_IQualifier = (
                 WriteList<IQualifier>(
                     WriteIClass));
 
             private static readonly ContentWriter<
                 List<ISubmodelElement>
-            > WriteListOfISubmodelElement = (
+            > Write_ListOf_ISubmodelElement = (
                 WriteList<ISubmodelElement>(
                     WriteIClass));
 
-            private static readonly ContentWriter<bool> WriteBool = (
+            private static readonly ContentWriter<bool> Write_bool = (
                 (that, writer) => writer.WriteValue(that));
 
-            private static readonly ContentWriter<AasSubmodelElements> WriteAasSubmodelElements = (
+            private static readonly ContentWriter<AasSubmodelElements> Write_AasSubmodelElements = (
                 WriteEnum<Aas.AasSubmodelElements>(
                     Stringification.ToString));
 
-            private static readonly ContentWriter<byte[]> WriteBytes = (
+            private static readonly ContentWriter<byte[]> Write_bytes = (
                 (that, writer) => writer.WriteBase64(that, 0, that.Length));
 
-            private static readonly ContentWriter<List<IDataElement>> WriteListOfIDataElement = (
+            private static readonly ContentWriter<List<IDataElement>> Write_ListOf_IDataElement = (
                 WriteList<IDataElement>(
                     WriteIClass));
 
-            private static readonly ContentWriter<EntityType> WriteEntityType = (
+            private static readonly ContentWriter<EntityType> Write_EntityType = (
                 WriteEnum<Aas.EntityType>(
                     Stringification.ToString));
 
-            private static readonly ContentWriter<Direction> WriteDirection = (
+            private static readonly ContentWriter<Direction> Write_Direction = (
                 WriteEnum<Aas.Direction>(
                     Stringification.ToString));
 
-            private static readonly ContentWriter<StateOfEvent> WriteStateOfEvent = (
+            private static readonly ContentWriter<StateOfEvent> Write_StateOfEvent = (
                 WriteEnum<Aas.StateOfEvent>(
                     Stringification.ToString));
 
             private static readonly ContentWriter<
                 List<IOperationVariable>
-            > WriteListOfIOperationVariable = (
+            > Write_ListOf_IOperationVariable = (
                 WriteList<IOperationVariable>(
                     WriteIClass));
 
-            private static readonly ContentWriter<ISubmodelElement> WriteISubmodelElement = (
+            private static readonly ContentWriter<ISubmodelElement> Write_ISubmodelElement = (
                 WriteIClass);
 
-            private static readonly ContentWriter<ReferenceTypes> WriteReferenceTypes = (
+            private static readonly ContentWriter<ReferenceTypes> Write_ReferenceTypes = (
                 WriteEnum<Aas.ReferenceTypes>(
                     Stringification.ToString));
 
-            private static readonly ContentWriter<List<IKey>> WriteListOfIKey = (
+            private static readonly ContentWriter<List<IKey>> Write_ListOf_IKey = (
                 WriteList<IKey>(
                     WriteIClass));
 
-            private static readonly ContentWriter<KeyTypes> WriteKeyTypes = (
+            private static readonly ContentWriter<KeyTypes> Write_KeyTypes = (
                 WriteEnum<Aas.KeyTypes>(
                     Stringification.ToString));
 
             private static readonly ContentWriter<
                 List<IAssetAdministrationShell>
-            > WriteListOfIAssetAdministrationShell = (
+            > Write_ListOf_IAssetAdministrationShell = (
                 WriteList<IAssetAdministrationShell>(
                     WriteIClass));
 
-            private static readonly ContentWriter<List<ISubmodel>> WriteListOfISubmodel = (
+            private static readonly ContentWriter<List<ISubmodel>> Write_ListOf_ISubmodel = (
                 WriteList<ISubmodel>(
                     WriteIClass));
 
             private static readonly ContentWriter<
                 List<IConceptDescription>
-            > WriteListOfIConceptDescription = (
+            > Write_ListOf_IConceptDescription = (
                 WriteList<IConceptDescription>(
                     WriteIClass));
 
             private static readonly ContentWriter<
                 IDataSpecificationContent
-            > WriteIDataSpecificationContent = (
+            > Write_IDataSpecificationContent = (
                 WriteIClass);
 
             private static readonly ContentWriter<
                 List<IValueReferencePair>
-            > WriteListOfIValueReferencePair = (
+            > Write_ListOf_IValueReferencePair = (
                 WriteList<IValueReferencePair>(
                     WriteIClass));
 
             private static readonly ContentWriter<
                 List<ILangStringPreferredNameTypeIec61360>
-            > WriteListOfILangStringPreferredNameTypeIec61360 = (
+            > Write_ListOf_ILangStringPreferredNameTypeIec61360 = (
                 WriteList<ILangStringPreferredNameTypeIec61360>(
                     WriteIClass));
 
             private static readonly ContentWriter<
                 List<ILangStringShortNameTypeIec61360>
-            > WriteListOfILangStringShortNameTypeIec61360 = (
+            > Write_ListOf_ILangStringShortNameTypeIec61360 = (
                 WriteList<ILangStringShortNameTypeIec61360>(
                     WriteIClass));
 
-            private static readonly ContentWriter<DataTypeIec61360> WriteDataTypeIec61360 = (
+            private static readonly ContentWriter<DataTypeIec61360> Write_DataTypeIec61360 = (
                 WriteEnum<Aas.DataTypeIec61360>(
                     Stringification.ToString));
 
             private static readonly ContentWriter<
                 List<ILangStringDefinitionTypeIec61360>
-            > WriteListOfILangStringDefinitionTypeIec61360 = (
+            > Write_ListOf_ILangStringDefinitionTypeIec61360 = (
                 WriteList<ILangStringDefinitionTypeIec61360>(
                     WriteIClass));
 
-            private static readonly ContentWriter<IValueList> WriteIValueList = (
+            private static readonly ContentWriter<IValueList> Write_IValueList = (
                 ValueListToSequence);
 
-            private static readonly ContentWriter<ILevelType> WriteILevelType = (
+            private static readonly ContentWriter<ILevelType> Write_ILevelType = (
                 LevelTypeToSequence);
 
             private static void ExtensionToSequence(
@@ -8906,7 +8906,7 @@ namespace AasCore.Aas3_0
                 if (that.SemanticId != null)
                 {
                     WriteElement(
-                        "semanticId", that.SemanticId, writer, WriteIReference);
+                        "semanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
@@ -8915,28 +8915,28 @@ namespace AasCore.Aas3_0
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        WriteListOfIReference);
+                        Write_ListOf_IReference);
                 }
 
                 WriteElement(
-                    "name", that.Name, writer, WriteString);
+                    "name", that.Name, writer, Write_string);
 
                 if (that.ValueType.HasValue)
                 {
                     WriteElement(
-                        "valueType", that.ValueType.Value, writer, WriteDataTypeDefXsd);
+                        "valueType", that.ValueType.Value, writer, Write_DataTypeDefXsd);
                 }
 
                 if (that.Value != null)
                 {
                     WriteElement(
-                        "value", that.Value, writer, WriteString);
+                        "value", that.Value, writer, Write_string);
                 }
 
                 if (that.RefersTo != null)
                 {
                     WriteElement(
-                        "refersTo", that.RefersTo, writer, WriteListOfIReference);
+                        "refersTo", that.RefersTo, writer, Write_ListOf_IReference);
                 }
             }  // private static void ExtensionToSequence
 
@@ -8963,31 +8963,31 @@ namespace AasCore.Aas3_0
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        WriteListOfIEmbeddedDataSpecification);
+                        Write_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.Version != null)
                 {
                     WriteElement(
-                        "version", that.Version, writer, WriteString);
+                        "version", that.Version, writer, Write_string);
                 }
 
                 if (that.Revision != null)
                 {
                     WriteElement(
-                        "revision", that.Revision, writer, WriteString);
+                        "revision", that.Revision, writer, Write_string);
                 }
 
                 if (that.Creator != null)
                 {
                     WriteElement(
-                        "creator", that.Creator, writer, WriteIReference);
+                        "creator", that.Creator, writer, Write_IReference);
                 }
 
                 if (that.TemplateId != null)
                 {
                     WriteElement(
-                        "templateId", that.TemplateId, writer, WriteString);
+                        "templateId", that.TemplateId, writer, Write_string);
                 }
             }  // private static void AdministrativeInformationToSequence
 
@@ -9011,7 +9011,7 @@ namespace AasCore.Aas3_0
                 if (that.SemanticId != null)
                 {
                     WriteElement(
-                        "semanticId", that.SemanticId, writer, WriteIReference);
+                        "semanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
@@ -9020,31 +9020,31 @@ namespace AasCore.Aas3_0
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        WriteListOfIReference);
+                        Write_ListOf_IReference);
                 }
 
                 if (that.Kind.HasValue)
                 {
                     WriteElement(
-                        "kind", that.Kind.Value, writer, WriteQualifierKind);
+                        "kind", that.Kind.Value, writer, Write_QualifierKind);
                 }
 
                 WriteElement(
-                    "type", that.Type, writer, WriteString);
+                    "type", that.Type, writer, Write_string);
 
                 WriteElement(
-                    "valueType", that.ValueType, writer, WriteDataTypeDefXsd);
+                    "valueType", that.ValueType, writer, Write_DataTypeDefXsd);
 
                 if (that.Value != null)
                 {
                     WriteElement(
-                        "value", that.Value, writer, WriteString);
+                        "value", that.Value, writer, Write_string);
                 }
 
                 if (that.ValueId != null)
                 {
                     WriteElement(
-                        "valueId", that.ValueId, writer, WriteIReference);
+                        "valueId", that.ValueId, writer, Write_IReference);
                 }
             }  // private static void QualifierToSequence
 
@@ -9068,31 +9068,31 @@ namespace AasCore.Aas3_0
                 if (that.Extensions != null)
                 {
                     WriteElement(
-                        "extensions", that.Extensions, writer, WriteListOfIExtension);
+                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
                     WriteElement(
-                        "category", that.Category, writer, WriteString);
+                        "category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
                     WriteElement(
-                        "idShort", that.IdShort, writer, WriteString);
+                        "idShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
                     WriteElement(
-                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
+                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
                     WriteElement(
-                        "description", that.Description, writer, WriteListOfILangStringTextType);
+                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.Administration != null)
@@ -9101,11 +9101,11 @@ namespace AasCore.Aas3_0
                         "administration",
                         that.Administration,
                         writer,
-                        WriteIAdministrativeInformation);
+                        Write_IAdministrativeInformation);
                 }
 
                 WriteElement(
-                    "id", that.Id, writer, WriteString);
+                    "id", that.Id, writer, Write_string);
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
@@ -9113,22 +9113,22 @@ namespace AasCore.Aas3_0
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        WriteListOfIEmbeddedDataSpecification);
+                        Write_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.DerivedFrom != null)
                 {
                     WriteElement(
-                        "derivedFrom", that.DerivedFrom, writer, WriteIReference);
+                        "derivedFrom", that.DerivedFrom, writer, Write_IReference);
                 }
 
                 WriteElement(
-                    "assetInformation", that.AssetInformation, writer, WriteIAssetInformation);
+                    "assetInformation", that.AssetInformation, writer, Write_IAssetInformation);
 
                 if (that.Submodels != null)
                 {
                     WriteElement(
-                        "submodels", that.Submodels, writer, WriteListOfIReference);
+                        "submodels", that.Submodels, writer, Write_ListOf_IReference);
                 }
             }  // private static void AssetAdministrationShellToSequence
 
@@ -9150,12 +9150,12 @@ namespace AasCore.Aas3_0
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "assetKind", that.AssetKind, writer, WriteAssetKind);
+                    "assetKind", that.AssetKind, writer, Write_AssetKind);
 
                 if (that.GlobalAssetId != null)
                 {
                     WriteElement(
-                        "globalAssetId", that.GlobalAssetId, writer, WriteString);
+                        "globalAssetId", that.GlobalAssetId, writer, Write_string);
                 }
 
                 if (that.SpecificAssetIds != null)
@@ -9164,19 +9164,19 @@ namespace AasCore.Aas3_0
                         "specificAssetIds",
                         that.SpecificAssetIds,
                         writer,
-                        WriteListOfISpecificAssetId);
+                        Write_ListOf_ISpecificAssetId);
                 }
 
                 if (that.AssetType != null)
                 {
                     WriteElement(
-                        "assetType", that.AssetType, writer, WriteString);
+                        "assetType", that.AssetType, writer, Write_string);
                 }
 
                 if (that.DefaultThumbnail != null)
                 {
                     WriteElement(
-                        "defaultThumbnail", that.DefaultThumbnail, writer, WriteIResource);
+                        "defaultThumbnail", that.DefaultThumbnail, writer, Write_IResource);
                 }
             }  // private static void AssetInformationToSequence
 
@@ -9198,12 +9198,12 @@ namespace AasCore.Aas3_0
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "path", that.Path, writer, WriteString);
+                    "path", that.Path, writer, Write_string);
 
                 if (that.ContentType != null)
                 {
                     WriteElement(
-                        "contentType", that.ContentType, writer, WriteString);
+                        "contentType", that.ContentType, writer, Write_string);
                 }
             }  // private static void ResourceToSequence
 
@@ -9227,7 +9227,7 @@ namespace AasCore.Aas3_0
                 if (that.SemanticId != null)
                 {
                     WriteElement(
-                        "semanticId", that.SemanticId, writer, WriteIReference);
+                        "semanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
@@ -9236,19 +9236,19 @@ namespace AasCore.Aas3_0
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        WriteListOfIReference);
+                        Write_ListOf_IReference);
                 }
 
                 WriteElement(
-                    "name", that.Name, writer, WriteString);
+                    "name", that.Name, writer, Write_string);
 
                 WriteElement(
-                    "value", that.Value, writer, WriteString);
+                    "value", that.Value, writer, Write_string);
 
                 if (that.ExternalSubjectId != null)
                 {
                     WriteElement(
-                        "externalSubjectId", that.ExternalSubjectId, writer, WriteIReference);
+                        "externalSubjectId", that.ExternalSubjectId, writer, Write_IReference);
                 }
             }  // private static void SpecificAssetIdToSequence
 
@@ -9272,31 +9272,31 @@ namespace AasCore.Aas3_0
                 if (that.Extensions != null)
                 {
                     WriteElement(
-                        "extensions", that.Extensions, writer, WriteListOfIExtension);
+                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
                     WriteElement(
-                        "category", that.Category, writer, WriteString);
+                        "category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
                     WriteElement(
-                        "idShort", that.IdShort, writer, WriteString);
+                        "idShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
                     WriteElement(
-                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
+                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
                     WriteElement(
-                        "description", that.Description, writer, WriteListOfILangStringTextType);
+                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.Administration != null)
@@ -9305,22 +9305,22 @@ namespace AasCore.Aas3_0
                         "administration",
                         that.Administration,
                         writer,
-                        WriteIAdministrativeInformation);
+                        Write_IAdministrativeInformation);
                 }
 
                 WriteElement(
-                    "id", that.Id, writer, WriteString);
+                    "id", that.Id, writer, Write_string);
 
                 if (that.Kind.HasValue)
                 {
                     WriteElement(
-                        "kind", that.Kind.Value, writer, WriteModellingKind);
+                        "kind", that.Kind.Value, writer, Write_ModellingKind);
                 }
 
                 if (that.SemanticId != null)
                 {
                     WriteElement(
-                        "semanticId", that.SemanticId, writer, WriteIReference);
+                        "semanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
@@ -9329,13 +9329,13 @@ namespace AasCore.Aas3_0
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        WriteListOfIReference);
+                        Write_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
                     WriteElement(
-                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
+                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
@@ -9344,7 +9344,7 @@ namespace AasCore.Aas3_0
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        WriteListOfIEmbeddedDataSpecification);
+                        Write_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.SubmodelElements != null)
@@ -9353,7 +9353,7 @@ namespace AasCore.Aas3_0
                         "submodelElements",
                         that.SubmodelElements,
                         writer,
-                        WriteListOfISubmodelElement);
+                        Write_ListOf_ISubmodelElement);
                 }
             }  // private static void SubmodelToSequence
 
@@ -9377,37 +9377,37 @@ namespace AasCore.Aas3_0
                 if (that.Extensions != null)
                 {
                     WriteElement(
-                        "extensions", that.Extensions, writer, WriteListOfIExtension);
+                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
                     WriteElement(
-                        "category", that.Category, writer, WriteString);
+                        "category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
                     WriteElement(
-                        "idShort", that.IdShort, writer, WriteString);
+                        "idShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
                     WriteElement(
-                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
+                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
                     WriteElement(
-                        "description", that.Description, writer, WriteListOfILangStringTextType);
+                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
                     WriteElement(
-                        "semanticId", that.SemanticId, writer, WriteIReference);
+                        "semanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
@@ -9416,13 +9416,13 @@ namespace AasCore.Aas3_0
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        WriteListOfIReference);
+                        Write_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
                     WriteElement(
-                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
+                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
@@ -9431,14 +9431,14 @@ namespace AasCore.Aas3_0
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        WriteListOfIEmbeddedDataSpecification);
+                        Write_ListOf_IEmbeddedDataSpecification);
                 }
 
                 WriteElement(
-                    "first", that.First, writer, WriteIReference);
+                    "first", that.First, writer, Write_IReference);
 
                 WriteElement(
-                    "second", that.Second, writer, WriteIReference);
+                    "second", that.Second, writer, Write_IReference);
             }  // private static void RelationshipElementToSequence
 
             public override void VisitRelationshipElement(
@@ -9461,37 +9461,37 @@ namespace AasCore.Aas3_0
                 if (that.Extensions != null)
                 {
                     WriteElement(
-                        "extensions", that.Extensions, writer, WriteListOfIExtension);
+                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
                     WriteElement(
-                        "category", that.Category, writer, WriteString);
+                        "category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
                     WriteElement(
-                        "idShort", that.IdShort, writer, WriteString);
+                        "idShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
                     WriteElement(
-                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
+                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
                     WriteElement(
-                        "description", that.Description, writer, WriteListOfILangStringTextType);
+                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
                     WriteElement(
-                        "semanticId", that.SemanticId, writer, WriteIReference);
+                        "semanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
@@ -9500,13 +9500,13 @@ namespace AasCore.Aas3_0
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        WriteListOfIReference);
+                        Write_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
                     WriteElement(
-                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
+                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
@@ -9515,13 +9515,13 @@ namespace AasCore.Aas3_0
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        WriteListOfIEmbeddedDataSpecification);
+                        Write_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.OrderRelevant.HasValue)
                 {
                     WriteElement(
-                        "orderRelevant", that.OrderRelevant.Value, writer, WriteBool);
+                        "orderRelevant", that.OrderRelevant.Value, writer, Write_bool);
                 }
 
                 if (that.SemanticIdListElement != null)
@@ -9530,14 +9530,14 @@ namespace AasCore.Aas3_0
                         "semanticIdListElement",
                         that.SemanticIdListElement,
                         writer,
-                        WriteIReference);
+                        Write_IReference);
                 }
 
                 WriteElement(
                     "typeValueListElement",
                     that.TypeValueListElement,
                     writer,
-                    WriteAasSubmodelElements);
+                    Write_AasSubmodelElements);
 
                 if (that.ValueTypeListElement.HasValue)
                 {
@@ -9545,13 +9545,13 @@ namespace AasCore.Aas3_0
                         "valueTypeListElement",
                         that.ValueTypeListElement.Value,
                         writer,
-                        WriteDataTypeDefXsd);
+                        Write_DataTypeDefXsd);
                 }
 
                 if (that.Value != null)
                 {
                     WriteElement(
-                        "value", that.Value, writer, WriteListOfISubmodelElement);
+                        "value", that.Value, writer, Write_ListOf_ISubmodelElement);
                 }
             }  // private static void SubmodelElementListToSequence
 
@@ -9575,37 +9575,37 @@ namespace AasCore.Aas3_0
                 if (that.Extensions != null)
                 {
                     WriteElement(
-                        "extensions", that.Extensions, writer, WriteListOfIExtension);
+                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
                     WriteElement(
-                        "category", that.Category, writer, WriteString);
+                        "category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
                     WriteElement(
-                        "idShort", that.IdShort, writer, WriteString);
+                        "idShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
                     WriteElement(
-                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
+                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
                     WriteElement(
-                        "description", that.Description, writer, WriteListOfILangStringTextType);
+                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
                     WriteElement(
-                        "semanticId", that.SemanticId, writer, WriteIReference);
+                        "semanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
@@ -9614,13 +9614,13 @@ namespace AasCore.Aas3_0
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        WriteListOfIReference);
+                        Write_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
                     WriteElement(
-                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
+                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
@@ -9629,13 +9629,13 @@ namespace AasCore.Aas3_0
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        WriteListOfIEmbeddedDataSpecification);
+                        Write_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.Value != null)
                 {
                     WriteElement(
-                        "value", that.Value, writer, WriteListOfISubmodelElement);
+                        "value", that.Value, writer, Write_ListOf_ISubmodelElement);
                 }
             }  // private static void SubmodelElementCollectionToSequence
 
@@ -9659,37 +9659,37 @@ namespace AasCore.Aas3_0
                 if (that.Extensions != null)
                 {
                     WriteElement(
-                        "extensions", that.Extensions, writer, WriteListOfIExtension);
+                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
                     WriteElement(
-                        "category", that.Category, writer, WriteString);
+                        "category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
                     WriteElement(
-                        "idShort", that.IdShort, writer, WriteString);
+                        "idShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
                     WriteElement(
-                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
+                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
                     WriteElement(
-                        "description", that.Description, writer, WriteListOfILangStringTextType);
+                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
                     WriteElement(
-                        "semanticId", that.SemanticId, writer, WriteIReference);
+                        "semanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
@@ -9698,13 +9698,13 @@ namespace AasCore.Aas3_0
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        WriteListOfIReference);
+                        Write_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
                     WriteElement(
-                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
+                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
@@ -9713,22 +9713,22 @@ namespace AasCore.Aas3_0
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        WriteListOfIEmbeddedDataSpecification);
+                        Write_ListOf_IEmbeddedDataSpecification);
                 }
 
                 WriteElement(
-                    "valueType", that.ValueType, writer, WriteDataTypeDefXsd);
+                    "valueType", that.ValueType, writer, Write_DataTypeDefXsd);
 
                 if (that.Value != null)
                 {
                     WriteElement(
-                        "value", that.Value, writer, WriteString);
+                        "value", that.Value, writer, Write_string);
                 }
 
                 if (that.ValueId != null)
                 {
                     WriteElement(
-                        "valueId", that.ValueId, writer, WriteIReference);
+                        "valueId", that.ValueId, writer, Write_IReference);
                 }
             }  // private static void PropertyToSequence
 
@@ -9752,37 +9752,37 @@ namespace AasCore.Aas3_0
                 if (that.Extensions != null)
                 {
                     WriteElement(
-                        "extensions", that.Extensions, writer, WriteListOfIExtension);
+                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
                     WriteElement(
-                        "category", that.Category, writer, WriteString);
+                        "category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
                     WriteElement(
-                        "idShort", that.IdShort, writer, WriteString);
+                        "idShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
                     WriteElement(
-                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
+                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
                     WriteElement(
-                        "description", that.Description, writer, WriteListOfILangStringTextType);
+                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
                     WriteElement(
-                        "semanticId", that.SemanticId, writer, WriteIReference);
+                        "semanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
@@ -9791,13 +9791,13 @@ namespace AasCore.Aas3_0
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        WriteListOfIReference);
+                        Write_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
                     WriteElement(
-                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
+                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
@@ -9806,19 +9806,19 @@ namespace AasCore.Aas3_0
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        WriteListOfIEmbeddedDataSpecification);
+                        Write_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.Value != null)
                 {
                     WriteElement(
-                        "value", that.Value, writer, WriteListOfILangStringTextType);
+                        "value", that.Value, writer, Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.ValueId != null)
                 {
                     WriteElement(
-                        "valueId", that.ValueId, writer, WriteIReference);
+                        "valueId", that.ValueId, writer, Write_IReference);
                 }
             }  // private static void MultiLanguagePropertyToSequence
 
@@ -9842,37 +9842,37 @@ namespace AasCore.Aas3_0
                 if (that.Extensions != null)
                 {
                     WriteElement(
-                        "extensions", that.Extensions, writer, WriteListOfIExtension);
+                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
                     WriteElement(
-                        "category", that.Category, writer, WriteString);
+                        "category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
                     WriteElement(
-                        "idShort", that.IdShort, writer, WriteString);
+                        "idShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
                     WriteElement(
-                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
+                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
                     WriteElement(
-                        "description", that.Description, writer, WriteListOfILangStringTextType);
+                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
                     WriteElement(
-                        "semanticId", that.SemanticId, writer, WriteIReference);
+                        "semanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
@@ -9881,13 +9881,13 @@ namespace AasCore.Aas3_0
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        WriteListOfIReference);
+                        Write_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
                     WriteElement(
-                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
+                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
@@ -9896,22 +9896,22 @@ namespace AasCore.Aas3_0
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        WriteListOfIEmbeddedDataSpecification);
+                        Write_ListOf_IEmbeddedDataSpecification);
                 }
 
                 WriteElement(
-                    "valueType", that.ValueType, writer, WriteDataTypeDefXsd);
+                    "valueType", that.ValueType, writer, Write_DataTypeDefXsd);
 
                 if (that.Min != null)
                 {
                     WriteElement(
-                        "min", that.Min, writer, WriteString);
+                        "min", that.Min, writer, Write_string);
                 }
 
                 if (that.Max != null)
                 {
                     WriteElement(
-                        "max", that.Max, writer, WriteString);
+                        "max", that.Max, writer, Write_string);
                 }
             }  // private static void RangeToSequence
 
@@ -9935,37 +9935,37 @@ namespace AasCore.Aas3_0
                 if (that.Extensions != null)
                 {
                     WriteElement(
-                        "extensions", that.Extensions, writer, WriteListOfIExtension);
+                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
                     WriteElement(
-                        "category", that.Category, writer, WriteString);
+                        "category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
                     WriteElement(
-                        "idShort", that.IdShort, writer, WriteString);
+                        "idShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
                     WriteElement(
-                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
+                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
                     WriteElement(
-                        "description", that.Description, writer, WriteListOfILangStringTextType);
+                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
                     WriteElement(
-                        "semanticId", that.SemanticId, writer, WriteIReference);
+                        "semanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
@@ -9974,13 +9974,13 @@ namespace AasCore.Aas3_0
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        WriteListOfIReference);
+                        Write_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
                     WriteElement(
-                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
+                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
@@ -9989,13 +9989,13 @@ namespace AasCore.Aas3_0
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        WriteListOfIEmbeddedDataSpecification);
+                        Write_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.Value != null)
                 {
                     WriteElement(
-                        "value", that.Value, writer, WriteIReference);
+                        "value", that.Value, writer, Write_IReference);
                 }
             }  // private static void ReferenceElementToSequence
 
@@ -10019,37 +10019,37 @@ namespace AasCore.Aas3_0
                 if (that.Extensions != null)
                 {
                     WriteElement(
-                        "extensions", that.Extensions, writer, WriteListOfIExtension);
+                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
                     WriteElement(
-                        "category", that.Category, writer, WriteString);
+                        "category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
                     WriteElement(
-                        "idShort", that.IdShort, writer, WriteString);
+                        "idShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
                     WriteElement(
-                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
+                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
                     WriteElement(
-                        "description", that.Description, writer, WriteListOfILangStringTextType);
+                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
                     WriteElement(
-                        "semanticId", that.SemanticId, writer, WriteIReference);
+                        "semanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
@@ -10058,13 +10058,13 @@ namespace AasCore.Aas3_0
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        WriteListOfIReference);
+                        Write_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
                     WriteElement(
-                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
+                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
@@ -10073,17 +10073,17 @@ namespace AasCore.Aas3_0
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        WriteListOfIEmbeddedDataSpecification);
+                        Write_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.Value != null)
                 {
                     WriteElement(
-                        "value", that.Value, writer, WriteBytes);
+                        "value", that.Value, writer, Write_bytes);
                 }
 
                 WriteElement(
-                    "contentType", that.ContentType, writer, WriteString);
+                    "contentType", that.ContentType, writer, Write_string);
             }  // private static void BlobToSequence
 
             public override void VisitBlob(
@@ -10106,37 +10106,37 @@ namespace AasCore.Aas3_0
                 if (that.Extensions != null)
                 {
                     WriteElement(
-                        "extensions", that.Extensions, writer, WriteListOfIExtension);
+                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
                     WriteElement(
-                        "category", that.Category, writer, WriteString);
+                        "category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
                     WriteElement(
-                        "idShort", that.IdShort, writer, WriteString);
+                        "idShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
                     WriteElement(
-                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
+                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
                     WriteElement(
-                        "description", that.Description, writer, WriteListOfILangStringTextType);
+                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
                     WriteElement(
-                        "semanticId", that.SemanticId, writer, WriteIReference);
+                        "semanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
@@ -10145,13 +10145,13 @@ namespace AasCore.Aas3_0
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        WriteListOfIReference);
+                        Write_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
                     WriteElement(
-                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
+                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
@@ -10160,17 +10160,17 @@ namespace AasCore.Aas3_0
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        WriteListOfIEmbeddedDataSpecification);
+                        Write_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.Value != null)
                 {
                     WriteElement(
-                        "value", that.Value, writer, WriteString);
+                        "value", that.Value, writer, Write_string);
                 }
 
                 WriteElement(
-                    "contentType", that.ContentType, writer, WriteString);
+                    "contentType", that.ContentType, writer, Write_string);
             }  // private static void FileToSequence
 
             public override void VisitFile(
@@ -10193,37 +10193,37 @@ namespace AasCore.Aas3_0
                 if (that.Extensions != null)
                 {
                     WriteElement(
-                        "extensions", that.Extensions, writer, WriteListOfIExtension);
+                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
                     WriteElement(
-                        "category", that.Category, writer, WriteString);
+                        "category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
                     WriteElement(
-                        "idShort", that.IdShort, writer, WriteString);
+                        "idShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
                     WriteElement(
-                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
+                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
                     WriteElement(
-                        "description", that.Description, writer, WriteListOfILangStringTextType);
+                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
                     WriteElement(
-                        "semanticId", that.SemanticId, writer, WriteIReference);
+                        "semanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
@@ -10232,13 +10232,13 @@ namespace AasCore.Aas3_0
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        WriteListOfIReference);
+                        Write_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
                     WriteElement(
-                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
+                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
@@ -10247,19 +10247,19 @@ namespace AasCore.Aas3_0
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        WriteListOfIEmbeddedDataSpecification);
+                        Write_ListOf_IEmbeddedDataSpecification);
                 }
 
                 WriteElement(
-                    "first", that.First, writer, WriteIReference);
+                    "first", that.First, writer, Write_IReference);
 
                 WriteElement(
-                    "second", that.Second, writer, WriteIReference);
+                    "second", that.Second, writer, Write_IReference);
 
                 if (that.Annotations != null)
                 {
                     WriteElement(
-                        "annotations", that.Annotations, writer, WriteListOfIDataElement);
+                        "annotations", that.Annotations, writer, Write_ListOf_IDataElement);
                 }
             }  // private static void AnnotatedRelationshipElementToSequence
 
@@ -10283,37 +10283,37 @@ namespace AasCore.Aas3_0
                 if (that.Extensions != null)
                 {
                     WriteElement(
-                        "extensions", that.Extensions, writer, WriteListOfIExtension);
+                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
                     WriteElement(
-                        "category", that.Category, writer, WriteString);
+                        "category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
                     WriteElement(
-                        "idShort", that.IdShort, writer, WriteString);
+                        "idShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
                     WriteElement(
-                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
+                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
                     WriteElement(
-                        "description", that.Description, writer, WriteListOfILangStringTextType);
+                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
                     WriteElement(
-                        "semanticId", that.SemanticId, writer, WriteIReference);
+                        "semanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
@@ -10322,13 +10322,13 @@ namespace AasCore.Aas3_0
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        WriteListOfIReference);
+                        Write_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
                     WriteElement(
-                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
+                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
@@ -10337,22 +10337,22 @@ namespace AasCore.Aas3_0
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        WriteListOfIEmbeddedDataSpecification);
+                        Write_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.Statements != null)
                 {
                     WriteElement(
-                        "statements", that.Statements, writer, WriteListOfISubmodelElement);
+                        "statements", that.Statements, writer, Write_ListOf_ISubmodelElement);
                 }
 
                 WriteElement(
-                    "entityType", that.EntityType, writer, WriteEntityType);
+                    "entityType", that.EntityType, writer, Write_EntityType);
 
                 if (that.GlobalAssetId != null)
                 {
                     WriteElement(
-                        "globalAssetId", that.GlobalAssetId, writer, WriteString);
+                        "globalAssetId", that.GlobalAssetId, writer, Write_string);
                 }
 
                 if (that.SpecificAssetIds != null)
@@ -10361,7 +10361,7 @@ namespace AasCore.Aas3_0
                         "specificAssetIds",
                         that.SpecificAssetIds,
                         writer,
-                        WriteListOfISpecificAssetId);
+                        Write_ListOf_ISpecificAssetId);
                 }
             }  // private static void EntityToSequence
 
@@ -10383,42 +10383,45 @@ namespace AasCore.Aas3_0
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "source", that.Source, writer, WriteIReference);
+                    "source", that.Source, writer, Write_IReference);
 
                 if (that.SourceSemanticId != null)
                 {
                     WriteElement(
-                        "sourceSemanticId", that.SourceSemanticId, writer, WriteIReference);
+                        "sourceSemanticId", that.SourceSemanticId, writer, Write_IReference);
                 }
 
                 WriteElement(
-                    "observableReference", that.ObservableReference, writer, WriteIReference);
+                    "observableReference", that.ObservableReference, writer, Write_IReference);
 
                 if (that.ObservableSemanticId != null)
                 {
                     WriteElement(
-                        "observableSemanticId", that.ObservableSemanticId, writer, WriteIReference);
+                        "observableSemanticId",
+                        that.ObservableSemanticId,
+                        writer,
+                        Write_IReference);
                 }
 
                 if (that.Topic != null)
                 {
                     WriteElement(
-                        "topic", that.Topic, writer, WriteString);
+                        "topic", that.Topic, writer, Write_string);
                 }
 
                 if (that.SubjectId != null)
                 {
                     WriteElement(
-                        "subjectId", that.SubjectId, writer, WriteIReference);
+                        "subjectId", that.SubjectId, writer, Write_IReference);
                 }
 
                 WriteElement(
-                    "timeStamp", that.TimeStamp, writer, WriteString);
+                    "timeStamp", that.TimeStamp, writer, Write_string);
 
                 if (that.Payload != null)
                 {
                     WriteElement(
-                        "payload", that.Payload, writer, WriteBytes);
+                        "payload", that.Payload, writer, Write_bytes);
                 }
             }  // private static void EventPayloadToSequence
 
@@ -10442,37 +10445,37 @@ namespace AasCore.Aas3_0
                 if (that.Extensions != null)
                 {
                     WriteElement(
-                        "extensions", that.Extensions, writer, WriteListOfIExtension);
+                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
                     WriteElement(
-                        "category", that.Category, writer, WriteString);
+                        "category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
                     WriteElement(
-                        "idShort", that.IdShort, writer, WriteString);
+                        "idShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
                     WriteElement(
-                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
+                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
                     WriteElement(
-                        "description", that.Description, writer, WriteListOfILangStringTextType);
+                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
                     WriteElement(
-                        "semanticId", that.SemanticId, writer, WriteIReference);
+                        "semanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
@@ -10481,13 +10484,13 @@ namespace AasCore.Aas3_0
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        WriteListOfIReference);
+                        Write_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
                     WriteElement(
-                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
+                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
@@ -10496,46 +10499,46 @@ namespace AasCore.Aas3_0
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        WriteListOfIEmbeddedDataSpecification);
+                        Write_ListOf_IEmbeddedDataSpecification);
                 }
 
                 WriteElement(
-                    "observed", that.Observed, writer, WriteIReference);
+                    "observed", that.Observed, writer, Write_IReference);
 
                 WriteElement(
-                    "direction", that.Direction, writer, WriteDirection);
+                    "direction", that.Direction, writer, Write_Direction);
 
                 WriteElement(
-                    "state", that.State, writer, WriteStateOfEvent);
+                    "state", that.State, writer, Write_StateOfEvent);
 
                 if (that.MessageTopic != null)
                 {
                     WriteElement(
-                        "messageTopic", that.MessageTopic, writer, WriteString);
+                        "messageTopic", that.MessageTopic, writer, Write_string);
                 }
 
                 if (that.MessageBroker != null)
                 {
                     WriteElement(
-                        "messageBroker", that.MessageBroker, writer, WriteIReference);
+                        "messageBroker", that.MessageBroker, writer, Write_IReference);
                 }
 
                 if (that.LastUpdate != null)
                 {
                     WriteElement(
-                        "lastUpdate", that.LastUpdate, writer, WriteString);
+                        "lastUpdate", that.LastUpdate, writer, Write_string);
                 }
 
                 if (that.MinInterval != null)
                 {
                     WriteElement(
-                        "minInterval", that.MinInterval, writer, WriteString);
+                        "minInterval", that.MinInterval, writer, Write_string);
                 }
 
                 if (that.MaxInterval != null)
                 {
                     WriteElement(
-                        "maxInterval", that.MaxInterval, writer, WriteString);
+                        "maxInterval", that.MaxInterval, writer, Write_string);
                 }
             }  // private static void BasicEventElementToSequence
 
@@ -10559,37 +10562,37 @@ namespace AasCore.Aas3_0
                 if (that.Extensions != null)
                 {
                     WriteElement(
-                        "extensions", that.Extensions, writer, WriteListOfIExtension);
+                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
                     WriteElement(
-                        "category", that.Category, writer, WriteString);
+                        "category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
                     WriteElement(
-                        "idShort", that.IdShort, writer, WriteString);
+                        "idShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
                     WriteElement(
-                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
+                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
                     WriteElement(
-                        "description", that.Description, writer, WriteListOfILangStringTextType);
+                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
                     WriteElement(
-                        "semanticId", that.SemanticId, writer, WriteIReference);
+                        "semanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
@@ -10598,13 +10601,13 @@ namespace AasCore.Aas3_0
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        WriteListOfIReference);
+                        Write_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
                     WriteElement(
-                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
+                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
@@ -10613,7 +10616,7 @@ namespace AasCore.Aas3_0
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        WriteListOfIEmbeddedDataSpecification);
+                        Write_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.InputVariables != null)
@@ -10622,7 +10625,7 @@ namespace AasCore.Aas3_0
                         "inputVariables",
                         that.InputVariables,
                         writer,
-                        WriteListOfIOperationVariable);
+                        Write_ListOf_IOperationVariable);
                 }
 
                 if (that.OutputVariables != null)
@@ -10631,7 +10634,7 @@ namespace AasCore.Aas3_0
                         "outputVariables",
                         that.OutputVariables,
                         writer,
-                        WriteListOfIOperationVariable);
+                        Write_ListOf_IOperationVariable);
                 }
 
                 if (that.InoutputVariables != null)
@@ -10640,7 +10643,7 @@ namespace AasCore.Aas3_0
                         "inoutputVariables",
                         that.InoutputVariables,
                         writer,
-                        WriteListOfIOperationVariable);
+                        Write_ListOf_IOperationVariable);
                 }
             }  // private static void OperationToSequence
 
@@ -10662,7 +10665,7 @@ namespace AasCore.Aas3_0
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "value", that.Value, writer, WriteISubmodelElement);
+                    "value", that.Value, writer, Write_ISubmodelElement);
             }  // private static void OperationVariableToSequence
 
             public override void VisitOperationVariable(
@@ -10685,37 +10688,37 @@ namespace AasCore.Aas3_0
                 if (that.Extensions != null)
                 {
                     WriteElement(
-                        "extensions", that.Extensions, writer, WriteListOfIExtension);
+                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
                     WriteElement(
-                        "category", that.Category, writer, WriteString);
+                        "category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
                     WriteElement(
-                        "idShort", that.IdShort, writer, WriteString);
+                        "idShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
                     WriteElement(
-                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
+                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
                     WriteElement(
-                        "description", that.Description, writer, WriteListOfILangStringTextType);
+                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.SemanticId != null)
                 {
                     WriteElement(
-                        "semanticId", that.SemanticId, writer, WriteIReference);
+                        "semanticId", that.SemanticId, writer, Write_IReference);
                 }
 
                 if (that.SupplementalSemanticIds != null)
@@ -10724,13 +10727,13 @@ namespace AasCore.Aas3_0
                         "supplementalSemanticIds",
                         that.SupplementalSemanticIds,
                         writer,
-                        WriteListOfIReference);
+                        Write_ListOf_IReference);
                 }
 
                 if (that.Qualifiers != null)
                 {
                     WriteElement(
-                        "qualifiers", that.Qualifiers, writer, WriteListOfIQualifier);
+                        "qualifiers", that.Qualifiers, writer, Write_ListOf_IQualifier);
                 }
 
                 if (that.EmbeddedDataSpecifications != null)
@@ -10739,7 +10742,7 @@ namespace AasCore.Aas3_0
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        WriteListOfIEmbeddedDataSpecification);
+                        Write_ListOf_IEmbeddedDataSpecification);
                 }
             }  // private static void CapabilityToSequence
 
@@ -10763,31 +10766,31 @@ namespace AasCore.Aas3_0
                 if (that.Extensions != null)
                 {
                     WriteElement(
-                        "extensions", that.Extensions, writer, WriteListOfIExtension);
+                        "extensions", that.Extensions, writer, Write_ListOf_IExtension);
                 }
 
                 if (that.Category != null)
                 {
                     WriteElement(
-                        "category", that.Category, writer, WriteString);
+                        "category", that.Category, writer, Write_string);
                 }
 
                 if (that.IdShort != null)
                 {
                     WriteElement(
-                        "idShort", that.IdShort, writer, WriteString);
+                        "idShort", that.IdShort, writer, Write_string);
                 }
 
                 if (that.DisplayName != null)
                 {
                     WriteElement(
-                        "displayName", that.DisplayName, writer, WriteListOfILangStringNameType);
+                        "displayName", that.DisplayName, writer, Write_ListOf_ILangStringNameType);
                 }
 
                 if (that.Description != null)
                 {
                     WriteElement(
-                        "description", that.Description, writer, WriteListOfILangStringTextType);
+                        "description", that.Description, writer, Write_ListOf_ILangStringTextType);
                 }
 
                 if (that.Administration != null)
@@ -10796,11 +10799,11 @@ namespace AasCore.Aas3_0
                         "administration",
                         that.Administration,
                         writer,
-                        WriteIAdministrativeInformation);
+                        Write_IAdministrativeInformation);
                 }
 
                 WriteElement(
-                    "id", that.Id, writer, WriteString);
+                    "id", that.Id, writer, Write_string);
 
                 if (that.EmbeddedDataSpecifications != null)
                 {
@@ -10808,13 +10811,13 @@ namespace AasCore.Aas3_0
                         "embeddedDataSpecifications",
                         that.EmbeddedDataSpecifications,
                         writer,
-                        WriteListOfIEmbeddedDataSpecification);
+                        Write_ListOf_IEmbeddedDataSpecification);
                 }
 
                 if (that.IsCaseOf != null)
                 {
                     WriteElement(
-                        "isCaseOf", that.IsCaseOf, writer, WriteListOfIReference);
+                        "isCaseOf", that.IsCaseOf, writer, Write_ListOf_IReference);
                 }
             }  // private static void ConceptDescriptionToSequence
 
@@ -10836,16 +10839,16 @@ namespace AasCore.Aas3_0
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "type", that.Type, writer, WriteReferenceTypes);
+                    "type", that.Type, writer, Write_ReferenceTypes);
 
                 if (that.ReferredSemanticId != null)
                 {
                     WriteElement(
-                        "referredSemanticId", that.ReferredSemanticId, writer, WriteIReference);
+                        "referredSemanticId", that.ReferredSemanticId, writer, Write_IReference);
                 }
 
                 WriteElement(
-                    "keys", that.Keys, writer, WriteListOfIKey);
+                    "keys", that.Keys, writer, Write_ListOf_IKey);
             }  // private static void ReferenceToSequence
 
             public override void VisitReference(
@@ -10866,10 +10869,10 @@ namespace AasCore.Aas3_0
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "type", that.Type, writer, WriteKeyTypes);
+                    "type", that.Type, writer, Write_KeyTypes);
 
                 WriteElement(
-                    "value", that.Value, writer, WriteString);
+                    "value", that.Value, writer, Write_string);
             }  // private static void KeyToSequence
 
             public override void VisitKey(
@@ -10890,10 +10893,10 @@ namespace AasCore.Aas3_0
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "language", that.Language, writer, WriteString);
+                    "language", that.Language, writer, Write_string);
 
                 WriteElement(
-                    "text", that.Text, writer, WriteString);
+                    "text", that.Text, writer, Write_string);
             }  // private static void LangStringNameTypeToSequence
 
             public override void VisitLangStringNameType(
@@ -10914,10 +10917,10 @@ namespace AasCore.Aas3_0
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "language", that.Language, writer, WriteString);
+                    "language", that.Language, writer, Write_string);
 
                 WriteElement(
-                    "text", that.Text, writer, WriteString);
+                    "text", that.Text, writer, Write_string);
             }  // private static void LangStringTextTypeToSequence
 
             public override void VisitLangStringTextType(
@@ -10943,13 +10946,13 @@ namespace AasCore.Aas3_0
                         "assetAdministrationShells",
                         that.AssetAdministrationShells,
                         writer,
-                        WriteListOfIAssetAdministrationShell);
+                        Write_ListOf_IAssetAdministrationShell);
                 }
 
                 if (that.Submodels != null)
                 {
                     WriteElement(
-                        "submodels", that.Submodels, writer, WriteListOfISubmodel);
+                        "submodels", that.Submodels, writer, Write_ListOf_ISubmodel);
                 }
 
                 if (that.ConceptDescriptions != null)
@@ -10958,7 +10961,7 @@ namespace AasCore.Aas3_0
                         "conceptDescriptions",
                         that.ConceptDescriptions,
                         writer,
-                        WriteListOfIConceptDescription);
+                        Write_ListOf_IConceptDescription);
                 }
             }  // private static void EnvironmentToSequence
 
@@ -10980,13 +10983,13 @@ namespace AasCore.Aas3_0
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "dataSpecification", that.DataSpecification, writer, WriteIReference);
+                    "dataSpecification", that.DataSpecification, writer, Write_IReference);
 
                 WriteElement(
                     "dataSpecificationContent",
                     that.DataSpecificationContent,
                     writer,
-                    WriteIDataSpecificationContent);
+                    Write_IDataSpecificationContent);
             }  // private static void EmbeddedDataSpecificationToSequence
 
             public override void VisitEmbeddedDataSpecification(
@@ -11007,16 +11010,16 @@ namespace AasCore.Aas3_0
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "min", that.Min, writer, WriteBool);
+                    "min", that.Min, writer, Write_bool);
 
                 WriteElement(
-                    "nom", that.Nom, writer, WriteBool);
+                    "nom", that.Nom, writer, Write_bool);
 
                 WriteElement(
-                    "typ", that.Typ, writer, WriteBool);
+                    "typ", that.Typ, writer, Write_bool);
 
                 WriteElement(
-                    "max", that.Max, writer, WriteBool);
+                    "max", that.Max, writer, Write_bool);
             }  // private static void LevelTypeToSequence
 
             public override void VisitLevelType(
@@ -11037,10 +11040,10 @@ namespace AasCore.Aas3_0
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "value", that.Value, writer, WriteString);
+                    "value", that.Value, writer, Write_string);
 
                 WriteElement(
-                    "valueId", that.ValueId, writer, WriteIReference);
+                    "valueId", that.ValueId, writer, Write_IReference);
             }  // private static void ValueReferencePairToSequence
 
             public override void VisitValueReferencePair(
@@ -11064,7 +11067,7 @@ namespace AasCore.Aas3_0
                     "valueReferencePairs",
                     that.ValueReferencePairs,
                     writer,
-                    WriteListOfIValueReferencePair);
+                    Write_ListOf_IValueReferencePair);
             }  // private static void ValueListToSequence
 
             public override void VisitValueList(
@@ -11085,10 +11088,10 @@ namespace AasCore.Aas3_0
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "language", that.Language, writer, WriteString);
+                    "language", that.Language, writer, Write_string);
 
                 WriteElement(
-                    "text", that.Text, writer, WriteString);
+                    "text", that.Text, writer, Write_string);
             }  // private static void LangStringPreferredNameTypeIec61360ToSequence
 
             public override void VisitLangStringPreferredNameTypeIec61360(
@@ -11109,10 +11112,10 @@ namespace AasCore.Aas3_0
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "language", that.Language, writer, WriteString);
+                    "language", that.Language, writer, Write_string);
 
                 WriteElement(
-                    "text", that.Text, writer, WriteString);
+                    "text", that.Text, writer, Write_string);
             }  // private static void LangStringShortNameTypeIec61360ToSequence
 
             public override void VisitLangStringShortNameTypeIec61360(
@@ -11133,10 +11136,10 @@ namespace AasCore.Aas3_0
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "language", that.Language, writer, WriteString);
+                    "language", that.Language, writer, Write_string);
 
                 WriteElement(
-                    "text", that.Text, writer, WriteString);
+                    "text", that.Text, writer, Write_string);
             }  // private static void LangStringDefinitionTypeIec61360ToSequence
 
             public override void VisitLangStringDefinitionTypeIec61360(
@@ -11160,7 +11163,7 @@ namespace AasCore.Aas3_0
                     "preferredName",
                     that.PreferredName,
                     writer,
-                    WriteListOfILangStringPreferredNameTypeIec61360);
+                    Write_ListOf_ILangStringPreferredNameTypeIec61360);
 
                 if (that.ShortName != null)
                 {
@@ -11168,37 +11171,37 @@ namespace AasCore.Aas3_0
                         "shortName",
                         that.ShortName,
                         writer,
-                        WriteListOfILangStringShortNameTypeIec61360);
+                        Write_ListOf_ILangStringShortNameTypeIec61360);
                 }
 
                 if (that.Unit != null)
                 {
                     WriteElement(
-                        "unit", that.Unit, writer, WriteString);
+                        "unit", that.Unit, writer, Write_string);
                 }
 
                 if (that.UnitId != null)
                 {
                     WriteElement(
-                        "unitId", that.UnitId, writer, WriteIReference);
+                        "unitId", that.UnitId, writer, Write_IReference);
                 }
 
                 if (that.SourceOfDefinition != null)
                 {
                     WriteElement(
-                        "sourceOfDefinition", that.SourceOfDefinition, writer, WriteString);
+                        "sourceOfDefinition", that.SourceOfDefinition, writer, Write_string);
                 }
 
                 if (that.Symbol != null)
                 {
                     WriteElement(
-                        "symbol", that.Symbol, writer, WriteString);
+                        "symbol", that.Symbol, writer, Write_string);
                 }
 
                 if (that.DataType.HasValue)
                 {
                     WriteElement(
-                        "dataType", that.DataType.Value, writer, WriteDataTypeIec61360);
+                        "dataType", that.DataType.Value, writer, Write_DataTypeIec61360);
                 }
 
                 if (that.Definition != null)
@@ -11207,31 +11210,31 @@ namespace AasCore.Aas3_0
                         "definition",
                         that.Definition,
                         writer,
-                        WriteListOfILangStringDefinitionTypeIec61360);
+                        Write_ListOf_ILangStringDefinitionTypeIec61360);
                 }
 
                 if (that.ValueFormat != null)
                 {
                     WriteElement(
-                        "valueFormat", that.ValueFormat, writer, WriteString);
+                        "valueFormat", that.ValueFormat, writer, Write_string);
                 }
 
                 if (that.ValueList != null)
                 {
                     WriteElement(
-                        "valueList", that.ValueList, writer, WriteIValueList);
+                        "valueList", that.ValueList, writer, Write_IValueList);
                 }
 
                 if (that.Value != null)
                 {
                     WriteElement(
-                        "value", that.Value, writer, WriteString);
+                        "value", that.Value, writer, Write_string);
                 }
 
                 if (that.LevelType != null)
                 {
                     WriteElement(
-                        "levelType", that.LevelType, writer, WriteILevelType);
+                        "levelType", that.LevelType, writer, Write_ILevelType);
                 }
             }  // private static void DataSpecificationIec61360ToSequence
 

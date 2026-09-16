@@ -194,7 +194,7 @@ func readText(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsBoolean(
+func readTextAs_bool(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value bool, next xml.Token, err error) {
@@ -236,7 +236,7 @@ func readTextAsBoolean(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsLong(
+func readTextAs_long(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value int64, next xml.Token, err error) {
@@ -296,7 +296,7 @@ func isValidXsDouble(text string) bool {
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsDouble(
+func readTextAs_double(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value float64, next xml.Token, err error) {
@@ -350,7 +350,7 @@ func readTextAsDouble(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsBase64EncodedBytes(
+func readTextAs_bytes(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value []byte, next xml.Token, err error) {
@@ -719,8 +719,8 @@ func readListOf[T any](
 // The arguments are the *results* of a read, not the reader itself. Go passes
 // a multi-valued call on as a complete argument list, so this composes with any read,
 // no matter how many arguments that read takes on its own --
-// `readOptional(readTextAsLong(decoder, current))` just as much as
-// `readOptional(readTuple2(decoder, current, readXAtV1, readYAtV2))`, which no
+// `readOptional(readTextAs_long(decoder, current))` just as much as
+// `readOptional(readTuple2(decoder, current, readAtV1_X, readAtV2_Y))`, which no
 // reader-taking signature could express, since the item readers of a tuple vary in
 // number and in type.
 func readOptional[T any](
@@ -942,7 +942,7 @@ func readAnotherItemAsSequence(
 		var valueErr error
 		switch local {
 		case "serialNumber":
-			theSerialNumber, current, valueErr = readTextAsLong(
+			theSerialNumber, current, valueErr = readTextAs_long(
 				decoder, current,
 			)
 			foundSerialNumber = true
@@ -1269,7 +1269,7 @@ func writeText(
 // Write the `value` as a `xs:boolean` in a text element.
 //
 // Do not flush.
-func writeBooleanAsText(
+func writeAsText_bool(
 	encoder *xml.Encoder,
 	value bool,
 ) (err error) {
@@ -1284,7 +1284,7 @@ func writeBooleanAsText(
 // Write the `value` as a `xs:long` in a text element.
 //
 // Do not flush.
-func writeLongAsText(
+func writeAsText_long(
 	encoder *xml.Encoder,
 	value int64,
 ) (err error) {
@@ -1296,7 +1296,7 @@ func writeLongAsText(
 // Write the `value` as a `xs:double` in a text element.
 //
 // Do not flush.
-func writeDoubleAsText(
+func writeAsText_double(
 	encoder *xml.Encoder,
 	value float64,
 ) (err error) {
@@ -1323,7 +1323,7 @@ func writeDoubleAsText(
 // Write the `value` as a `xs:string` in a text element.
 //
 // Do not flush.
-func writeStringAsText(
+func writeAsText_string(
 	encoder *xml.Encoder,
 	value string,
 ) (err error) {
@@ -1334,7 +1334,7 @@ func writeStringAsText(
 // Write the `value` as a base64-encoded bytes in a text element.
 //
 // Do not flush.
-func writeBytesAsText(
+func writeAsText_bytes(
 	encoder *xml.Encoder,
 	value []byte,
 ) (err error) {
@@ -1569,7 +1569,7 @@ func writeClassElement[T any](
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfIAbstractItem(
+func writeListOf_IAbstractItem(
 	encoder *xml.Encoder,
 	list []aastypes.IAbstractItem,
 ) error {
@@ -1581,7 +1581,7 @@ func writeListOfIAbstractItem(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfISimple(
+func writeListOf_ISimple(
 	encoder *xml.Encoder,
 	list []aastypes.ISimple,
 ) error {
@@ -1605,7 +1605,7 @@ func writeSomeItemAsSequence(
 	err = finishProperty(
 		"Name()",
 		writeElement(
-			encoder, "name", that.Name(), writeStringAsText,
+			encoder, "name", that.Name(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -1630,7 +1630,7 @@ func writeAnotherItemAsSequence(
 	err = finishProperty(
 		"SerialNumber()",
 		writeElement(
-			encoder, "serialNumber", that.SerialNumber(), writeLongAsText,
+			encoder, "serialNumber", that.SerialNumber(), writeAsText_long,
 		),
 	)
 	if err != nil {
@@ -1655,7 +1655,7 @@ func writeSimpleAsSequence(
 	err = finishProperty(
 		"Name()",
 		writeElement(
-			encoder, "name", that.Name(), writeStringAsText,
+			encoder, "name", that.Name(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -1680,7 +1680,7 @@ func writeSomethingAsSequence(
 	err = finishProperty(
 		"SomeItems()",
 		writeElement(
-			encoder, "someItems", that.SomeItems(), writeListOfIAbstractItem,
+			encoder, "someItems", that.SomeItems(), writeListOf_IAbstractItem,
 		),
 	)
 	if err != nil {
@@ -1690,7 +1690,7 @@ func writeSomethingAsSequence(
 	err = finishProperty(
 		"SomeSimples()",
 		writeElement(
-			encoder, "someSimples", that.SomeSimples(), writeListOfISimple,
+			encoder, "someSimples", that.SomeSimples(), writeListOf_ISimple,
 		),
 	)
 	if err != nil {

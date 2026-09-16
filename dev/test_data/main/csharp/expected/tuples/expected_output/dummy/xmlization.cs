@@ -672,43 +672,43 @@ namespace dummy
                 AtElement<Aas.Something>(
                     SomethingFromSequence, "something"));
 
-            private static readonly ContentReader<string> ReadString = (
+            private static readonly ContentReader<string> Read_string = (
                 AsText<string>(ReadContentAsString, ""));
 
-            private static readonly ContentReader<long> ReadLong = (
+            private static readonly ContentReader<long> Read_long = (
                 AsText<long>(ReadContentAsLong));
 
-            private static readonly ContentReader<(string, long)> ReadTupleOfStringLong = (
+            private static readonly ContentReader<(string, long)> Read_TupleOf2_string_long = (
                 AsTuple2<string, long>(
                     AtElement(
-                        ReadString, "v1"),
+                        Read_string, "v1"),
                     AtElement(
-                        ReadLong, "v2")));
+                        Read_long, "v2")));
 
             private static readonly ContentReader<
                 (IAbstractItem, IAbstractItem)
-            > ReadTupleOfIAbstractItemIAbstractItem = (
+            > Read_TupleOf2_IAbstractItem_IAbstractItem = (
                 AsTuple2<IAbstractItem, IAbstractItem>(
                     IAbstractItemFromElement,
                     IAbstractItemFromElement));
 
-            private static readonly ContentReader<Result> ReadResult = (
+            private static readonly ContentReader<Result> Read_Result = (
                 AsEnum<Aas.Result>(
                     Stringification.ResultFromString));
 
             private static readonly ContentReader<
                 (long, ISomeItem, IAbstractItem, ISomeItem, long, Result)
-            > ReadTupleOfLongISomeItemIAbstractItemISomeItemLongResult = (
+            > Read_TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result = (
                 AsTuple6<long, ISomeItem, IAbstractItem, ISomeItem, long, Result>(
                     AtElement(
-                        ReadLong, "v1"),
+                        Read_long, "v1"),
                     SomeItemFromElement,
                     IAbstractItemFromElement,
                     SomeItemFromElement,
                     AtElement(
-                        ReadLong, "v5"),
+                        Read_long, "v5"),
                     AtElement(
-                        ReadResult, "v6")));
+                        Read_Result, "v6")));
 
             /// <summary>
             /// Deserialize an instance of IAbstractItem from an XML element.
@@ -777,7 +777,7 @@ namespace dummy
                         switch (elementName)
                         {
                             case "name":
-                                theName = ReadString(
+                                theName = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -868,7 +868,7 @@ namespace dummy
                         switch (elementName)
                         {
                             case "serialNumber":
-                                theSerialNumber = ReadLong(
+                                theSerialNumber = Read_long(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -961,15 +961,15 @@ namespace dummy
                         switch (elementName)
                         {
                             case "pair":
-                                thePair = ReadTupleOfStringLong(
+                                thePair = Read_TupleOf2_string_long(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "items":
-                                theItems = ReadTupleOfIAbstractItemIAbstractItem(
+                                theItems = Read_TupleOf2_IAbstractItem_IAbstractItem(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "tricky":
-                                theTricky = ReadTupleOfLongISomeItemIAbstractItemISomeItemLongResult(
+                                theTricky = Read_TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -1411,50 +1411,50 @@ namespace dummy
                 that.Accept(_instance, writer);
             }
 
-            private static readonly ContentWriter<string> WriteString = (
+            private static readonly ContentWriter<string> Write_string = (
                 (that, writer) => writer.WriteValue(that));
 
-            private static readonly ContentWriter<long> WriteLong = (
+            private static readonly ContentWriter<long> Write_long = (
                 (that, writer) => writer.WriteValue(that));
 
-            private static readonly ContentWriter<(string, long)> WriteTupleOfStringLong = (
+            private static readonly ContentWriter<(string, long)> Write_TupleOf2_string_long = (
                 WriteTuple2<string, long>(
                     WrapInElement(
-                        WriteString, "v1"),
+                        Write_string, "v1"),
                     WrapInElement(
-                        WriteLong, "v2")));
+                        Write_long, "v2")));
 
             private static readonly ContentWriter<
                 (IAbstractItem, IAbstractItem)
-            > WriteTupleOfIAbstractItemIAbstractItem = (
+            > Write_TupleOf2_IAbstractItem_IAbstractItem = (
                 WriteTuple2<IAbstractItem, IAbstractItem>(
                     WriteIClass,
                     WriteIClass));
 
-            private static readonly ContentWriter<Result> WriteResult = (
+            private static readonly ContentWriter<Result> Write_Result = (
                 WriteEnum<Aas.Result>(
                     Stringification.ToString));
 
             private static readonly ContentWriter<
                 (long, ISomeItem, IAbstractItem, ISomeItem, long, Result)
-            > WriteTupleOfLongISomeItemIAbstractItemISomeItemLongResult = (
+            > Write_TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result = (
                 WriteTuple6<long, ISomeItem, IAbstractItem, ISomeItem, long, Result>(
                     WrapInElement(
-                        WriteLong, "v1"),
+                        Write_long, "v1"),
                     WriteIClass,
                     WriteIClass,
                     WriteIClass,
                     WrapInElement(
-                        WriteLong, "v5"),
+                        Write_long, "v5"),
                     WrapInElement(
-                        WriteResult, "v6")));
+                        Write_Result, "v6")));
 
             private static void SomeItemToSequence(
                 Aas.ISomeItem that,
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "name", that.Name, writer, WriteString);
+                    "name", that.Name, writer, Write_string);
             }  // private static void SomeItemToSequence
 
             public override void VisitSomeItem(
@@ -1475,7 +1475,7 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "serialNumber", that.SerialNumber, writer, WriteLong);
+                    "serialNumber", that.SerialNumber, writer, Write_long);
             }  // private static void AnotherItemToSequence
 
             public override void VisitAnotherItem(
@@ -1496,16 +1496,16 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "pair", that.Pair, writer, WriteTupleOfStringLong);
+                    "pair", that.Pair, writer, Write_TupleOf2_string_long);
 
                 WriteElement(
-                    "items", that.Items, writer, WriteTupleOfIAbstractItemIAbstractItem);
+                    "items", that.Items, writer, Write_TupleOf2_IAbstractItem_IAbstractItem);
 
                 WriteElement(
                     "tricky",
                     that.Tricky,
                     writer,
-                    WriteTupleOfLongISomeItemIAbstractItemISomeItemLongResult);
+                    Write_TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result);
             }  // private static void SomethingToSequence
 
             public override void VisitSomething(

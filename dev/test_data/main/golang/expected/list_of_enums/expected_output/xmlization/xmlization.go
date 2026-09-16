@@ -194,7 +194,7 @@ func readText(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsBoolean(
+func readTextAs_bool(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value bool, next xml.Token, err error) {
@@ -236,7 +236,7 @@ func readTextAsBoolean(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsLong(
+func readTextAs_long(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value int64, next xml.Token, err error) {
@@ -296,7 +296,7 @@ func isValidXsDouble(text string) bool {
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsDouble(
+func readTextAs_double(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value float64, next xml.Token, err error) {
@@ -350,7 +350,7 @@ func readTextAsDouble(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsBase64EncodedBytes(
+func readTextAs_bytes(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value []byte, next xml.Token, err error) {
@@ -719,8 +719,8 @@ func readListOf[T any](
 // The arguments are the *results* of a read, not the reader itself. Go passes
 // a multi-valued call on as a complete argument list, so this composes with any read,
 // no matter how many arguments that read takes on its own --
-// `readOptional(readTextAsLong(decoder, current))` just as much as
-// `readOptional(readTuple2(decoder, current, readXAtV1, readYAtV2))`, which no
+// `readOptional(readTextAs_long(decoder, current))` just as much as
+// `readOptional(readTuple2(decoder, current, readAtV1_X, readAtV2_Y))`, which no
 // reader-taking signature could express, since the item readers of a tuple vary in
 // number and in type.
 func readOptional[T any](
@@ -831,7 +831,7 @@ func concludeProperty(
 //
 // The `current` token is expected to point to the content of that element, and
 // the resulting `next` token points to its end element.
-func readResultAtV(
+func readAtV_Result(
 	decoder *xml.Decoder,
 	current xml.Token,
 	local string,
@@ -844,7 +844,7 @@ func readResultAtV(
 		return
 	}
 
-	return readTextAsResult(decoder, current)
+	return readTextAs_Result(decoder, current)
 }
 
 // Consume the text tokens (char data) as a string-encoded literal of
@@ -856,7 +856,7 @@ func readResultAtV(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsResult(
+func readTextAs_Result(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value aastypes.Result,
@@ -916,7 +916,7 @@ func readSomethingAsSequence(
 		switch local {
 		case "someResults":
 			theSomeResults, current, valueErr = readListOf(
-				decoder, current, readResultAtV,
+				decoder, current, readAtV_Result,
 			)
 			foundSomeResults = true
 		default:
@@ -1081,7 +1081,7 @@ func writeText(
 // Write the `value` as a `xs:boolean` in a text element.
 //
 // Do not flush.
-func writeBooleanAsText(
+func writeAsText_bool(
 	encoder *xml.Encoder,
 	value bool,
 ) (err error) {
@@ -1096,7 +1096,7 @@ func writeBooleanAsText(
 // Write the `value` as a `xs:long` in a text element.
 //
 // Do not flush.
-func writeLongAsText(
+func writeAsText_long(
 	encoder *xml.Encoder,
 	value int64,
 ) (err error) {
@@ -1108,7 +1108,7 @@ func writeLongAsText(
 // Write the `value` as a `xs:double` in a text element.
 //
 // Do not flush.
-func writeDoubleAsText(
+func writeAsText_double(
 	encoder *xml.Encoder,
 	value float64,
 ) (err error) {
@@ -1135,7 +1135,7 @@ func writeDoubleAsText(
 // Write the `value` as a `xs:string` in a text element.
 //
 // Do not flush.
-func writeStringAsText(
+func writeAsText_string(
 	encoder *xml.Encoder,
 	value string,
 ) (err error) {
@@ -1146,7 +1146,7 @@ func writeStringAsText(
 // Write the `value` as a base64-encoded bytes in a text element.
 //
 // Do not flush.
-func writeBytesAsText(
+func writeAsText_bytes(
 	encoder *xml.Encoder,
 	value []byte,
 ) (err error) {
@@ -1381,24 +1381,24 @@ func writeClassElement[T any](
 // Write the scalar `value` in the element `v`.
 //
 // Do not flush.
-func writeResultAtV(
+func writeAtV_Result(
 	encoder *xml.Encoder,
 	value aastypes.Result,
 ) error {
 	return writeElement(
-		encoder, "v", value, writeResultAsText,
+		encoder, "v", value, writeAsText_Result,
 	)
 }
 
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfResult(
+func writeListOf_Result(
 	encoder *xml.Encoder,
 	list []aastypes.Result,
 ) error {
 	return writeList(
-		encoder, list, writeResultAtV,
+		encoder, list, writeAtV_Result,
 	)
 }
 
@@ -1407,7 +1407,7 @@ func writeListOfResult(
 // in a text element.
 //
 // Do not flush.
-func writeResultAsText(
+func writeAsText_Result(
 	encoder *xml.Encoder,
 	value aastypes.Result,
 ) (err error) {
@@ -1443,7 +1443,7 @@ func writeSomethingAsSequence(
 	err = finishProperty(
 		"SomeResults()",
 		writeElement(
-			encoder, "someResults", that.SomeResults(), writeListOfResult,
+			encoder, "someResults", that.SomeResults(), writeListOf_Result,
 		),
 	)
 	if err != nil {
