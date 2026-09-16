@@ -119,6 +119,23 @@ function newDeserializationError<T>(
   );
 }
 
+/**
+ * Parse a value from `cursor`.
+ *
+ * Every parser in this module wears this one shape, which is what lets them
+ * compose: a parser can be given to another parser without a closure, since
+ * everything it needs comes from the `cursor` and from its own definition.
+ * The name says what a parser consumes -- a `parse*Content` stops right before
+ * the closing tag of the element which the caller has opened, while
+ * a `parse*Element` and a `dispatchParse*Element` read an element of their own,
+ * its tags included.
+ *
+ * @typeParam T - type of the parsed value
+ */
+type ContentParser<T> = (
+  cursor: XmlCursor
+) => AasCommon.Either<T, DeserializationError>;
+
 function currentTokenKind(cursor: XmlCursor): string {
   const token = cursor.current();
   if (token === null) {
@@ -304,74 +321,64 @@ function readNextOpenTag(
 }
 
 /**
- * Read the next XML element from `cursor`, expecting it to be named
- * `expectedLocalName`, parse its text content with `parseTextFn` and
- * consume the matching closing element.
+ * Parse the content of the XML element which the caller has opened, and consume
+ * the corresponding closing element named `localName`.
  *
- * This is shared by the parsing of a single list item (with a fixed
- * local name, *e.g.*, `"v"`) and the parsing of a single tuple item (with
- * a positional local name, *e.g.*, `"v1"`).
+ * This is the one thing which every value of an XML element has in common,
+ * whatever it holds: the property loop of a class calls it directly, since
+ * it has already read the opening tag and switched on its local name, and
+ * `parseNamedElement` calls it after reading an opening tag of its own.
+ *
+ * A property loop assigns *both* halves of the result -- the value as well as
+ * the error -- without looking at either first. The loop returns as soon as
+ * the error is set, so the `null` value which comes with an error is never
+ * read, and the property's variable needs no guard.
  *
  * @param cursor - to read from
- * @param expectedLocalName - the expected local name of the element
- * @param parseTextFn - parses the text content of the element
+ * @param localName - local name of the element which the caller has opened
+ * @param parseContent - parses the content of the element
  * @returns parsed value, or an error
  * @typeParam T - type of the parsed value
  */
-function parseNamedVElement<T>(
+function parseElementContent<T>(
   cursor: XmlCursor,
-  expectedLocalName: string,
-  parseTextFn: (text: string) => AasCommon.Either<T, DeserializationError>
+  localName: string,
+  parseContent: ContentParser<T>
 ): AasCommon.Either<T, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<T, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const observedLocalName = localNameOfTag(startTag.tag);
-  if (observedLocalName !== expectedLocalName) {
-    return newDeserializationError<T>(
-      `Expected the element '${expectedLocalName}', ` +
-        `but got '${observedLocalName}'`
-    );
+  const parsedOrError = parseContent(cursor);
+  if (parsedOrError.error !== null) {
+    return parsedOrError;
   }
 
-  cursor.advance();
-
-  const text = parseTextContent(cursor);
-
-  const closeError = consumeCloseTag(cursor, expectedLocalName);
+  const closeError = consumeCloseTag(cursor, localName);
   if (closeError !== null) {
     return new AasCommon.Either<T, DeserializationError>(null, closeError);
   }
 
-  return parseTextFn(text);
+  return parsedOrError;
 }
 
 /**
  * Read the next XML element from `cursor`, expecting it to be named
- * `expectedLocalName`, parse its content with `parseFn` and consume the
- * matching closing element.
+ * `expectedLocalName`, parse its content with `parseContent` and consume
+ * the matching closing element.
  *
- * This is used for a list or a tuple item whose concrete type is statically
- * known (*i.e.*, it has no further descendants), so we can reject
- * an unexpected element based on its local name alone, without wastefully
- * parsing its full (possibly deeply nested) content.
+ * This is what an item of a list or of a tuple is parsed with -- a scalar item
+ * in an element tagged `"v"`, `"v1"`, `"v2"`, *etc.*, and an item whose concrete
+ * class is statically known in an element named after that class. Rejecting
+ * an unexpected element on its local name alone spares us parsing its full
+ * (possibly deeply nested) content only to discover the mismatch afterwards.
  *
  * @param cursor - to read from
  * @param expectedLocalName - the expected local name of the element
- * @param parseFn - parses the sequence of properties of the class instance
- * @returns the parsed instance, or an error
- * @typeParam T - type of the parsed instance
+ * @param parseContent - parses the content of the element
+ * @returns parsed value, or an error
+ * @typeParam T - type of the parsed value
  */
-function parseNamedClassElement<T>(
+function parseNamedElement<T>(
   cursor: XmlCursor,
   expectedLocalName: string,
-  parseFn: (cursor: XmlCursor) => AasCommon.Either<T, DeserializationError>
+  parseContent: ContentParser<T>
 ): AasCommon.Either<T, DeserializationError> {
   const startTagOrError = readNextOpenTag(cursor);
   if (startTagOrError.error !== null) {
@@ -392,17 +399,7 @@ function parseNamedClassElement<T>(
 
   cursor.advance();
 
-  const instanceOrError = parseFn(cursor);
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, expectedLocalName);
-  if (closeError !== null) {
-    return new AasCommon.Either<T, DeserializationError>(null, closeError);
-  }
-
-  return instanceOrError;
+  return parseElementContent(cursor, expectedLocalName, parseContent);
 }
 
 /**
@@ -419,7 +416,7 @@ function parseNamedClassElement<T>(
  */
 function parseList<T>(
   cursor: XmlCursor,
-  parseItem: (cursor: XmlCursor) => AasCommon.Either<T, DeserializationError>
+  parseItem: ContentParser<T>
 ): AasCommon.Either<Array<T>, DeserializationError> {
   const items = new Array<T>();
   let itemIndex = 0;
@@ -586,9 +583,68 @@ function parseTextContent(cursor: XmlCursor): string {
   return text;
 }
 
-function parseBooleanText(
-  text: string
+/**
+ * Read the next XML element from `cursor` and parse it with the parser which
+ * `parsersByLocalName` gives for the element's local name.
+ *
+ * An abstract class, a concrete class with descendants and a named union all
+ * prescribe no element tag of their own, so the tag is what tells us which
+ * parser to use. The set of local names which are accepted is the only thing
+ * which distinguishes one such dispatch from another, so it is the only thing
+ * which is generated -- the reading itself lives here.
+ *
+ * @param cursor - to read from
+ * @param expectedWhat - what we expected to read, for the error message
+ * @param parsersByLocalName - parser of the content, by the element's local name
+ * @returns parsed instance, or an error
+ * @typeParam T - type of the parsed instance
+ */
+function dispatchParseElement<T>(
+  cursor: XmlCursor,
+  expectedWhat: string,
+  parsersByLocalName: ReadonlyMap<string, ContentParser<T>>
+): AasCommon.Either<T, DeserializationError> {
+  const startTagOrError = readNextOpenTag(cursor);
+  if (startTagOrError.error !== null) {
+    return new AasCommon.Either<T, DeserializationError>(
+      null,
+      startTagOrError.error
+    );
+  }
+
+  const localName = localNameOfTag(startTagOrError.mustValue().tag);
+
+  const parseContent = parsersByLocalName.get(localName);
+  if (parseContent === undefined) {
+    return newDeserializationError<T>(
+      `Expected an instance of ${expectedWhat}, but got: ${localName}`
+    );
+  }
+
+  cursor.advance();
+
+  return parseElementContent(cursor, localName, parseContent);
+}
+
+/**
+ * Report that the property `localName` occurred more than once.
+ *
+ * The check itself sits in the property loop, right in front of the parse, since
+ * only the loop knows whether the property's variable has been set already. This
+ * is only the error, so that the message is written once instead of at every one
+ * of the property cases.
+ */
+function duplicatePropertyError(localName: string): DeserializationError {
+  return new DeserializationError(
+    "Property " + localName + " occurred more than once"
+  );
+}
+
+function parseBooleanContent(
+  cursor: XmlCursor
 ): AasCommon.Either<boolean, DeserializationError> {
+  const text = parseTextContent(cursor);
+
   if (text === "true" || text === "1") {
     return new AasCommon.Either<boolean, DeserializationError>(true, null);
   }
@@ -601,9 +657,11 @@ function parseBooleanText(
   );
 }
 
-function parseIntegerText(
-  text: string
+function parseIntegerContent(
+  cursor: XmlCursor
 ): AasCommon.Either<number, DeserializationError> {
+  const text = parseTextContent(cursor);
+
   if (!/^[+-]?\d+$/.test(text)) {
     return newDeserializationError<number>(
       `Expected integer text, but got: ${text}`
@@ -620,9 +678,11 @@ function parseIntegerText(
   return new AasCommon.Either<number, DeserializationError>(value, null);
 }
 
-function parseFloatText(
-  text: string
+function parseFloatContent(
+  cursor: XmlCursor
 ): AasCommon.Either<number, DeserializationError> {
+  const text = parseTextContent(cursor);
+
   if (text === "INF") {
     return new AasCommon.Either<number, DeserializationError>(Infinity, null);
   }
@@ -643,16 +703,19 @@ function parseFloatText(
   return new AasCommon.Either<number, DeserializationError>(value, null);
 }
 
-function parseStringText(
-  text: string
+function parseStringContent(
+  cursor: XmlCursor
 ): AasCommon.Either<string, DeserializationError> {
-  return new AasCommon.Either<string, DeserializationError>(text, null);
+  return new AasCommon.Either<string, DeserializationError>(
+    parseTextContent(cursor),
+    null
+  );
 }
 
-function parseBase64EncodedBytesText(
-  text: string
+function parseBase64EncodedBytesContent(
+  cursor: XmlCursor
 ): AasCommon.Either<Uint8Array, DeserializationError> {
-  const decodedOrError = AasCommon.base64Decode(text);
+  const decodedOrError = AasCommon.base64Decode(parseTextContent(cursor));
   if (decodedOrError.error !== null) {
     return newDeserializationError<Uint8Array>(
       decodedOrError.error
@@ -668,9 +731,9 @@ function parseBase64EncodedBytesText(
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function parseTuple3<T0, T1, T2>(
   cursor: XmlCursor,
-  parseItem0: (cursor: XmlCursor) => AasCommon.Either<T0, DeserializationError>,
-  parseItem1: (cursor: XmlCursor) => AasCommon.Either<T1, DeserializationError>,
-  parseItem2: (cursor: XmlCursor) => AasCommon.Either<T2, DeserializationError>
+  parseItem0: ContentParser<T0>,
+  parseItem1: ContentParser<T1>,
+  parseItem2: ContentParser<T2>
 ): AasCommon.Either<[T0, T1, T2], DeserializationError> {
   const item0OrError = parseItem0(cursor);
   if (item0OrError.error !== null) {
@@ -709,13 +772,44 @@ function parseTuple3<T0, T1, T2>(
   );
 }
 
+function parseListOfMixedUnionContent(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.MixedUnion>, DeserializationError> {
+  return parseList<AasTypes.MixedUnion>(cursor, dispatchParseMixedUnionElement);
+}
+
+function parseListOfModelTypedUnionContent(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.ModelTypedUnion>, DeserializationError> {
+  return parseList<AasTypes.ModelTypedUnion>(cursor, dispatchParseModelTypedUnionElement);
+}
+
+function parseListOfStructuralUnionContent(
+  cursor: XmlCursor
+): AasCommon.Either<Array<AasTypes.StructuralUnion>, DeserializationError> {
+  return parseList<AasTypes.StructuralUnion>(cursor, dispatchParseStructuralUnionElement);
+}
+
+function parseTuple3OfStructuralUnion_MixedUnion_ModelTypedUnionContent(
+  cursor: XmlCursor
+): AasCommon.Either<[AasTypes.StructuralUnion, AasTypes.MixedUnion, AasTypes.ModelTypedUnion], DeserializationError> {
+  return parseTuple3<AasTypes.StructuralUnion, AasTypes.MixedUnion, AasTypes.ModelTypedUnion>(
+    cursor,
+    dispatchParseStructuralUnionElement,
+    dispatchParseMixedUnionElement,
+    dispatchParseModelTypedUnionElement
+  );
+}
+
 /**
  * Parse the sequence of properties of an instance
  * of {@link types!StructuralFirst}.
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!StructuralFirst} is embedded.
  */
 function parseStructuralFirstFromSequence(
   cursor: XmlCursor
@@ -744,32 +838,13 @@ function parseStructuralFirstFromSequence(
     switch (propertyLocalName) {
       case "uniqueToFirst": {
         if (theUniqueToFirst !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "uniqueToFirst" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theUniqueToFirst = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theUniqueToFirst = parsed.value;
         break;
       }
 
@@ -813,7 +888,9 @@ function parseStructuralFirstFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!StructuralSecond} is embedded.
  */
 function parseStructuralSecondFromSequence(
   cursor: XmlCursor
@@ -842,32 +919,13 @@ function parseStructuralSecondFromSequence(
     switch (propertyLocalName) {
       case "uniqueToSecond": {
         if (theUniqueToSecond !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "uniqueToSecond" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theUniqueToSecond = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theUniqueToSecond = parsed.value;
         break;
       }
 
@@ -911,7 +969,9 @@ function parseStructuralSecondFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!MixedAbstractDescendantOne} is embedded.
  */
 function parseMixedAbstractDescendantOneFromSequence(
   cursor: XmlCursor
@@ -940,32 +1000,13 @@ function parseMixedAbstractDescendantOneFromSequence(
     switch (propertyLocalName) {
       case "uniqueToAbstractDescendantOne": {
         if (theUniqueToAbstractDescendantOne !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "uniqueToAbstractDescendantOne" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theUniqueToAbstractDescendantOne = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theUniqueToAbstractDescendantOne = parsed.value;
         break;
       }
 
@@ -1009,7 +1050,9 @@ function parseMixedAbstractDescendantOneFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!MixedAbstractDescendantTwo} is embedded.
  */
 function parseMixedAbstractDescendantTwoFromSequence(
   cursor: XmlCursor
@@ -1038,32 +1081,13 @@ function parseMixedAbstractDescendantTwoFromSequence(
     switch (propertyLocalName) {
       case "uniqueToAbstractDescendantTwo": {
         if (theUniqueToAbstractDescendantTwo !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "uniqueToAbstractDescendantTwo" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theUniqueToAbstractDescendantTwo = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theUniqueToAbstractDescendantTwo = parsed.value;
         break;
       }
 
@@ -1107,7 +1131,9 @@ function parseMixedAbstractDescendantTwoFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!MixedConcreteWithDescendants} is embedded.
  */
 function parseMixedConcreteWithDescendantsFromSequence(
   cursor: XmlCursor
@@ -1136,32 +1162,13 @@ function parseMixedConcreteWithDescendantsFromSequence(
     switch (propertyLocalName) {
       case "someBaseProperty": {
         if (theSomeBaseProperty !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "someBaseProperty" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSomeBaseProperty = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theSomeBaseProperty = parsed.value;
         break;
       }
 
@@ -1205,7 +1212,9 @@ function parseMixedConcreteWithDescendantsFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!MixedConcreteWithDescendantsChild} is embedded.
  */
 function parseMixedConcreteWithDescendantsChildFromSequence(
   cursor: XmlCursor
@@ -1235,63 +1244,25 @@ function parseMixedConcreteWithDescendantsChildFromSequence(
     switch (propertyLocalName) {
       case "someBaseProperty": {
         if (theSomeBaseProperty !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "someBaseProperty" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSomeBaseProperty = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theSomeBaseProperty = parsed.value;
         break;
       }
 
       case "someChildProperty": {
         if (theSomeChildProperty !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "someChildProperty" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSomeChildProperty = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theSomeChildProperty = parsed.value;
         break;
       }
 
@@ -1342,7 +1313,9 @@ function parseMixedConcreteWithDescendantsChildFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!MixedConcreteLeaf} is embedded.
  */
 function parseMixedConcreteLeafFromSequence(
   cursor: XmlCursor
@@ -1371,32 +1344,13 @@ function parseMixedConcreteLeafFromSequence(
     switch (propertyLocalName) {
       case "uniqueToConcreteLeaf": {
         if (theUniqueToConcreteLeaf !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "uniqueToConcreteLeaf" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theUniqueToConcreteLeaf = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theUniqueToConcreteLeaf = parsed.value;
         break;
       }
 
@@ -1440,7 +1394,9 @@ function parseMixedConcreteLeafFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!ModelTypedFirst} is embedded.
  */
 function parseModelTypedFirstFromSequence(
   cursor: XmlCursor
@@ -1469,32 +1425,13 @@ function parseModelTypedFirstFromSequence(
     switch (propertyLocalName) {
       case "someProperty": {
         if (theSomeProperty !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "someProperty" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSomeProperty = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theSomeProperty = parsed.value;
         break;
       }
 
@@ -1538,7 +1475,9 @@ function parseModelTypedFirstFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!ModelTypedSecond} is embedded.
  */
 function parseModelTypedSecondFromSequence(
   cursor: XmlCursor
@@ -1567,32 +1506,13 @@ function parseModelTypedSecondFromSequence(
     switch (propertyLocalName) {
       case "someProperty": {
         if (theSomeProperty !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "someProperty" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const text = parseTextContent(cursor);
-
-        const parsedOrError = parseStringText(text);
-        if (parsedOrError.error !== null) {
-          propertyError = parsedOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theSomeProperty = parsedOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        propertyError = parsed.error;
+        theSomeProperty = parsed.value;
         break;
       }
 
@@ -1636,7 +1556,9 @@ function parseModelTypedSecondFromSequence(
  *
  * The opening tag is expected to have been already read by the caller, and
  * the caller is expected to read and verify the corresponding closing tag
- * after this function returns successfully.
+ * after this function returns successfully. This is the contract of
+ * a `ContentParser`, so this function is used as one wherever an instance
+ * of {@link types!Something} is embedded.
  */
 function parseSomethingFromSequence(
   cursor: XmlCursor
@@ -1674,305 +1596,157 @@ function parseSomethingFromSequence(
     switch (propertyLocalName) {
       case "structuralProperty": {
         if (theStructuralProperty !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "structuralProperty" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const instanceOrError = dispatchParseStructuralUnionElement(cursor);
-        if (instanceOrError.error !== null) {
-          propertyError = instanceOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
+        const parsed = parseElementContent(
           cursor,
-          propertyLocalName
+          propertyLocalName,
+          dispatchParseStructuralUnionElement
         );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theStructuralProperty = instanceOrError.mustValue();
+        propertyError = parsed.error;
+        theStructuralProperty = parsed.value;
         break;
       }
 
       case "mixedProperty": {
         if (theMixedProperty !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "mixedProperty" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const instanceOrError = dispatchParseMixedUnionElement(cursor);
-        if (instanceOrError.error !== null) {
-          propertyError = instanceOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
+        const parsed = parseElementContent(
           cursor,
-          propertyLocalName
+          propertyLocalName,
+          dispatchParseMixedUnionElement
         );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theMixedProperty = instanceOrError.mustValue();
+        propertyError = parsed.error;
+        theMixedProperty = parsed.value;
         break;
       }
 
       case "modelTypedProperty": {
         if (theModelTypedProperty !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "modelTypedProperty" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const instanceOrError = dispatchParseModelTypedUnionElement(cursor);
-        if (instanceOrError.error !== null) {
-          propertyError = instanceOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
+        const parsed = parseElementContent(
           cursor,
-          propertyLocalName
+          propertyLocalName,
+          dispatchParseModelTypedUnionElement
         );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theModelTypedProperty = instanceOrError.mustValue();
+        propertyError = parsed.error;
+        theModelTypedProperty = parsed.value;
         break;
       }
 
       case "listStructuralProperty": {
         if (theListStructuralProperty !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "listStructuralProperty" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.StructuralUnion>(
+        const parsed = parseElementContent(
           cursor,
-          dispatchParseStructuralUnionElement
+          propertyLocalName,
+          parseListOfStructuralUnionContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theListStructuralProperty = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theListStructuralProperty = parsed.value;
         break;
       }
 
       case "listMixedProperty": {
         if (theListMixedProperty !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "listMixedProperty" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.MixedUnion>(
-          cursor,
-          dispatchParseMixedUnionElement
-        );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theListMixedProperty = parsedItemsOrError.mustValue();
+        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfMixedUnionContent);
+        propertyError = parsed.error;
+        theListMixedProperty = parsed.value;
         break;
       }
 
       case "listModelTypedProperty": {
         if (theListModelTypedProperty !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "listModelTypedProperty" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const parsedItemsOrError = parseList<AasTypes.ModelTypedUnion>(
+        const parsed = parseElementContent(
           cursor,
-          dispatchParseModelTypedUnionElement
+          propertyLocalName,
+          parseListOfModelTypedUnionContent
         );
-        if (parsedItemsOrError.error !== null) {
-          propertyError = parsedItemsOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theListModelTypedProperty = parsedItemsOrError.mustValue();
+        propertyError = parsed.error;
+        theListModelTypedProperty = parsed.value;
         break;
       }
 
       case "tupleProperty": {
         if (theTupleProperty !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "tupleProperty" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const tupleOrError = parseTuple3<AasTypes.StructuralUnion, AasTypes.MixedUnion, AasTypes.ModelTypedUnion>(
+        const parsed = parseElementContent(
           cursor,
-          dispatchParseStructuralUnionElement,
-          dispatchParseMixedUnionElement,
-          dispatchParseModelTypedUnionElement
+          propertyLocalName,
+          parseTuple3OfStructuralUnion_MixedUnion_ModelTypedUnionContent
         );
-        if (tupleOrError.error !== null) {
-          propertyError = tupleOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
-          cursor,
-          propertyLocalName
-        );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theTupleProperty = tupleOrError.mustValue();
+        propertyError = parsed.error;
+        theTupleProperty = parsed.value;
         break;
       }
 
       case "optionalStructuralProperty": {
         if (theOptionalStructuralProperty !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "optionalStructuralProperty" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const instanceOrError = dispatchParseStructuralUnionElement(cursor);
-        if (instanceOrError.error !== null) {
-          propertyError = instanceOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
+        const parsed = parseElementContent(
           cursor,
-          propertyLocalName
+          propertyLocalName,
+          dispatchParseStructuralUnionElement
         );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theOptionalStructuralProperty = instanceOrError.mustValue();
+        propertyError = parsed.error;
+        theOptionalStructuralProperty = parsed.value;
         break;
       }
 
       case "optionalMixedProperty": {
         if (theOptionalMixedProperty !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "optionalMixedProperty" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const instanceOrError = dispatchParseMixedUnionElement(cursor);
-        if (instanceOrError.error !== null) {
-          propertyError = instanceOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
+        const parsed = parseElementContent(
           cursor,
-          propertyLocalName
+          propertyLocalName,
+          dispatchParseMixedUnionElement
         );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theOptionalMixedProperty = instanceOrError.mustValue();
+        propertyError = parsed.error;
+        theOptionalMixedProperty = parsed.value;
         break;
       }
 
       case "optionalModelTypedProperty": {
         if (theOptionalModelTypedProperty !== null) {
-          propertyError = new DeserializationError(
-            "Property " +
-              "optionalModelTypedProperty" +
-              " occurred more than once"
-          );
+          propertyError = duplicatePropertyError(propertyLocalName);
           break;
         }
 
-        const instanceOrError = dispatchParseModelTypedUnionElement(cursor);
-        if (instanceOrError.error !== null) {
-          propertyError = instanceOrError.error;
-          break;
-        }
-
-        const propertyCloseError = consumeCloseTag(
+        const parsed = parseElementContent(
           cursor,
-          propertyLocalName
+          propertyLocalName,
+          dispatchParseModelTypedUnionElement
         );
-        if (propertyCloseError !== null) {
-          propertyError = propertyCloseError;
-          break;
-        }
-
-        theOptionalModelTypedProperty = instanceOrError.mustValue();
+        propertyError = parsed.error;
+        theOptionalModelTypedProperty = parsed.value;
         break;
       }
 
@@ -2055,6 +1829,14 @@ function parseSomethingFromSequence(
   );
 }
 
+const PARSERS_OF_MIXED_ABSTRACT_MEMBER = new Map<
+  string,
+  ContentParser<AasTypes.IMixedAbstractMember>
+>([
+  ["mixedAbstractDescendantOne", parseMixedAbstractDescendantOneFromSequence],
+  ["mixedAbstractDescendantTwo", parseMixedAbstractDescendantTwoFromSequence]
+]);
+
 /**
  * Dispatch-parse an instance
  * of {@link types!IMixedAbstractMember} from the next
@@ -2066,45 +1848,7 @@ function parseSomethingFromSequence(
 function dispatchParseMixedAbstractMemberElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.IMixedAbstractMember, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<AasTypes.IMixedAbstractMember, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const localName = localNameOfTag(startTag.tag);
-  cursor.advance();
-
-  let instanceOrError: AasCommon.Either<AasTypes.IMixedAbstractMember, DeserializationError>;
-  switch (localName) {
-    case "mixedAbstractDescendantOne":
-      instanceOrError = parseMixedAbstractDescendantOneFromSequence(cursor);
-      break;
-    case "mixedAbstractDescendantTwo":
-      instanceOrError = parseMixedAbstractDescendantTwoFromSequence(cursor);
-      break;
-    default:
-      return newDeserializationError<AasTypes.IMixedAbstractMember>(
-        `Expected an instance of IMixedAbstractMember, but got: ${localName}`
-      );
-  }
-
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, localName);
-  if (closeError !== null) {
-    return new AasCommon.Either<AasTypes.IMixedAbstractMember, DeserializationError>(
-      null,
-      closeError
-    );
-  }
-
-  return instanceOrError;
+  return dispatchParseElement(cursor, "IMixedAbstractMember", PARSERS_OF_MIXED_ABSTRACT_MEMBER);
 }
 
 /**
@@ -2149,6 +1893,14 @@ export function mixedAbstractMemberFromXmlString(
   return instanceOrError;
 }
 
+const PARSERS_OF_MIXED_CONCRETE_WITH_DESCENDANTS = new Map<
+  string,
+  ContentParser<AasTypes.MixedConcreteWithDescendants>
+>([
+  ["mixedConcreteWithDescendantsChild", parseMixedConcreteWithDescendantsChildFromSequence],
+  ["mixedConcreteWithDescendants", parseMixedConcreteWithDescendantsFromSequence]
+]);
+
 /**
  * Dispatch-parse an instance
  * of {@link types!MixedConcreteWithDescendants} from the next
@@ -2160,45 +1912,11 @@ export function mixedAbstractMemberFromXmlString(
 function dispatchParseMixedConcreteWithDescendantsElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.MixedConcreteWithDescendants, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<AasTypes.MixedConcreteWithDescendants, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const localName = localNameOfTag(startTag.tag);
-  cursor.advance();
-
-  let instanceOrError: AasCommon.Either<AasTypes.MixedConcreteWithDescendants, DeserializationError>;
-  switch (localName) {
-    case "mixedConcreteWithDescendantsChild":
-      instanceOrError = parseMixedConcreteWithDescendantsChildFromSequence(cursor);
-      break;
-    case "mixedConcreteWithDescendants":
-      instanceOrError = parseMixedConcreteWithDescendantsFromSequence(cursor);
-      break;
-    default:
-      return newDeserializationError<AasTypes.MixedConcreteWithDescendants>(
-        `Expected an instance of MixedConcreteWithDescendants, but got: ${localName}`
-      );
-  }
-
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, localName);
-  if (closeError !== null) {
-    return new AasCommon.Either<AasTypes.MixedConcreteWithDescendants, DeserializationError>(
-      null,
-      closeError
-    );
-  }
-
-  return instanceOrError;
+  return dispatchParseElement(
+    cursor,
+    "MixedConcreteWithDescendants",
+    PARSERS_OF_MIXED_CONCRETE_WITH_DESCENDANTS
+  );
 }
 
 /**
@@ -2243,6 +1961,14 @@ export function mixedConcreteWithDescendantsFromXmlString(
   return instanceOrError;
 }
 
+const PARSERS_OF_STRUCTURAL_UNION = new Map<
+  string,
+  ContentParser<AasTypes.StructuralUnion>
+>([
+  ["structuralFirst", parseStructuralFirstFromSequence],
+  ["structuralSecond", parseStructuralSecondFromSequence]
+]);
+
 /**
  * Dispatch-parse an instance
  * of {@link types!StructuralUnion} from the next
@@ -2254,46 +1980,19 @@ export function mixedConcreteWithDescendantsFromXmlString(
 function dispatchParseStructuralUnionElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.StructuralUnion, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<AasTypes.StructuralUnion, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const localName = localNameOfTag(startTag.tag);
-  cursor.advance();
-
-  let instanceOrError: AasCommon.Either<AasTypes.StructuralUnion, DeserializationError>;
-  switch (localName) {
-    case "structuralFirst":
-      instanceOrError = parseStructuralFirstFromSequence(cursor);
-      break;
-    case "structuralSecond":
-      instanceOrError = parseStructuralSecondFromSequence(cursor);
-      break;
-    default:
-      return newDeserializationError<AasTypes.StructuralUnion>(
-        `Expected an instance of StructuralUnion, but got: ${localName}`
-      );
-  }
-
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, localName);
-  if (closeError !== null) {
-    return new AasCommon.Either<AasTypes.StructuralUnion, DeserializationError>(
-      null,
-      closeError
-    );
-  }
-
-  return instanceOrError;
+  return dispatchParseElement(cursor, "StructuralUnion", PARSERS_OF_STRUCTURAL_UNION);
 }
+
+const PARSERS_OF_MIXED_UNION = new Map<
+  string,
+  ContentParser<AasTypes.MixedUnion>
+>([
+  ["mixedAbstractDescendantOne", parseMixedAbstractDescendantOneFromSequence],
+  ["mixedAbstractDescendantTwo", parseMixedAbstractDescendantTwoFromSequence],
+  ["mixedConcreteWithDescendantsChild", parseMixedConcreteWithDescendantsChildFromSequence],
+  ["mixedConcreteWithDescendants", parseMixedConcreteWithDescendantsFromSequence],
+  ["mixedConcreteLeaf", parseMixedConcreteLeafFromSequence]
+]);
 
 /**
  * Dispatch-parse an instance
@@ -2306,55 +2005,16 @@ function dispatchParseStructuralUnionElement(
 function dispatchParseMixedUnionElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.MixedUnion, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<AasTypes.MixedUnion, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const localName = localNameOfTag(startTag.tag);
-  cursor.advance();
-
-  let instanceOrError: AasCommon.Either<AasTypes.MixedUnion, DeserializationError>;
-  switch (localName) {
-    case "mixedAbstractDescendantOne":
-      instanceOrError = parseMixedAbstractDescendantOneFromSequence(cursor);
-      break;
-    case "mixedAbstractDescendantTwo":
-      instanceOrError = parseMixedAbstractDescendantTwoFromSequence(cursor);
-      break;
-    case "mixedConcreteWithDescendantsChild":
-      instanceOrError = parseMixedConcreteWithDescendantsChildFromSequence(cursor);
-      break;
-    case "mixedConcreteWithDescendants":
-      instanceOrError = parseMixedConcreteWithDescendantsFromSequence(cursor);
-      break;
-    case "mixedConcreteLeaf":
-      instanceOrError = parseMixedConcreteLeafFromSequence(cursor);
-      break;
-    default:
-      return newDeserializationError<AasTypes.MixedUnion>(
-        `Expected an instance of MixedUnion, but got: ${localName}`
-      );
-  }
-
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, localName);
-  if (closeError !== null) {
-    return new AasCommon.Either<AasTypes.MixedUnion, DeserializationError>(
-      null,
-      closeError
-    );
-  }
-
-  return instanceOrError;
+  return dispatchParseElement(cursor, "MixedUnion", PARSERS_OF_MIXED_UNION);
 }
+
+const PARSERS_OF_MODEL_TYPED_UNION = new Map<
+  string,
+  ContentParser<AasTypes.ModelTypedUnion>
+>([
+  ["modelTypedFirst", parseModelTypedFirstFromSequence],
+  ["modelTypedSecond", parseModelTypedSecondFromSequence]
+]);
 
 /**
  * Dispatch-parse an instance
@@ -2367,93 +2027,24 @@ function dispatchParseMixedUnionElement(
 function dispatchParseModelTypedUnionElement(
   cursor: XmlCursor
 ): AasCommon.Either<AasTypes.ModelTypedUnion, DeserializationError> {
-  const startTagOrError = readNextOpenTag(cursor);
-  if (startTagOrError.error !== null) {
-    return new AasCommon.Either<AasTypes.ModelTypedUnion, DeserializationError>(
-      null,
-      startTagOrError.error
-    );
-  }
-  const startTag = startTagOrError.mustValue();
-
-  const localName = localNameOfTag(startTag.tag);
-  cursor.advance();
-
-  let instanceOrError: AasCommon.Either<AasTypes.ModelTypedUnion, DeserializationError>;
-  switch (localName) {
-    case "modelTypedFirst":
-      instanceOrError = parseModelTypedFirstFromSequence(cursor);
-      break;
-    case "modelTypedSecond":
-      instanceOrError = parseModelTypedSecondFromSequence(cursor);
-      break;
-    default:
-      return newDeserializationError<AasTypes.ModelTypedUnion>(
-        `Expected an instance of ModelTypedUnion, but got: ${localName}`
-      );
-  }
-
-  if (instanceOrError.error !== null) {
-    return instanceOrError;
-  }
-
-  const closeError = consumeCloseTag(cursor, localName);
-  if (closeError !== null) {
-    return new AasCommon.Either<AasTypes.ModelTypedUnion, DeserializationError>(
-      null,
-      closeError
-    );
-  }
-
-  return instanceOrError;
+  return dispatchParseElement(cursor, "ModelTypedUnion", PARSERS_OF_MODEL_TYPED_UNION);
 }
 
-const ROOT_DISPATCH_BY_LOCAL_NAME =
-  new Map<
-    string,
-    (cursor: XmlCursor) => AasCommon.Either<AasTypes.Class, DeserializationError>
-  >([
-    [
-      "structuralFirst",
-      parseStructuralFirstFromSequence
-    ],
-    [
-      "structuralSecond",
-      parseStructuralSecondFromSequence
-    ],
-    [
-      "mixedAbstractDescendantOne",
-      parseMixedAbstractDescendantOneFromSequence
-    ],
-    [
-      "mixedAbstractDescendantTwo",
-      parseMixedAbstractDescendantTwoFromSequence
-    ],
-    [
-      "mixedConcreteWithDescendants",
-      parseMixedConcreteWithDescendantsFromSequence
-    ],
-    [
-      "mixedConcreteWithDescendantsChild",
-      parseMixedConcreteWithDescendantsChildFromSequence
-    ],
-    [
-      "mixedConcreteLeaf",
-      parseMixedConcreteLeafFromSequence
-    ],
-    [
-      "modelTypedFirst",
-      parseModelTypedFirstFromSequence
-    ],
-    [
-      "modelTypedSecond",
-      parseModelTypedSecondFromSequence
-    ],
-    [
-      "something",
-      parseSomethingFromSequence
-    ]
-  ]);
+const ROOT_DISPATCH_BY_LOCAL_NAME = new Map<
+  string,
+  ContentParser<AasTypes.Class>
+>([
+  ["structuralFirst", parseStructuralFirstFromSequence],
+  ["structuralSecond", parseStructuralSecondFromSequence],
+  ["mixedAbstractDescendantOne", parseMixedAbstractDescendantOneFromSequence],
+  ["mixedAbstractDescendantTwo", parseMixedAbstractDescendantTwoFromSequence],
+  ["mixedConcreteWithDescendants", parseMixedConcreteWithDescendantsFromSequence],
+  ["mixedConcreteWithDescendantsChild", parseMixedConcreteWithDescendantsChildFromSequence],
+  ["mixedConcreteLeaf", parseMixedConcreteLeafFromSequence],
+  ["modelTypedFirst", parseModelTypedFirstFromSequence],
+  ["modelTypedSecond", parseModelTypedSecondFromSequence],
+  ["something", parseSomethingFromSequence]
+]);
 
 /**
  * Parse an XML string as an AAS instance.
