@@ -2580,7 +2580,169 @@ _READERS_FOR_CONTAINER: Mapping[
 # region Serialization
 
 
-_ItemT = TypeVar("_ItemT")
+def _write_int_as_element(
+    name: str,
+    value: int,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write the :paramref:`value` of an integer enclosed in
+    the :paramref:`name` element.
+
+    :param name: of the corresponding element tag
+    :param value: to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    serializer.stream.write(str(value))
+    serializer._write_end_element(name)
+
+
+def _write_str_as_element(
+    name: str,
+    value: str,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write the :paramref:`value` of a string enclosed in
+    the :paramref:`name` element.
+
+    :param name: of the corresponding element tag
+    :param value: to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+
+    # NOTE (mristin, 2022-10-14):
+    # We ran ``timeit`` on manual code which escaped XML special characters with
+    # a dictionary, and on another snippet which called three ``.replace()``.
+    # The code with ``.replace()`` was an order of magnitude faster on our computers.
+    #
+    # The escaping is written out here, and not put in a function of its own, since
+    # a string is the commonest value in a meta-model and a call is not free.
+    serializer.stream.write(
+        value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    )
+
+    serializer._write_end_element(name)
+
+
+def _write_nested_element(
+    name: str,
+    value: aas_types.Class,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`value` nested in the :paramref:`name` element.
+
+    The instance writes the element which designates its model type, so it has to be
+    nested in an element of its own when it is the value of a property. Mind that
+    an *item* of a list is not nested that way -- see
+    :py:func:`_write_list_of_instances` -- as it is the item's own element which
+    already sits in the list's element.
+
+    :param name: of the enclosing element
+    :param value: to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    serializer.visit(value)
+    serializer._write_end_element(name)
+
+
+def _write_branch_as_element(
+    name: str,
+    that: aas_types.Branch,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element('identifier', that.identifier, serializer)
+    _write_str_as_element('description', that.description, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_leaf_as_element(
+    name: str,
+    that: aas_types.Leaf,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element('identifier', that.identifier, serializer)
+    _write_str_as_element('description', that.description, serializer)
+    _write_int_as_element('value', that.value, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_blossom_as_element(
+    name: str,
+    that: aas_types.Blossom,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element('identifier', that.identifier, serializer)
+    _write_str_as_element('description', that.description, serializer)
+    _write_int_as_element('value', that.value, serializer)
+    _write_str_as_element('details', that.details, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_something_as_element(
+    name: str,
+    that: aas_types.Something,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_nested_element('someChoice', that.some_choice, serializer)
+    _write_nested_element(
+        'somethingWithoutChoice', that.something_without_choice, serializer
+    )
+    serializer._write_end_element(name)
+
+
+def _write_container_as_element(
+    name: str,
+    that: aas_types.Container,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_nested_element('node', that.node, serializer)
+    _write_something_as_element('something', that.something, serializer)
+    serializer._write_end_element(name)
 
 
 class _Serializer(aas_types.AbstractVisitor):
@@ -2658,23 +2820,6 @@ class _Serializer(aas_types.AbstractVisitor):
         """
         self.stream.write(f'<{name}>')
 
-    def _escape_and_write_text(
-            self,
-            text: str
-    ) -> None:
-        """
-        Escape :paramref:`text` for XML and write it.
-
-        :param text: to be escaped and written
-        """
-        # NOTE (mristin, 2022-10-14):
-        # We ran ``timeit`` on manual code which escaped XML special characters with
-        # a dictionary, and on another snippet which called three ``.replace()``.
-        # The code with ``.replace()`` was an order of magnitude faster on our computers.
-        self.stream.write(
-            text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        )
-
     def _write_end_element(
             self,
             name: str
@@ -2726,136 +2871,6 @@ class _Serializer(aas_types.AbstractVisitor):
         """
         self.stream.write(f'<{name}/>')
 
-    def _write_bool_as_element(
-            self,
-            name: str,
-            value: bool
-    ) -> None:
-        """
-        Write the :paramref:`value` of a boolean enclosed in
-        the :paramref:`name` element.
-
-        :param name: of the corresponding element tag
-        :param value: to be serialized
-        """
-        self._write_start_element(name)
-        self.stream.write('true' if value else 'false')
-        self._write_end_element(name)
-
-    def _write_int_as_element(
-            self,
-            name: str,
-            value: int
-    ) -> None:
-        """
-        Write the :paramref:`value` of an integer enclosed in
-        the :paramref:`name` element.
-
-        :param name: of the corresponding element tag
-        :param value: to be serialized
-        """
-        self._write_start_element(name)
-        self.stream.write(str(value))
-        self._write_end_element(name)
-
-    def _write_float_as_element(
-            self,
-            name: str,
-            value: float
-    ) -> None:
-        """
-        Write the :paramref:`value` of a floating-point number enclosed in
-        the :paramref:`name` element.
-
-        :param name: of the corresponding element tag
-        :param value: to be serialized
-        """
-        self._write_start_element(name)
-
-        if value == math.inf:
-            self.stream.write('INF')
-        elif value == -math.inf:
-            self.stream.write('-INF')
-        elif math.isnan(value):
-            self.stream.write('NaN')
-        elif value == 0:
-            if math.copysign(1.0, value) < 0.0:
-                self.stream.write('-0.0')
-            else:
-                self.stream.write('0.0')
-        else:
-            self.stream.write(str(value))
-
-        self._write_end_element(name)
-
-    def _write_str_as_element(
-            self,
-            name: str,
-            value: str
-    ) -> None:
-        """
-        Write the :paramref:`value` of a string enclosed in
-        the :paramref:`name` element.
-
-        :param name: of the corresponding element tag
-        :param value: to be serialized
-        """
-        self._write_start_element(name)
-        self._escape_and_write_text(value)
-        self._write_end_element(name)
-
-    def _write_bytes_as_element(
-            self,
-            name: str,
-            value: bytes
-    ) -> None:
-        """
-        Write the :paramref:`value` of a binary content enclosed in
-        the :paramref:`name` element.
-
-        :param name: of the corresponding element tag
-        :param value: to be serialized
-        """
-        self._write_start_element(name)
-
-        # NOTE (mristin):
-        # We need to decode the result of the base64-encoding to ASCII since we are
-        # writing to an XML *text* stream. ``base64.b64encode(.)`` gives us bytes,
-        # not a string.
-        encoded = base64.b64encode(value).decode('ascii')
-
-        # NOTE (mristin):
-        # Base64 alphabet excludes ``<``, ``>`` and ``&``, so we can directly
-        # write the ``encoded`` content to the stream as XML text.
-        #
-        # See: https://datatracker.ietf.org/doc/html/rfc4648#section-4
-        self.stream.write(encoded)
-        self._write_end_element(name)
-
-    def _write_list_of_items(
-        self,
-        name: str,
-        items: Sequence[_ItemT],
-        write_item: Callable[[_ItemT], None]
-    ) -> None:
-        """
-        Write :paramref:`items` enclosed in the :paramref:`name` element.
-
-        :param name: of the enclosing element
-        :param items: to be written
-        :param write_item:
-            to write a single item of :paramref:`items` -- either into its own
-            ``v`` element (for scalars/enumerations) or its own natural class
-            element (for classes, via :py:meth:`~visit`)
-        """
-        if len(items) == 0:
-            self._write_empty_element(name)
-        else:
-            self._write_start_element(name)
-            for item in items:
-                write_item(item)
-            self._write_end_element(name)
-
     def __init__(
         self,
         stream: TextIO
@@ -2876,29 +2891,6 @@ class _Serializer(aas_types.AbstractVisitor):
             self._write_first_empty_element_with_namespace
         )
 
-    def _write_branch_as_sequence(
-        self,
-        that: aas_types.Branch
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'identifier',
-            that.identifier
-        )
-
-        self._write_str_as_element(
-            'description',
-            that.description
-        )
-
     def visit_branch(
         self,
         that: aas_types.Branch
@@ -2911,39 +2903,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('branch')
-        self._write_branch_as_sequence(
-            that
-        )
-        self._write_end_element('branch')
-
-    def _write_leaf_as_sequence(
-        self,
-        that: aas_types.Leaf
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'identifier',
-            that.identifier
-        )
-
-        self._write_str_as_element(
-            'description',
-            that.description
-        )
-
-        self._write_int_as_element(
-            'value',
-            that.value
-        )
+        _write_branch_as_element('branch', that, self)
 
     def visit_leaf(
         self,
@@ -2957,44 +2917,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('leaf')
-        self._write_leaf_as_sequence(
-            that
-        )
-        self._write_end_element('leaf')
-
-    def _write_blossom_as_sequence(
-        self,
-        that: aas_types.Blossom
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'identifier',
-            that.identifier
-        )
-
-        self._write_str_as_element(
-            'description',
-            that.description
-        )
-
-        self._write_int_as_element(
-            'value',
-            that.value
-        )
-
-        self._write_str_as_element(
-            'details',
-            that.details
-        )
+        _write_leaf_as_element('leaf', that, self)
 
     def visit_blossom(
         self,
@@ -3008,32 +2931,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('blossom')
-        self._write_blossom_as_sequence(
-            that
-        )
-        self._write_end_element('blossom')
-
-    def _write_something_as_sequence(
-        self,
-        that: aas_types.Something
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_start_element('someChoice')
-        self.visit(that.some_choice)
-        self._write_end_element('someChoice')
-
-        self._write_start_element('somethingWithoutChoice')
-        self.visit(that.something_without_choice)
-        self._write_end_element('somethingWithoutChoice')
+        _write_blossom_as_element('blossom', that, self)
 
     def visit_something(
         self,
@@ -3047,34 +2945,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('something')
-        self._write_something_as_sequence(
-            that
-        )
-        self._write_end_element('something')
-
-    def _write_container_as_sequence(
-        self,
-        that: aas_types.Container
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_start_element('node')
-        self.visit(that.node)
-        self._write_end_element('node')
-
-        self._write_start_element('something')
-        self._write_something_as_sequence(
-            that.something
-        )
-        self._write_end_element('something')
+        _write_something_as_element('something', that, self)
 
     def visit_container(
         self,
@@ -3088,11 +2959,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('container')
-        self._write_container_as_sequence(
-            that
-        )
-        self._write_end_element('container')
+        _write_container_as_element('container', that, self)
 
 
 def write(instance: aas_types.Class, stream: TextIO) -> None:

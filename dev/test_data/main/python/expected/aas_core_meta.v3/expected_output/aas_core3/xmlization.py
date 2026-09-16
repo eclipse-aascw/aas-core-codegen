@@ -14944,7 +14944,1483 @@ _READERS_FOR_DATA_SPECIFICATION_IEC_61360: Mapping[
 # region Serialization
 
 
-_ItemT = TypeVar("_ItemT")
+def _write_bool_as_element(
+    name: str,
+    value: bool,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write the :paramref:`value` of a boolean enclosed in
+    the :paramref:`name` element.
+
+    :param name: of the corresponding element tag
+    :param value: to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    serializer.stream.write('true' if value else 'false')
+    serializer._write_end_element(name)
+
+
+def _write_str_as_element(
+    name: str,
+    value: str,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write the :paramref:`value` of a string enclosed in
+    the :paramref:`name` element.
+
+    :param name: of the corresponding element tag
+    :param value: to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+
+    # NOTE (mristin, 2022-10-14):
+    # We ran ``timeit`` on manual code which escaped XML special characters with
+    # a dictionary, and on another snippet which called three ``.replace()``.
+    # The code with ``.replace()`` was an order of magnitude faster on our computers.
+    #
+    # The escaping is written out here, and not put in a function of its own, since
+    # a string is the commonest value in a meta-model and a call is not free.
+    serializer.stream.write(
+        value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    )
+
+    serializer._write_end_element(name)
+
+
+def _write_bytes_as_element(
+    name: str,
+    value: bytes,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write the :paramref:`value` of a binary content enclosed in
+    the :paramref:`name` element.
+
+    :param name: of the corresponding element tag
+    :param value: to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+
+    # NOTE (mristin):
+    # We need to decode the result of the base64-encoding to ASCII since we are
+    # writing to an XML *text* stream. ``base64.b64encode(.)`` gives us bytes,
+    # not a string.
+    encoded = base64.b64encode(value).decode('ascii')
+
+    # NOTE (mristin):
+    # Base64 alphabet excludes ``<``, ``>`` and ``&``, so we can directly
+    # write the ``encoded`` content to the stream as XML text.
+    #
+    # See: https://datatracker.ietf.org/doc/html/rfc4648#section-4
+    serializer.stream.write(encoded)
+    serializer._write_end_element(name)
+
+
+def _write_nested_element(
+    name: str,
+    value: aas_types.Class,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`value` nested in the :paramref:`name` element.
+
+    The instance writes the element which designates its model type, so it has to be
+    nested in an element of its own when it is the value of a property. Mind that
+    an *item* of a list is not nested that way -- see
+    :py:func:`_write_list_of_instances` -- as it is the item's own element which
+    already sits in the list's element.
+
+    :param name: of the enclosing element
+    :param value: to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    serializer.visit(value)
+    serializer._write_end_element(name)
+
+
+def _write_list_of_instances(
+    name: str,
+    items: Sequence[aas_types.Class],
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`items` enclosed in the :paramref:`name` element.
+
+    Every item writes the element which designates its model type, so no positional
+    tag is necessary. If there are no items, the enclosing element is collapsed to
+    an empty one.
+
+    :param name: of the enclosing element
+    :param items: to be serialized
+    :param serializer: to write to
+    """
+    if len(items) == 0:
+        serializer._write_empty_element(name)
+    else:
+        serializer._write_start_element(name)
+        for item in items:
+            serializer.visit(item)
+        serializer._write_end_element(name)
+
+
+def _write_extension_as_element(
+    name: str,
+    that: aas_types.Extension,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    if that.semantic_id is not None:
+        _write_reference_as_element('semanticId', that.semantic_id, serializer)
+    if that.supplemental_semantic_ids is not None:
+        _write_list_of_instances(
+            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+        )
+    _write_str_as_element('name', that.name, serializer)
+    if that.value_type is not None:
+        _write_str_as_element('valueType', that.value_type.value, serializer)
+    if that.value is not None:
+        _write_str_as_element('value', that.value, serializer)
+    if that.refers_to is not None:
+        _write_list_of_instances('refersTo', that.refers_to, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_administrative_information_as_element(
+    name: str,
+    that: aas_types.AdministrativeInformation,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    All the properties are optional, so the element is collapsed to an empty one
+    if none of them is set.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    # We optimize for the case where all the optional properties are not set,
+    # so that we can simply output an empty element.
+    if (
+            that.embedded_data_specifications is None
+            and that.version is None
+            and that.revision is None
+            and that.creator is None
+            and that.template_id is None
+    ):
+        serializer._write_empty_element(name)
+        return
+
+    serializer._write_start_element(name)
+    if that.embedded_data_specifications is not None:
+        _write_list_of_instances(
+            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
+        )
+    if that.version is not None:
+        _write_str_as_element('version', that.version, serializer)
+    if that.revision is not None:
+        _write_str_as_element('revision', that.revision, serializer)
+    if that.creator is not None:
+        _write_reference_as_element('creator', that.creator, serializer)
+    if that.template_id is not None:
+        _write_str_as_element('templateId', that.template_id, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_qualifier_as_element(
+    name: str,
+    that: aas_types.Qualifier,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    if that.semantic_id is not None:
+        _write_reference_as_element('semanticId', that.semantic_id, serializer)
+    if that.supplemental_semantic_ids is not None:
+        _write_list_of_instances(
+            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+        )
+    if that.kind is not None:
+        _write_str_as_element('kind', that.kind.value, serializer)
+    _write_str_as_element('type', that.type, serializer)
+    _write_str_as_element('valueType', that.value_type.value, serializer)
+    if that.value is not None:
+        _write_str_as_element('value', that.value, serializer)
+    if that.value_id is not None:
+        _write_reference_as_element('valueId', that.value_id, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_asset_administration_shell_as_element(
+    name: str,
+    that: aas_types.AssetAdministrationShell,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    if that.extensions is not None:
+        _write_list_of_instances('extensions', that.extensions, serializer)
+    if that.category is not None:
+        _write_str_as_element('category', that.category, serializer)
+    if that.id_short is not None:
+        _write_str_as_element('idShort', that.id_short, serializer)
+    if that.display_name is not None:
+        _write_list_of_instances('displayName', that.display_name, serializer)
+    if that.description is not None:
+        _write_list_of_instances('description', that.description, serializer)
+    if that.administration is not None:
+        _write_administrative_information_as_element(
+            'administration', that.administration, serializer
+        )
+    _write_str_as_element('id', that.id, serializer)
+    if that.embedded_data_specifications is not None:
+        _write_list_of_instances(
+            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
+        )
+    if that.derived_from is not None:
+        _write_reference_as_element('derivedFrom', that.derived_from, serializer)
+    _write_asset_information_as_element(
+        'assetInformation', that.asset_information, serializer
+    )
+    if that.submodels is not None:
+        _write_list_of_instances('submodels', that.submodels, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_asset_information_as_element(
+    name: str,
+    that: aas_types.AssetInformation,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element('assetKind', that.asset_kind.value, serializer)
+    if that.global_asset_id is not None:
+        _write_str_as_element('globalAssetId', that.global_asset_id, serializer)
+    if that.specific_asset_ids is not None:
+        _write_list_of_instances(
+            'specificAssetIds', that.specific_asset_ids, serializer
+        )
+    if that.asset_type is not None:
+        _write_str_as_element('assetType', that.asset_type, serializer)
+    if that.default_thumbnail is not None:
+        _write_resource_as_element(
+            'defaultThumbnail', that.default_thumbnail, serializer
+        )
+    serializer._write_end_element(name)
+
+
+def _write_resource_as_element(
+    name: str,
+    that: aas_types.Resource,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element('path', that.path, serializer)
+    if that.content_type is not None:
+        _write_str_as_element('contentType', that.content_type, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_specific_asset_id_as_element(
+    name: str,
+    that: aas_types.SpecificAssetID,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    if that.semantic_id is not None:
+        _write_reference_as_element('semanticId', that.semantic_id, serializer)
+    if that.supplemental_semantic_ids is not None:
+        _write_list_of_instances(
+            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+        )
+    _write_str_as_element('name', that.name, serializer)
+    _write_str_as_element('value', that.value, serializer)
+    if that.external_subject_id is not None:
+        _write_reference_as_element(
+            'externalSubjectId', that.external_subject_id, serializer
+        )
+    serializer._write_end_element(name)
+
+
+def _write_submodel_as_element(
+    name: str,
+    that: aas_types.Submodel,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    if that.extensions is not None:
+        _write_list_of_instances('extensions', that.extensions, serializer)
+    if that.category is not None:
+        _write_str_as_element('category', that.category, serializer)
+    if that.id_short is not None:
+        _write_str_as_element('idShort', that.id_short, serializer)
+    if that.display_name is not None:
+        _write_list_of_instances('displayName', that.display_name, serializer)
+    if that.description is not None:
+        _write_list_of_instances('description', that.description, serializer)
+    if that.administration is not None:
+        _write_administrative_information_as_element(
+            'administration', that.administration, serializer
+        )
+    _write_str_as_element('id', that.id, serializer)
+    if that.kind is not None:
+        _write_str_as_element('kind', that.kind.value, serializer)
+    if that.semantic_id is not None:
+        _write_reference_as_element('semanticId', that.semantic_id, serializer)
+    if that.supplemental_semantic_ids is not None:
+        _write_list_of_instances(
+            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+        )
+    if that.qualifiers is not None:
+        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
+    if that.embedded_data_specifications is not None:
+        _write_list_of_instances(
+            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
+        )
+    if that.submodel_elements is not None:
+        _write_list_of_instances('submodelElements', that.submodel_elements, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_relationship_element_as_element(
+    name: str,
+    that: aas_types.RelationshipElement,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    if that.extensions is not None:
+        _write_list_of_instances('extensions', that.extensions, serializer)
+    if that.category is not None:
+        _write_str_as_element('category', that.category, serializer)
+    if that.id_short is not None:
+        _write_str_as_element('idShort', that.id_short, serializer)
+    if that.display_name is not None:
+        _write_list_of_instances('displayName', that.display_name, serializer)
+    if that.description is not None:
+        _write_list_of_instances('description', that.description, serializer)
+    if that.semantic_id is not None:
+        _write_reference_as_element('semanticId', that.semantic_id, serializer)
+    if that.supplemental_semantic_ids is not None:
+        _write_list_of_instances(
+            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+        )
+    if that.qualifiers is not None:
+        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
+    if that.embedded_data_specifications is not None:
+        _write_list_of_instances(
+            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
+        )
+    _write_reference_as_element('first', that.first, serializer)
+    _write_reference_as_element('second', that.second, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_submodel_element_list_as_element(
+    name: str,
+    that: aas_types.SubmodelElementList,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    if that.extensions is not None:
+        _write_list_of_instances('extensions', that.extensions, serializer)
+    if that.category is not None:
+        _write_str_as_element('category', that.category, serializer)
+    if that.id_short is not None:
+        _write_str_as_element('idShort', that.id_short, serializer)
+    if that.display_name is not None:
+        _write_list_of_instances('displayName', that.display_name, serializer)
+    if that.description is not None:
+        _write_list_of_instances('description', that.description, serializer)
+    if that.semantic_id is not None:
+        _write_reference_as_element('semanticId', that.semantic_id, serializer)
+    if that.supplemental_semantic_ids is not None:
+        _write_list_of_instances(
+            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+        )
+    if that.qualifiers is not None:
+        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
+    if that.embedded_data_specifications is not None:
+        _write_list_of_instances(
+            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
+        )
+    if that.order_relevant is not None:
+        _write_bool_as_element('orderRelevant', that.order_relevant, serializer)
+    if that.semantic_id_list_element is not None:
+        _write_reference_as_element(
+            'semanticIdListElement', that.semantic_id_list_element, serializer
+        )
+    _write_str_as_element(
+        'typeValueListElement', that.type_value_list_element.value, serializer
+    )
+    if that.value_type_list_element is not None:
+        _write_str_as_element(
+            'valueTypeListElement', that.value_type_list_element.value, serializer
+        )
+    if that.value is not None:
+        _write_list_of_instances('value', that.value, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_submodel_element_collection_as_element(
+    name: str,
+    that: aas_types.SubmodelElementCollection,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    All the properties are optional, so the element is collapsed to an empty one
+    if none of them is set.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    # We optimize for the case where all the optional properties are not set,
+    # so that we can simply output an empty element.
+    if (
+            that.extensions is None
+            and that.category is None
+            and that.id_short is None
+            and that.display_name is None
+            and that.description is None
+            and that.semantic_id is None
+            and that.supplemental_semantic_ids is None
+            and that.qualifiers is None
+            and that.embedded_data_specifications is None
+            and that.value is None
+    ):
+        serializer._write_empty_element(name)
+        return
+
+    serializer._write_start_element(name)
+    if that.extensions is not None:
+        _write_list_of_instances('extensions', that.extensions, serializer)
+    if that.category is not None:
+        _write_str_as_element('category', that.category, serializer)
+    if that.id_short is not None:
+        _write_str_as_element('idShort', that.id_short, serializer)
+    if that.display_name is not None:
+        _write_list_of_instances('displayName', that.display_name, serializer)
+    if that.description is not None:
+        _write_list_of_instances('description', that.description, serializer)
+    if that.semantic_id is not None:
+        _write_reference_as_element('semanticId', that.semantic_id, serializer)
+    if that.supplemental_semantic_ids is not None:
+        _write_list_of_instances(
+            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+        )
+    if that.qualifiers is not None:
+        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
+    if that.embedded_data_specifications is not None:
+        _write_list_of_instances(
+            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
+        )
+    if that.value is not None:
+        _write_list_of_instances('value', that.value, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_property_as_element(
+    name: str,
+    that: aas_types.Property,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    if that.extensions is not None:
+        _write_list_of_instances('extensions', that.extensions, serializer)
+    if that.category is not None:
+        _write_str_as_element('category', that.category, serializer)
+    if that.id_short is not None:
+        _write_str_as_element('idShort', that.id_short, serializer)
+    if that.display_name is not None:
+        _write_list_of_instances('displayName', that.display_name, serializer)
+    if that.description is not None:
+        _write_list_of_instances('description', that.description, serializer)
+    if that.semantic_id is not None:
+        _write_reference_as_element('semanticId', that.semantic_id, serializer)
+    if that.supplemental_semantic_ids is not None:
+        _write_list_of_instances(
+            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+        )
+    if that.qualifiers is not None:
+        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
+    if that.embedded_data_specifications is not None:
+        _write_list_of_instances(
+            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
+        )
+    _write_str_as_element('valueType', that.value_type.value, serializer)
+    if that.value is not None:
+        _write_str_as_element('value', that.value, serializer)
+    if that.value_id is not None:
+        _write_reference_as_element('valueId', that.value_id, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_multi_language_property_as_element(
+    name: str,
+    that: aas_types.MultiLanguageProperty,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    All the properties are optional, so the element is collapsed to an empty one
+    if none of them is set.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    # We optimize for the case where all the optional properties are not set,
+    # so that we can simply output an empty element.
+    if (
+            that.extensions is None
+            and that.category is None
+            and that.id_short is None
+            and that.display_name is None
+            and that.description is None
+            and that.semantic_id is None
+            and that.supplemental_semantic_ids is None
+            and that.qualifiers is None
+            and that.embedded_data_specifications is None
+            and that.value is None
+            and that.value_id is None
+    ):
+        serializer._write_empty_element(name)
+        return
+
+    serializer._write_start_element(name)
+    if that.extensions is not None:
+        _write_list_of_instances('extensions', that.extensions, serializer)
+    if that.category is not None:
+        _write_str_as_element('category', that.category, serializer)
+    if that.id_short is not None:
+        _write_str_as_element('idShort', that.id_short, serializer)
+    if that.display_name is not None:
+        _write_list_of_instances('displayName', that.display_name, serializer)
+    if that.description is not None:
+        _write_list_of_instances('description', that.description, serializer)
+    if that.semantic_id is not None:
+        _write_reference_as_element('semanticId', that.semantic_id, serializer)
+    if that.supplemental_semantic_ids is not None:
+        _write_list_of_instances(
+            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+        )
+    if that.qualifiers is not None:
+        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
+    if that.embedded_data_specifications is not None:
+        _write_list_of_instances(
+            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
+        )
+    if that.value is not None:
+        _write_list_of_instances('value', that.value, serializer)
+    if that.value_id is not None:
+        _write_reference_as_element('valueId', that.value_id, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_range_as_element(
+    name: str,
+    that: aas_types.Range,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    if that.extensions is not None:
+        _write_list_of_instances('extensions', that.extensions, serializer)
+    if that.category is not None:
+        _write_str_as_element('category', that.category, serializer)
+    if that.id_short is not None:
+        _write_str_as_element('idShort', that.id_short, serializer)
+    if that.display_name is not None:
+        _write_list_of_instances('displayName', that.display_name, serializer)
+    if that.description is not None:
+        _write_list_of_instances('description', that.description, serializer)
+    if that.semantic_id is not None:
+        _write_reference_as_element('semanticId', that.semantic_id, serializer)
+    if that.supplemental_semantic_ids is not None:
+        _write_list_of_instances(
+            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+        )
+    if that.qualifiers is not None:
+        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
+    if that.embedded_data_specifications is not None:
+        _write_list_of_instances(
+            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
+        )
+    _write_str_as_element('valueType', that.value_type.value, serializer)
+    if that.min is not None:
+        _write_str_as_element('min', that.min, serializer)
+    if that.max is not None:
+        _write_str_as_element('max', that.max, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_reference_element_as_element(
+    name: str,
+    that: aas_types.ReferenceElement,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    All the properties are optional, so the element is collapsed to an empty one
+    if none of them is set.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    # We optimize for the case where all the optional properties are not set,
+    # so that we can simply output an empty element.
+    if (
+            that.extensions is None
+            and that.category is None
+            and that.id_short is None
+            and that.display_name is None
+            and that.description is None
+            and that.semantic_id is None
+            and that.supplemental_semantic_ids is None
+            and that.qualifiers is None
+            and that.embedded_data_specifications is None
+            and that.value is None
+    ):
+        serializer._write_empty_element(name)
+        return
+
+    serializer._write_start_element(name)
+    if that.extensions is not None:
+        _write_list_of_instances('extensions', that.extensions, serializer)
+    if that.category is not None:
+        _write_str_as_element('category', that.category, serializer)
+    if that.id_short is not None:
+        _write_str_as_element('idShort', that.id_short, serializer)
+    if that.display_name is not None:
+        _write_list_of_instances('displayName', that.display_name, serializer)
+    if that.description is not None:
+        _write_list_of_instances('description', that.description, serializer)
+    if that.semantic_id is not None:
+        _write_reference_as_element('semanticId', that.semantic_id, serializer)
+    if that.supplemental_semantic_ids is not None:
+        _write_list_of_instances(
+            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+        )
+    if that.qualifiers is not None:
+        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
+    if that.embedded_data_specifications is not None:
+        _write_list_of_instances(
+            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
+        )
+    if that.value is not None:
+        _write_reference_as_element('value', that.value, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_blob_as_element(
+    name: str,
+    that: aas_types.Blob,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    if that.extensions is not None:
+        _write_list_of_instances('extensions', that.extensions, serializer)
+    if that.category is not None:
+        _write_str_as_element('category', that.category, serializer)
+    if that.id_short is not None:
+        _write_str_as_element('idShort', that.id_short, serializer)
+    if that.display_name is not None:
+        _write_list_of_instances('displayName', that.display_name, serializer)
+    if that.description is not None:
+        _write_list_of_instances('description', that.description, serializer)
+    if that.semantic_id is not None:
+        _write_reference_as_element('semanticId', that.semantic_id, serializer)
+    if that.supplemental_semantic_ids is not None:
+        _write_list_of_instances(
+            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+        )
+    if that.qualifiers is not None:
+        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
+    if that.embedded_data_specifications is not None:
+        _write_list_of_instances(
+            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
+        )
+    if that.value is not None:
+        _write_bytes_as_element('value', that.value, serializer)
+    _write_str_as_element('contentType', that.content_type, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_file_as_element(
+    name: str,
+    that: aas_types.File,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    if that.extensions is not None:
+        _write_list_of_instances('extensions', that.extensions, serializer)
+    if that.category is not None:
+        _write_str_as_element('category', that.category, serializer)
+    if that.id_short is not None:
+        _write_str_as_element('idShort', that.id_short, serializer)
+    if that.display_name is not None:
+        _write_list_of_instances('displayName', that.display_name, serializer)
+    if that.description is not None:
+        _write_list_of_instances('description', that.description, serializer)
+    if that.semantic_id is not None:
+        _write_reference_as_element('semanticId', that.semantic_id, serializer)
+    if that.supplemental_semantic_ids is not None:
+        _write_list_of_instances(
+            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+        )
+    if that.qualifiers is not None:
+        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
+    if that.embedded_data_specifications is not None:
+        _write_list_of_instances(
+            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
+        )
+    if that.value is not None:
+        _write_str_as_element('value', that.value, serializer)
+    _write_str_as_element('contentType', that.content_type, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_annotated_relationship_element_as_element(
+    name: str,
+    that: aas_types.AnnotatedRelationshipElement,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    if that.extensions is not None:
+        _write_list_of_instances('extensions', that.extensions, serializer)
+    if that.category is not None:
+        _write_str_as_element('category', that.category, serializer)
+    if that.id_short is not None:
+        _write_str_as_element('idShort', that.id_short, serializer)
+    if that.display_name is not None:
+        _write_list_of_instances('displayName', that.display_name, serializer)
+    if that.description is not None:
+        _write_list_of_instances('description', that.description, serializer)
+    if that.semantic_id is not None:
+        _write_reference_as_element('semanticId', that.semantic_id, serializer)
+    if that.supplemental_semantic_ids is not None:
+        _write_list_of_instances(
+            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+        )
+    if that.qualifiers is not None:
+        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
+    if that.embedded_data_specifications is not None:
+        _write_list_of_instances(
+            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
+        )
+    _write_reference_as_element('first', that.first, serializer)
+    _write_reference_as_element('second', that.second, serializer)
+    if that.annotations is not None:
+        _write_list_of_instances('annotations', that.annotations, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_entity_as_element(
+    name: str,
+    that: aas_types.Entity,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    if that.extensions is not None:
+        _write_list_of_instances('extensions', that.extensions, serializer)
+    if that.category is not None:
+        _write_str_as_element('category', that.category, serializer)
+    if that.id_short is not None:
+        _write_str_as_element('idShort', that.id_short, serializer)
+    if that.display_name is not None:
+        _write_list_of_instances('displayName', that.display_name, serializer)
+    if that.description is not None:
+        _write_list_of_instances('description', that.description, serializer)
+    if that.semantic_id is not None:
+        _write_reference_as_element('semanticId', that.semantic_id, serializer)
+    if that.supplemental_semantic_ids is not None:
+        _write_list_of_instances(
+            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+        )
+    if that.qualifiers is not None:
+        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
+    if that.embedded_data_specifications is not None:
+        _write_list_of_instances(
+            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
+        )
+    if that.statements is not None:
+        _write_list_of_instances('statements', that.statements, serializer)
+    _write_str_as_element('entityType', that.entity_type.value, serializer)
+    if that.global_asset_id is not None:
+        _write_str_as_element('globalAssetId', that.global_asset_id, serializer)
+    if that.specific_asset_ids is not None:
+        _write_list_of_instances(
+            'specificAssetIds', that.specific_asset_ids, serializer
+        )
+    serializer._write_end_element(name)
+
+
+def _write_event_payload_as_element(
+    name: str,
+    that: aas_types.EventPayload,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_reference_as_element('source', that.source, serializer)
+    if that.source_semantic_id is not None:
+        _write_reference_as_element(
+            'sourceSemanticId', that.source_semantic_id, serializer
+        )
+    _write_reference_as_element(
+        'observableReference', that.observable_reference, serializer
+    )
+    if that.observable_semantic_id is not None:
+        _write_reference_as_element(
+            'observableSemanticId', that.observable_semantic_id, serializer
+        )
+    if that.topic is not None:
+        _write_str_as_element('topic', that.topic, serializer)
+    if that.subject_id is not None:
+        _write_reference_as_element('subjectId', that.subject_id, serializer)
+    _write_str_as_element('timeStamp', that.time_stamp, serializer)
+    if that.payload is not None:
+        _write_bytes_as_element('payload', that.payload, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_basic_event_element_as_element(
+    name: str,
+    that: aas_types.BasicEventElement,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    if that.extensions is not None:
+        _write_list_of_instances('extensions', that.extensions, serializer)
+    if that.category is not None:
+        _write_str_as_element('category', that.category, serializer)
+    if that.id_short is not None:
+        _write_str_as_element('idShort', that.id_short, serializer)
+    if that.display_name is not None:
+        _write_list_of_instances('displayName', that.display_name, serializer)
+    if that.description is not None:
+        _write_list_of_instances('description', that.description, serializer)
+    if that.semantic_id is not None:
+        _write_reference_as_element('semanticId', that.semantic_id, serializer)
+    if that.supplemental_semantic_ids is not None:
+        _write_list_of_instances(
+            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+        )
+    if that.qualifiers is not None:
+        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
+    if that.embedded_data_specifications is not None:
+        _write_list_of_instances(
+            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
+        )
+    _write_reference_as_element('observed', that.observed, serializer)
+    _write_str_as_element('direction', that.direction.value, serializer)
+    _write_str_as_element('state', that.state.value, serializer)
+    if that.message_topic is not None:
+        _write_str_as_element('messageTopic', that.message_topic, serializer)
+    if that.message_broker is not None:
+        _write_reference_as_element('messageBroker', that.message_broker, serializer)
+    if that.last_update is not None:
+        _write_str_as_element('lastUpdate', that.last_update, serializer)
+    if that.min_interval is not None:
+        _write_str_as_element('minInterval', that.min_interval, serializer)
+    if that.max_interval is not None:
+        _write_str_as_element('maxInterval', that.max_interval, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_operation_as_element(
+    name: str,
+    that: aas_types.Operation,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    All the properties are optional, so the element is collapsed to an empty one
+    if none of them is set.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    # We optimize for the case where all the optional properties are not set,
+    # so that we can simply output an empty element.
+    if (
+            that.extensions is None
+            and that.category is None
+            and that.id_short is None
+            and that.display_name is None
+            and that.description is None
+            and that.semantic_id is None
+            and that.supplemental_semantic_ids is None
+            and that.qualifiers is None
+            and that.embedded_data_specifications is None
+            and that.input_variables is None
+            and that.output_variables is None
+            and that.inoutput_variables is None
+    ):
+        serializer._write_empty_element(name)
+        return
+
+    serializer._write_start_element(name)
+    if that.extensions is not None:
+        _write_list_of_instances('extensions', that.extensions, serializer)
+    if that.category is not None:
+        _write_str_as_element('category', that.category, serializer)
+    if that.id_short is not None:
+        _write_str_as_element('idShort', that.id_short, serializer)
+    if that.display_name is not None:
+        _write_list_of_instances('displayName', that.display_name, serializer)
+    if that.description is not None:
+        _write_list_of_instances('description', that.description, serializer)
+    if that.semantic_id is not None:
+        _write_reference_as_element('semanticId', that.semantic_id, serializer)
+    if that.supplemental_semantic_ids is not None:
+        _write_list_of_instances(
+            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+        )
+    if that.qualifiers is not None:
+        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
+    if that.embedded_data_specifications is not None:
+        _write_list_of_instances(
+            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
+        )
+    if that.input_variables is not None:
+        _write_list_of_instances('inputVariables', that.input_variables, serializer)
+    if that.output_variables is not None:
+        _write_list_of_instances('outputVariables', that.output_variables, serializer)
+    if that.inoutput_variables is not None:
+        _write_list_of_instances(
+            'inoutputVariables', that.inoutput_variables, serializer
+        )
+    serializer._write_end_element(name)
+
+
+def _write_operation_variable_as_element(
+    name: str,
+    that: aas_types.OperationVariable,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_nested_element('value', that.value, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_capability_as_element(
+    name: str,
+    that: aas_types.Capability,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    All the properties are optional, so the element is collapsed to an empty one
+    if none of them is set.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    # We optimize for the case where all the optional properties are not set,
+    # so that we can simply output an empty element.
+    if (
+            that.extensions is None
+            and that.category is None
+            and that.id_short is None
+            and that.display_name is None
+            and that.description is None
+            and that.semantic_id is None
+            and that.supplemental_semantic_ids is None
+            and that.qualifiers is None
+            and that.embedded_data_specifications is None
+    ):
+        serializer._write_empty_element(name)
+        return
+
+    serializer._write_start_element(name)
+    if that.extensions is not None:
+        _write_list_of_instances('extensions', that.extensions, serializer)
+    if that.category is not None:
+        _write_str_as_element('category', that.category, serializer)
+    if that.id_short is not None:
+        _write_str_as_element('idShort', that.id_short, serializer)
+    if that.display_name is not None:
+        _write_list_of_instances('displayName', that.display_name, serializer)
+    if that.description is not None:
+        _write_list_of_instances('description', that.description, serializer)
+    if that.semantic_id is not None:
+        _write_reference_as_element('semanticId', that.semantic_id, serializer)
+    if that.supplemental_semantic_ids is not None:
+        _write_list_of_instances(
+            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+        )
+    if that.qualifiers is not None:
+        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
+    if that.embedded_data_specifications is not None:
+        _write_list_of_instances(
+            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
+        )
+    serializer._write_end_element(name)
+
+
+def _write_concept_description_as_element(
+    name: str,
+    that: aas_types.ConceptDescription,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    if that.extensions is not None:
+        _write_list_of_instances('extensions', that.extensions, serializer)
+    if that.category is not None:
+        _write_str_as_element('category', that.category, serializer)
+    if that.id_short is not None:
+        _write_str_as_element('idShort', that.id_short, serializer)
+    if that.display_name is not None:
+        _write_list_of_instances('displayName', that.display_name, serializer)
+    if that.description is not None:
+        _write_list_of_instances('description', that.description, serializer)
+    if that.administration is not None:
+        _write_administrative_information_as_element(
+            'administration', that.administration, serializer
+        )
+    _write_str_as_element('id', that.id, serializer)
+    if that.embedded_data_specifications is not None:
+        _write_list_of_instances(
+            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
+        )
+    if that.is_case_of is not None:
+        _write_list_of_instances('isCaseOf', that.is_case_of, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_reference_as_element(
+    name: str,
+    that: aas_types.Reference,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element('type', that.type.value, serializer)
+    if that.referred_semantic_id is not None:
+        _write_reference_as_element(
+            'referredSemanticId', that.referred_semantic_id, serializer
+        )
+    _write_list_of_instances('keys', that.keys, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_key_as_element(
+    name: str,
+    that: aas_types.Key,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element('type', that.type.value, serializer)
+    _write_str_as_element('value', that.value, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_lang_string_name_type_as_element(
+    name: str,
+    that: aas_types.LangStringNameType,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element('language', that.language, serializer)
+    _write_str_as_element('text', that.text, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_lang_string_text_type_as_element(
+    name: str,
+    that: aas_types.LangStringTextType,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element('language', that.language, serializer)
+    _write_str_as_element('text', that.text, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_environment_as_element(
+    name: str,
+    that: aas_types.Environment,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    All the properties are optional, so the element is collapsed to an empty one
+    if none of them is set.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    # We optimize for the case where all the optional properties are not set,
+    # so that we can simply output an empty element.
+    if (
+            that.asset_administration_shells is None
+            and that.submodels is None
+            and that.concept_descriptions is None
+    ):
+        serializer._write_empty_element(name)
+        return
+
+    serializer._write_start_element(name)
+    if that.asset_administration_shells is not None:
+        _write_list_of_instances(
+            'assetAdministrationShells', that.asset_administration_shells, serializer
+        )
+    if that.submodels is not None:
+        _write_list_of_instances('submodels', that.submodels, serializer)
+    if that.concept_descriptions is not None:
+        _write_list_of_instances(
+            'conceptDescriptions', that.concept_descriptions, serializer
+        )
+    serializer._write_end_element(name)
+
+
+def _write_embedded_data_specification_as_element(
+    name: str,
+    that: aas_types.EmbeddedDataSpecification,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_reference_as_element(
+        'dataSpecification', that.data_specification, serializer
+    )
+    _write_nested_element(
+        'dataSpecificationContent', that.data_specification_content, serializer
+    )
+    serializer._write_end_element(name)
+
+
+def _write_level_type_as_element(
+    name: str,
+    that: aas_types.LevelType,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_bool_as_element('min', that.min, serializer)
+    _write_bool_as_element('nom', that.nom, serializer)
+    _write_bool_as_element('typ', that.typ, serializer)
+    _write_bool_as_element('max', that.max, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_value_reference_pair_as_element(
+    name: str,
+    that: aas_types.ValueReferencePair,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element('value', that.value, serializer)
+    _write_reference_as_element('valueId', that.value_id, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_value_list_as_element(
+    name: str,
+    that: aas_types.ValueList,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_list_of_instances(
+        'valueReferencePairs', that.value_reference_pairs, serializer
+    )
+    serializer._write_end_element(name)
+
+
+def _write_lang_string_preferred_name_type_iec_61360_as_element(
+    name: str,
+    that: aas_types.LangStringPreferredNameTypeIEC61360,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element('language', that.language, serializer)
+    _write_str_as_element('text', that.text, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_lang_string_short_name_type_iec_61360_as_element(
+    name: str,
+    that: aas_types.LangStringShortNameTypeIEC61360,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element('language', that.language, serializer)
+    _write_str_as_element('text', that.text, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_lang_string_definition_type_iec_61360_as_element(
+    name: str,
+    that: aas_types.LangStringDefinitionTypeIEC61360,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element('language', that.language, serializer)
+    _write_str_as_element('text', that.text, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_data_specification_iec_61360_as_element(
+    name: str,
+    that: aas_types.DataSpecificationIEC61360,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_list_of_instances('preferredName', that.preferred_name, serializer)
+    if that.short_name is not None:
+        _write_list_of_instances('shortName', that.short_name, serializer)
+    if that.unit is not None:
+        _write_str_as_element('unit', that.unit, serializer)
+    if that.unit_id is not None:
+        _write_reference_as_element('unitId', that.unit_id, serializer)
+    if that.source_of_definition is not None:
+        _write_str_as_element(
+            'sourceOfDefinition', that.source_of_definition, serializer
+        )
+    if that.symbol is not None:
+        _write_str_as_element('symbol', that.symbol, serializer)
+    if that.data_type is not None:
+        _write_str_as_element('dataType', that.data_type.value, serializer)
+    if that.definition is not None:
+        _write_list_of_instances('definition', that.definition, serializer)
+    if that.value_format is not None:
+        _write_str_as_element('valueFormat', that.value_format, serializer)
+    if that.value_list is not None:
+        _write_value_list_as_element('valueList', that.value_list, serializer)
+    if that.value is not None:
+        _write_str_as_element('value', that.value, serializer)
+    if that.level_type is not None:
+        _write_level_type_as_element('levelType', that.level_type, serializer)
+    serializer._write_end_element(name)
 
 
 class _Serializer(aas_types.AbstractVisitor):
@@ -15022,23 +16498,6 @@ class _Serializer(aas_types.AbstractVisitor):
         """
         self.stream.write(f'<{name}>')
 
-    def _escape_and_write_text(
-            self,
-            text: str
-    ) -> None:
-        """
-        Escape :paramref:`text` for XML and write it.
-
-        :param text: to be escaped and written
-        """
-        # NOTE (mristin, 2022-10-14):
-        # We ran ``timeit`` on manual code which escaped XML special characters with
-        # a dictionary, and on another snippet which called three ``.replace()``.
-        # The code with ``.replace()`` was an order of magnitude faster on our computers.
-        self.stream.write(
-            text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        )
-
     def _write_end_element(
             self,
             name: str
@@ -15090,136 +16549,6 @@ class _Serializer(aas_types.AbstractVisitor):
         """
         self.stream.write(f'<{name}/>')
 
-    def _write_bool_as_element(
-            self,
-            name: str,
-            value: bool
-    ) -> None:
-        """
-        Write the :paramref:`value` of a boolean enclosed in
-        the :paramref:`name` element.
-
-        :param name: of the corresponding element tag
-        :param value: to be serialized
-        """
-        self._write_start_element(name)
-        self.stream.write('true' if value else 'false')
-        self._write_end_element(name)
-
-    def _write_int_as_element(
-            self,
-            name: str,
-            value: int
-    ) -> None:
-        """
-        Write the :paramref:`value` of an integer enclosed in
-        the :paramref:`name` element.
-
-        :param name: of the corresponding element tag
-        :param value: to be serialized
-        """
-        self._write_start_element(name)
-        self.stream.write(str(value))
-        self._write_end_element(name)
-
-    def _write_float_as_element(
-            self,
-            name: str,
-            value: float
-    ) -> None:
-        """
-        Write the :paramref:`value` of a floating-point number enclosed in
-        the :paramref:`name` element.
-
-        :param name: of the corresponding element tag
-        :param value: to be serialized
-        """
-        self._write_start_element(name)
-
-        if value == math.inf:
-            self.stream.write('INF')
-        elif value == -math.inf:
-            self.stream.write('-INF')
-        elif math.isnan(value):
-            self.stream.write('NaN')
-        elif value == 0:
-            if math.copysign(1.0, value) < 0.0:
-                self.stream.write('-0.0')
-            else:
-                self.stream.write('0.0')
-        else:
-            self.stream.write(str(value))
-
-        self._write_end_element(name)
-
-    def _write_str_as_element(
-            self,
-            name: str,
-            value: str
-    ) -> None:
-        """
-        Write the :paramref:`value` of a string enclosed in
-        the :paramref:`name` element.
-
-        :param name: of the corresponding element tag
-        :param value: to be serialized
-        """
-        self._write_start_element(name)
-        self._escape_and_write_text(value)
-        self._write_end_element(name)
-
-    def _write_bytes_as_element(
-            self,
-            name: str,
-            value: bytes
-    ) -> None:
-        """
-        Write the :paramref:`value` of a binary content enclosed in
-        the :paramref:`name` element.
-
-        :param name: of the corresponding element tag
-        :param value: to be serialized
-        """
-        self._write_start_element(name)
-
-        # NOTE (mristin):
-        # We need to decode the result of the base64-encoding to ASCII since we are
-        # writing to an XML *text* stream. ``base64.b64encode(.)`` gives us bytes,
-        # not a string.
-        encoded = base64.b64encode(value).decode('ascii')
-
-        # NOTE (mristin):
-        # Base64 alphabet excludes ``<``, ``>`` and ``&``, so we can directly
-        # write the ``encoded`` content to the stream as XML text.
-        #
-        # See: https://datatracker.ietf.org/doc/html/rfc4648#section-4
-        self.stream.write(encoded)
-        self._write_end_element(name)
-
-    def _write_list_of_items(
-        self,
-        name: str,
-        items: Sequence[_ItemT],
-        write_item: Callable[[_ItemT], None]
-    ) -> None:
-        """
-        Write :paramref:`items` enclosed in the :paramref:`name` element.
-
-        :param name: of the enclosing element
-        :param items: to be written
-        :param write_item:
-            to write a single item of :paramref:`items` -- either into its own
-            ``v`` element (for scalars/enumerations) or its own natural class
-            element (for classes, via :py:meth:`~visit`)
-        """
-        if len(items) == 0:
-            self._write_empty_element(name)
-        else:
-            self._write_start_element(name)
-            for item in items:
-                write_item(item)
-            self._write_end_element(name)
-
     def __init__(
         self,
         stream: TextIO
@@ -15240,57 +16569,6 @@ class _Serializer(aas_types.AbstractVisitor):
             self._write_first_empty_element_with_namespace
         )
 
-    def _write_extension_as_sequence(
-        self,
-        that: aas_types.Extension
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.semantic_id is not None:
-            self._write_start_element('semanticId')
-            self._write_reference_as_sequence(
-                that.semantic_id
-            )
-            self._write_end_element('semanticId')
-
-        if that.supplemental_semantic_ids is not None:
-            self._write_list_of_items(
-                'supplementalSemanticIds',
-                that.supplemental_semantic_ids,
-                self.visit
-            )
-
-        self._write_str_as_element(
-            'name',
-            that.name
-        )
-
-        if that.value_type is not None:
-            self._write_str_as_element(
-                'valueType',
-                that.value_type.value
-            )
-
-        if that.value is not None:
-            self._write_str_as_element(
-                'value',
-                that.value
-            )
-
-        if that.refers_to is not None:
-            self._write_list_of_items(
-                'refersTo',
-                that.refers_to,
-                self.visit
-            )
-
     def visit_extension(
         self,
         that: aas_types.Extension
@@ -15303,56 +16581,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('extension')
-        self._write_extension_as_sequence(
-            that
-        )
-        self._write_end_element('extension')
-
-    def _write_administrative_information_as_sequence(
-        self,
-        that: aas_types.AdministrativeInformation
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.embedded_data_specifications is not None:
-            self._write_list_of_items(
-                'embeddedDataSpecifications',
-                that.embedded_data_specifications,
-                self.visit
-            )
-
-        if that.version is not None:
-            self._write_str_as_element(
-                'version',
-                that.version
-            )
-
-        if that.revision is not None:
-            self._write_str_as_element(
-                'revision',
-                that.revision
-            )
-
-        if that.creator is not None:
-            self._write_start_element('creator')
-            self._write_reference_as_sequence(
-                that.creator
-            )
-            self._write_end_element('creator')
-
-        if that.template_id is not None:
-            self._write_str_as_element(
-                'templateId',
-                that.template_id
-            )
+        _write_extension_as_element('extension', that, self)
 
     def visit_administrative_information(
         self,
@@ -15366,80 +16595,9 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        # We optimize for the case where all the optional properties are not set,
-        # so that we can simply output an empty element.
-        if (
-                that.embedded_data_specifications is None
-                and that.version is None
-                and that.revision is None
-                and that.creator is None
-                and that.template_id is None
-        ):
-            self._write_empty_element(
-                'administrativeInformation'
-            )
-        else:
-            self._write_start_element('administrativeInformation')
-            self._write_administrative_information_as_sequence(
-                that
-            )
-            self._write_end_element('administrativeInformation')
-
-    def _write_qualifier_as_sequence(
-        self,
-        that: aas_types.Qualifier
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.semantic_id is not None:
-            self._write_start_element('semanticId')
-            self._write_reference_as_sequence(
-                that.semantic_id
-            )
-            self._write_end_element('semanticId')
-
-        if that.supplemental_semantic_ids is not None:
-            self._write_list_of_items(
-                'supplementalSemanticIds',
-                that.supplemental_semantic_ids,
-                self.visit
-            )
-
-        if that.kind is not None:
-            self._write_str_as_element(
-                'kind',
-                that.kind.value
-            )
-
-        self._write_str_as_element(
-            'type',
-            that.type
+        _write_administrative_information_as_element(
+            'administrativeInformation', that, self
         )
-
-        self._write_str_as_element(
-            'valueType',
-            that.value_type.value
-        )
-
-        if that.value is not None:
-            self._write_str_as_element(
-                'value',
-                that.value
-            )
-
-        if that.value_id is not None:
-            self._write_start_element('valueId')
-            self._write_reference_as_sequence(
-                that.value_id
-            )
-            self._write_end_element('valueId')
 
     def visit_qualifier(
         self,
@@ -15453,110 +16611,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('qualifier')
-        self._write_qualifier_as_sequence(
-            that
-        )
-        self._write_end_element('qualifier')
-
-    def _write_asset_administration_shell_as_sequence(
-        self,
-        that: aas_types.AssetAdministrationShell
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.extensions is not None:
-            self._write_list_of_items(
-                'extensions',
-                that.extensions,
-                self.visit
-            )
-
-        if that.category is not None:
-            self._write_str_as_element(
-                'category',
-                that.category
-            )
-
-        if that.id_short is not None:
-            self._write_str_as_element(
-                'idShort',
-                that.id_short
-            )
-
-        if that.display_name is not None:
-            self._write_list_of_items(
-                'displayName',
-                that.display_name,
-                self.visit
-            )
-
-        if that.description is not None:
-            self._write_list_of_items(
-                'description',
-                that.description,
-                self.visit
-            )
-
-        if that.administration is not None:
-            the_administration = that.administration
-            # We optimize for the case where all the optional properties are not set,
-            # so that we can simply output an empty element.
-            if (
-                    the_administration.embedded_data_specifications is None
-                    and the_administration.version is None
-                    and the_administration.revision is None
-                    and the_administration.creator is None
-                    and the_administration.template_id is None
-            ):
-                self._write_empty_element(
-                    'administration'
-                )
-            else:
-                self._write_start_element('administration')
-                self._write_administrative_information_as_sequence(
-                    the_administration
-                )
-                self._write_end_element('administration')
-
-        self._write_str_as_element(
-            'id',
-            that.id
-        )
-
-        if that.embedded_data_specifications is not None:
-            self._write_list_of_items(
-                'embeddedDataSpecifications',
-                that.embedded_data_specifications,
-                self.visit
-            )
-
-        if that.derived_from is not None:
-            self._write_start_element('derivedFrom')
-            self._write_reference_as_sequence(
-                that.derived_from
-            )
-            self._write_end_element('derivedFrom')
-
-        self._write_start_element('assetInformation')
-        self._write_asset_information_as_sequence(
-            that.asset_information
-        )
-        self._write_end_element('assetInformation')
-
-        if that.submodels is not None:
-            self._write_list_of_items(
-                'submodels',
-                that.submodels,
-                self.visit
-            )
+        _write_qualifier_as_element('qualifier', that, self)
 
     def visit_asset_administration_shell(
         self,
@@ -15570,55 +16625,9 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('assetAdministrationShell')
-        self._write_asset_administration_shell_as_sequence(
-            that
+        _write_asset_administration_shell_as_element(
+            'assetAdministrationShell', that, self
         )
-        self._write_end_element('assetAdministrationShell')
-
-    def _write_asset_information_as_sequence(
-        self,
-        that: aas_types.AssetInformation
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'assetKind',
-            that.asset_kind.value
-        )
-
-        if that.global_asset_id is not None:
-            self._write_str_as_element(
-                'globalAssetId',
-                that.global_asset_id
-            )
-
-        if that.specific_asset_ids is not None:
-            self._write_list_of_items(
-                'specificAssetIds',
-                that.specific_asset_ids,
-                self.visit
-            )
-
-        if that.asset_type is not None:
-            self._write_str_as_element(
-                'assetType',
-                that.asset_type
-            )
-
-        if that.default_thumbnail is not None:
-            self._write_start_element('defaultThumbnail')
-            self._write_resource_as_sequence(
-                that.default_thumbnail
-            )
-            self._write_end_element('defaultThumbnail')
 
     def visit_asset_information(
         self,
@@ -15632,35 +16641,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('assetInformation')
-        self._write_asset_information_as_sequence(
-            that
-        )
-        self._write_end_element('assetInformation')
-
-    def _write_resource_as_sequence(
-        self,
-        that: aas_types.Resource
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'path',
-            that.path
-        )
-
-        if that.content_type is not None:
-            self._write_str_as_element(
-                'contentType',
-                that.content_type
-            )
+        _write_asset_information_as_element('assetInformation', that, self)
 
     def visit_resource(
         self,
@@ -15674,55 +16655,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('resource')
-        self._write_resource_as_sequence(
-            that
-        )
-        self._write_end_element('resource')
-
-    def _write_specific_asset_id_as_sequence(
-        self,
-        that: aas_types.SpecificAssetID
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.semantic_id is not None:
-            self._write_start_element('semanticId')
-            self._write_reference_as_sequence(
-                that.semantic_id
-            )
-            self._write_end_element('semanticId')
-
-        if that.supplemental_semantic_ids is not None:
-            self._write_list_of_items(
-                'supplementalSemanticIds',
-                that.supplemental_semantic_ids,
-                self.visit
-            )
-
-        self._write_str_as_element(
-            'name',
-            that.name
-        )
-
-        self._write_str_as_element(
-            'value',
-            that.value
-        )
-
-        if that.external_subject_id is not None:
-            self._write_start_element('externalSubjectId')
-            self._write_reference_as_sequence(
-                that.external_subject_id
-            )
-            self._write_end_element('externalSubjectId')
+        _write_resource_as_element('resource', that, self)
 
     def visit_specific_asset_id(
         self,
@@ -15736,124 +16669,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('specificAssetId')
-        self._write_specific_asset_id_as_sequence(
-            that
-        )
-        self._write_end_element('specificAssetId')
-
-    def _write_submodel_as_sequence(
-        self,
-        that: aas_types.Submodel
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.extensions is not None:
-            self._write_list_of_items(
-                'extensions',
-                that.extensions,
-                self.visit
-            )
-
-        if that.category is not None:
-            self._write_str_as_element(
-                'category',
-                that.category
-            )
-
-        if that.id_short is not None:
-            self._write_str_as_element(
-                'idShort',
-                that.id_short
-            )
-
-        if that.display_name is not None:
-            self._write_list_of_items(
-                'displayName',
-                that.display_name,
-                self.visit
-            )
-
-        if that.description is not None:
-            self._write_list_of_items(
-                'description',
-                that.description,
-                self.visit
-            )
-
-        if that.administration is not None:
-            the_administration = that.administration
-            # We optimize for the case where all the optional properties are not set,
-            # so that we can simply output an empty element.
-            if (
-                    the_administration.embedded_data_specifications is None
-                    and the_administration.version is None
-                    and the_administration.revision is None
-                    and the_administration.creator is None
-                    and the_administration.template_id is None
-            ):
-                self._write_empty_element(
-                    'administration'
-                )
-            else:
-                self._write_start_element('administration')
-                self._write_administrative_information_as_sequence(
-                    the_administration
-                )
-                self._write_end_element('administration')
-
-        self._write_str_as_element(
-            'id',
-            that.id
-        )
-
-        if that.kind is not None:
-            self._write_str_as_element(
-                'kind',
-                that.kind.value
-            )
-
-        if that.semantic_id is not None:
-            self._write_start_element('semanticId')
-            self._write_reference_as_sequence(
-                that.semantic_id
-            )
-            self._write_end_element('semanticId')
-
-        if that.supplemental_semantic_ids is not None:
-            self._write_list_of_items(
-                'supplementalSemanticIds',
-                that.supplemental_semantic_ids,
-                self.visit
-            )
-
-        if that.qualifiers is not None:
-            self._write_list_of_items(
-                'qualifiers',
-                that.qualifiers,
-                self.visit
-            )
-
-        if that.embedded_data_specifications is not None:
-            self._write_list_of_items(
-                'embeddedDataSpecifications',
-                that.embedded_data_specifications,
-                self.visit
-            )
-
-        if that.submodel_elements is not None:
-            self._write_list_of_items(
-                'submodelElements',
-                that.submodel_elements,
-                self.visit
-            )
+        _write_specific_asset_id_as_element('specificAssetId', that, self)
 
     def visit_submodel(
         self,
@@ -15867,97 +16683,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('submodel')
-        self._write_submodel_as_sequence(
-            that
-        )
-        self._write_end_element('submodel')
-
-    def _write_relationship_element_as_sequence(
-        self,
-        that: aas_types.RelationshipElement
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.extensions is not None:
-            self._write_list_of_items(
-                'extensions',
-                that.extensions,
-                self.visit
-            )
-
-        if that.category is not None:
-            self._write_str_as_element(
-                'category',
-                that.category
-            )
-
-        if that.id_short is not None:
-            self._write_str_as_element(
-                'idShort',
-                that.id_short
-            )
-
-        if that.display_name is not None:
-            self._write_list_of_items(
-                'displayName',
-                that.display_name,
-                self.visit
-            )
-
-        if that.description is not None:
-            self._write_list_of_items(
-                'description',
-                that.description,
-                self.visit
-            )
-
-        if that.semantic_id is not None:
-            self._write_start_element('semanticId')
-            self._write_reference_as_sequence(
-                that.semantic_id
-            )
-            self._write_end_element('semanticId')
-
-        if that.supplemental_semantic_ids is not None:
-            self._write_list_of_items(
-                'supplementalSemanticIds',
-                that.supplemental_semantic_ids,
-                self.visit
-            )
-
-        if that.qualifiers is not None:
-            self._write_list_of_items(
-                'qualifiers',
-                that.qualifiers,
-                self.visit
-            )
-
-        if that.embedded_data_specifications is not None:
-            self._write_list_of_items(
-                'embeddedDataSpecifications',
-                that.embedded_data_specifications,
-                self.visit
-            )
-
-        self._write_start_element('first')
-        self._write_reference_as_sequence(
-            that.first
-        )
-        self._write_end_element('first')
-
-        self._write_start_element('second')
-        self._write_reference_as_sequence(
-            that.second
-        )
-        self._write_end_element('second')
+        _write_submodel_as_element('submodel', that, self)
 
     def visit_relationship_element(
         self,
@@ -15971,116 +16697,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('relationshipElement')
-        self._write_relationship_element_as_sequence(
-            that
-        )
-        self._write_end_element('relationshipElement')
-
-    def _write_submodel_element_list_as_sequence(
-        self,
-        that: aas_types.SubmodelElementList
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.extensions is not None:
-            self._write_list_of_items(
-                'extensions',
-                that.extensions,
-                self.visit
-            )
-
-        if that.category is not None:
-            self._write_str_as_element(
-                'category',
-                that.category
-            )
-
-        if that.id_short is not None:
-            self._write_str_as_element(
-                'idShort',
-                that.id_short
-            )
-
-        if that.display_name is not None:
-            self._write_list_of_items(
-                'displayName',
-                that.display_name,
-                self.visit
-            )
-
-        if that.description is not None:
-            self._write_list_of_items(
-                'description',
-                that.description,
-                self.visit
-            )
-
-        if that.semantic_id is not None:
-            self._write_start_element('semanticId')
-            self._write_reference_as_sequence(
-                that.semantic_id
-            )
-            self._write_end_element('semanticId')
-
-        if that.supplemental_semantic_ids is not None:
-            self._write_list_of_items(
-                'supplementalSemanticIds',
-                that.supplemental_semantic_ids,
-                self.visit
-            )
-
-        if that.qualifiers is not None:
-            self._write_list_of_items(
-                'qualifiers',
-                that.qualifiers,
-                self.visit
-            )
-
-        if that.embedded_data_specifications is not None:
-            self._write_list_of_items(
-                'embeddedDataSpecifications',
-                that.embedded_data_specifications,
-                self.visit
-            )
-
-        if that.order_relevant is not None:
-            self._write_bool_as_element(
-                'orderRelevant',
-                that.order_relevant
-            )
-
-        if that.semantic_id_list_element is not None:
-            self._write_start_element('semanticIdListElement')
-            self._write_reference_as_sequence(
-                that.semantic_id_list_element
-            )
-            self._write_end_element('semanticIdListElement')
-
-        self._write_str_as_element(
-            'typeValueListElement',
-            that.type_value_list_element.value
-        )
-
-        if that.value_type_list_element is not None:
-            self._write_str_as_element(
-                'valueTypeListElement',
-                that.value_type_list_element.value
-            )
-
-        if that.value is not None:
-            self._write_list_of_items(
-                'value',
-                that.value,
-                self.visit
-            )
+        _write_relationship_element_as_element('relationshipElement', that, self)
 
     def visit_submodel_element_list(
         self,
@@ -16094,92 +16711,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('submodelElementList')
-        self._write_submodel_element_list_as_sequence(
-            that
-        )
-        self._write_end_element('submodelElementList')
-
-    def _write_submodel_element_collection_as_sequence(
-        self,
-        that: aas_types.SubmodelElementCollection
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.extensions is not None:
-            self._write_list_of_items(
-                'extensions',
-                that.extensions,
-                self.visit
-            )
-
-        if that.category is not None:
-            self._write_str_as_element(
-                'category',
-                that.category
-            )
-
-        if that.id_short is not None:
-            self._write_str_as_element(
-                'idShort',
-                that.id_short
-            )
-
-        if that.display_name is not None:
-            self._write_list_of_items(
-                'displayName',
-                that.display_name,
-                self.visit
-            )
-
-        if that.description is not None:
-            self._write_list_of_items(
-                'description',
-                that.description,
-                self.visit
-            )
-
-        if that.semantic_id is not None:
-            self._write_start_element('semanticId')
-            self._write_reference_as_sequence(
-                that.semantic_id
-            )
-            self._write_end_element('semanticId')
-
-        if that.supplemental_semantic_ids is not None:
-            self._write_list_of_items(
-                'supplementalSemanticIds',
-                that.supplemental_semantic_ids,
-                self.visit
-            )
-
-        if that.qualifiers is not None:
-            self._write_list_of_items(
-                'qualifiers',
-                that.qualifiers,
-                self.visit
-            )
-
-        if that.embedded_data_specifications is not None:
-            self._write_list_of_items(
-                'embeddedDataSpecifications',
-                that.embedded_data_specifications,
-                self.visit
-            )
-
-        if that.value is not None:
-            self._write_list_of_items(
-                'value',
-                that.value,
-                self.visit
-            )
+        _write_submodel_element_list_as_element('submodelElementList', that, self)
 
     def visit_submodel_element_collection(
         self,
@@ -16193,121 +16725,9 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        # We optimize for the case where all the optional properties are not set,
-        # so that we can simply output an empty element.
-        if (
-                that.extensions is None
-                and that.category is None
-                and that.id_short is None
-                and that.display_name is None
-                and that.description is None
-                and that.semantic_id is None
-                and that.supplemental_semantic_ids is None
-                and that.qualifiers is None
-                and that.embedded_data_specifications is None
-                and that.value is None
-        ):
-            self._write_empty_element(
-                'submodelElementCollection'
-            )
-        else:
-            self._write_start_element('submodelElementCollection')
-            self._write_submodel_element_collection_as_sequence(
-                that
-            )
-            self._write_end_element('submodelElementCollection')
-
-    def _write_property_as_sequence(
-        self,
-        that: aas_types.Property
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.extensions is not None:
-            self._write_list_of_items(
-                'extensions',
-                that.extensions,
-                self.visit
-            )
-
-        if that.category is not None:
-            self._write_str_as_element(
-                'category',
-                that.category
-            )
-
-        if that.id_short is not None:
-            self._write_str_as_element(
-                'idShort',
-                that.id_short
-            )
-
-        if that.display_name is not None:
-            self._write_list_of_items(
-                'displayName',
-                that.display_name,
-                self.visit
-            )
-
-        if that.description is not None:
-            self._write_list_of_items(
-                'description',
-                that.description,
-                self.visit
-            )
-
-        if that.semantic_id is not None:
-            self._write_start_element('semanticId')
-            self._write_reference_as_sequence(
-                that.semantic_id
-            )
-            self._write_end_element('semanticId')
-
-        if that.supplemental_semantic_ids is not None:
-            self._write_list_of_items(
-                'supplementalSemanticIds',
-                that.supplemental_semantic_ids,
-                self.visit
-            )
-
-        if that.qualifiers is not None:
-            self._write_list_of_items(
-                'qualifiers',
-                that.qualifiers,
-                self.visit
-            )
-
-        if that.embedded_data_specifications is not None:
-            self._write_list_of_items(
-                'embeddedDataSpecifications',
-                that.embedded_data_specifications,
-                self.visit
-            )
-
-        self._write_str_as_element(
-            'valueType',
-            that.value_type.value
+        _write_submodel_element_collection_as_element(
+            'submodelElementCollection', that, self
         )
-
-        if that.value is not None:
-            self._write_str_as_element(
-                'value',
-                that.value
-            )
-
-        if that.value_id is not None:
-            self._write_start_element('valueId')
-            self._write_reference_as_sequence(
-                that.value_id
-            )
-            self._write_end_element('valueId')
 
     def visit_property(
         self,
@@ -16321,99 +16741,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('property')
-        self._write_property_as_sequence(
-            that
-        )
-        self._write_end_element('property')
-
-    def _write_multi_language_property_as_sequence(
-        self,
-        that: aas_types.MultiLanguageProperty
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.extensions is not None:
-            self._write_list_of_items(
-                'extensions',
-                that.extensions,
-                self.visit
-            )
-
-        if that.category is not None:
-            self._write_str_as_element(
-                'category',
-                that.category
-            )
-
-        if that.id_short is not None:
-            self._write_str_as_element(
-                'idShort',
-                that.id_short
-            )
-
-        if that.display_name is not None:
-            self._write_list_of_items(
-                'displayName',
-                that.display_name,
-                self.visit
-            )
-
-        if that.description is not None:
-            self._write_list_of_items(
-                'description',
-                that.description,
-                self.visit
-            )
-
-        if that.semantic_id is not None:
-            self._write_start_element('semanticId')
-            self._write_reference_as_sequence(
-                that.semantic_id
-            )
-            self._write_end_element('semanticId')
-
-        if that.supplemental_semantic_ids is not None:
-            self._write_list_of_items(
-                'supplementalSemanticIds',
-                that.supplemental_semantic_ids,
-                self.visit
-            )
-
-        if that.qualifiers is not None:
-            self._write_list_of_items(
-                'qualifiers',
-                that.qualifiers,
-                self.visit
-            )
-
-        if that.embedded_data_specifications is not None:
-            self._write_list_of_items(
-                'embeddedDataSpecifications',
-                that.embedded_data_specifications,
-                self.visit
-            )
-
-        if that.value is not None:
-            self._write_list_of_items(
-                'value',
-                that.value,
-                self.visit
-            )
-
-        if that.value_id is not None:
-            self._write_start_element('valueId')
-            self._write_reference_as_sequence(
-                that.value_id
-            )
-            self._write_end_element('valueId')
+        _write_property_as_element('property', that, self)
 
     def visit_multi_language_property(
         self,
@@ -16427,121 +16755,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        # We optimize for the case where all the optional properties are not set,
-        # so that we can simply output an empty element.
-        if (
-                that.extensions is None
-                and that.category is None
-                and that.id_short is None
-                and that.display_name is None
-                and that.description is None
-                and that.semantic_id is None
-                and that.supplemental_semantic_ids is None
-                and that.qualifiers is None
-                and that.embedded_data_specifications is None
-                and that.value is None
-                and that.value_id is None
-        ):
-            self._write_empty_element(
-                'multiLanguageProperty'
-            )
-        else:
-            self._write_start_element('multiLanguageProperty')
-            self._write_multi_language_property_as_sequence(
-                that
-            )
-            self._write_end_element('multiLanguageProperty')
-
-    def _write_range_as_sequence(
-        self,
-        that: aas_types.Range
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.extensions is not None:
-            self._write_list_of_items(
-                'extensions',
-                that.extensions,
-                self.visit
-            )
-
-        if that.category is not None:
-            self._write_str_as_element(
-                'category',
-                that.category
-            )
-
-        if that.id_short is not None:
-            self._write_str_as_element(
-                'idShort',
-                that.id_short
-            )
-
-        if that.display_name is not None:
-            self._write_list_of_items(
-                'displayName',
-                that.display_name,
-                self.visit
-            )
-
-        if that.description is not None:
-            self._write_list_of_items(
-                'description',
-                that.description,
-                self.visit
-            )
-
-        if that.semantic_id is not None:
-            self._write_start_element('semanticId')
-            self._write_reference_as_sequence(
-                that.semantic_id
-            )
-            self._write_end_element('semanticId')
-
-        if that.supplemental_semantic_ids is not None:
-            self._write_list_of_items(
-                'supplementalSemanticIds',
-                that.supplemental_semantic_ids,
-                self.visit
-            )
-
-        if that.qualifiers is not None:
-            self._write_list_of_items(
-                'qualifiers',
-                that.qualifiers,
-                self.visit
-            )
-
-        if that.embedded_data_specifications is not None:
-            self._write_list_of_items(
-                'embeddedDataSpecifications',
-                that.embedded_data_specifications,
-                self.visit
-            )
-
-        self._write_str_as_element(
-            'valueType',
-            that.value_type.value
-        )
-
-        if that.min is not None:
-            self._write_str_as_element(
-                'min',
-                that.min
-            )
-
-        if that.max is not None:
-            self._write_str_as_element(
-                'max',
-                that.max
-            )
+        _write_multi_language_property_as_element('multiLanguageProperty', that, self)
 
     def visit_range(
         self,
@@ -16555,92 +16769,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('range')
-        self._write_range_as_sequence(
-            that
-        )
-        self._write_end_element('range')
-
-    def _write_reference_element_as_sequence(
-        self,
-        that: aas_types.ReferenceElement
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.extensions is not None:
-            self._write_list_of_items(
-                'extensions',
-                that.extensions,
-                self.visit
-            )
-
-        if that.category is not None:
-            self._write_str_as_element(
-                'category',
-                that.category
-            )
-
-        if that.id_short is not None:
-            self._write_str_as_element(
-                'idShort',
-                that.id_short
-            )
-
-        if that.display_name is not None:
-            self._write_list_of_items(
-                'displayName',
-                that.display_name,
-                self.visit
-            )
-
-        if that.description is not None:
-            self._write_list_of_items(
-                'description',
-                that.description,
-                self.visit
-            )
-
-        if that.semantic_id is not None:
-            self._write_start_element('semanticId')
-            self._write_reference_as_sequence(
-                that.semantic_id
-            )
-            self._write_end_element('semanticId')
-
-        if that.supplemental_semantic_ids is not None:
-            self._write_list_of_items(
-                'supplementalSemanticIds',
-                that.supplemental_semantic_ids,
-                self.visit
-            )
-
-        if that.qualifiers is not None:
-            self._write_list_of_items(
-                'qualifiers',
-                that.qualifiers,
-                self.visit
-            )
-
-        if that.embedded_data_specifications is not None:
-            self._write_list_of_items(
-                'embeddedDataSpecifications',
-                that.embedded_data_specifications,
-                self.visit
-            )
-
-        if that.value is not None:
-            self._write_start_element('value')
-            self._write_reference_as_sequence(
-                that.value
-            )
-            self._write_end_element('value')
+        _write_range_as_element('range', that, self)
 
     def visit_reference_element(
         self,
@@ -16654,114 +16783,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        # We optimize for the case where all the optional properties are not set,
-        # so that we can simply output an empty element.
-        if (
-                that.extensions is None
-                and that.category is None
-                and that.id_short is None
-                and that.display_name is None
-                and that.description is None
-                and that.semantic_id is None
-                and that.supplemental_semantic_ids is None
-                and that.qualifiers is None
-                and that.embedded_data_specifications is None
-                and that.value is None
-        ):
-            self._write_empty_element(
-                'referenceElement'
-            )
-        else:
-            self._write_start_element('referenceElement')
-            self._write_reference_element_as_sequence(
-                that
-            )
-            self._write_end_element('referenceElement')
-
-    def _write_blob_as_sequence(
-        self,
-        that: aas_types.Blob
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.extensions is not None:
-            self._write_list_of_items(
-                'extensions',
-                that.extensions,
-                self.visit
-            )
-
-        if that.category is not None:
-            self._write_str_as_element(
-                'category',
-                that.category
-            )
-
-        if that.id_short is not None:
-            self._write_str_as_element(
-                'idShort',
-                that.id_short
-            )
-
-        if that.display_name is not None:
-            self._write_list_of_items(
-                'displayName',
-                that.display_name,
-                self.visit
-            )
-
-        if that.description is not None:
-            self._write_list_of_items(
-                'description',
-                that.description,
-                self.visit
-            )
-
-        if that.semantic_id is not None:
-            self._write_start_element('semanticId')
-            self._write_reference_as_sequence(
-                that.semantic_id
-            )
-            self._write_end_element('semanticId')
-
-        if that.supplemental_semantic_ids is not None:
-            self._write_list_of_items(
-                'supplementalSemanticIds',
-                that.supplemental_semantic_ids,
-                self.visit
-            )
-
-        if that.qualifiers is not None:
-            self._write_list_of_items(
-                'qualifiers',
-                that.qualifiers,
-                self.visit
-            )
-
-        if that.embedded_data_specifications is not None:
-            self._write_list_of_items(
-                'embeddedDataSpecifications',
-                that.embedded_data_specifications,
-                self.visit
-            )
-
-        if that.value is not None:
-            self._write_bytes_as_element(
-                'value',
-                that.value
-            )
-
-        self._write_str_as_element(
-            'contentType',
-            that.content_type
-        )
+        _write_reference_element_as_element('referenceElement', that, self)
 
     def visit_blob(
         self,
@@ -16775,96 +16797,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('blob')
-        self._write_blob_as_sequence(
-            that
-        )
-        self._write_end_element('blob')
-
-    def _write_file_as_sequence(
-        self,
-        that: aas_types.File
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.extensions is not None:
-            self._write_list_of_items(
-                'extensions',
-                that.extensions,
-                self.visit
-            )
-
-        if that.category is not None:
-            self._write_str_as_element(
-                'category',
-                that.category
-            )
-
-        if that.id_short is not None:
-            self._write_str_as_element(
-                'idShort',
-                that.id_short
-            )
-
-        if that.display_name is not None:
-            self._write_list_of_items(
-                'displayName',
-                that.display_name,
-                self.visit
-            )
-
-        if that.description is not None:
-            self._write_list_of_items(
-                'description',
-                that.description,
-                self.visit
-            )
-
-        if that.semantic_id is not None:
-            self._write_start_element('semanticId')
-            self._write_reference_as_sequence(
-                that.semantic_id
-            )
-            self._write_end_element('semanticId')
-
-        if that.supplemental_semantic_ids is not None:
-            self._write_list_of_items(
-                'supplementalSemanticIds',
-                that.supplemental_semantic_ids,
-                self.visit
-            )
-
-        if that.qualifiers is not None:
-            self._write_list_of_items(
-                'qualifiers',
-                that.qualifiers,
-                self.visit
-            )
-
-        if that.embedded_data_specifications is not None:
-            self._write_list_of_items(
-                'embeddedDataSpecifications',
-                that.embedded_data_specifications,
-                self.visit
-            )
-
-        if that.value is not None:
-            self._write_str_as_element(
-                'value',
-                that.value
-            )
-
-        self._write_str_as_element(
-            'contentType',
-            that.content_type
-        )
+        _write_blob_as_element('blob', that, self)
 
     def visit_file(
         self,
@@ -16878,104 +16811,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('file')
-        self._write_file_as_sequence(
-            that
-        )
-        self._write_end_element('file')
-
-    def _write_annotated_relationship_element_as_sequence(
-        self,
-        that: aas_types.AnnotatedRelationshipElement
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.extensions is not None:
-            self._write_list_of_items(
-                'extensions',
-                that.extensions,
-                self.visit
-            )
-
-        if that.category is not None:
-            self._write_str_as_element(
-                'category',
-                that.category
-            )
-
-        if that.id_short is not None:
-            self._write_str_as_element(
-                'idShort',
-                that.id_short
-            )
-
-        if that.display_name is not None:
-            self._write_list_of_items(
-                'displayName',
-                that.display_name,
-                self.visit
-            )
-
-        if that.description is not None:
-            self._write_list_of_items(
-                'description',
-                that.description,
-                self.visit
-            )
-
-        if that.semantic_id is not None:
-            self._write_start_element('semanticId')
-            self._write_reference_as_sequence(
-                that.semantic_id
-            )
-            self._write_end_element('semanticId')
-
-        if that.supplemental_semantic_ids is not None:
-            self._write_list_of_items(
-                'supplementalSemanticIds',
-                that.supplemental_semantic_ids,
-                self.visit
-            )
-
-        if that.qualifiers is not None:
-            self._write_list_of_items(
-                'qualifiers',
-                that.qualifiers,
-                self.visit
-            )
-
-        if that.embedded_data_specifications is not None:
-            self._write_list_of_items(
-                'embeddedDataSpecifications',
-                that.embedded_data_specifications,
-                self.visit
-            )
-
-        self._write_start_element('first')
-        self._write_reference_as_sequence(
-            that.first
-        )
-        self._write_end_element('first')
-
-        self._write_start_element('second')
-        self._write_reference_as_sequence(
-            that.second
-        )
-        self._write_end_element('second')
-
-        if that.annotations is not None:
-            self._write_list_of_items(
-                'annotations',
-                that.annotations,
-                self.visit
-            )
+        _write_file_as_element('file', that, self)
 
     def visit_annotated_relationship_element(
         self,
@@ -16989,110 +16825,9 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('annotatedRelationshipElement')
-        self._write_annotated_relationship_element_as_sequence(
-            that
+        _write_annotated_relationship_element_as_element(
+            'annotatedRelationshipElement', that, self
         )
-        self._write_end_element('annotatedRelationshipElement')
-
-    def _write_entity_as_sequence(
-        self,
-        that: aas_types.Entity
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.extensions is not None:
-            self._write_list_of_items(
-                'extensions',
-                that.extensions,
-                self.visit
-            )
-
-        if that.category is not None:
-            self._write_str_as_element(
-                'category',
-                that.category
-            )
-
-        if that.id_short is not None:
-            self._write_str_as_element(
-                'idShort',
-                that.id_short
-            )
-
-        if that.display_name is not None:
-            self._write_list_of_items(
-                'displayName',
-                that.display_name,
-                self.visit
-            )
-
-        if that.description is not None:
-            self._write_list_of_items(
-                'description',
-                that.description,
-                self.visit
-            )
-
-        if that.semantic_id is not None:
-            self._write_start_element('semanticId')
-            self._write_reference_as_sequence(
-                that.semantic_id
-            )
-            self._write_end_element('semanticId')
-
-        if that.supplemental_semantic_ids is not None:
-            self._write_list_of_items(
-                'supplementalSemanticIds',
-                that.supplemental_semantic_ids,
-                self.visit
-            )
-
-        if that.qualifiers is not None:
-            self._write_list_of_items(
-                'qualifiers',
-                that.qualifiers,
-                self.visit
-            )
-
-        if that.embedded_data_specifications is not None:
-            self._write_list_of_items(
-                'embeddedDataSpecifications',
-                that.embedded_data_specifications,
-                self.visit
-            )
-
-        if that.statements is not None:
-            self._write_list_of_items(
-                'statements',
-                that.statements,
-                self.visit
-            )
-
-        self._write_str_as_element(
-            'entityType',
-            that.entity_type.value
-        )
-
-        if that.global_asset_id is not None:
-            self._write_str_as_element(
-                'globalAssetId',
-                that.global_asset_id
-            )
-
-        if that.specific_asset_ids is not None:
-            self._write_list_of_items(
-                'specificAssetIds',
-                that.specific_asset_ids,
-                self.visit
-            )
 
     def visit_entity(
         self,
@@ -17106,74 +16841,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('entity')
-        self._write_entity_as_sequence(
-            that
-        )
-        self._write_end_element('entity')
-
-    def _write_event_payload_as_sequence(
-        self,
-        that: aas_types.EventPayload
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_start_element('source')
-        self._write_reference_as_sequence(
-            that.source
-        )
-        self._write_end_element('source')
-
-        if that.source_semantic_id is not None:
-            self._write_start_element('sourceSemanticId')
-            self._write_reference_as_sequence(
-                that.source_semantic_id
-            )
-            self._write_end_element('sourceSemanticId')
-
-        self._write_start_element('observableReference')
-        self._write_reference_as_sequence(
-            that.observable_reference
-        )
-        self._write_end_element('observableReference')
-
-        if that.observable_semantic_id is not None:
-            self._write_start_element('observableSemanticId')
-            self._write_reference_as_sequence(
-                that.observable_semantic_id
-            )
-            self._write_end_element('observableSemanticId')
-
-        if that.topic is not None:
-            self._write_str_as_element(
-                'topic',
-                that.topic
-            )
-
-        if that.subject_id is not None:
-            self._write_start_element('subjectId')
-            self._write_reference_as_sequence(
-                that.subject_id
-            )
-            self._write_end_element('subjectId')
-
-        self._write_str_as_element(
-            'timeStamp',
-            that.time_stamp
-        )
-
-        if that.payload is not None:
-            self._write_bytes_as_element(
-                'payload',
-                that.payload
-            )
+        _write_entity_as_element('entity', that, self)
 
     def visit_event_payload(
         self,
@@ -17187,132 +16855,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('eventPayload')
-        self._write_event_payload_as_sequence(
-            that
-        )
-        self._write_end_element('eventPayload')
-
-    def _write_basic_event_element_as_sequence(
-        self,
-        that: aas_types.BasicEventElement
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.extensions is not None:
-            self._write_list_of_items(
-                'extensions',
-                that.extensions,
-                self.visit
-            )
-
-        if that.category is not None:
-            self._write_str_as_element(
-                'category',
-                that.category
-            )
-
-        if that.id_short is not None:
-            self._write_str_as_element(
-                'idShort',
-                that.id_short
-            )
-
-        if that.display_name is not None:
-            self._write_list_of_items(
-                'displayName',
-                that.display_name,
-                self.visit
-            )
-
-        if that.description is not None:
-            self._write_list_of_items(
-                'description',
-                that.description,
-                self.visit
-            )
-
-        if that.semantic_id is not None:
-            self._write_start_element('semanticId')
-            self._write_reference_as_sequence(
-                that.semantic_id
-            )
-            self._write_end_element('semanticId')
-
-        if that.supplemental_semantic_ids is not None:
-            self._write_list_of_items(
-                'supplementalSemanticIds',
-                that.supplemental_semantic_ids,
-                self.visit
-            )
-
-        if that.qualifiers is not None:
-            self._write_list_of_items(
-                'qualifiers',
-                that.qualifiers,
-                self.visit
-            )
-
-        if that.embedded_data_specifications is not None:
-            self._write_list_of_items(
-                'embeddedDataSpecifications',
-                that.embedded_data_specifications,
-                self.visit
-            )
-
-        self._write_start_element('observed')
-        self._write_reference_as_sequence(
-            that.observed
-        )
-        self._write_end_element('observed')
-
-        self._write_str_as_element(
-            'direction',
-            that.direction.value
-        )
-
-        self._write_str_as_element(
-            'state',
-            that.state.value
-        )
-
-        if that.message_topic is not None:
-            self._write_str_as_element(
-                'messageTopic',
-                that.message_topic
-            )
-
-        if that.message_broker is not None:
-            self._write_start_element('messageBroker')
-            self._write_reference_as_sequence(
-                that.message_broker
-            )
-            self._write_end_element('messageBroker')
-
-        if that.last_update is not None:
-            self._write_str_as_element(
-                'lastUpdate',
-                that.last_update
-            )
-
-        if that.min_interval is not None:
-            self._write_str_as_element(
-                'minInterval',
-                that.min_interval
-            )
-
-        if that.max_interval is not None:
-            self._write_str_as_element(
-                'maxInterval',
-                that.max_interval
-            )
+        _write_event_payload_as_element('eventPayload', that, self)
 
     def visit_basic_event_element(
         self,
@@ -17326,106 +16869,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('basicEventElement')
-        self._write_basic_event_element_as_sequence(
-            that
-        )
-        self._write_end_element('basicEventElement')
-
-    def _write_operation_as_sequence(
-        self,
-        that: aas_types.Operation
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.extensions is not None:
-            self._write_list_of_items(
-                'extensions',
-                that.extensions,
-                self.visit
-            )
-
-        if that.category is not None:
-            self._write_str_as_element(
-                'category',
-                that.category
-            )
-
-        if that.id_short is not None:
-            self._write_str_as_element(
-                'idShort',
-                that.id_short
-            )
-
-        if that.display_name is not None:
-            self._write_list_of_items(
-                'displayName',
-                that.display_name,
-                self.visit
-            )
-
-        if that.description is not None:
-            self._write_list_of_items(
-                'description',
-                that.description,
-                self.visit
-            )
-
-        if that.semantic_id is not None:
-            self._write_start_element('semanticId')
-            self._write_reference_as_sequence(
-                that.semantic_id
-            )
-            self._write_end_element('semanticId')
-
-        if that.supplemental_semantic_ids is not None:
-            self._write_list_of_items(
-                'supplementalSemanticIds',
-                that.supplemental_semantic_ids,
-                self.visit
-            )
-
-        if that.qualifiers is not None:
-            self._write_list_of_items(
-                'qualifiers',
-                that.qualifiers,
-                self.visit
-            )
-
-        if that.embedded_data_specifications is not None:
-            self._write_list_of_items(
-                'embeddedDataSpecifications',
-                that.embedded_data_specifications,
-                self.visit
-            )
-
-        if that.input_variables is not None:
-            self._write_list_of_items(
-                'inputVariables',
-                that.input_variables,
-                self.visit
-            )
-
-        if that.output_variables is not None:
-            self._write_list_of_items(
-                'outputVariables',
-                that.output_variables,
-                self.visit
-            )
-
-        if that.inoutput_variables is not None:
-            self._write_list_of_items(
-                'inoutputVariables',
-                that.inoutput_variables,
-                self.visit
-            )
+        _write_basic_event_element_as_element('basicEventElement', that, self)
 
     def visit_operation(
         self,
@@ -17439,48 +16883,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        # We optimize for the case where all the optional properties are not set,
-        # so that we can simply output an empty element.
-        if (
-                that.extensions is None
-                and that.category is None
-                and that.id_short is None
-                and that.display_name is None
-                and that.description is None
-                and that.semantic_id is None
-                and that.supplemental_semantic_ids is None
-                and that.qualifiers is None
-                and that.embedded_data_specifications is None
-                and that.input_variables is None
-                and that.output_variables is None
-                and that.inoutput_variables is None
-        ):
-            self._write_empty_element(
-                'operation'
-            )
-        else:
-            self._write_start_element('operation')
-            self._write_operation_as_sequence(
-                that
-            )
-            self._write_end_element('operation')
-
-    def _write_operation_variable_as_sequence(
-        self,
-        that: aas_types.OperationVariable
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_start_element('value')
-        self.visit(that.value)
-        self._write_end_element('value')
+        _write_operation_as_element('operation', that, self)
 
     def visit_operation_variable(
         self,
@@ -17494,85 +16897,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('operationVariable')
-        self._write_operation_variable_as_sequence(
-            that
-        )
-        self._write_end_element('operationVariable')
-
-    def _write_capability_as_sequence(
-        self,
-        that: aas_types.Capability
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.extensions is not None:
-            self._write_list_of_items(
-                'extensions',
-                that.extensions,
-                self.visit
-            )
-
-        if that.category is not None:
-            self._write_str_as_element(
-                'category',
-                that.category
-            )
-
-        if that.id_short is not None:
-            self._write_str_as_element(
-                'idShort',
-                that.id_short
-            )
-
-        if that.display_name is not None:
-            self._write_list_of_items(
-                'displayName',
-                that.display_name,
-                self.visit
-            )
-
-        if that.description is not None:
-            self._write_list_of_items(
-                'description',
-                that.description,
-                self.visit
-            )
-
-        if that.semantic_id is not None:
-            self._write_start_element('semanticId')
-            self._write_reference_as_sequence(
-                that.semantic_id
-            )
-            self._write_end_element('semanticId')
-
-        if that.supplemental_semantic_ids is not None:
-            self._write_list_of_items(
-                'supplementalSemanticIds',
-                that.supplemental_semantic_ids,
-                self.visit
-            )
-
-        if that.qualifiers is not None:
-            self._write_list_of_items(
-                'qualifiers',
-                that.qualifiers,
-                self.visit
-            )
-
-        if that.embedded_data_specifications is not None:
-            self._write_list_of_items(
-                'embeddedDataSpecifications',
-                that.embedded_data_specifications,
-                self.visit
-            )
+        _write_operation_variable_as_element('operationVariable', that, self)
 
     def visit_capability(
         self,
@@ -17586,114 +16911,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        # We optimize for the case where all the optional properties are not set,
-        # so that we can simply output an empty element.
-        if (
-                that.extensions is None
-                and that.category is None
-                and that.id_short is None
-                and that.display_name is None
-                and that.description is None
-                and that.semantic_id is None
-                and that.supplemental_semantic_ids is None
-                and that.qualifiers is None
-                and that.embedded_data_specifications is None
-        ):
-            self._write_empty_element(
-                'capability'
-            )
-        else:
-            self._write_start_element('capability')
-            self._write_capability_as_sequence(
-                that
-            )
-            self._write_end_element('capability')
-
-    def _write_concept_description_as_sequence(
-        self,
-        that: aas_types.ConceptDescription
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.extensions is not None:
-            self._write_list_of_items(
-                'extensions',
-                that.extensions,
-                self.visit
-            )
-
-        if that.category is not None:
-            self._write_str_as_element(
-                'category',
-                that.category
-            )
-
-        if that.id_short is not None:
-            self._write_str_as_element(
-                'idShort',
-                that.id_short
-            )
-
-        if that.display_name is not None:
-            self._write_list_of_items(
-                'displayName',
-                that.display_name,
-                self.visit
-            )
-
-        if that.description is not None:
-            self._write_list_of_items(
-                'description',
-                that.description,
-                self.visit
-            )
-
-        if that.administration is not None:
-            the_administration = that.administration
-            # We optimize for the case where all the optional properties are not set,
-            # so that we can simply output an empty element.
-            if (
-                    the_administration.embedded_data_specifications is None
-                    and the_administration.version is None
-                    and the_administration.revision is None
-                    and the_administration.creator is None
-                    and the_administration.template_id is None
-            ):
-                self._write_empty_element(
-                    'administration'
-                )
-            else:
-                self._write_start_element('administration')
-                self._write_administrative_information_as_sequence(
-                    the_administration
-                )
-                self._write_end_element('administration')
-
-        self._write_str_as_element(
-            'id',
-            that.id
-        )
-
-        if that.embedded_data_specifications is not None:
-            self._write_list_of_items(
-                'embeddedDataSpecifications',
-                that.embedded_data_specifications,
-                self.visit
-            )
-
-        if that.is_case_of is not None:
-            self._write_list_of_items(
-                'isCaseOf',
-                that.is_case_of,
-                self.visit
-            )
+        _write_capability_as_element('capability', that, self)
 
     def visit_concept_description(
         self,
@@ -17707,42 +16925,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('conceptDescription')
-        self._write_concept_description_as_sequence(
-            that
-        )
-        self._write_end_element('conceptDescription')
-
-    def _write_reference_as_sequence(
-        self,
-        that: aas_types.Reference
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'type',
-            that.type.value
-        )
-
-        if that.referred_semantic_id is not None:
-            self._write_start_element('referredSemanticId')
-            self._write_reference_as_sequence(
-                that.referred_semantic_id
-            )
-            self._write_end_element('referredSemanticId')
-
-        self._write_list_of_items(
-            'keys',
-            that.keys,
-            self.visit
-        )
+        _write_concept_description_as_element('conceptDescription', that, self)
 
     def visit_reference(
         self,
@@ -17756,34 +16939,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('reference')
-        self._write_reference_as_sequence(
-            that
-        )
-        self._write_end_element('reference')
-
-    def _write_key_as_sequence(
-        self,
-        that: aas_types.Key
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'type',
-            that.type.value
-        )
-
-        self._write_str_as_element(
-            'value',
-            that.value
-        )
+        _write_reference_as_element('reference', that, self)
 
     def visit_key(
         self,
@@ -17797,34 +16953,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('key')
-        self._write_key_as_sequence(
-            that
-        )
-        self._write_end_element('key')
-
-    def _write_lang_string_name_type_as_sequence(
-        self,
-        that: aas_types.LangStringNameType
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'language',
-            that.language
-        )
-
-        self._write_str_as_element(
-            'text',
-            that.text
-        )
+        _write_key_as_element('key', that, self)
 
     def visit_lang_string_name_type(
         self,
@@ -17838,34 +16967,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('langStringNameType')
-        self._write_lang_string_name_type_as_sequence(
-            that
-        )
-        self._write_end_element('langStringNameType')
-
-    def _write_lang_string_text_type_as_sequence(
-        self,
-        that: aas_types.LangStringTextType
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'language',
-            that.language
-        )
-
-        self._write_str_as_element(
-            'text',
-            that.text
-        )
+        _write_lang_string_name_type_as_element('langStringNameType', that, self)
 
     def visit_lang_string_text_type(
         self,
@@ -17879,45 +16981,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('langStringTextType')
-        self._write_lang_string_text_type_as_sequence(
-            that
-        )
-        self._write_end_element('langStringTextType')
-
-    def _write_environment_as_sequence(
-        self,
-        that: aas_types.Environment
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        if that.asset_administration_shells is not None:
-            self._write_list_of_items(
-                'assetAdministrationShells',
-                that.asset_administration_shells,
-                self.visit
-            )
-
-        if that.submodels is not None:
-            self._write_list_of_items(
-                'submodels',
-                that.submodels,
-                self.visit
-            )
-
-        if that.concept_descriptions is not None:
-            self._write_list_of_items(
-                'conceptDescriptions',
-                that.concept_descriptions,
-                self.visit
-            )
+        _write_lang_string_text_type_as_element('langStringTextType', that, self)
 
     def visit_environment(
         self,
@@ -17931,45 +16995,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        # We optimize for the case where all the optional properties are not set,
-        # so that we can simply output an empty element.
-        if (
-                that.asset_administration_shells is None
-                and that.submodels is None
-                and that.concept_descriptions is None
-        ):
-            self._write_empty_element(
-                'environment'
-            )
-        else:
-            self._write_start_element('environment')
-            self._write_environment_as_sequence(
-                that
-            )
-            self._write_end_element('environment')
-
-    def _write_embedded_data_specification_as_sequence(
-        self,
-        that: aas_types.EmbeddedDataSpecification
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_start_element('dataSpecification')
-        self._write_reference_as_sequence(
-            that.data_specification
-        )
-        self._write_end_element('dataSpecification')
-
-        self._write_start_element('dataSpecificationContent')
-        self.visit(that.data_specification_content)
-        self._write_end_element('dataSpecificationContent')
+        _write_environment_as_element('environment', that, self)
 
     def visit_embedded_data_specification(
         self,
@@ -17983,43 +17009,8 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('embeddedDataSpecification')
-        self._write_embedded_data_specification_as_sequence(
-            that
-        )
-        self._write_end_element('embeddedDataSpecification')
-
-    def _write_level_type_as_sequence(
-        self,
-        that: aas_types.LevelType
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_bool_as_element(
-            'min',
-            that.min
-        )
-
-        self._write_bool_as_element(
-            'nom',
-            that.nom
-        )
-
-        self._write_bool_as_element(
-            'typ',
-            that.typ
-        )
-
-        self._write_bool_as_element(
-            'max',
-            that.max
+        _write_embedded_data_specification_as_element(
+            'embeddedDataSpecification', that, self
         )
 
     def visit_level_type(
@@ -18034,35 +17025,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('levelType')
-        self._write_level_type_as_sequence(
-            that
-        )
-        self._write_end_element('levelType')
-
-    def _write_value_reference_pair_as_sequence(
-        self,
-        that: aas_types.ValueReferencePair
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'value',
-            that.value
-        )
-
-        self._write_start_element('valueId')
-        self._write_reference_as_sequence(
-            that.value_id
-        )
-        self._write_end_element('valueId')
+        _write_level_type_as_element('levelType', that, self)
 
     def visit_value_reference_pair(
         self,
@@ -18076,30 +17039,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('valueReferencePair')
-        self._write_value_reference_pair_as_sequence(
-            that
-        )
-        self._write_end_element('valueReferencePair')
-
-    def _write_value_list_as_sequence(
-        self,
-        that: aas_types.ValueList
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_list_of_items(
-            'valueReferencePairs',
-            that.value_reference_pairs,
-            self.visit
-        )
+        _write_value_reference_pair_as_element('valueReferencePair', that, self)
 
     def visit_value_list(
         self,
@@ -18113,34 +17053,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('valueList')
-        self._write_value_list_as_sequence(
-            that
-        )
-        self._write_end_element('valueList')
-
-    def _write_lang_string_preferred_name_type_iec_61360_as_sequence(
-        self,
-        that: aas_types.LangStringPreferredNameTypeIEC61360
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'language',
-            that.language
-        )
-
-        self._write_str_as_element(
-            'text',
-            that.text
-        )
+        _write_value_list_as_element('valueList', that, self)
 
     def visit_lang_string_preferred_name_type_iec_61360(
         self,
@@ -18154,33 +17067,8 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('langStringPreferredNameTypeIec61360')
-        self._write_lang_string_preferred_name_type_iec_61360_as_sequence(
-            that
-        )
-        self._write_end_element('langStringPreferredNameTypeIec61360')
-
-    def _write_lang_string_short_name_type_iec_61360_as_sequence(
-        self,
-        that: aas_types.LangStringShortNameTypeIEC61360
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'language',
-            that.language
-        )
-
-        self._write_str_as_element(
-            'text',
-            that.text
+        _write_lang_string_preferred_name_type_iec_61360_as_element(
+            'langStringPreferredNameTypeIec61360', that, self
         )
 
     def visit_lang_string_short_name_type_iec_61360(
@@ -18195,33 +17083,8 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('langStringShortNameTypeIec61360')
-        self._write_lang_string_short_name_type_iec_61360_as_sequence(
-            that
-        )
-        self._write_end_element('langStringShortNameTypeIec61360')
-
-    def _write_lang_string_definition_type_iec_61360_as_sequence(
-        self,
-        that: aas_types.LangStringDefinitionTypeIEC61360
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'language',
-            that.language
-        )
-
-        self._write_str_as_element(
-            'text',
-            that.text
+        _write_lang_string_short_name_type_iec_61360_as_element(
+            'langStringShortNameTypeIec61360', that, self
         )
 
     def visit_lang_string_definition_type_iec_61360(
@@ -18236,101 +17099,9 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('langStringDefinitionTypeIec61360')
-        self._write_lang_string_definition_type_iec_61360_as_sequence(
-            that
+        _write_lang_string_definition_type_iec_61360_as_element(
+            'langStringDefinitionTypeIec61360', that, self
         )
-        self._write_end_element('langStringDefinitionTypeIec61360')
-
-    def _write_data_specification_iec_61360_as_sequence(
-        self,
-        that: aas_types.DataSpecificationIEC61360
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_list_of_items(
-            'preferredName',
-            that.preferred_name,
-            self.visit
-        )
-
-        if that.short_name is not None:
-            self._write_list_of_items(
-                'shortName',
-                that.short_name,
-                self.visit
-            )
-
-        if that.unit is not None:
-            self._write_str_as_element(
-                'unit',
-                that.unit
-            )
-
-        if that.unit_id is not None:
-            self._write_start_element('unitId')
-            self._write_reference_as_sequence(
-                that.unit_id
-            )
-            self._write_end_element('unitId')
-
-        if that.source_of_definition is not None:
-            self._write_str_as_element(
-                'sourceOfDefinition',
-                that.source_of_definition
-            )
-
-        if that.symbol is not None:
-            self._write_str_as_element(
-                'symbol',
-                that.symbol
-            )
-
-        if that.data_type is not None:
-            self._write_str_as_element(
-                'dataType',
-                that.data_type.value
-            )
-
-        if that.definition is not None:
-            self._write_list_of_items(
-                'definition',
-                that.definition,
-                self.visit
-            )
-
-        if that.value_format is not None:
-            self._write_str_as_element(
-                'valueFormat',
-                that.value_format
-            )
-
-        if that.value_list is not None:
-            self._write_start_element('valueList')
-            self._write_value_list_as_sequence(
-                that.value_list
-            )
-            self._write_end_element('valueList')
-
-        if that.value is not None:
-            self._write_str_as_element(
-                'value',
-                that.value
-            )
-
-        if that.level_type is not None:
-            self._write_start_element('levelType')
-            self._write_level_type_as_sequence(
-                that.level_type
-            )
-            self._write_end_element('levelType')
 
     def visit_data_specification_iec_61360(
         self,
@@ -18344,11 +17115,9 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('dataSpecificationIec61360')
-        self._write_data_specification_iec_61360_as_sequence(
-            that
+        _write_data_specification_iec_61360_as_element(
+            'dataSpecificationIec61360', that, self
         )
-        self._write_end_element('dataSpecificationIec61360')
 
 
 def write(instance: aas_types.Class, stream: TextIO) -> None:
