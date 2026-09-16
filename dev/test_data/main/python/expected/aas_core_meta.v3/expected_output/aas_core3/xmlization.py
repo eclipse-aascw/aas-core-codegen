@@ -29,6 +29,12 @@ For writing, use the function :py:func:`aas_core3.xmlization.write` which
 translates the instance of the model into an XML document and writes it in one pass
 to the stream.
 
+The writing raises a :py:class:`SerializationException` if it can not serialize
+the instance, be it because the stream failed or because a value could not be
+written. The path of the exception points to the culprit as a Python access
+expression, *e.g.*, ``.submodels[0].id``, so that you can find it in the instance
+which you handed over.
+
 Here is an example usage how to de-serialize from a file:
 
 .. code-block::
@@ -69,6 +75,7 @@ Here is another code example where we serialize the instance:
 
 
 import base64
+import enum
 import io
 import math
 import os
@@ -80,6 +87,7 @@ from typing import (
     Iterator,
     List,
     Mapping,
+    NoReturn,
     Optional,
     Sequence,
     TextIO,
@@ -14944,8 +14952,138 @@ _READERS_FOR_DATA_SPECIFICATION_IEC_61360: Mapping[
 # region Serialization
 
 
+class SerializationException(Exception):
+    """Signal that the XML serialization could not be performed."""
+
+    #: Human-readable explanation of the exception's cause
+    cause: Final[str]
+
+    def __init__(
+            self,
+            cause: str
+    ) -> None:
+        """Initialize with the given :paramref:`cause` and an empty path."""
+        self.cause = cause
+        self._segments = []  # type: List[str]
+
+    @property
+    def path(self) -> str:
+        """
+        Render the path to the erroneous value as a Python access expression.
+
+        The path points into the instance which you handed over for
+        the serialization, and *not* into an XML document -- at the point of
+        the failure, there is no document yet. For example, ``.submodels[0].id``
+        tells you that the serialization broke on ``that.submodels[0].id``.
+
+        Mind that the elements which the XML representation adds on top of
+        the instance contribute no segment, as they correspond to no attribute
+        access. This concerns the element enclosing the instance itself, and
+        the element which designates the model type of the value of a property.
+        """
+        return ''.join(self._segments)
+
+    def _prepend_property(self, name: str) -> None:
+        """Insert the access to the property :paramref:`name` before the path."""
+        self._segments.insert(0, f'.{name}')
+
+    def _prepend_index(self, index: int) -> None:
+        """Insert the access to the item at :paramref:`index` before the path."""
+        self._segments.insert(0, f'[{index}]')
+
+    def __str__(self) -> str:
+        if len(self._segments) == 0:
+            return self.cause
+
+        return f'{self.path}: {self.cause}'
+
+
+def _attribute_to_property(
+        exception: Exception,
+        prop_name: Optional[str]
+) -> NoReturn:
+    """
+    Re-raise the :paramref:`exception` as a failure of the property
+    :paramref:`prop_name`.
+
+    Every writer funnels its failures through this function, so that the path to
+    the culprit is built up as the stack unwinds: a writer knows the property whose
+    value it writes, and nothing below it does.
+
+    A :paramref:`prop_name` of ``None`` prepends nothing to the path. It does *not*
+    mean that no property is involved. It means that the access which leads to
+    the value is recorded by a writer further up the stack, so recording it here
+    as well would spell one step of the path twice.
+
+    For example, the writer of an item of a list is given no property name. The list
+    writer records its own property and the loop over the items records the index, so
+    that ``.submodel_elements[3]`` is assembled from ``submodel_elements`` above and
+    ``3`` around the item. Were the item to contribute ``submodel_elements`` as well,
+    the path would read ``.submodel_elements[3].submodel_elements``.
+
+    Likewise, an instance nested in the element of a property is written by
+    a dispatch on its run-time type, and a dispatch knows nothing about where
+    the instance came from. It is :py:func:`_write_nested_element` above it which
+    knows that the instance sits in ``.value``, so the writer which the dispatch
+    selects contributes no segment of its own.
+
+    The path therefore stays empty only when the value which broke *is* the one you
+    handed over, which is the failure :py:func:`write` funnels here: there is no
+    access leading to it to report.
+
+    We deliberately catch *any* exception, and not only the failures of
+    the underlying stream. The type annotations are not enforced at run-time, so
+    a property can hold a value which we can not serialize, and telling you where
+    that value sits is much more helpful than the bare exception. The original
+    exception is kept as the cause of the raised one.
+
+    :param exception: to be re-raised
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
+    :raise: :py:class:`SerializationException` always
+    """
+    if isinstance(exception, SerializationException):
+        if prop_name is not None:
+            exception._prepend_property(prop_name)
+
+        raise exception
+
+    failure = SerializationException(str(exception))
+    if prop_name is not None:
+        failure._prepend_property(prop_name)
+
+    raise failure from exception
+
+
+def _attribute_to_item(
+        exception: Exception,
+        index: int
+) -> NoReturn:
+    """
+    Re-raise the :paramref:`exception` as a failure of the item at
+    :paramref:`index`.
+
+    This is the counterpart of :py:func:`_attribute_to_property` for the items of
+    a list and of a tuple. The item's own element contributes no segment to
+    the path: an item is selected by its position, and not by its element tag.
+
+    :param exception: to be re-raised
+    :param index: of the item which was being written
+    :raise: :py:class:`SerializationException` always
+    """
+    if isinstance(exception, SerializationException):
+        exception._prepend_index(index)
+        raise exception
+
+    failure = SerializationException(str(exception))
+    failure._prepend_index(index)
+    raise failure from exception
+
+
 def _write_bool_as_element(
     name: str,
+    prop_name: Optional[str],
     value: bool,
     serializer: '_Serializer'
 ) -> None:
@@ -14954,16 +15092,24 @@ def _write_bool_as_element(
     the :paramref:`name` element.
 
     :param name: of the corresponding element tag
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param value: to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    serializer.stream.write('true' if value else 'false')
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        serializer.stream.write('true' if value else 'false')
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_str_as_element(
     name: str,
+    prop_name: Optional[str],
     value: str,
     serializer: '_Serializer'
 ) -> None:
@@ -14972,27 +15118,36 @@ def _write_str_as_element(
     the :paramref:`name` element.
 
     :param name: of the corresponding element tag
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param value: to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
+    try:
+        serializer._write_start_element(name)
 
-    # NOTE (mristin, 2022-10-14):
-    # We ran ``timeit`` on manual code which escaped XML special characters with
-    # a dictionary, and on another snippet which called three ``.replace()``.
-    # The code with ``.replace()`` was an order of magnitude faster on our computers.
-    #
-    # The escaping is written out here, and not put in a function of its own, since
-    # a string is the commonest value in a meta-model and a call is not free.
-    serializer.stream.write(
-        value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-    )
+        # NOTE (mristin, 2022-10-14):
+        # We ran ``timeit`` on manual code which escaped XML special characters with
+        # a dictionary, and on another snippet which called three ``.replace()``.
+        # The code with ``.replace()`` was an order of magnitude faster on our
+        # computers.
+        #
+        # The escaping is written out here, and not put in a function of its own,
+        # since a string is the commonest value in a meta-model and a call is not free.
+        serializer.stream.write(
+            value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        )
 
-    serializer._write_end_element(name)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_bytes_as_element(
     name: str,
+    prop_name: Optional[str],
     value: bytes,
     serializer: '_Serializer'
 ) -> None:
@@ -15001,28 +15156,65 @@ def _write_bytes_as_element(
     the :paramref:`name` element.
 
     :param name: of the corresponding element tag
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param value: to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
+    try:
+        serializer._write_start_element(name)
 
-    # NOTE (mristin):
-    # We need to decode the result of the base64-encoding to ASCII since we are
-    # writing to an XML *text* stream. ``base64.b64encode(.)`` gives us bytes,
-    # not a string.
-    encoded = base64.b64encode(value).decode('ascii')
+        # NOTE (mristin):
+        # We need to decode the result of the base64-encoding to ASCII since we are
+        # writing to an XML *text* stream. ``base64.b64encode(.)`` gives us bytes,
+        # not a string.
+        encoded = base64.b64encode(value).decode('ascii')
 
-    # NOTE (mristin):
-    # Base64 alphabet excludes ``<``, ``>`` and ``&``, so we can directly
-    # write the ``encoded`` content to the stream as XML text.
-    #
-    # See: https://datatracker.ietf.org/doc/html/rfc4648#section-4
-    serializer.stream.write(encoded)
-    serializer._write_end_element(name)
+        # NOTE (mristin):
+        # Base64 alphabet excludes ``<``, ``>`` and ``&``, so we can directly
+        # write the ``encoded`` content to the stream as XML text.
+        #
+        # See: https://datatracker.ietf.org/doc/html/rfc4648#section-4
+        serializer.stream.write(encoded)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
+
+
+def _write_enum_as_element(
+    name: str,
+    prop_name: Optional[str],
+    value: enum.Enum,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write the literal :paramref:`value` enclosed in the :paramref:`name` element.
+
+    A literal is written as the text of the element, so this one writer serves every
+    enumeration of the meta-model. The access to the literal's value is deliberately
+    *not* spelled out at the call site: a :paramref:`value` which is not a literal
+    of the enumeration would then break *before* this function is entered, and
+    the failure could no longer be attributed to :paramref:`prop_name`.
+
+    :param name: of the corresponding element tag
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
+    :param value: to be serialized
+    :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
+    """
+    try:
+        _write_str_as_element(name, None, value.value, serializer)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_nested_element(
     name: str,
+    prop_name: Optional[str],
     value: aas_types.Class,
     serializer: '_Serializer'
 ) -> None:
@@ -15035,17 +15227,30 @@ def _write_nested_element(
     :py:func:`_write_list_of_instances` -- as it is the item's own element which
     already sits in the list's element.
 
+    The element which designates the model type contributes no segment to the path
+    of a :py:class:`SerializationException`. The path points into the instance which
+    was handed over for the serialization, and there that element is no level of its
+    own: ``.value.id_short`` is exactly what you would write in Python.
+
     :param name: of the enclosing element
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param value: to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    serializer.visit(value)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        serializer.visit(value)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_list_of_instances(
     name: str,
+    prop_name: Optional[str],
     items: Sequence[aas_types.Class],
     serializer: '_Serializer'
 ) -> None:
@@ -15057,20 +15262,33 @@ def _write_list_of_instances(
     an empty one.
 
     :param name: of the enclosing element
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param items: to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    if len(items) == 0:
-        serializer._write_empty_element(name)
-    else:
-        serializer._write_start_element(name)
-        for item in items:
-            serializer.visit(item)
-        serializer._write_end_element(name)
+    try:
+        if len(items) == 0:
+            serializer._write_empty_element(name)
+        else:
+            serializer._write_start_element(name)
+
+            for index, item in enumerate(items):
+                try:
+                    serializer.visit(item)
+                except Exception as exception:
+                    _attribute_to_item(exception, index)
+
+            serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_extension_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.Extension,
     serializer: '_Serializer'
 ) -> None:
@@ -15078,28 +15296,45 @@ def _write_extension_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    if that.semantic_id is not None:
-        _write_reference_as_element('semanticId', that.semantic_id, serializer)
-    if that.supplemental_semantic_ids is not None:
-        _write_list_of_instances(
-            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
-        )
-    _write_str_as_element('name', that.name, serializer)
-    if that.value_type is not None:
-        _write_str_as_element('valueType', that.value_type.value, serializer)
-    if that.value is not None:
-        _write_str_as_element('value', that.value, serializer)
-    if that.refers_to is not None:
-        _write_list_of_instances('refersTo', that.refers_to, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        if that.semantic_id is not None:
+            _write_reference_as_element(
+                'semanticId', 'semantic_id', that.semantic_id, serializer
+            )
+        if that.supplemental_semantic_ids is not None:
+            _write_list_of_instances(
+                'supplementalSemanticIds',
+                'supplemental_semantic_ids',
+                that.supplemental_semantic_ids,
+                serializer
+            )
+        _write_str_as_element('name', 'name', that.name, serializer)
+        if that.value_type is not None:
+            _write_enum_as_element(
+                'valueType', 'value_type', that.value_type, serializer
+            )
+        if that.value is not None:
+            _write_str_as_element('value', 'value', that.value, serializer)
+        if that.refers_to is not None:
+            _write_list_of_instances(
+                'refersTo', 'refers_to', that.refers_to, serializer
+            )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_administrative_information_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.AdministrativeInformation,
     serializer: '_Serializer'
 ) -> None:
@@ -15110,39 +15345,52 @@ def _write_administrative_information_as_element(
     if none of them is set.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    # We optimize for the case where all the optional properties are not set,
-    # so that we can simply output an empty element.
-    if (
-            that.embedded_data_specifications is None
-            and that.version is None
-            and that.revision is None
-            and that.creator is None
-            and that.template_id is None
-    ):
-        serializer._write_empty_element(name)
-        return
+    try:
+        # We optimize for the case where all the optional properties are not set,
+        # so that we can simply output an empty element.
+        if (
+                that.embedded_data_specifications is None
+                and that.version is None
+                and that.revision is None
+                and that.creator is None
+                and that.template_id is None
+        ):
+            serializer._write_empty_element(name)
+            return
 
-    serializer._write_start_element(name)
-    if that.embedded_data_specifications is not None:
-        _write_list_of_instances(
-            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
-        )
-    if that.version is not None:
-        _write_str_as_element('version', that.version, serializer)
-    if that.revision is not None:
-        _write_str_as_element('revision', that.revision, serializer)
-    if that.creator is not None:
-        _write_reference_as_element('creator', that.creator, serializer)
-    if that.template_id is not None:
-        _write_str_as_element('templateId', that.template_id, serializer)
-    serializer._write_end_element(name)
+        serializer._write_start_element(name)
+        if that.embedded_data_specifications is not None:
+            _write_list_of_instances(
+                'embeddedDataSpecifications',
+                'embedded_data_specifications',
+                that.embedded_data_specifications,
+                serializer
+            )
+        if that.version is not None:
+            _write_str_as_element('version', 'version', that.version, serializer)
+        if that.revision is not None:
+            _write_str_as_element('revision', 'revision', that.revision, serializer)
+        if that.creator is not None:
+            _write_reference_as_element('creator', 'creator', that.creator, serializer)
+        if that.template_id is not None:
+            _write_str_as_element(
+                'templateId', 'template_id', that.template_id, serializer
+            )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_qualifier_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.Qualifier,
     serializer: '_Serializer'
 ) -> None:
@@ -15150,29 +15398,44 @@ def _write_qualifier_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    if that.semantic_id is not None:
-        _write_reference_as_element('semanticId', that.semantic_id, serializer)
-    if that.supplemental_semantic_ids is not None:
-        _write_list_of_instances(
-            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
-        )
-    if that.kind is not None:
-        _write_str_as_element('kind', that.kind.value, serializer)
-    _write_str_as_element('type', that.type, serializer)
-    _write_str_as_element('valueType', that.value_type.value, serializer)
-    if that.value is not None:
-        _write_str_as_element('value', that.value, serializer)
-    if that.value_id is not None:
-        _write_reference_as_element('valueId', that.value_id, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        if that.semantic_id is not None:
+            _write_reference_as_element(
+                'semanticId', 'semantic_id', that.semantic_id, serializer
+            )
+        if that.supplemental_semantic_ids is not None:
+            _write_list_of_instances(
+                'supplementalSemanticIds',
+                'supplemental_semantic_ids',
+                that.supplemental_semantic_ids,
+                serializer
+            )
+        if that.kind is not None:
+            _write_enum_as_element('kind', 'kind', that.kind, serializer)
+        _write_str_as_element('type', 'type', that.type, serializer)
+        _write_enum_as_element('valueType', 'value_type', that.value_type, serializer)
+        if that.value is not None:
+            _write_str_as_element('value', 'value', that.value, serializer)
+        if that.value_id is not None:
+            _write_reference_as_element(
+                'valueId', 'value_id', that.value_id, serializer
+            )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_asset_administration_shell_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.AssetAdministrationShell,
     serializer: '_Serializer'
 ) -> None:
@@ -15180,41 +15443,62 @@ def _write_asset_administration_shell_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    if that.extensions is not None:
-        _write_list_of_instances('extensions', that.extensions, serializer)
-    if that.category is not None:
-        _write_str_as_element('category', that.category, serializer)
-    if that.id_short is not None:
-        _write_str_as_element('idShort', that.id_short, serializer)
-    if that.display_name is not None:
-        _write_list_of_instances('displayName', that.display_name, serializer)
-    if that.description is not None:
-        _write_list_of_instances('description', that.description, serializer)
-    if that.administration is not None:
-        _write_administrative_information_as_element(
-            'administration', that.administration, serializer
+    try:
+        serializer._write_start_element(name)
+        if that.extensions is not None:
+            _write_list_of_instances(
+                'extensions', 'extensions', that.extensions, serializer
+            )
+        if that.category is not None:
+            _write_str_as_element('category', 'category', that.category, serializer)
+        if that.id_short is not None:
+            _write_str_as_element('idShort', 'id_short', that.id_short, serializer)
+        if that.display_name is not None:
+            _write_list_of_instances(
+                'displayName', 'display_name', that.display_name, serializer
+            )
+        if that.description is not None:
+            _write_list_of_instances(
+                'description', 'description', that.description, serializer
+            )
+        if that.administration is not None:
+            _write_administrative_information_as_element(
+                'administration', 'administration', that.administration, serializer
+            )
+        _write_str_as_element('id', 'id', that.id, serializer)
+        if that.embedded_data_specifications is not None:
+            _write_list_of_instances(
+                'embeddedDataSpecifications',
+                'embedded_data_specifications',
+                that.embedded_data_specifications,
+                serializer
+            )
+        if that.derived_from is not None:
+            _write_reference_as_element(
+                'derivedFrom', 'derived_from', that.derived_from, serializer
+            )
+        _write_asset_information_as_element(
+            'assetInformation', 'asset_information', that.asset_information, serializer
         )
-    _write_str_as_element('id', that.id, serializer)
-    if that.embedded_data_specifications is not None:
-        _write_list_of_instances(
-            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
-        )
-    if that.derived_from is not None:
-        _write_reference_as_element('derivedFrom', that.derived_from, serializer)
-    _write_asset_information_as_element(
-        'assetInformation', that.asset_information, serializer
-    )
-    if that.submodels is not None:
-        _write_list_of_instances('submodels', that.submodels, serializer)
-    serializer._write_end_element(name)
+        if that.submodels is not None:
+            _write_list_of_instances(
+                'submodels', 'submodels', that.submodels, serializer
+            )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_asset_information_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.AssetInformation,
     serializer: '_Serializer'
 ) -> None:
@@ -15222,28 +15506,46 @@ def _write_asset_information_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_str_as_element('assetKind', that.asset_kind.value, serializer)
-    if that.global_asset_id is not None:
-        _write_str_as_element('globalAssetId', that.global_asset_id, serializer)
-    if that.specific_asset_ids is not None:
-        _write_list_of_instances(
-            'specificAssetIds', that.specific_asset_ids, serializer
-        )
-    if that.asset_type is not None:
-        _write_str_as_element('assetType', that.asset_type, serializer)
-    if that.default_thumbnail is not None:
-        _write_resource_as_element(
-            'defaultThumbnail', that.default_thumbnail, serializer
-        )
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        _write_enum_as_element('assetKind', 'asset_kind', that.asset_kind, serializer)
+        if that.global_asset_id is not None:
+            _write_str_as_element(
+                'globalAssetId', 'global_asset_id', that.global_asset_id, serializer
+            )
+        if that.specific_asset_ids is not None:
+            _write_list_of_instances(
+                'specificAssetIds',
+                'specific_asset_ids',
+                that.specific_asset_ids,
+                serializer
+            )
+        if that.asset_type is not None:
+            _write_str_as_element(
+                'assetType', 'asset_type', that.asset_type, serializer
+            )
+        if that.default_thumbnail is not None:
+            _write_resource_as_element(
+                'defaultThumbnail',
+                'default_thumbnail',
+                that.default_thumbnail,
+                serializer
+            )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_resource_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.Resource,
     serializer: '_Serializer'
 ) -> None:
@@ -15251,18 +15553,28 @@ def _write_resource_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_str_as_element('path', that.path, serializer)
-    if that.content_type is not None:
-        _write_str_as_element('contentType', that.content_type, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        _write_str_as_element('path', 'path', that.path, serializer)
+        if that.content_type is not None:
+            _write_str_as_element(
+                'contentType', 'content_type', that.content_type, serializer
+            )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_specific_asset_id_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.SpecificAssetID,
     serializer: '_Serializer'
 ) -> None:
@@ -15270,27 +15582,43 @@ def _write_specific_asset_id_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    if that.semantic_id is not None:
-        _write_reference_as_element('semanticId', that.semantic_id, serializer)
-    if that.supplemental_semantic_ids is not None:
-        _write_list_of_instances(
-            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
-        )
-    _write_str_as_element('name', that.name, serializer)
-    _write_str_as_element('value', that.value, serializer)
-    if that.external_subject_id is not None:
-        _write_reference_as_element(
-            'externalSubjectId', that.external_subject_id, serializer
-        )
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        if that.semantic_id is not None:
+            _write_reference_as_element(
+                'semanticId', 'semantic_id', that.semantic_id, serializer
+            )
+        if that.supplemental_semantic_ids is not None:
+            _write_list_of_instances(
+                'supplementalSemanticIds',
+                'supplemental_semantic_ids',
+                that.supplemental_semantic_ids,
+                serializer
+            )
+        _write_str_as_element('name', 'name', that.name, serializer)
+        _write_str_as_element('value', 'value', that.value, serializer)
+        if that.external_subject_id is not None:
+            _write_reference_as_element(
+                'externalSubjectId',
+                'external_subject_id',
+                that.external_subject_id,
+                serializer
+            )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_submodel_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.Submodel,
     serializer: '_Serializer'
 ) -> None:
@@ -15298,46 +15626,75 @@ def _write_submodel_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    if that.extensions is not None:
-        _write_list_of_instances('extensions', that.extensions, serializer)
-    if that.category is not None:
-        _write_str_as_element('category', that.category, serializer)
-    if that.id_short is not None:
-        _write_str_as_element('idShort', that.id_short, serializer)
-    if that.display_name is not None:
-        _write_list_of_instances('displayName', that.display_name, serializer)
-    if that.description is not None:
-        _write_list_of_instances('description', that.description, serializer)
-    if that.administration is not None:
-        _write_administrative_information_as_element(
-            'administration', that.administration, serializer
-        )
-    _write_str_as_element('id', that.id, serializer)
-    if that.kind is not None:
-        _write_str_as_element('kind', that.kind.value, serializer)
-    if that.semantic_id is not None:
-        _write_reference_as_element('semanticId', that.semantic_id, serializer)
-    if that.supplemental_semantic_ids is not None:
-        _write_list_of_instances(
-            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
-        )
-    if that.qualifiers is not None:
-        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
-    if that.embedded_data_specifications is not None:
-        _write_list_of_instances(
-            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
-        )
-    if that.submodel_elements is not None:
-        _write_list_of_instances('submodelElements', that.submodel_elements, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        if that.extensions is not None:
+            _write_list_of_instances(
+                'extensions', 'extensions', that.extensions, serializer
+            )
+        if that.category is not None:
+            _write_str_as_element('category', 'category', that.category, serializer)
+        if that.id_short is not None:
+            _write_str_as_element('idShort', 'id_short', that.id_short, serializer)
+        if that.display_name is not None:
+            _write_list_of_instances(
+                'displayName', 'display_name', that.display_name, serializer
+            )
+        if that.description is not None:
+            _write_list_of_instances(
+                'description', 'description', that.description, serializer
+            )
+        if that.administration is not None:
+            _write_administrative_information_as_element(
+                'administration', 'administration', that.administration, serializer
+            )
+        _write_str_as_element('id', 'id', that.id, serializer)
+        if that.kind is not None:
+            _write_enum_as_element('kind', 'kind', that.kind, serializer)
+        if that.semantic_id is not None:
+            _write_reference_as_element(
+                'semanticId', 'semantic_id', that.semantic_id, serializer
+            )
+        if that.supplemental_semantic_ids is not None:
+            _write_list_of_instances(
+                'supplementalSemanticIds',
+                'supplemental_semantic_ids',
+                that.supplemental_semantic_ids,
+                serializer
+            )
+        if that.qualifiers is not None:
+            _write_list_of_instances(
+                'qualifiers', 'qualifiers', that.qualifiers, serializer
+            )
+        if that.embedded_data_specifications is not None:
+            _write_list_of_instances(
+                'embeddedDataSpecifications',
+                'embedded_data_specifications',
+                that.embedded_data_specifications,
+                serializer
+            )
+        if that.submodel_elements is not None:
+            _write_list_of_instances(
+                'submodelElements',
+                'submodel_elements',
+                that.submodel_elements,
+                serializer
+            )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_relationship_element_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.RelationshipElement,
     serializer: '_Serializer'
 ) -> None:
@@ -15345,39 +15702,63 @@ def _write_relationship_element_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    if that.extensions is not None:
-        _write_list_of_instances('extensions', that.extensions, serializer)
-    if that.category is not None:
-        _write_str_as_element('category', that.category, serializer)
-    if that.id_short is not None:
-        _write_str_as_element('idShort', that.id_short, serializer)
-    if that.display_name is not None:
-        _write_list_of_instances('displayName', that.display_name, serializer)
-    if that.description is not None:
-        _write_list_of_instances('description', that.description, serializer)
-    if that.semantic_id is not None:
-        _write_reference_as_element('semanticId', that.semantic_id, serializer)
-    if that.supplemental_semantic_ids is not None:
-        _write_list_of_instances(
-            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
-        )
-    if that.qualifiers is not None:
-        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
-    if that.embedded_data_specifications is not None:
-        _write_list_of_instances(
-            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
-        )
-    _write_reference_as_element('first', that.first, serializer)
-    _write_reference_as_element('second', that.second, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        if that.extensions is not None:
+            _write_list_of_instances(
+                'extensions', 'extensions', that.extensions, serializer
+            )
+        if that.category is not None:
+            _write_str_as_element('category', 'category', that.category, serializer)
+        if that.id_short is not None:
+            _write_str_as_element('idShort', 'id_short', that.id_short, serializer)
+        if that.display_name is not None:
+            _write_list_of_instances(
+                'displayName', 'display_name', that.display_name, serializer
+            )
+        if that.description is not None:
+            _write_list_of_instances(
+                'description', 'description', that.description, serializer
+            )
+        if that.semantic_id is not None:
+            _write_reference_as_element(
+                'semanticId', 'semantic_id', that.semantic_id, serializer
+            )
+        if that.supplemental_semantic_ids is not None:
+            _write_list_of_instances(
+                'supplementalSemanticIds',
+                'supplemental_semantic_ids',
+                that.supplemental_semantic_ids,
+                serializer
+            )
+        if that.qualifiers is not None:
+            _write_list_of_instances(
+                'qualifiers', 'qualifiers', that.qualifiers, serializer
+            )
+        if that.embedded_data_specifications is not None:
+            _write_list_of_instances(
+                'embeddedDataSpecifications',
+                'embedded_data_specifications',
+                that.embedded_data_specifications,
+                serializer
+            )
+        _write_reference_as_element('first', 'first', that.first, serializer)
+        _write_reference_as_element('second', 'second', that.second, serializer)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_submodel_element_list_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.SubmodelElementList,
     serializer: '_Serializer'
 ) -> None:
@@ -15385,52 +15766,87 @@ def _write_submodel_element_list_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    if that.extensions is not None:
-        _write_list_of_instances('extensions', that.extensions, serializer)
-    if that.category is not None:
-        _write_str_as_element('category', that.category, serializer)
-    if that.id_short is not None:
-        _write_str_as_element('idShort', that.id_short, serializer)
-    if that.display_name is not None:
-        _write_list_of_instances('displayName', that.display_name, serializer)
-    if that.description is not None:
-        _write_list_of_instances('description', that.description, serializer)
-    if that.semantic_id is not None:
-        _write_reference_as_element('semanticId', that.semantic_id, serializer)
-    if that.supplemental_semantic_ids is not None:
-        _write_list_of_instances(
-            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+    try:
+        serializer._write_start_element(name)
+        if that.extensions is not None:
+            _write_list_of_instances(
+                'extensions', 'extensions', that.extensions, serializer
+            )
+        if that.category is not None:
+            _write_str_as_element('category', 'category', that.category, serializer)
+        if that.id_short is not None:
+            _write_str_as_element('idShort', 'id_short', that.id_short, serializer)
+        if that.display_name is not None:
+            _write_list_of_instances(
+                'displayName', 'display_name', that.display_name, serializer
+            )
+        if that.description is not None:
+            _write_list_of_instances(
+                'description', 'description', that.description, serializer
+            )
+        if that.semantic_id is not None:
+            _write_reference_as_element(
+                'semanticId', 'semantic_id', that.semantic_id, serializer
+            )
+        if that.supplemental_semantic_ids is not None:
+            _write_list_of_instances(
+                'supplementalSemanticIds',
+                'supplemental_semantic_ids',
+                that.supplemental_semantic_ids,
+                serializer
+            )
+        if that.qualifiers is not None:
+            _write_list_of_instances(
+                'qualifiers', 'qualifiers', that.qualifiers, serializer
+            )
+        if that.embedded_data_specifications is not None:
+            _write_list_of_instances(
+                'embeddedDataSpecifications',
+                'embedded_data_specifications',
+                that.embedded_data_specifications,
+                serializer
+            )
+        if that.order_relevant is not None:
+            _write_bool_as_element(
+                'orderRelevant', 'order_relevant', that.order_relevant, serializer
+            )
+        if that.semantic_id_list_element is not None:
+            _write_reference_as_element(
+                'semanticIdListElement',
+                'semantic_id_list_element',
+                that.semantic_id_list_element,
+                serializer
+            )
+        _write_enum_as_element(
+            'typeValueListElement',
+            'type_value_list_element',
+            that.type_value_list_element,
+            serializer
         )
-    if that.qualifiers is not None:
-        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
-    if that.embedded_data_specifications is not None:
-        _write_list_of_instances(
-            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
-        )
-    if that.order_relevant is not None:
-        _write_bool_as_element('orderRelevant', that.order_relevant, serializer)
-    if that.semantic_id_list_element is not None:
-        _write_reference_as_element(
-            'semanticIdListElement', that.semantic_id_list_element, serializer
-        )
-    _write_str_as_element(
-        'typeValueListElement', that.type_value_list_element.value, serializer
-    )
-    if that.value_type_list_element is not None:
-        _write_str_as_element(
-            'valueTypeListElement', that.value_type_list_element.value, serializer
-        )
-    if that.value is not None:
-        _write_list_of_instances('value', that.value, serializer)
-    serializer._write_end_element(name)
+        if that.value_type_list_element is not None:
+            _write_enum_as_element(
+                'valueTypeListElement',
+                'value_type_list_element',
+                that.value_type_list_element,
+                serializer
+            )
+        if that.value is not None:
+            _write_list_of_instances('value', 'value', that.value, serializer)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_submodel_element_collection_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.SubmodelElementCollection,
     serializer: '_Serializer'
 ) -> None:
@@ -15441,56 +15857,80 @@ def _write_submodel_element_collection_as_element(
     if none of them is set.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    # We optimize for the case where all the optional properties are not set,
-    # so that we can simply output an empty element.
-    if (
-            that.extensions is None
-            and that.category is None
-            and that.id_short is None
-            and that.display_name is None
-            and that.description is None
-            and that.semantic_id is None
-            and that.supplemental_semantic_ids is None
-            and that.qualifiers is None
-            and that.embedded_data_specifications is None
-            and that.value is None
-    ):
-        serializer._write_empty_element(name)
-        return
+    try:
+        # We optimize for the case where all the optional properties are not set,
+        # so that we can simply output an empty element.
+        if (
+                that.extensions is None
+                and that.category is None
+                and that.id_short is None
+                and that.display_name is None
+                and that.description is None
+                and that.semantic_id is None
+                and that.supplemental_semantic_ids is None
+                and that.qualifiers is None
+                and that.embedded_data_specifications is None
+                and that.value is None
+        ):
+            serializer._write_empty_element(name)
+            return
 
-    serializer._write_start_element(name)
-    if that.extensions is not None:
-        _write_list_of_instances('extensions', that.extensions, serializer)
-    if that.category is not None:
-        _write_str_as_element('category', that.category, serializer)
-    if that.id_short is not None:
-        _write_str_as_element('idShort', that.id_short, serializer)
-    if that.display_name is not None:
-        _write_list_of_instances('displayName', that.display_name, serializer)
-    if that.description is not None:
-        _write_list_of_instances('description', that.description, serializer)
-    if that.semantic_id is not None:
-        _write_reference_as_element('semanticId', that.semantic_id, serializer)
-    if that.supplemental_semantic_ids is not None:
-        _write_list_of_instances(
-            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
-        )
-    if that.qualifiers is not None:
-        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
-    if that.embedded_data_specifications is not None:
-        _write_list_of_instances(
-            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
-        )
-    if that.value is not None:
-        _write_list_of_instances('value', that.value, serializer)
-    serializer._write_end_element(name)
+        serializer._write_start_element(name)
+        if that.extensions is not None:
+            _write_list_of_instances(
+                'extensions', 'extensions', that.extensions, serializer
+            )
+        if that.category is not None:
+            _write_str_as_element('category', 'category', that.category, serializer)
+        if that.id_short is not None:
+            _write_str_as_element('idShort', 'id_short', that.id_short, serializer)
+        if that.display_name is not None:
+            _write_list_of_instances(
+                'displayName', 'display_name', that.display_name, serializer
+            )
+        if that.description is not None:
+            _write_list_of_instances(
+                'description', 'description', that.description, serializer
+            )
+        if that.semantic_id is not None:
+            _write_reference_as_element(
+                'semanticId', 'semantic_id', that.semantic_id, serializer
+            )
+        if that.supplemental_semantic_ids is not None:
+            _write_list_of_instances(
+                'supplementalSemanticIds',
+                'supplemental_semantic_ids',
+                that.supplemental_semantic_ids,
+                serializer
+            )
+        if that.qualifiers is not None:
+            _write_list_of_instances(
+                'qualifiers', 'qualifiers', that.qualifiers, serializer
+            )
+        if that.embedded_data_specifications is not None:
+            _write_list_of_instances(
+                'embeddedDataSpecifications',
+                'embedded_data_specifications',
+                that.embedded_data_specifications,
+                serializer
+            )
+        if that.value is not None:
+            _write_list_of_instances('value', 'value', that.value, serializer)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_property_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.Property,
     serializer: '_Serializer'
 ) -> None:
@@ -15498,42 +15938,68 @@ def _write_property_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    if that.extensions is not None:
-        _write_list_of_instances('extensions', that.extensions, serializer)
-    if that.category is not None:
-        _write_str_as_element('category', that.category, serializer)
-    if that.id_short is not None:
-        _write_str_as_element('idShort', that.id_short, serializer)
-    if that.display_name is not None:
-        _write_list_of_instances('displayName', that.display_name, serializer)
-    if that.description is not None:
-        _write_list_of_instances('description', that.description, serializer)
-    if that.semantic_id is not None:
-        _write_reference_as_element('semanticId', that.semantic_id, serializer)
-    if that.supplemental_semantic_ids is not None:
-        _write_list_of_instances(
-            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
-        )
-    if that.qualifiers is not None:
-        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
-    if that.embedded_data_specifications is not None:
-        _write_list_of_instances(
-            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
-        )
-    _write_str_as_element('valueType', that.value_type.value, serializer)
-    if that.value is not None:
-        _write_str_as_element('value', that.value, serializer)
-    if that.value_id is not None:
-        _write_reference_as_element('valueId', that.value_id, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        if that.extensions is not None:
+            _write_list_of_instances(
+                'extensions', 'extensions', that.extensions, serializer
+            )
+        if that.category is not None:
+            _write_str_as_element('category', 'category', that.category, serializer)
+        if that.id_short is not None:
+            _write_str_as_element('idShort', 'id_short', that.id_short, serializer)
+        if that.display_name is not None:
+            _write_list_of_instances(
+                'displayName', 'display_name', that.display_name, serializer
+            )
+        if that.description is not None:
+            _write_list_of_instances(
+                'description', 'description', that.description, serializer
+            )
+        if that.semantic_id is not None:
+            _write_reference_as_element(
+                'semanticId', 'semantic_id', that.semantic_id, serializer
+            )
+        if that.supplemental_semantic_ids is not None:
+            _write_list_of_instances(
+                'supplementalSemanticIds',
+                'supplemental_semantic_ids',
+                that.supplemental_semantic_ids,
+                serializer
+            )
+        if that.qualifiers is not None:
+            _write_list_of_instances(
+                'qualifiers', 'qualifiers', that.qualifiers, serializer
+            )
+        if that.embedded_data_specifications is not None:
+            _write_list_of_instances(
+                'embeddedDataSpecifications',
+                'embedded_data_specifications',
+                that.embedded_data_specifications,
+                serializer
+            )
+        _write_enum_as_element('valueType', 'value_type', that.value_type, serializer)
+        if that.value is not None:
+            _write_str_as_element('value', 'value', that.value, serializer)
+        if that.value_id is not None:
+            _write_reference_as_element(
+                'valueId', 'value_id', that.value_id, serializer
+            )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_multi_language_property_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.MultiLanguageProperty,
     serializer: '_Serializer'
 ) -> None:
@@ -15544,59 +16010,85 @@ def _write_multi_language_property_as_element(
     if none of them is set.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    # We optimize for the case where all the optional properties are not set,
-    # so that we can simply output an empty element.
-    if (
-            that.extensions is None
-            and that.category is None
-            and that.id_short is None
-            and that.display_name is None
-            and that.description is None
-            and that.semantic_id is None
-            and that.supplemental_semantic_ids is None
-            and that.qualifiers is None
-            and that.embedded_data_specifications is None
-            and that.value is None
-            and that.value_id is None
-    ):
-        serializer._write_empty_element(name)
-        return
+    try:
+        # We optimize for the case where all the optional properties are not set,
+        # so that we can simply output an empty element.
+        if (
+                that.extensions is None
+                and that.category is None
+                and that.id_short is None
+                and that.display_name is None
+                and that.description is None
+                and that.semantic_id is None
+                and that.supplemental_semantic_ids is None
+                and that.qualifiers is None
+                and that.embedded_data_specifications is None
+                and that.value is None
+                and that.value_id is None
+        ):
+            serializer._write_empty_element(name)
+            return
 
-    serializer._write_start_element(name)
-    if that.extensions is not None:
-        _write_list_of_instances('extensions', that.extensions, serializer)
-    if that.category is not None:
-        _write_str_as_element('category', that.category, serializer)
-    if that.id_short is not None:
-        _write_str_as_element('idShort', that.id_short, serializer)
-    if that.display_name is not None:
-        _write_list_of_instances('displayName', that.display_name, serializer)
-    if that.description is not None:
-        _write_list_of_instances('description', that.description, serializer)
-    if that.semantic_id is not None:
-        _write_reference_as_element('semanticId', that.semantic_id, serializer)
-    if that.supplemental_semantic_ids is not None:
-        _write_list_of_instances(
-            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
-        )
-    if that.qualifiers is not None:
-        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
-    if that.embedded_data_specifications is not None:
-        _write_list_of_instances(
-            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
-        )
-    if that.value is not None:
-        _write_list_of_instances('value', that.value, serializer)
-    if that.value_id is not None:
-        _write_reference_as_element('valueId', that.value_id, serializer)
-    serializer._write_end_element(name)
+        serializer._write_start_element(name)
+        if that.extensions is not None:
+            _write_list_of_instances(
+                'extensions', 'extensions', that.extensions, serializer
+            )
+        if that.category is not None:
+            _write_str_as_element('category', 'category', that.category, serializer)
+        if that.id_short is not None:
+            _write_str_as_element('idShort', 'id_short', that.id_short, serializer)
+        if that.display_name is not None:
+            _write_list_of_instances(
+                'displayName', 'display_name', that.display_name, serializer
+            )
+        if that.description is not None:
+            _write_list_of_instances(
+                'description', 'description', that.description, serializer
+            )
+        if that.semantic_id is not None:
+            _write_reference_as_element(
+                'semanticId', 'semantic_id', that.semantic_id, serializer
+            )
+        if that.supplemental_semantic_ids is not None:
+            _write_list_of_instances(
+                'supplementalSemanticIds',
+                'supplemental_semantic_ids',
+                that.supplemental_semantic_ids,
+                serializer
+            )
+        if that.qualifiers is not None:
+            _write_list_of_instances(
+                'qualifiers', 'qualifiers', that.qualifiers, serializer
+            )
+        if that.embedded_data_specifications is not None:
+            _write_list_of_instances(
+                'embeddedDataSpecifications',
+                'embedded_data_specifications',
+                that.embedded_data_specifications,
+                serializer
+            )
+        if that.value is not None:
+            _write_list_of_instances('value', 'value', that.value, serializer)
+        if that.value_id is not None:
+            _write_reference_as_element(
+                'valueId', 'value_id', that.value_id, serializer
+            )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_range_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.Range,
     serializer: '_Serializer'
 ) -> None:
@@ -15604,42 +16096,66 @@ def _write_range_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    if that.extensions is not None:
-        _write_list_of_instances('extensions', that.extensions, serializer)
-    if that.category is not None:
-        _write_str_as_element('category', that.category, serializer)
-    if that.id_short is not None:
-        _write_str_as_element('idShort', that.id_short, serializer)
-    if that.display_name is not None:
-        _write_list_of_instances('displayName', that.display_name, serializer)
-    if that.description is not None:
-        _write_list_of_instances('description', that.description, serializer)
-    if that.semantic_id is not None:
-        _write_reference_as_element('semanticId', that.semantic_id, serializer)
-    if that.supplemental_semantic_ids is not None:
-        _write_list_of_instances(
-            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
-        )
-    if that.qualifiers is not None:
-        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
-    if that.embedded_data_specifications is not None:
-        _write_list_of_instances(
-            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
-        )
-    _write_str_as_element('valueType', that.value_type.value, serializer)
-    if that.min is not None:
-        _write_str_as_element('min', that.min, serializer)
-    if that.max is not None:
-        _write_str_as_element('max', that.max, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        if that.extensions is not None:
+            _write_list_of_instances(
+                'extensions', 'extensions', that.extensions, serializer
+            )
+        if that.category is not None:
+            _write_str_as_element('category', 'category', that.category, serializer)
+        if that.id_short is not None:
+            _write_str_as_element('idShort', 'id_short', that.id_short, serializer)
+        if that.display_name is not None:
+            _write_list_of_instances(
+                'displayName', 'display_name', that.display_name, serializer
+            )
+        if that.description is not None:
+            _write_list_of_instances(
+                'description', 'description', that.description, serializer
+            )
+        if that.semantic_id is not None:
+            _write_reference_as_element(
+                'semanticId', 'semantic_id', that.semantic_id, serializer
+            )
+        if that.supplemental_semantic_ids is not None:
+            _write_list_of_instances(
+                'supplementalSemanticIds',
+                'supplemental_semantic_ids',
+                that.supplemental_semantic_ids,
+                serializer
+            )
+        if that.qualifiers is not None:
+            _write_list_of_instances(
+                'qualifiers', 'qualifiers', that.qualifiers, serializer
+            )
+        if that.embedded_data_specifications is not None:
+            _write_list_of_instances(
+                'embeddedDataSpecifications',
+                'embedded_data_specifications',
+                that.embedded_data_specifications,
+                serializer
+            )
+        _write_enum_as_element('valueType', 'value_type', that.value_type, serializer)
+        if that.min is not None:
+            _write_str_as_element('min', 'min', that.min, serializer)
+        if that.max is not None:
+            _write_str_as_element('max', 'max', that.max, serializer)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_reference_element_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.ReferenceElement,
     serializer: '_Serializer'
 ) -> None:
@@ -15650,56 +16166,80 @@ def _write_reference_element_as_element(
     if none of them is set.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    # We optimize for the case where all the optional properties are not set,
-    # so that we can simply output an empty element.
-    if (
-            that.extensions is None
-            and that.category is None
-            and that.id_short is None
-            and that.display_name is None
-            and that.description is None
-            and that.semantic_id is None
-            and that.supplemental_semantic_ids is None
-            and that.qualifiers is None
-            and that.embedded_data_specifications is None
-            and that.value is None
-    ):
-        serializer._write_empty_element(name)
-        return
+    try:
+        # We optimize for the case where all the optional properties are not set,
+        # so that we can simply output an empty element.
+        if (
+                that.extensions is None
+                and that.category is None
+                and that.id_short is None
+                and that.display_name is None
+                and that.description is None
+                and that.semantic_id is None
+                and that.supplemental_semantic_ids is None
+                and that.qualifiers is None
+                and that.embedded_data_specifications is None
+                and that.value is None
+        ):
+            serializer._write_empty_element(name)
+            return
 
-    serializer._write_start_element(name)
-    if that.extensions is not None:
-        _write_list_of_instances('extensions', that.extensions, serializer)
-    if that.category is not None:
-        _write_str_as_element('category', that.category, serializer)
-    if that.id_short is not None:
-        _write_str_as_element('idShort', that.id_short, serializer)
-    if that.display_name is not None:
-        _write_list_of_instances('displayName', that.display_name, serializer)
-    if that.description is not None:
-        _write_list_of_instances('description', that.description, serializer)
-    if that.semantic_id is not None:
-        _write_reference_as_element('semanticId', that.semantic_id, serializer)
-    if that.supplemental_semantic_ids is not None:
-        _write_list_of_instances(
-            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
-        )
-    if that.qualifiers is not None:
-        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
-    if that.embedded_data_specifications is not None:
-        _write_list_of_instances(
-            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
-        )
-    if that.value is not None:
-        _write_reference_as_element('value', that.value, serializer)
-    serializer._write_end_element(name)
+        serializer._write_start_element(name)
+        if that.extensions is not None:
+            _write_list_of_instances(
+                'extensions', 'extensions', that.extensions, serializer
+            )
+        if that.category is not None:
+            _write_str_as_element('category', 'category', that.category, serializer)
+        if that.id_short is not None:
+            _write_str_as_element('idShort', 'id_short', that.id_short, serializer)
+        if that.display_name is not None:
+            _write_list_of_instances(
+                'displayName', 'display_name', that.display_name, serializer
+            )
+        if that.description is not None:
+            _write_list_of_instances(
+                'description', 'description', that.description, serializer
+            )
+        if that.semantic_id is not None:
+            _write_reference_as_element(
+                'semanticId', 'semantic_id', that.semantic_id, serializer
+            )
+        if that.supplemental_semantic_ids is not None:
+            _write_list_of_instances(
+                'supplementalSemanticIds',
+                'supplemental_semantic_ids',
+                that.supplemental_semantic_ids,
+                serializer
+            )
+        if that.qualifiers is not None:
+            _write_list_of_instances(
+                'qualifiers', 'qualifiers', that.qualifiers, serializer
+            )
+        if that.embedded_data_specifications is not None:
+            _write_list_of_instances(
+                'embeddedDataSpecifications',
+                'embedded_data_specifications',
+                that.embedded_data_specifications,
+                serializer
+            )
+        if that.value is not None:
+            _write_reference_as_element('value', 'value', that.value, serializer)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_blob_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.Blob,
     serializer: '_Serializer'
 ) -> None:
@@ -15707,40 +16247,66 @@ def _write_blob_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    if that.extensions is not None:
-        _write_list_of_instances('extensions', that.extensions, serializer)
-    if that.category is not None:
-        _write_str_as_element('category', that.category, serializer)
-    if that.id_short is not None:
-        _write_str_as_element('idShort', that.id_short, serializer)
-    if that.display_name is not None:
-        _write_list_of_instances('displayName', that.display_name, serializer)
-    if that.description is not None:
-        _write_list_of_instances('description', that.description, serializer)
-    if that.semantic_id is not None:
-        _write_reference_as_element('semanticId', that.semantic_id, serializer)
-    if that.supplemental_semantic_ids is not None:
-        _write_list_of_instances(
-            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+    try:
+        serializer._write_start_element(name)
+        if that.extensions is not None:
+            _write_list_of_instances(
+                'extensions', 'extensions', that.extensions, serializer
+            )
+        if that.category is not None:
+            _write_str_as_element('category', 'category', that.category, serializer)
+        if that.id_short is not None:
+            _write_str_as_element('idShort', 'id_short', that.id_short, serializer)
+        if that.display_name is not None:
+            _write_list_of_instances(
+                'displayName', 'display_name', that.display_name, serializer
+            )
+        if that.description is not None:
+            _write_list_of_instances(
+                'description', 'description', that.description, serializer
+            )
+        if that.semantic_id is not None:
+            _write_reference_as_element(
+                'semanticId', 'semantic_id', that.semantic_id, serializer
+            )
+        if that.supplemental_semantic_ids is not None:
+            _write_list_of_instances(
+                'supplementalSemanticIds',
+                'supplemental_semantic_ids',
+                that.supplemental_semantic_ids,
+                serializer
+            )
+        if that.qualifiers is not None:
+            _write_list_of_instances(
+                'qualifiers', 'qualifiers', that.qualifiers, serializer
+            )
+        if that.embedded_data_specifications is not None:
+            _write_list_of_instances(
+                'embeddedDataSpecifications',
+                'embedded_data_specifications',
+                that.embedded_data_specifications,
+                serializer
+            )
+        if that.value is not None:
+            _write_bytes_as_element('value', 'value', that.value, serializer)
+        _write_str_as_element(
+            'contentType', 'content_type', that.content_type, serializer
         )
-    if that.qualifiers is not None:
-        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
-    if that.embedded_data_specifications is not None:
-        _write_list_of_instances(
-            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
-        )
-    if that.value is not None:
-        _write_bytes_as_element('value', that.value, serializer)
-    _write_str_as_element('contentType', that.content_type, serializer)
-    serializer._write_end_element(name)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_file_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.File,
     serializer: '_Serializer'
 ) -> None:
@@ -15748,40 +16314,66 @@ def _write_file_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    if that.extensions is not None:
-        _write_list_of_instances('extensions', that.extensions, serializer)
-    if that.category is not None:
-        _write_str_as_element('category', that.category, serializer)
-    if that.id_short is not None:
-        _write_str_as_element('idShort', that.id_short, serializer)
-    if that.display_name is not None:
-        _write_list_of_instances('displayName', that.display_name, serializer)
-    if that.description is not None:
-        _write_list_of_instances('description', that.description, serializer)
-    if that.semantic_id is not None:
-        _write_reference_as_element('semanticId', that.semantic_id, serializer)
-    if that.supplemental_semantic_ids is not None:
-        _write_list_of_instances(
-            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+    try:
+        serializer._write_start_element(name)
+        if that.extensions is not None:
+            _write_list_of_instances(
+                'extensions', 'extensions', that.extensions, serializer
+            )
+        if that.category is not None:
+            _write_str_as_element('category', 'category', that.category, serializer)
+        if that.id_short is not None:
+            _write_str_as_element('idShort', 'id_short', that.id_short, serializer)
+        if that.display_name is not None:
+            _write_list_of_instances(
+                'displayName', 'display_name', that.display_name, serializer
+            )
+        if that.description is not None:
+            _write_list_of_instances(
+                'description', 'description', that.description, serializer
+            )
+        if that.semantic_id is not None:
+            _write_reference_as_element(
+                'semanticId', 'semantic_id', that.semantic_id, serializer
+            )
+        if that.supplemental_semantic_ids is not None:
+            _write_list_of_instances(
+                'supplementalSemanticIds',
+                'supplemental_semantic_ids',
+                that.supplemental_semantic_ids,
+                serializer
+            )
+        if that.qualifiers is not None:
+            _write_list_of_instances(
+                'qualifiers', 'qualifiers', that.qualifiers, serializer
+            )
+        if that.embedded_data_specifications is not None:
+            _write_list_of_instances(
+                'embeddedDataSpecifications',
+                'embedded_data_specifications',
+                that.embedded_data_specifications,
+                serializer
+            )
+        if that.value is not None:
+            _write_str_as_element('value', 'value', that.value, serializer)
+        _write_str_as_element(
+            'contentType', 'content_type', that.content_type, serializer
         )
-    if that.qualifiers is not None:
-        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
-    if that.embedded_data_specifications is not None:
-        _write_list_of_instances(
-            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
-        )
-    if that.value is not None:
-        _write_str_as_element('value', that.value, serializer)
-    _write_str_as_element('contentType', that.content_type, serializer)
-    serializer._write_end_element(name)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_annotated_relationship_element_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.AnnotatedRelationshipElement,
     serializer: '_Serializer'
 ) -> None:
@@ -15789,41 +16381,67 @@ def _write_annotated_relationship_element_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    if that.extensions is not None:
-        _write_list_of_instances('extensions', that.extensions, serializer)
-    if that.category is not None:
-        _write_str_as_element('category', that.category, serializer)
-    if that.id_short is not None:
-        _write_str_as_element('idShort', that.id_short, serializer)
-    if that.display_name is not None:
-        _write_list_of_instances('displayName', that.display_name, serializer)
-    if that.description is not None:
-        _write_list_of_instances('description', that.description, serializer)
-    if that.semantic_id is not None:
-        _write_reference_as_element('semanticId', that.semantic_id, serializer)
-    if that.supplemental_semantic_ids is not None:
-        _write_list_of_instances(
-            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
-        )
-    if that.qualifiers is not None:
-        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
-    if that.embedded_data_specifications is not None:
-        _write_list_of_instances(
-            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
-        )
-    _write_reference_as_element('first', that.first, serializer)
-    _write_reference_as_element('second', that.second, serializer)
-    if that.annotations is not None:
-        _write_list_of_instances('annotations', that.annotations, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        if that.extensions is not None:
+            _write_list_of_instances(
+                'extensions', 'extensions', that.extensions, serializer
+            )
+        if that.category is not None:
+            _write_str_as_element('category', 'category', that.category, serializer)
+        if that.id_short is not None:
+            _write_str_as_element('idShort', 'id_short', that.id_short, serializer)
+        if that.display_name is not None:
+            _write_list_of_instances(
+                'displayName', 'display_name', that.display_name, serializer
+            )
+        if that.description is not None:
+            _write_list_of_instances(
+                'description', 'description', that.description, serializer
+            )
+        if that.semantic_id is not None:
+            _write_reference_as_element(
+                'semanticId', 'semantic_id', that.semantic_id, serializer
+            )
+        if that.supplemental_semantic_ids is not None:
+            _write_list_of_instances(
+                'supplementalSemanticIds',
+                'supplemental_semantic_ids',
+                that.supplemental_semantic_ids,
+                serializer
+            )
+        if that.qualifiers is not None:
+            _write_list_of_instances(
+                'qualifiers', 'qualifiers', that.qualifiers, serializer
+            )
+        if that.embedded_data_specifications is not None:
+            _write_list_of_instances(
+                'embeddedDataSpecifications',
+                'embedded_data_specifications',
+                that.embedded_data_specifications,
+                serializer
+            )
+        _write_reference_as_element('first', 'first', that.first, serializer)
+        _write_reference_as_element('second', 'second', that.second, serializer)
+        if that.annotations is not None:
+            _write_list_of_instances(
+                'annotations', 'annotations', that.annotations, serializer
+            )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_entity_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.Entity,
     serializer: '_Serializer'
 ) -> None:
@@ -15831,46 +16449,79 @@ def _write_entity_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    if that.extensions is not None:
-        _write_list_of_instances('extensions', that.extensions, serializer)
-    if that.category is not None:
-        _write_str_as_element('category', that.category, serializer)
-    if that.id_short is not None:
-        _write_str_as_element('idShort', that.id_short, serializer)
-    if that.display_name is not None:
-        _write_list_of_instances('displayName', that.display_name, serializer)
-    if that.description is not None:
-        _write_list_of_instances('description', that.description, serializer)
-    if that.semantic_id is not None:
-        _write_reference_as_element('semanticId', that.semantic_id, serializer)
-    if that.supplemental_semantic_ids is not None:
-        _write_list_of_instances(
-            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
+    try:
+        serializer._write_start_element(name)
+        if that.extensions is not None:
+            _write_list_of_instances(
+                'extensions', 'extensions', that.extensions, serializer
+            )
+        if that.category is not None:
+            _write_str_as_element('category', 'category', that.category, serializer)
+        if that.id_short is not None:
+            _write_str_as_element('idShort', 'id_short', that.id_short, serializer)
+        if that.display_name is not None:
+            _write_list_of_instances(
+                'displayName', 'display_name', that.display_name, serializer
+            )
+        if that.description is not None:
+            _write_list_of_instances(
+                'description', 'description', that.description, serializer
+            )
+        if that.semantic_id is not None:
+            _write_reference_as_element(
+                'semanticId', 'semantic_id', that.semantic_id, serializer
+            )
+        if that.supplemental_semantic_ids is not None:
+            _write_list_of_instances(
+                'supplementalSemanticIds',
+                'supplemental_semantic_ids',
+                that.supplemental_semantic_ids,
+                serializer
+            )
+        if that.qualifiers is not None:
+            _write_list_of_instances(
+                'qualifiers', 'qualifiers', that.qualifiers, serializer
+            )
+        if that.embedded_data_specifications is not None:
+            _write_list_of_instances(
+                'embeddedDataSpecifications',
+                'embedded_data_specifications',
+                that.embedded_data_specifications,
+                serializer
+            )
+        if that.statements is not None:
+            _write_list_of_instances(
+                'statements', 'statements', that.statements, serializer
+            )
+        _write_enum_as_element(
+            'entityType', 'entity_type', that.entity_type, serializer
         )
-    if that.qualifiers is not None:
-        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
-    if that.embedded_data_specifications is not None:
-        _write_list_of_instances(
-            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
-        )
-    if that.statements is not None:
-        _write_list_of_instances('statements', that.statements, serializer)
-    _write_str_as_element('entityType', that.entity_type.value, serializer)
-    if that.global_asset_id is not None:
-        _write_str_as_element('globalAssetId', that.global_asset_id, serializer)
-    if that.specific_asset_ids is not None:
-        _write_list_of_instances(
-            'specificAssetIds', that.specific_asset_ids, serializer
-        )
-    serializer._write_end_element(name)
+        if that.global_asset_id is not None:
+            _write_str_as_element(
+                'globalAssetId', 'global_asset_id', that.global_asset_id, serializer
+            )
+        if that.specific_asset_ids is not None:
+            _write_list_of_instances(
+                'specificAssetIds',
+                'specific_asset_ids',
+                that.specific_asset_ids,
+                serializer
+            )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_event_payload_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.EventPayload,
     serializer: '_Serializer'
 ) -> None:
@@ -15878,34 +16529,53 @@ def _write_event_payload_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_reference_as_element('source', that.source, serializer)
-    if that.source_semantic_id is not None:
+    try:
+        serializer._write_start_element(name)
+        _write_reference_as_element('source', 'source', that.source, serializer)
+        if that.source_semantic_id is not None:
+            _write_reference_as_element(
+                'sourceSemanticId',
+                'source_semantic_id',
+                that.source_semantic_id,
+                serializer
+            )
         _write_reference_as_element(
-            'sourceSemanticId', that.source_semantic_id, serializer
+            'observableReference',
+            'observable_reference',
+            that.observable_reference,
+            serializer
         )
-    _write_reference_as_element(
-        'observableReference', that.observable_reference, serializer
-    )
-    if that.observable_semantic_id is not None:
-        _write_reference_as_element(
-            'observableSemanticId', that.observable_semantic_id, serializer
-        )
-    if that.topic is not None:
-        _write_str_as_element('topic', that.topic, serializer)
-    if that.subject_id is not None:
-        _write_reference_as_element('subjectId', that.subject_id, serializer)
-    _write_str_as_element('timeStamp', that.time_stamp, serializer)
-    if that.payload is not None:
-        _write_bytes_as_element('payload', that.payload, serializer)
-    serializer._write_end_element(name)
+        if that.observable_semantic_id is not None:
+            _write_reference_as_element(
+                'observableSemanticId',
+                'observable_semantic_id',
+                that.observable_semantic_id,
+                serializer
+            )
+        if that.topic is not None:
+            _write_str_as_element('topic', 'topic', that.topic, serializer)
+        if that.subject_id is not None:
+            _write_reference_as_element(
+                'subjectId', 'subject_id', that.subject_id, serializer
+            )
+        _write_str_as_element('timeStamp', 'time_stamp', that.time_stamp, serializer)
+        if that.payload is not None:
+            _write_bytes_as_element('payload', 'payload', that.payload, serializer)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_basic_event_element_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.BasicEventElement,
     serializer: '_Serializer'
 ) -> None:
@@ -15913,50 +16583,84 @@ def _write_basic_event_element_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    if that.extensions is not None:
-        _write_list_of_instances('extensions', that.extensions, serializer)
-    if that.category is not None:
-        _write_str_as_element('category', that.category, serializer)
-    if that.id_short is not None:
-        _write_str_as_element('idShort', that.id_short, serializer)
-    if that.display_name is not None:
-        _write_list_of_instances('displayName', that.display_name, serializer)
-    if that.description is not None:
-        _write_list_of_instances('description', that.description, serializer)
-    if that.semantic_id is not None:
-        _write_reference_as_element('semanticId', that.semantic_id, serializer)
-    if that.supplemental_semantic_ids is not None:
-        _write_list_of_instances(
-            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
-        )
-    if that.qualifiers is not None:
-        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
-    if that.embedded_data_specifications is not None:
-        _write_list_of_instances(
-            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
-        )
-    _write_reference_as_element('observed', that.observed, serializer)
-    _write_str_as_element('direction', that.direction.value, serializer)
-    _write_str_as_element('state', that.state.value, serializer)
-    if that.message_topic is not None:
-        _write_str_as_element('messageTopic', that.message_topic, serializer)
-    if that.message_broker is not None:
-        _write_reference_as_element('messageBroker', that.message_broker, serializer)
-    if that.last_update is not None:
-        _write_str_as_element('lastUpdate', that.last_update, serializer)
-    if that.min_interval is not None:
-        _write_str_as_element('minInterval', that.min_interval, serializer)
-    if that.max_interval is not None:
-        _write_str_as_element('maxInterval', that.max_interval, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        if that.extensions is not None:
+            _write_list_of_instances(
+                'extensions', 'extensions', that.extensions, serializer
+            )
+        if that.category is not None:
+            _write_str_as_element('category', 'category', that.category, serializer)
+        if that.id_short is not None:
+            _write_str_as_element('idShort', 'id_short', that.id_short, serializer)
+        if that.display_name is not None:
+            _write_list_of_instances(
+                'displayName', 'display_name', that.display_name, serializer
+            )
+        if that.description is not None:
+            _write_list_of_instances(
+                'description', 'description', that.description, serializer
+            )
+        if that.semantic_id is not None:
+            _write_reference_as_element(
+                'semanticId', 'semantic_id', that.semantic_id, serializer
+            )
+        if that.supplemental_semantic_ids is not None:
+            _write_list_of_instances(
+                'supplementalSemanticIds',
+                'supplemental_semantic_ids',
+                that.supplemental_semantic_ids,
+                serializer
+            )
+        if that.qualifiers is not None:
+            _write_list_of_instances(
+                'qualifiers', 'qualifiers', that.qualifiers, serializer
+            )
+        if that.embedded_data_specifications is not None:
+            _write_list_of_instances(
+                'embeddedDataSpecifications',
+                'embedded_data_specifications',
+                that.embedded_data_specifications,
+                serializer
+            )
+        _write_reference_as_element('observed', 'observed', that.observed, serializer)
+        _write_enum_as_element('direction', 'direction', that.direction, serializer)
+        _write_enum_as_element('state', 'state', that.state, serializer)
+        if that.message_topic is not None:
+            _write_str_as_element(
+                'messageTopic', 'message_topic', that.message_topic, serializer
+            )
+        if that.message_broker is not None:
+            _write_reference_as_element(
+                'messageBroker', 'message_broker', that.message_broker, serializer
+            )
+        if that.last_update is not None:
+            _write_str_as_element(
+                'lastUpdate', 'last_update', that.last_update, serializer
+            )
+        if that.min_interval is not None:
+            _write_str_as_element(
+                'minInterval', 'min_interval', that.min_interval, serializer
+            )
+        if that.max_interval is not None:
+            _write_str_as_element(
+                'maxInterval', 'max_interval', that.max_interval, serializer
+            )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_operation_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.Operation,
     serializer: '_Serializer'
 ) -> None:
@@ -15967,64 +16671,95 @@ def _write_operation_as_element(
     if none of them is set.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    # We optimize for the case where all the optional properties are not set,
-    # so that we can simply output an empty element.
-    if (
-            that.extensions is None
-            and that.category is None
-            and that.id_short is None
-            and that.display_name is None
-            and that.description is None
-            and that.semantic_id is None
-            and that.supplemental_semantic_ids is None
-            and that.qualifiers is None
-            and that.embedded_data_specifications is None
-            and that.input_variables is None
-            and that.output_variables is None
-            and that.inoutput_variables is None
-    ):
-        serializer._write_empty_element(name)
-        return
+    try:
+        # We optimize for the case where all the optional properties are not set,
+        # so that we can simply output an empty element.
+        if (
+                that.extensions is None
+                and that.category is None
+                and that.id_short is None
+                and that.display_name is None
+                and that.description is None
+                and that.semantic_id is None
+                and that.supplemental_semantic_ids is None
+                and that.qualifiers is None
+                and that.embedded_data_specifications is None
+                and that.input_variables is None
+                and that.output_variables is None
+                and that.inoutput_variables is None
+        ):
+            serializer._write_empty_element(name)
+            return
 
-    serializer._write_start_element(name)
-    if that.extensions is not None:
-        _write_list_of_instances('extensions', that.extensions, serializer)
-    if that.category is not None:
-        _write_str_as_element('category', that.category, serializer)
-    if that.id_short is not None:
-        _write_str_as_element('idShort', that.id_short, serializer)
-    if that.display_name is not None:
-        _write_list_of_instances('displayName', that.display_name, serializer)
-    if that.description is not None:
-        _write_list_of_instances('description', that.description, serializer)
-    if that.semantic_id is not None:
-        _write_reference_as_element('semanticId', that.semantic_id, serializer)
-    if that.supplemental_semantic_ids is not None:
-        _write_list_of_instances(
-            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
-        )
-    if that.qualifiers is not None:
-        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
-    if that.embedded_data_specifications is not None:
-        _write_list_of_instances(
-            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
-        )
-    if that.input_variables is not None:
-        _write_list_of_instances('inputVariables', that.input_variables, serializer)
-    if that.output_variables is not None:
-        _write_list_of_instances('outputVariables', that.output_variables, serializer)
-    if that.inoutput_variables is not None:
-        _write_list_of_instances(
-            'inoutputVariables', that.inoutput_variables, serializer
-        )
-    serializer._write_end_element(name)
+        serializer._write_start_element(name)
+        if that.extensions is not None:
+            _write_list_of_instances(
+                'extensions', 'extensions', that.extensions, serializer
+            )
+        if that.category is not None:
+            _write_str_as_element('category', 'category', that.category, serializer)
+        if that.id_short is not None:
+            _write_str_as_element('idShort', 'id_short', that.id_short, serializer)
+        if that.display_name is not None:
+            _write_list_of_instances(
+                'displayName', 'display_name', that.display_name, serializer
+            )
+        if that.description is not None:
+            _write_list_of_instances(
+                'description', 'description', that.description, serializer
+            )
+        if that.semantic_id is not None:
+            _write_reference_as_element(
+                'semanticId', 'semantic_id', that.semantic_id, serializer
+            )
+        if that.supplemental_semantic_ids is not None:
+            _write_list_of_instances(
+                'supplementalSemanticIds',
+                'supplemental_semantic_ids',
+                that.supplemental_semantic_ids,
+                serializer
+            )
+        if that.qualifiers is not None:
+            _write_list_of_instances(
+                'qualifiers', 'qualifiers', that.qualifiers, serializer
+            )
+        if that.embedded_data_specifications is not None:
+            _write_list_of_instances(
+                'embeddedDataSpecifications',
+                'embedded_data_specifications',
+                that.embedded_data_specifications,
+                serializer
+            )
+        if that.input_variables is not None:
+            _write_list_of_instances(
+                'inputVariables', 'input_variables', that.input_variables, serializer
+            )
+        if that.output_variables is not None:
+            _write_list_of_instances(
+                'outputVariables', 'output_variables', that.output_variables, serializer
+            )
+        if that.inoutput_variables is not None:
+            _write_list_of_instances(
+                'inoutputVariables',
+                'inoutput_variables',
+                that.inoutput_variables,
+                serializer
+            )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_operation_variable_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.OperationVariable,
     serializer: '_Serializer'
 ) -> None:
@@ -16032,16 +16767,24 @@ def _write_operation_variable_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_nested_element('value', that.value, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        _write_nested_element('value', 'value', that.value, serializer)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_capability_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.Capability,
     serializer: '_Serializer'
 ) -> None:
@@ -16052,53 +16795,77 @@ def _write_capability_as_element(
     if none of them is set.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    # We optimize for the case where all the optional properties are not set,
-    # so that we can simply output an empty element.
-    if (
-            that.extensions is None
-            and that.category is None
-            and that.id_short is None
-            and that.display_name is None
-            and that.description is None
-            and that.semantic_id is None
-            and that.supplemental_semantic_ids is None
-            and that.qualifiers is None
-            and that.embedded_data_specifications is None
-    ):
-        serializer._write_empty_element(name)
-        return
+    try:
+        # We optimize for the case where all the optional properties are not set,
+        # so that we can simply output an empty element.
+        if (
+                that.extensions is None
+                and that.category is None
+                and that.id_short is None
+                and that.display_name is None
+                and that.description is None
+                and that.semantic_id is None
+                and that.supplemental_semantic_ids is None
+                and that.qualifiers is None
+                and that.embedded_data_specifications is None
+        ):
+            serializer._write_empty_element(name)
+            return
 
-    serializer._write_start_element(name)
-    if that.extensions is not None:
-        _write_list_of_instances('extensions', that.extensions, serializer)
-    if that.category is not None:
-        _write_str_as_element('category', that.category, serializer)
-    if that.id_short is not None:
-        _write_str_as_element('idShort', that.id_short, serializer)
-    if that.display_name is not None:
-        _write_list_of_instances('displayName', that.display_name, serializer)
-    if that.description is not None:
-        _write_list_of_instances('description', that.description, serializer)
-    if that.semantic_id is not None:
-        _write_reference_as_element('semanticId', that.semantic_id, serializer)
-    if that.supplemental_semantic_ids is not None:
-        _write_list_of_instances(
-            'supplementalSemanticIds', that.supplemental_semantic_ids, serializer
-        )
-    if that.qualifiers is not None:
-        _write_list_of_instances('qualifiers', that.qualifiers, serializer)
-    if that.embedded_data_specifications is not None:
-        _write_list_of_instances(
-            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
-        )
-    serializer._write_end_element(name)
+        serializer._write_start_element(name)
+        if that.extensions is not None:
+            _write_list_of_instances(
+                'extensions', 'extensions', that.extensions, serializer
+            )
+        if that.category is not None:
+            _write_str_as_element('category', 'category', that.category, serializer)
+        if that.id_short is not None:
+            _write_str_as_element('idShort', 'id_short', that.id_short, serializer)
+        if that.display_name is not None:
+            _write_list_of_instances(
+                'displayName', 'display_name', that.display_name, serializer
+            )
+        if that.description is not None:
+            _write_list_of_instances(
+                'description', 'description', that.description, serializer
+            )
+        if that.semantic_id is not None:
+            _write_reference_as_element(
+                'semanticId', 'semantic_id', that.semantic_id, serializer
+            )
+        if that.supplemental_semantic_ids is not None:
+            _write_list_of_instances(
+                'supplementalSemanticIds',
+                'supplemental_semantic_ids',
+                that.supplemental_semantic_ids,
+                serializer
+            )
+        if that.qualifiers is not None:
+            _write_list_of_instances(
+                'qualifiers', 'qualifiers', that.qualifiers, serializer
+            )
+        if that.embedded_data_specifications is not None:
+            _write_list_of_instances(
+                'embeddedDataSpecifications',
+                'embedded_data_specifications',
+                that.embedded_data_specifications,
+                serializer
+            )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_concept_description_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.ConceptDescription,
     serializer: '_Serializer'
 ) -> None:
@@ -16106,36 +16873,55 @@ def _write_concept_description_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    if that.extensions is not None:
-        _write_list_of_instances('extensions', that.extensions, serializer)
-    if that.category is not None:
-        _write_str_as_element('category', that.category, serializer)
-    if that.id_short is not None:
-        _write_str_as_element('idShort', that.id_short, serializer)
-    if that.display_name is not None:
-        _write_list_of_instances('displayName', that.display_name, serializer)
-    if that.description is not None:
-        _write_list_of_instances('description', that.description, serializer)
-    if that.administration is not None:
-        _write_administrative_information_as_element(
-            'administration', that.administration, serializer
-        )
-    _write_str_as_element('id', that.id, serializer)
-    if that.embedded_data_specifications is not None:
-        _write_list_of_instances(
-            'embeddedDataSpecifications', that.embedded_data_specifications, serializer
-        )
-    if that.is_case_of is not None:
-        _write_list_of_instances('isCaseOf', that.is_case_of, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        if that.extensions is not None:
+            _write_list_of_instances(
+                'extensions', 'extensions', that.extensions, serializer
+            )
+        if that.category is not None:
+            _write_str_as_element('category', 'category', that.category, serializer)
+        if that.id_short is not None:
+            _write_str_as_element('idShort', 'id_short', that.id_short, serializer)
+        if that.display_name is not None:
+            _write_list_of_instances(
+                'displayName', 'display_name', that.display_name, serializer
+            )
+        if that.description is not None:
+            _write_list_of_instances(
+                'description', 'description', that.description, serializer
+            )
+        if that.administration is not None:
+            _write_administrative_information_as_element(
+                'administration', 'administration', that.administration, serializer
+            )
+        _write_str_as_element('id', 'id', that.id, serializer)
+        if that.embedded_data_specifications is not None:
+            _write_list_of_instances(
+                'embeddedDataSpecifications',
+                'embedded_data_specifications',
+                that.embedded_data_specifications,
+                serializer
+            )
+        if that.is_case_of is not None:
+            _write_list_of_instances(
+                'isCaseOf', 'is_case_of', that.is_case_of, serializer
+            )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_reference_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.Reference,
     serializer: '_Serializer'
 ) -> None:
@@ -16143,21 +16929,32 @@ def _write_reference_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_str_as_element('type', that.type.value, serializer)
-    if that.referred_semantic_id is not None:
-        _write_reference_as_element(
-            'referredSemanticId', that.referred_semantic_id, serializer
-        )
-    _write_list_of_instances('keys', that.keys, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        _write_enum_as_element('type', 'type', that.type, serializer)
+        if that.referred_semantic_id is not None:
+            _write_reference_as_element(
+                'referredSemanticId',
+                'referred_semantic_id',
+                that.referred_semantic_id,
+                serializer
+            )
+        _write_list_of_instances('keys', 'keys', that.keys, serializer)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_key_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.Key,
     serializer: '_Serializer'
 ) -> None:
@@ -16165,17 +16962,25 @@ def _write_key_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_str_as_element('type', that.type.value, serializer)
-    _write_str_as_element('value', that.value, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        _write_enum_as_element('type', 'type', that.type, serializer)
+        _write_str_as_element('value', 'value', that.value, serializer)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_lang_string_name_type_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.LangStringNameType,
     serializer: '_Serializer'
 ) -> None:
@@ -16183,17 +16988,25 @@ def _write_lang_string_name_type_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_str_as_element('language', that.language, serializer)
-    _write_str_as_element('text', that.text, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        _write_str_as_element('language', 'language', that.language, serializer)
+        _write_str_as_element('text', 'text', that.text, serializer)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_lang_string_text_type_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.LangStringTextType,
     serializer: '_Serializer'
 ) -> None:
@@ -16201,17 +17014,25 @@ def _write_lang_string_text_type_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_str_as_element('language', that.language, serializer)
-    _write_str_as_element('text', that.text, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        _write_str_as_element('language', 'language', that.language, serializer)
+        _write_str_as_element('text', 'text', that.text, serializer)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_environment_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.Environment,
     serializer: '_Serializer'
 ) -> None:
@@ -16222,35 +17043,51 @@ def _write_environment_as_element(
     if none of them is set.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    # We optimize for the case where all the optional properties are not set,
-    # so that we can simply output an empty element.
-    if (
-            that.asset_administration_shells is None
-            and that.submodels is None
-            and that.concept_descriptions is None
-    ):
-        serializer._write_empty_element(name)
-        return
+    try:
+        # We optimize for the case where all the optional properties are not set,
+        # so that we can simply output an empty element.
+        if (
+                that.asset_administration_shells is None
+                and that.submodels is None
+                and that.concept_descriptions is None
+        ):
+            serializer._write_empty_element(name)
+            return
 
-    serializer._write_start_element(name)
-    if that.asset_administration_shells is not None:
-        _write_list_of_instances(
-            'assetAdministrationShells', that.asset_administration_shells, serializer
-        )
-    if that.submodels is not None:
-        _write_list_of_instances('submodels', that.submodels, serializer)
-    if that.concept_descriptions is not None:
-        _write_list_of_instances(
-            'conceptDescriptions', that.concept_descriptions, serializer
-        )
-    serializer._write_end_element(name)
+        serializer._write_start_element(name)
+        if that.asset_administration_shells is not None:
+            _write_list_of_instances(
+                'assetAdministrationShells',
+                'asset_administration_shells',
+                that.asset_administration_shells,
+                serializer
+            )
+        if that.submodels is not None:
+            _write_list_of_instances(
+                'submodels', 'submodels', that.submodels, serializer
+            )
+        if that.concept_descriptions is not None:
+            _write_list_of_instances(
+                'conceptDescriptions',
+                'concept_descriptions',
+                that.concept_descriptions,
+                serializer
+            )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_embedded_data_specification_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.EmbeddedDataSpecification,
     serializer: '_Serializer'
 ) -> None:
@@ -16258,21 +17095,35 @@ def _write_embedded_data_specification_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_reference_as_element(
-        'dataSpecification', that.data_specification, serializer
-    )
-    _write_nested_element(
-        'dataSpecificationContent', that.data_specification_content, serializer
-    )
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        _write_reference_as_element(
+            'dataSpecification',
+            'data_specification',
+            that.data_specification,
+            serializer
+        )
+        _write_nested_element(
+            'dataSpecificationContent',
+            'data_specification_content',
+            that.data_specification_content,
+            serializer
+        )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_level_type_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.LevelType,
     serializer: '_Serializer'
 ) -> None:
@@ -16280,19 +17131,27 @@ def _write_level_type_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_bool_as_element('min', that.min, serializer)
-    _write_bool_as_element('nom', that.nom, serializer)
-    _write_bool_as_element('typ', that.typ, serializer)
-    _write_bool_as_element('max', that.max, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        _write_bool_as_element('min', 'min', that.min, serializer)
+        _write_bool_as_element('nom', 'nom', that.nom, serializer)
+        _write_bool_as_element('typ', 'typ', that.typ, serializer)
+        _write_bool_as_element('max', 'max', that.max, serializer)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_value_reference_pair_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.ValueReferencePair,
     serializer: '_Serializer'
 ) -> None:
@@ -16300,17 +17159,25 @@ def _write_value_reference_pair_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_str_as_element('value', that.value, serializer)
-    _write_reference_as_element('valueId', that.value_id, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        _write_str_as_element('value', 'value', that.value, serializer)
+        _write_reference_as_element('valueId', 'value_id', that.value_id, serializer)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_value_list_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.ValueList,
     serializer: '_Serializer'
 ) -> None:
@@ -16318,18 +17185,29 @@ def _write_value_list_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_list_of_instances(
-        'valueReferencePairs', that.value_reference_pairs, serializer
-    )
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        _write_list_of_instances(
+            'valueReferencePairs',
+            'value_reference_pairs',
+            that.value_reference_pairs,
+            serializer
+        )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_lang_string_preferred_name_type_iec_61360_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.LangStringPreferredNameTypeIEC61360,
     serializer: '_Serializer'
 ) -> None:
@@ -16337,17 +17215,25 @@ def _write_lang_string_preferred_name_type_iec_61360_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_str_as_element('language', that.language, serializer)
-    _write_str_as_element('text', that.text, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        _write_str_as_element('language', 'language', that.language, serializer)
+        _write_str_as_element('text', 'text', that.text, serializer)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_lang_string_short_name_type_iec_61360_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.LangStringShortNameTypeIEC61360,
     serializer: '_Serializer'
 ) -> None:
@@ -16355,17 +17241,25 @@ def _write_lang_string_short_name_type_iec_61360_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_str_as_element('language', that.language, serializer)
-    _write_str_as_element('text', that.text, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        _write_str_as_element('language', 'language', that.language, serializer)
+        _write_str_as_element('text', 'text', that.text, serializer)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_lang_string_definition_type_iec_61360_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.LangStringDefinitionTypeIEC61360,
     serializer: '_Serializer'
 ) -> None:
@@ -16373,17 +17267,25 @@ def _write_lang_string_definition_type_iec_61360_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_str_as_element('language', that.language, serializer)
-    _write_str_as_element('text', that.text, serializer)
-    serializer._write_end_element(name)
+    try:
+        serializer._write_start_element(name)
+        _write_str_as_element('language', 'language', that.language, serializer)
+        _write_str_as_element('text', 'text', that.text, serializer)
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 def _write_data_specification_iec_61360_as_element(
     name: str,
+    prop_name: Optional[str],
     that: aas_types.DataSpecificationIEC61360,
     serializer: '_Serializer'
 ) -> None:
@@ -16391,36 +17293,58 @@ def _write_data_specification_iec_61360_as_element(
     Write :paramref:`that` enclosed in the :paramref:`name` element.
 
     :param name: of the element tag. Expected to contain no XML special characters.
+    :param prop_name:
+        name of the property, as spelled in Python, whose value is written, or
+        ``None`` if the access to the value is recorded by an enclosing writer
     :param that: instance to be serialized
     :param serializer: to write to
+    :raise: :py:class:`SerializationException` if the value could not be written
     """
-    serializer._write_start_element(name)
-    _write_list_of_instances('preferredName', that.preferred_name, serializer)
-    if that.short_name is not None:
-        _write_list_of_instances('shortName', that.short_name, serializer)
-    if that.unit is not None:
-        _write_str_as_element('unit', that.unit, serializer)
-    if that.unit_id is not None:
-        _write_reference_as_element('unitId', that.unit_id, serializer)
-    if that.source_of_definition is not None:
-        _write_str_as_element(
-            'sourceOfDefinition', that.source_of_definition, serializer
+    try:
+        serializer._write_start_element(name)
+        _write_list_of_instances(
+            'preferredName', 'preferred_name', that.preferred_name, serializer
         )
-    if that.symbol is not None:
-        _write_str_as_element('symbol', that.symbol, serializer)
-    if that.data_type is not None:
-        _write_str_as_element('dataType', that.data_type.value, serializer)
-    if that.definition is not None:
-        _write_list_of_instances('definition', that.definition, serializer)
-    if that.value_format is not None:
-        _write_str_as_element('valueFormat', that.value_format, serializer)
-    if that.value_list is not None:
-        _write_value_list_as_element('valueList', that.value_list, serializer)
-    if that.value is not None:
-        _write_str_as_element('value', that.value, serializer)
-    if that.level_type is not None:
-        _write_level_type_as_element('levelType', that.level_type, serializer)
-    serializer._write_end_element(name)
+        if that.short_name is not None:
+            _write_list_of_instances(
+                'shortName', 'short_name', that.short_name, serializer
+            )
+        if that.unit is not None:
+            _write_str_as_element('unit', 'unit', that.unit, serializer)
+        if that.unit_id is not None:
+            _write_reference_as_element('unitId', 'unit_id', that.unit_id, serializer)
+        if that.source_of_definition is not None:
+            _write_str_as_element(
+                'sourceOfDefinition',
+                'source_of_definition',
+                that.source_of_definition,
+                serializer
+            )
+        if that.symbol is not None:
+            _write_str_as_element('symbol', 'symbol', that.symbol, serializer)
+        if that.data_type is not None:
+            _write_enum_as_element('dataType', 'data_type', that.data_type, serializer)
+        if that.definition is not None:
+            _write_list_of_instances(
+                'definition', 'definition', that.definition, serializer
+            )
+        if that.value_format is not None:
+            _write_str_as_element(
+                'valueFormat', 'value_format', that.value_format, serializer
+            )
+        if that.value_list is not None:
+            _write_value_list_as_element(
+                'valueList', 'value_list', that.value_list, serializer
+            )
+        if that.value is not None:
+            _write_str_as_element('value', 'value', that.value, serializer)
+        if that.level_type is not None:
+            _write_level_type_as_element(
+                'levelType', 'level_type', that.level_type, serializer
+            )
+        serializer._write_end_element(name)
+    except Exception as exception:
+        _attribute_to_property(exception, prop_name)
 
 
 class _Serializer(aas_types.AbstractVisitor):
@@ -16581,7 +17505,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_extension_as_element('extension', that, self)
+        _write_extension_as_element('extension', None, that, self)
 
     def visit_administrative_information(
         self,
@@ -16596,7 +17520,7 @@ class _Serializer(aas_types.AbstractVisitor):
         :param that: instance to be serialized
         """
         _write_administrative_information_as_element(
-            'administrativeInformation', that, self
+            'administrativeInformation', None, that, self
         )
 
     def visit_qualifier(
@@ -16611,7 +17535,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_qualifier_as_element('qualifier', that, self)
+        _write_qualifier_as_element('qualifier', None, that, self)
 
     def visit_asset_administration_shell(
         self,
@@ -16626,7 +17550,7 @@ class _Serializer(aas_types.AbstractVisitor):
         :param that: instance to be serialized
         """
         _write_asset_administration_shell_as_element(
-            'assetAdministrationShell', that, self
+            'assetAdministrationShell', None, that, self
         )
 
     def visit_asset_information(
@@ -16641,7 +17565,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_asset_information_as_element('assetInformation', that, self)
+        _write_asset_information_as_element('assetInformation', None, that, self)
 
     def visit_resource(
         self,
@@ -16655,7 +17579,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_resource_as_element('resource', that, self)
+        _write_resource_as_element('resource', None, that, self)
 
     def visit_specific_asset_id(
         self,
@@ -16669,7 +17593,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_specific_asset_id_as_element('specificAssetId', that, self)
+        _write_specific_asset_id_as_element('specificAssetId', None, that, self)
 
     def visit_submodel(
         self,
@@ -16683,7 +17607,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_submodel_as_element('submodel', that, self)
+        _write_submodel_as_element('submodel', None, that, self)
 
     def visit_relationship_element(
         self,
@@ -16697,7 +17621,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_relationship_element_as_element('relationshipElement', that, self)
+        _write_relationship_element_as_element('relationshipElement', None, that, self)
 
     def visit_submodel_element_list(
         self,
@@ -16711,7 +17635,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_submodel_element_list_as_element('submodelElementList', that, self)
+        _write_submodel_element_list_as_element('submodelElementList', None, that, self)
 
     def visit_submodel_element_collection(
         self,
@@ -16726,7 +17650,7 @@ class _Serializer(aas_types.AbstractVisitor):
         :param that: instance to be serialized
         """
         _write_submodel_element_collection_as_element(
-            'submodelElementCollection', that, self
+            'submodelElementCollection', None, that, self
         )
 
     def visit_property(
@@ -16741,7 +17665,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_property_as_element('property', that, self)
+        _write_property_as_element('property', None, that, self)
 
     def visit_multi_language_property(
         self,
@@ -16755,7 +17679,9 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_multi_language_property_as_element('multiLanguageProperty', that, self)
+        _write_multi_language_property_as_element(
+            'multiLanguageProperty', None, that, self
+        )
 
     def visit_range(
         self,
@@ -16769,7 +17695,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_range_as_element('range', that, self)
+        _write_range_as_element('range', None, that, self)
 
     def visit_reference_element(
         self,
@@ -16783,7 +17709,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_reference_element_as_element('referenceElement', that, self)
+        _write_reference_element_as_element('referenceElement', None, that, self)
 
     def visit_blob(
         self,
@@ -16797,7 +17723,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_blob_as_element('blob', that, self)
+        _write_blob_as_element('blob', None, that, self)
 
     def visit_file(
         self,
@@ -16811,7 +17737,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_file_as_element('file', that, self)
+        _write_file_as_element('file', None, that, self)
 
     def visit_annotated_relationship_element(
         self,
@@ -16826,7 +17752,7 @@ class _Serializer(aas_types.AbstractVisitor):
         :param that: instance to be serialized
         """
         _write_annotated_relationship_element_as_element(
-            'annotatedRelationshipElement', that, self
+            'annotatedRelationshipElement', None, that, self
         )
 
     def visit_entity(
@@ -16841,7 +17767,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_entity_as_element('entity', that, self)
+        _write_entity_as_element('entity', None, that, self)
 
     def visit_event_payload(
         self,
@@ -16855,7 +17781,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_event_payload_as_element('eventPayload', that, self)
+        _write_event_payload_as_element('eventPayload', None, that, self)
 
     def visit_basic_event_element(
         self,
@@ -16869,7 +17795,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_basic_event_element_as_element('basicEventElement', that, self)
+        _write_basic_event_element_as_element('basicEventElement', None, that, self)
 
     def visit_operation(
         self,
@@ -16883,7 +17809,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_operation_as_element('operation', that, self)
+        _write_operation_as_element('operation', None, that, self)
 
     def visit_operation_variable(
         self,
@@ -16897,7 +17823,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_operation_variable_as_element('operationVariable', that, self)
+        _write_operation_variable_as_element('operationVariable', None, that, self)
 
     def visit_capability(
         self,
@@ -16911,7 +17837,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_capability_as_element('capability', that, self)
+        _write_capability_as_element('capability', None, that, self)
 
     def visit_concept_description(
         self,
@@ -16925,7 +17851,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_concept_description_as_element('conceptDescription', that, self)
+        _write_concept_description_as_element('conceptDescription', None, that, self)
 
     def visit_reference(
         self,
@@ -16939,7 +17865,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_reference_as_element('reference', that, self)
+        _write_reference_as_element('reference', None, that, self)
 
     def visit_key(
         self,
@@ -16953,7 +17879,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_key_as_element('key', that, self)
+        _write_key_as_element('key', None, that, self)
 
     def visit_lang_string_name_type(
         self,
@@ -16967,7 +17893,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_lang_string_name_type_as_element('langStringNameType', that, self)
+        _write_lang_string_name_type_as_element('langStringNameType', None, that, self)
 
     def visit_lang_string_text_type(
         self,
@@ -16981,7 +17907,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_lang_string_text_type_as_element('langStringTextType', that, self)
+        _write_lang_string_text_type_as_element('langStringTextType', None, that, self)
 
     def visit_environment(
         self,
@@ -16995,7 +17921,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_environment_as_element('environment', that, self)
+        _write_environment_as_element('environment', None, that, self)
 
     def visit_embedded_data_specification(
         self,
@@ -17010,7 +17936,7 @@ class _Serializer(aas_types.AbstractVisitor):
         :param that: instance to be serialized
         """
         _write_embedded_data_specification_as_element(
-            'embeddedDataSpecification', that, self
+            'embeddedDataSpecification', None, that, self
         )
 
     def visit_level_type(
@@ -17025,7 +17951,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_level_type_as_element('levelType', that, self)
+        _write_level_type_as_element('levelType', None, that, self)
 
     def visit_value_reference_pair(
         self,
@@ -17039,7 +17965,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_value_reference_pair_as_element('valueReferencePair', that, self)
+        _write_value_reference_pair_as_element('valueReferencePair', None, that, self)
 
     def visit_value_list(
         self,
@@ -17053,7 +17979,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        _write_value_list_as_element('valueList', that, self)
+        _write_value_list_as_element('valueList', None, that, self)
 
     def visit_lang_string_preferred_name_type_iec_61360(
         self,
@@ -17068,7 +17994,7 @@ class _Serializer(aas_types.AbstractVisitor):
         :param that: instance to be serialized
         """
         _write_lang_string_preferred_name_type_iec_61360_as_element(
-            'langStringPreferredNameTypeIec61360', that, self
+            'langStringPreferredNameTypeIec61360', None, that, self
         )
 
     def visit_lang_string_short_name_type_iec_61360(
@@ -17084,7 +18010,7 @@ class _Serializer(aas_types.AbstractVisitor):
         :param that: instance to be serialized
         """
         _write_lang_string_short_name_type_iec_61360_as_element(
-            'langStringShortNameTypeIec61360', that, self
+            'langStringShortNameTypeIec61360', None, that, self
         )
 
     def visit_lang_string_definition_type_iec_61360(
@@ -17100,7 +18026,7 @@ class _Serializer(aas_types.AbstractVisitor):
         :param that: instance to be serialized
         """
         _write_lang_string_definition_type_iec_61360_as_element(
-            'langStringDefinitionTypeIec61360', that, self
+            'langStringDefinitionTypeIec61360', None, that, self
         )
 
     def visit_data_specification_iec_61360(
@@ -17116,7 +18042,7 @@ class _Serializer(aas_types.AbstractVisitor):
         :param that: instance to be serialized
         """
         _write_data_specification_iec_61360_as_element(
-            'dataSpecificationIec61360', that, self
+            'dataSpecificationIec61360', None, that, self
         )
 
 
@@ -17143,9 +18069,16 @@ def write(instance: aas_types.Class, stream: TextIO) -> None:
 
     :param instance: to be serialized
     :param stream: to write to
+    :raise:
+        :py:class:`SerializationException` if :paramref:`instance` could not be
+        serialized
     """
     serializer = _Serializer(stream)
-    serializer.visit(instance)
+
+    try:
+        serializer.visit(instance)
+    except Exception as exception:
+        _attribute_to_property(exception, None)
 
 
 def to_str(that: aas_types.Class) -> str:
@@ -17153,6 +18086,9 @@ def to_str(that: aas_types.Class) -> str:
     Serialize :paramref:`that` to an XML-encoded text.
 
     :param that: instance to be serialized
+    :raise:
+        :py:class:`SerializationException` if :paramref:`that` could not be
+        serialized
     :return: :paramref:`that` serialized to XML serialized to text
     """
     writer = io.StringIO()
