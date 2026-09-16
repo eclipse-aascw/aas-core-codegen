@@ -725,40 +725,40 @@ namespace dummy
                 AtElement<Aas.Something>(
                     SomethingFromSequence, "something"));
 
-            private static readonly ContentReader<string> ReadString = (
+            private static readonly ContentReader<string> Read_string = (
                 AsText<string>(ReadContentAsString, ""));
 
-            private static readonly ContentReader<StructuralUnion> ReadStructuralUnion = (
+            private static readonly ContentReader<StructuralUnion> Read_StructuralUnion = (
                 AsElement<Aas.StructuralUnion>(
                     StructuralUnionFromElement));
 
-            private static readonly ContentReader<MixedUnion> ReadMixedUnion = (
+            private static readonly ContentReader<MixedUnion> Read_MixedUnion = (
                 AsElement<Aas.MixedUnion>(
                     MixedUnionFromElement));
 
-            private static readonly ContentReader<ModelTypedUnion> ReadModelTypedUnion = (
+            private static readonly ContentReader<ModelTypedUnion> Read_ModelTypedUnion = (
                 AsElement<Aas.ModelTypedUnion>(
                     ModelTypedUnionFromElement));
 
             private static readonly ContentReader<
                 List<StructuralUnion>
-            > ReadListOfStructuralUnion = (
+            > Read_ListOf_StructuralUnion = (
                 AsList<StructuralUnion>(
                     StructuralUnionFromElement));
 
-            private static readonly ContentReader<List<MixedUnion>> ReadListOfMixedUnion = (
+            private static readonly ContentReader<List<MixedUnion>> Read_ListOf_MixedUnion = (
                 AsList<MixedUnion>(
                     MixedUnionFromElement));
 
             private static readonly ContentReader<
                 List<ModelTypedUnion>
-            > ReadListOfModelTypedUnion = (
+            > Read_ListOf_ModelTypedUnion = (
                 AsList<ModelTypedUnion>(
                     ModelTypedUnionFromElement));
 
             private static readonly ContentReader<
                 (StructuralUnion, MixedUnion, ModelTypedUnion)
-            > ReadTupleOfStructuralUnionMixedUnionModelTypedUnion = (
+            > Read_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion = (
                 AsTuple3<StructuralUnion, MixedUnion, ModelTypedUnion>(
                     StructuralUnionFromElement,
                     MixedUnionFromElement,
@@ -801,7 +801,7 @@ namespace dummy
                         switch (elementName)
                         {
                             case "uniqueToFirst":
-                                theUniqueToFirst = ReadString(
+                                theUniqueToFirst = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -892,7 +892,7 @@ namespace dummy
                         switch (elementName)
                         {
                             case "uniqueToSecond":
-                                theUniqueToSecond = ReadString(
+                                theUniqueToSecond = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -1013,7 +1013,7 @@ namespace dummy
                         switch (elementName)
                         {
                             case "uniqueToAbstractDescendantOne":
-                                theUniqueToAbstractDescendantOne = ReadString(
+                                theUniqueToAbstractDescendantOne = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -1104,7 +1104,7 @@ namespace dummy
                         switch (elementName)
                         {
                             case "uniqueToAbstractDescendantTwo":
-                                theUniqueToAbstractDescendantTwo = ReadString(
+                                theUniqueToAbstractDescendantTwo = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -1195,7 +1195,7 @@ namespace dummy
                         switch (elementName)
                         {
                             case "someBaseProperty":
-                                theSomeBaseProperty = ReadString(
+                                theSomeBaseProperty = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -1317,11 +1317,11 @@ namespace dummy
                         switch (elementName)
                         {
                             case "someBaseProperty":
-                                theSomeBaseProperty = ReadString(
+                                theSomeBaseProperty = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "someChildProperty":
-                                theSomeChildProperty = ReadString(
+                                theSomeChildProperty = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -1423,7 +1423,7 @@ namespace dummy
                         switch (elementName)
                         {
                             case "uniqueToConcreteLeaf":
-                                theUniqueToConcreteLeaf = ReadString(
+                                theUniqueToConcreteLeaf = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -1514,7 +1514,7 @@ namespace dummy
                         switch (elementName)
                         {
                             case "someProperty":
-                                theSomeProperty = ReadString(
+                                theSomeProperty = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -1605,7 +1605,7 @@ namespace dummy
                         switch (elementName)
                         {
                             case "someProperty":
-                                theSomeProperty = ReadString(
+                                theSomeProperty = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -1705,43 +1705,43 @@ namespace dummy
                         switch (elementName)
                         {
                             case "structuralProperty":
-                                theStructuralProperty = ReadStructuralUnion(
+                                theStructuralProperty = Read_StructuralUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "mixedProperty":
-                                theMixedProperty = ReadMixedUnion(
+                                theMixedProperty = Read_MixedUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "modelTypedProperty":
-                                theModelTypedProperty = ReadModelTypedUnion(
+                                theModelTypedProperty = Read_ModelTypedUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "listStructuralProperty":
-                                theListStructuralProperty = ReadListOfStructuralUnion(
+                                theListStructuralProperty = Read_ListOf_StructuralUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "listMixedProperty":
-                                theListMixedProperty = ReadListOfMixedUnion(
+                                theListMixedProperty = Read_ListOf_MixedUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "listModelTypedProperty":
-                                theListModelTypedProperty = ReadListOfModelTypedUnion(
+                                theListModelTypedProperty = Read_ListOf_ModelTypedUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "tupleProperty":
-                                theTupleProperty = ReadTupleOfStructuralUnionMixedUnionModelTypedUnion(
+                                theTupleProperty = Read_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "optionalStructuralProperty":
-                                theOptionalStructuralProperty = ReadStructuralUnion(
+                                theOptionalStructuralProperty = Read_StructuralUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "optionalMixedProperty":
-                                theOptionalMixedProperty = ReadMixedUnion(
+                                theOptionalMixedProperty = Read_MixedUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "optionalModelTypedProperty":
-                                theOptionalModelTypedProperty = ReadModelTypedUnion(
+                                theOptionalModelTypedProperty = Read_ModelTypedUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -2715,37 +2715,37 @@ namespace dummy
                 WriteIClass(that.Underlying, writer);
             }
 
-            private static readonly ContentWriter<string> WriteString = (
+            private static readonly ContentWriter<string> Write_string = (
                 (that, writer) => writer.WriteValue(that));
 
-            private static readonly ContentWriter<StructuralUnion> WriteStructuralUnion = (
+            private static readonly ContentWriter<StructuralUnion> Write_StructuralUnion = (
                 WriteIUnion);
 
-            private static readonly ContentWriter<MixedUnion> WriteMixedUnion = (
+            private static readonly ContentWriter<MixedUnion> Write_MixedUnion = (
                 WriteIUnion);
 
-            private static readonly ContentWriter<ModelTypedUnion> WriteModelTypedUnion = (
+            private static readonly ContentWriter<ModelTypedUnion> Write_ModelTypedUnion = (
                 WriteIUnion);
 
             private static readonly ContentWriter<
                 List<StructuralUnion>
-            > WriteListOfStructuralUnion = (
+            > Write_ListOf_StructuralUnion = (
                 WriteList<StructuralUnion>(
                     WriteIUnion));
 
-            private static readonly ContentWriter<List<MixedUnion>> WriteListOfMixedUnion = (
+            private static readonly ContentWriter<List<MixedUnion>> Write_ListOf_MixedUnion = (
                 WriteList<MixedUnion>(
                     WriteIUnion));
 
             private static readonly ContentWriter<
                 List<ModelTypedUnion>
-            > WriteListOfModelTypedUnion = (
+            > Write_ListOf_ModelTypedUnion = (
                 WriteList<ModelTypedUnion>(
                     WriteIUnion));
 
             private static readonly ContentWriter<
                 (StructuralUnion, MixedUnion, ModelTypedUnion)
-            > WriteTupleOfStructuralUnionMixedUnionModelTypedUnion = (
+            > Write_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion = (
                 WriteTuple3<StructuralUnion, MixedUnion, ModelTypedUnion>(
                     WriteIUnion,
                     WriteIUnion,
@@ -2756,7 +2756,7 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "uniqueToFirst", that.UniqueToFirst, writer, WriteString);
+                    "uniqueToFirst", that.UniqueToFirst, writer, Write_string);
             }  // private static void StructuralFirstToSequence
 
             public override void VisitStructuralFirst(
@@ -2777,7 +2777,7 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "uniqueToSecond", that.UniqueToSecond, writer, WriteString);
+                    "uniqueToSecond", that.UniqueToSecond, writer, Write_string);
             }  // private static void StructuralSecondToSequence
 
             public override void VisitStructuralSecond(
@@ -2801,7 +2801,7 @@ namespace dummy
                     "uniqueToAbstractDescendantOne",
                     that.UniqueToAbstractDescendantOne,
                     writer,
-                    WriteString);
+                    Write_string);
             }  // private static void MixedAbstractDescendantOneToSequence
 
             public override void VisitMixedAbstractDescendantOne(
@@ -2825,7 +2825,7 @@ namespace dummy
                     "uniqueToAbstractDescendantTwo",
                     that.UniqueToAbstractDescendantTwo,
                     writer,
-                    WriteString);
+                    Write_string);
             }  // private static void MixedAbstractDescendantTwoToSequence
 
             public override void VisitMixedAbstractDescendantTwo(
@@ -2846,7 +2846,7 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "someBaseProperty", that.SomeBaseProperty, writer, WriteString);
+                    "someBaseProperty", that.SomeBaseProperty, writer, Write_string);
             }  // private static void MixedConcreteWithDescendantsToSequence
 
             public override void VisitMixedConcreteWithDescendants(
@@ -2867,10 +2867,10 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "someBaseProperty", that.SomeBaseProperty, writer, WriteString);
+                    "someBaseProperty", that.SomeBaseProperty, writer, Write_string);
 
                 WriteElement(
-                    "someChildProperty", that.SomeChildProperty, writer, WriteString);
+                    "someChildProperty", that.SomeChildProperty, writer, Write_string);
             }  // private static void MixedConcreteWithDescendantsChildToSequence
 
             public override void VisitMixedConcreteWithDescendantsChild(
@@ -2891,7 +2891,7 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "uniqueToConcreteLeaf", that.UniqueToConcreteLeaf, writer, WriteString);
+                    "uniqueToConcreteLeaf", that.UniqueToConcreteLeaf, writer, Write_string);
             }  // private static void MixedConcreteLeafToSequence
 
             public override void VisitMixedConcreteLeaf(
@@ -2912,7 +2912,7 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "someProperty", that.SomeProperty, writer, WriteString);
+                    "someProperty", that.SomeProperty, writer, Write_string);
             }  // private static void ModelTypedFirstToSequence
 
             public override void VisitModelTypedFirst(
@@ -2933,7 +2933,7 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "someProperty", that.SomeProperty, writer, WriteString);
+                    "someProperty", that.SomeProperty, writer, Write_string);
             }  // private static void ModelTypedSecondToSequence
 
             public override void VisitModelTypedSecond(
@@ -2954,34 +2954,34 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "structuralProperty", that.StructuralProperty, writer, WriteStructuralUnion);
+                    "structuralProperty", that.StructuralProperty, writer, Write_StructuralUnion);
 
                 WriteElement(
-                    "mixedProperty", that.MixedProperty, writer, WriteMixedUnion);
+                    "mixedProperty", that.MixedProperty, writer, Write_MixedUnion);
 
                 WriteElement(
-                    "modelTypedProperty", that.ModelTypedProperty, writer, WriteModelTypedUnion);
+                    "modelTypedProperty", that.ModelTypedProperty, writer, Write_ModelTypedUnion);
 
                 WriteElement(
                     "listStructuralProperty",
                     that.ListStructuralProperty,
                     writer,
-                    WriteListOfStructuralUnion);
+                    Write_ListOf_StructuralUnion);
 
                 WriteElement(
-                    "listMixedProperty", that.ListMixedProperty, writer, WriteListOfMixedUnion);
+                    "listMixedProperty", that.ListMixedProperty, writer, Write_ListOf_MixedUnion);
 
                 WriteElement(
                     "listModelTypedProperty",
                     that.ListModelTypedProperty,
                     writer,
-                    WriteListOfModelTypedUnion);
+                    Write_ListOf_ModelTypedUnion);
 
                 WriteElement(
                     "tupleProperty",
                     that.TupleProperty,
                     writer,
-                    WriteTupleOfStructuralUnionMixedUnionModelTypedUnion);
+                    Write_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion);
 
                 if (that.OptionalStructuralProperty != null)
                 {
@@ -2989,7 +2989,7 @@ namespace dummy
                         "optionalStructuralProperty",
                         that.OptionalStructuralProperty,
                         writer,
-                        WriteStructuralUnion);
+                        Write_StructuralUnion);
                 }
 
                 if (that.OptionalMixedProperty != null)
@@ -2998,7 +2998,7 @@ namespace dummy
                         "optionalMixedProperty",
                         that.OptionalMixedProperty,
                         writer,
-                        WriteMixedUnion);
+                        Write_MixedUnion);
                 }
 
                 if (that.OptionalModelTypedProperty != null)
@@ -3007,7 +3007,7 @@ namespace dummy
                         "optionalModelTypedProperty",
                         that.OptionalModelTypedProperty,
                         writer,
-                        WriteModelTypedUnion);
+                        Write_ModelTypedUnion);
                 }
             }  // private static void SomethingToSequence
 

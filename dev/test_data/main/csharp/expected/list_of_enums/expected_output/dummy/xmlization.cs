@@ -561,14 +561,14 @@ namespace dummy
                 AtElement<Aas.Something>(
                     SomethingFromSequence, "something"));
 
-            private static readonly ContentReader<Result> ReadResult = (
+            private static readonly ContentReader<Result> Read_Result = (
                 AsEnum<Aas.Result>(
                     Stringification.ResultFromString));
 
-            private static readonly ContentReader<List<Result>> ReadListOfResult = (
+            private static readonly ContentReader<List<Result>> Read_ListOf_Result = (
                 AsList<Result>(
                     AtElement(
-                        ReadResult, "v")));
+                        Read_Result, "v")));
 
             /// <summary>
             /// Deserialize an instance of class Something from a sequence of XML elements.
@@ -607,7 +607,7 @@ namespace dummy
                         switch (elementName)
                         {
                             case "someResults":
-                                theSomeResults = ReadListOfResult(
+                                theSomeResults = Read_ListOf_Result(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -900,21 +900,21 @@ namespace dummy
                 that.Accept(_instance, writer);
             }
 
-            private static readonly ContentWriter<Result> WriteResult = (
+            private static readonly ContentWriter<Result> Write_Result = (
                 WriteEnum<Aas.Result>(
                     Stringification.ToString));
 
-            private static readonly ContentWriter<List<Result>> WriteListOfResult = (
+            private static readonly ContentWriter<List<Result>> Write_ListOf_Result = (
                 WriteList<Result>(
                     WrapInElement(
-                        WriteResult, "v")));
+                        Write_Result, "v")));
 
             private static void SomethingToSequence(
                 Aas.ISomething that,
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "someResults", that.SomeResults, writer, WriteListOfResult);
+                    "someResults", that.SomeResults, writer, Write_ListOf_Result);
             }  // private static void SomethingToSequence
 
             public override void VisitSomething(

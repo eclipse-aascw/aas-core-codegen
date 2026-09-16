@@ -551,45 +551,45 @@ namespace dummy
                 AtElement<Aas.Something>(
                     SomethingFromSequence, "something"));
 
-            private static readonly ContentReader<bool> ReadBool = (
+            private static readonly ContentReader<bool> Read_bool = (
                 AsText<bool>(ReadContentAsBoolean));
 
-            private static readonly ContentReader<List<bool>> ReadListOfBool = (
+            private static readonly ContentReader<List<bool>> Read_ListOf_bool = (
                 AsList<bool>(
                     AtElement(
-                        ReadBool, "v")));
+                        Read_bool, "v")));
 
-            private static readonly ContentReader<long> ReadLong = (
+            private static readonly ContentReader<long> Read_long = (
                 AsText<long>(ReadContentAsLong));
 
-            private static readonly ContentReader<List<long>> ReadListOfLong = (
+            private static readonly ContentReader<List<long>> Read_ListOf_long = (
                 AsList<long>(
                     AtElement(
-                        ReadLong, "v")));
+                        Read_long, "v")));
 
-            private static readonly ContentReader<double> ReadDouble = (
+            private static readonly ContentReader<double> Read_double = (
                 AsText<double>(ReadContentAsDouble));
 
-            private static readonly ContentReader<List<double>> ReadListOfDouble = (
+            private static readonly ContentReader<List<double>> Read_ListOf_double = (
                 AsList<double>(
                     AtElement(
-                        ReadDouble, "v")));
+                        Read_double, "v")));
 
-            private static readonly ContentReader<string> ReadString = (
+            private static readonly ContentReader<string> Read_string = (
                 AsText<string>(ReadContentAsString, ""));
 
-            private static readonly ContentReader<List<string>> ReadListOfString = (
+            private static readonly ContentReader<List<string>> Read_ListOf_string = (
                 AsList<string>(
                     AtElement(
-                        ReadString, "v")));
+                        Read_string, "v")));
 
-            private static readonly ContentReader<byte[]> ReadBytes = (
+            private static readonly ContentReader<byte[]> Read_bytes = (
                 AsText<byte[]>(ReadContentAsBytes, new byte[0]));
 
-            private static readonly ContentReader<List<byte[]>> ReadListOfBytes = (
+            private static readonly ContentReader<List<byte[]>> Read_ListOf_bytes = (
                 AsList<byte[]>(
                     AtElement(
-                        ReadBytes, "v")));
+                        Read_bytes, "v")));
 
             /// <summary>
             /// Deserialize an instance of class Something from a sequence of XML elements.
@@ -632,23 +632,23 @@ namespace dummy
                         switch (elementName)
                         {
                             case "someBools":
-                                theSomeBools = ReadListOfBool(
+                                theSomeBools = Read_ListOf_bool(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "someInts":
-                                theSomeInts = ReadListOfLong(
+                                theSomeInts = Read_ListOf_long(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "someFloats":
-                                theSomeFloats = ReadListOfDouble(
+                                theSomeFloats = Read_ListOf_double(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "someStrings":
-                                theSomeStrings = ReadListOfString(
+                                theSomeStrings = Read_ListOf_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "someBytes":
-                                theSomeBytes = ReadListOfBytes(
+                                theSomeBytes = Read_ListOf_bytes(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -952,64 +952,64 @@ namespace dummy
                 that.Accept(_instance, writer);
             }
 
-            private static readonly ContentWriter<bool> WriteBool = (
+            private static readonly ContentWriter<bool> Write_bool = (
                 (that, writer) => writer.WriteValue(that));
 
-            private static readonly ContentWriter<List<bool>> WriteListOfBool = (
+            private static readonly ContentWriter<List<bool>> Write_ListOf_bool = (
                 WriteList<bool>(
                     WrapInElement(
-                        WriteBool, "v")));
+                        Write_bool, "v")));
 
-            private static readonly ContentWriter<long> WriteLong = (
+            private static readonly ContentWriter<long> Write_long = (
                 (that, writer) => writer.WriteValue(that));
 
-            private static readonly ContentWriter<List<long>> WriteListOfLong = (
+            private static readonly ContentWriter<List<long>> Write_ListOf_long = (
                 WriteList<long>(
                     WrapInElement(
-                        WriteLong, "v")));
+                        Write_long, "v")));
 
-            private static readonly ContentWriter<double> WriteDouble = (
+            private static readonly ContentWriter<double> Write_double = (
                 (that, writer) => writer.WriteValue(that));
 
-            private static readonly ContentWriter<List<double>> WriteListOfDouble = (
+            private static readonly ContentWriter<List<double>> Write_ListOf_double = (
                 WriteList<double>(
                     WrapInElement(
-                        WriteDouble, "v")));
+                        Write_double, "v")));
 
-            private static readonly ContentWriter<string> WriteString = (
+            private static readonly ContentWriter<string> Write_string = (
                 (that, writer) => writer.WriteValue(that));
 
-            private static readonly ContentWriter<List<string>> WriteListOfString = (
+            private static readonly ContentWriter<List<string>> Write_ListOf_string = (
                 WriteList<string>(
                     WrapInElement(
-                        WriteString, "v")));
+                        Write_string, "v")));
 
-            private static readonly ContentWriter<byte[]> WriteBytes = (
+            private static readonly ContentWriter<byte[]> Write_bytes = (
                 (that, writer) => writer.WriteBase64(that, 0, that.Length));
 
-            private static readonly ContentWriter<List<byte[]>> WriteListOfBytes = (
+            private static readonly ContentWriter<List<byte[]>> Write_ListOf_bytes = (
                 WriteList<byte[]>(
                     WrapInElement(
-                        WriteBytes, "v")));
+                        Write_bytes, "v")));
 
             private static void SomethingToSequence(
                 Aas.ISomething that,
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "someBools", that.SomeBools, writer, WriteListOfBool);
+                    "someBools", that.SomeBools, writer, Write_ListOf_bool);
 
                 WriteElement(
-                    "someInts", that.SomeInts, writer, WriteListOfLong);
+                    "someInts", that.SomeInts, writer, Write_ListOf_long);
 
                 WriteElement(
-                    "someFloats", that.SomeFloats, writer, WriteListOfDouble);
+                    "someFloats", that.SomeFloats, writer, Write_ListOf_double);
 
                 WriteElement(
-                    "someStrings", that.SomeStrings, writer, WriteListOfString);
+                    "someStrings", that.SomeStrings, writer, Write_ListOf_string);
 
                 WriteElement(
-                    "someBytes", that.SomeBytes, writer, WriteListOfBytes);
+                    "someBytes", that.SomeBytes, writer, Write_ListOf_bytes);
             }  // private static void SomethingToSequence
 
             public override void VisitSomething(

@@ -442,7 +442,7 @@ namespace dummy
                 AtElement<Aas.Something>(
                     SomethingFromSequence, "something"));
 
-            private static readonly ContentReader<string> ReadString = (
+            private static readonly ContentReader<string> Read_string = (
                 AsText<string>(ReadContentAsString, ""));
 
             /// <summary>
@@ -485,19 +485,19 @@ namespace dummy
                         switch (elementName)
                         {
                             case "interface":
-                                theInterface = ReadString(
+                                theInterface = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "type":
-                                theType = ReadString(
+                                theType = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "range":
-                                theRange = ReadString(
+                                theRange = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "void":
-                                theVoid = ReadString(
+                                theVoid = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -738,7 +738,7 @@ namespace dummy
                 that.Accept(_instance, writer);
             }
 
-            private static readonly ContentWriter<string> WriteString = (
+            private static readonly ContentWriter<string> Write_string = (
                 (that, writer) => writer.WriteValue(that));
 
             private static void SomethingToSequence(
@@ -746,16 +746,16 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "interface", that.Interface, writer, WriteString);
+                    "interface", that.Interface, writer, Write_string);
 
                 WriteElement(
-                    "type", that.Type, writer, WriteString);
+                    "type", that.Type, writer, Write_string);
 
                 WriteElement(
-                    "range", that.Range, writer, WriteString);
+                    "range", that.Range, writer, Write_string);
 
                 WriteElement(
-                    "void", that.Void, writer, WriteString);
+                    "void", that.Void, writer, Write_string);
             }  // private static void SomethingToSequence
 
             public override void VisitSomething(

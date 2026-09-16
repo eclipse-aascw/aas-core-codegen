@@ -194,7 +194,7 @@ func readText(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsBoolean(
+func readTextAs_bool(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value bool, next xml.Token, err error) {
@@ -236,7 +236,7 @@ func readTextAsBoolean(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsLong(
+func readTextAs_long(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value int64, next xml.Token, err error) {
@@ -296,7 +296,7 @@ func isValidXsDouble(text string) bool {
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsDouble(
+func readTextAs_double(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value float64, next xml.Token, err error) {
@@ -350,7 +350,7 @@ func readTextAsDouble(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsBase64EncodedBytes(
+func readTextAs_bytes(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value []byte, next xml.Token, err error) {
@@ -719,8 +719,8 @@ func readListOf[T any](
 // The arguments are the *results* of a read, not the reader itself. Go passes
 // a multi-valued call on as a complete argument list, so this composes with any read,
 // no matter how many arguments that read takes on its own --
-// `readOptional(readTextAsLong(decoder, current))` just as much as
-// `readOptional(readTuple2(decoder, current, readXAtV1, readYAtV2))`, which no
+// `readOptional(readTextAs_long(decoder, current))` just as much as
+// `readOptional(readTuple2(decoder, current, readAtV1_X, readAtV2_Y))`, which no
 // reader-taking signature could express, since the item readers of a tuple vary in
 // number and in type.
 func readOptional[T any](
@@ -1881,7 +1881,7 @@ func writeText(
 // Write the `value` as a `xs:boolean` in a text element.
 //
 // Do not flush.
-func writeBooleanAsText(
+func writeAsText_bool(
 	encoder *xml.Encoder,
 	value bool,
 ) (err error) {
@@ -1896,7 +1896,7 @@ func writeBooleanAsText(
 // Write the `value` as a `xs:long` in a text element.
 //
 // Do not flush.
-func writeLongAsText(
+func writeAsText_long(
 	encoder *xml.Encoder,
 	value int64,
 ) (err error) {
@@ -1908,7 +1908,7 @@ func writeLongAsText(
 // Write the `value` as a `xs:double` in a text element.
 //
 // Do not flush.
-func writeDoubleAsText(
+func writeAsText_double(
 	encoder *xml.Encoder,
 	value float64,
 ) (err error) {
@@ -1935,7 +1935,7 @@ func writeDoubleAsText(
 // Write the `value` as a `xs:string` in a text element.
 //
 // Do not flush.
-func writeStringAsText(
+func writeAsText_string(
 	encoder *xml.Encoder,
 	value string,
 ) (err error) {
@@ -1946,7 +1946,7 @@ func writeStringAsText(
 // Write the `value` as a base64-encoded bytes in a text element.
 //
 // Do not flush.
-func writeBytesAsText(
+func writeAsText_bytes(
 	encoder *xml.Encoder,
 	value []byte,
 ) (err error) {
@@ -2250,7 +2250,7 @@ func writeTuple3[T1 any, T2 any, T3 any](
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfStructuralUnion(
+func writeListOf_StructuralUnion(
 	encoder *xml.Encoder,
 	list []*aastypes.StructuralUnion,
 ) error {
@@ -2262,7 +2262,7 @@ func writeListOfStructuralUnion(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfMixedUnion(
+func writeListOf_MixedUnion(
 	encoder *xml.Encoder,
 	list []*aastypes.MixedUnion,
 ) error {
@@ -2274,7 +2274,7 @@ func writeListOfMixedUnion(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfModelTypedUnion(
+func writeListOf_ModelTypedUnion(
 	encoder *xml.Encoder,
 	list []*aastypes.ModelTypedUnion,
 ) error {
@@ -2286,7 +2286,7 @@ func writeListOfModelTypedUnion(
 // Write the items of `that` as a sequence of XML elements.
 //
 // Do not flush.
-func writeTupleOfStructuralUnionMixedUnionModelTypedUnion(
+func writeTupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(
 	encoder *xml.Encoder,
 	that aascommon.Tuple3[*aastypes.StructuralUnion, *aastypes.MixedUnion, *aastypes.ModelTypedUnion],
 ) error {
@@ -2314,7 +2314,7 @@ func writeStructuralFirstAsSequence(
 	err = finishProperty(
 		"UniqueToFirst()",
 		writeElement(
-			encoder, "uniqueToFirst", that.UniqueToFirst(), writeStringAsText,
+			encoder, "uniqueToFirst", that.UniqueToFirst(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -2339,7 +2339,7 @@ func writeStructuralSecondAsSequence(
 	err = finishProperty(
 		"UniqueToSecond()",
 		writeElement(
-			encoder, "uniqueToSecond", that.UniqueToSecond(), writeStringAsText,
+			encoder, "uniqueToSecond", that.UniqueToSecond(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -2367,7 +2367,7 @@ func writeMixedAbstractDescendantOneAsSequence(
 			encoder,
 			"uniqueToAbstractDescendantOne",
 			that.UniqueToAbstractDescendantOne(),
-			writeStringAsText,
+			writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -2395,7 +2395,7 @@ func writeMixedAbstractDescendantTwoAsSequence(
 			encoder,
 			"uniqueToAbstractDescendantTwo",
 			that.UniqueToAbstractDescendantTwo(),
-			writeStringAsText,
+			writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -2420,7 +2420,7 @@ func writeMixedConcreteWithDescendantsAsSequence(
 	err = finishProperty(
 		"SomeBaseProperty()",
 		writeElement(
-			encoder, "someBaseProperty", that.SomeBaseProperty(), writeStringAsText,
+			encoder, "someBaseProperty", that.SomeBaseProperty(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -2445,7 +2445,7 @@ func writeMixedConcreteWithDescendantsChildAsSequence(
 	err = finishProperty(
 		"SomeBaseProperty()",
 		writeElement(
-			encoder, "someBaseProperty", that.SomeBaseProperty(), writeStringAsText,
+			encoder, "someBaseProperty", that.SomeBaseProperty(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -2455,7 +2455,7 @@ func writeMixedConcreteWithDescendantsChildAsSequence(
 	err = finishProperty(
 		"SomeChildProperty()",
 		writeElement(
-			encoder, "someChildProperty", that.SomeChildProperty(), writeStringAsText,
+			encoder, "someChildProperty", that.SomeChildProperty(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -2483,7 +2483,7 @@ func writeMixedConcreteLeafAsSequence(
 			encoder,
 			"uniqueToConcreteLeaf",
 			that.UniqueToConcreteLeaf(),
-			writeStringAsText,
+			writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -2508,7 +2508,7 @@ func writeModelTypedFirstAsSequence(
 	err = finishProperty(
 		"SomeProperty()",
 		writeElement(
-			encoder, "someProperty", that.SomeProperty(), writeStringAsText,
+			encoder, "someProperty", that.SomeProperty(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -2533,7 +2533,7 @@ func writeModelTypedSecondAsSequence(
 	err = finishProperty(
 		"SomeProperty()",
 		writeElement(
-			encoder, "someProperty", that.SomeProperty(), writeStringAsText,
+			encoder, "someProperty", that.SomeProperty(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -2600,7 +2600,7 @@ func writeSomethingAsSequence(
 			encoder,
 			"listStructuralProperty",
 			that.ListStructuralProperty(),
-			writeListOfStructuralUnion,
+			writeListOf_StructuralUnion,
 		),
 	)
 	if err != nil {
@@ -2613,7 +2613,7 @@ func writeSomethingAsSequence(
 			encoder,
 			"listMixedProperty",
 			that.ListMixedProperty(),
-			writeListOfMixedUnion,
+			writeListOf_MixedUnion,
 		),
 	)
 	if err != nil {
@@ -2626,7 +2626,7 @@ func writeSomethingAsSequence(
 			encoder,
 			"listModelTypedProperty",
 			that.ListModelTypedProperty(),
-			writeListOfModelTypedUnion,
+			writeListOf_ModelTypedUnion,
 		),
 	)
 	if err != nil {
@@ -2639,7 +2639,7 @@ func writeSomethingAsSequence(
 			encoder,
 			"tupleProperty",
 			that.TupleProperty(),
-			writeTupleOfStructuralUnionMixedUnionModelTypedUnion,
+			writeTupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion,
 		),
 	)
 	if err != nil {

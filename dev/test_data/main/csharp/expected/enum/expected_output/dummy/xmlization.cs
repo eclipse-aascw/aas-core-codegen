@@ -489,7 +489,7 @@ namespace dummy
                 AtElement<Aas.Something>(
                     SomethingFromSequence, "something"));
 
-            private static readonly ContentReader<Result> ReadResult = (
+            private static readonly ContentReader<Result> Read_Result = (
                 AsEnum<Aas.Result>(
                     Stringification.ResultFromString));
 
@@ -530,7 +530,7 @@ namespace dummy
                         switch (elementName)
                         {
                             case "someResult":
-                                theSomeResult = ReadResult(
+                                theSomeResult = Read_Result(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -771,7 +771,7 @@ namespace dummy
                 that.Accept(_instance, writer);
             }
 
-            private static readonly ContentWriter<Result> WriteResult = (
+            private static readonly ContentWriter<Result> Write_Result = (
                 WriteEnum<Aas.Result>(
                     Stringification.ToString));
 
@@ -780,7 +780,7 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "someResult", that.SomeResult, writer, WriteResult);
+                    "someResult", that.SomeResult, writer, Write_Result);
             }  // private static void SomethingToSequence
 
             public override void VisitSomething(

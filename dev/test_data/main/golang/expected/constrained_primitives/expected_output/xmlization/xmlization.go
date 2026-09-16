@@ -194,7 +194,7 @@ func readText(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsBoolean(
+func readTextAs_bool(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value bool, next xml.Token, err error) {
@@ -236,7 +236,7 @@ func readTextAsBoolean(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsLong(
+func readTextAs_long(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value int64, next xml.Token, err error) {
@@ -296,7 +296,7 @@ func isValidXsDouble(text string) bool {
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsDouble(
+func readTextAs_double(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value float64, next xml.Token, err error) {
@@ -350,7 +350,7 @@ func readTextAsDouble(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsBase64EncodedBytes(
+func readTextAs_bytes(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value []byte, next xml.Token, err error) {
@@ -719,8 +719,8 @@ func readListOf[T any](
 // The arguments are the *results* of a read, not the reader itself. Go passes
 // a multi-valued call on as a complete argument list, so this composes with any read,
 // no matter how many arguments that read takes on its own --
-// `readOptional(readTextAsLong(decoder, current))` just as much as
-// `readOptional(readTuple2(decoder, current, readXAtV1, readYAtV2))`, which no
+// `readOptional(readTextAs_long(decoder, current))` just as much as
+// `readOptional(readTuple2(decoder, current, readAtV1_X, readAtV2_Y))`, which no
 // reader-taking signature could express, since the item readers of a tuple vary in
 // number and in type.
 func readOptional[T any](
@@ -866,17 +866,17 @@ func readSomethingAsSequence(
 		var valueErr error
 		switch local {
 		case "someBool":
-			theSomeBool, current, valueErr = readTextAsBoolean(
+			theSomeBool, current, valueErr = readTextAs_bool(
 				decoder, current,
 			)
 			foundSomeBool = true
 		case "someInt":
-			theSomeInt, current, valueErr = readTextAsLong(
+			theSomeInt, current, valueErr = readTextAs_long(
 				decoder, current,
 			)
 			foundSomeInt = true
 		case "someFloat":
-			theSomeFloat, current, valueErr = readTextAsDouble(
+			theSomeFloat, current, valueErr = readTextAs_double(
 				decoder, current,
 			)
 			foundSomeFloat = true
@@ -886,7 +886,7 @@ func readSomethingAsSequence(
 			)
 			foundSomeString = true
 		case "someBytes":
-			theSomeBytes, current, valueErr = readTextAsBase64EncodedBytes(
+			theSomeBytes, current, valueErr = readTextAs_bytes(
 				decoder, current,
 			)
 			foundSomeBytes = true
@@ -1076,7 +1076,7 @@ func writeText(
 // Write the `value` as a `xs:boolean` in a text element.
 //
 // Do not flush.
-func writeBooleanAsText(
+func writeAsText_bool(
 	encoder *xml.Encoder,
 	value bool,
 ) (err error) {
@@ -1091,7 +1091,7 @@ func writeBooleanAsText(
 // Write the `value` as a `xs:long` in a text element.
 //
 // Do not flush.
-func writeLongAsText(
+func writeAsText_long(
 	encoder *xml.Encoder,
 	value int64,
 ) (err error) {
@@ -1103,7 +1103,7 @@ func writeLongAsText(
 // Write the `value` as a `xs:double` in a text element.
 //
 // Do not flush.
-func writeDoubleAsText(
+func writeAsText_double(
 	encoder *xml.Encoder,
 	value float64,
 ) (err error) {
@@ -1130,7 +1130,7 @@ func writeDoubleAsText(
 // Write the `value` as a `xs:string` in a text element.
 //
 // Do not flush.
-func writeStringAsText(
+func writeAsText_string(
 	encoder *xml.Encoder,
 	value string,
 ) (err error) {
@@ -1141,7 +1141,7 @@ func writeStringAsText(
 // Write the `value` as a base64-encoded bytes in a text element.
 //
 // Do not flush.
-func writeBytesAsText(
+func writeAsText_bytes(
 	encoder *xml.Encoder,
 	value []byte,
 ) (err error) {
@@ -1388,7 +1388,7 @@ func writeSomethingAsSequence(
 	err = finishProperty(
 		"SomeBool()",
 		writeElement(
-			encoder, "someBool", that.SomeBool(), writeBooleanAsText,
+			encoder, "someBool", that.SomeBool(), writeAsText_bool,
 		),
 	)
 	if err != nil {
@@ -1398,7 +1398,7 @@ func writeSomethingAsSequence(
 	err = finishProperty(
 		"SomeInt()",
 		writeElement(
-			encoder, "someInt", that.SomeInt(), writeLongAsText,
+			encoder, "someInt", that.SomeInt(), writeAsText_long,
 		),
 	)
 	if err != nil {
@@ -1408,7 +1408,7 @@ func writeSomethingAsSequence(
 	err = finishProperty(
 		"SomeFloat()",
 		writeElement(
-			encoder, "someFloat", that.SomeFloat(), writeDoubleAsText,
+			encoder, "someFloat", that.SomeFloat(), writeAsText_double,
 		),
 	)
 	if err != nil {
@@ -1418,7 +1418,7 @@ func writeSomethingAsSequence(
 	err = finishProperty(
 		"SomeString()",
 		writeElement(
-			encoder, "someString", that.SomeString(), writeStringAsText,
+			encoder, "someString", that.SomeString(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -1428,7 +1428,7 @@ func writeSomethingAsSequence(
 	err = finishProperty(
 		"SomeBytes()",
 		writeElement(
-			encoder, "someBytes", that.SomeBytes(), writeBytesAsText,
+			encoder, "someBytes", that.SomeBytes(), writeAsText_bytes,
 		),
 	)
 	if err != nil {

@@ -479,19 +479,19 @@ namespace dummy
                 AtElement<Aas.Something>(
                     SomethingFromSequence, "something"));
 
-            private static readonly ContentReader<bool> ReadBool = (
+            private static readonly ContentReader<bool> Read_bool = (
                 AsText<bool>(ReadContentAsBoolean));
 
-            private static readonly ContentReader<long> ReadLong = (
+            private static readonly ContentReader<long> Read_long = (
                 AsText<long>(ReadContentAsLong));
 
-            private static readonly ContentReader<double> ReadDouble = (
+            private static readonly ContentReader<double> Read_double = (
                 AsText<double>(ReadContentAsDouble));
 
-            private static readonly ContentReader<string> ReadString = (
+            private static readonly ContentReader<string> Read_string = (
                 AsText<string>(ReadContentAsString, ""));
 
-            private static readonly ContentReader<byte[]> ReadBytes = (
+            private static readonly ContentReader<byte[]> Read_bytes = (
                 AsText<byte[]>(ReadContentAsBytes, new byte[0]));
 
             /// <summary>
@@ -535,23 +535,23 @@ namespace dummy
                         switch (elementName)
                         {
                             case "someBool":
-                                theSomeBool = ReadBool(
+                                theSomeBool = Read_bool(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "someInt":
-                                theSomeInt = ReadLong(
+                                theSomeInt = Read_long(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "someFloat":
-                                theSomeFloat = ReadDouble(
+                                theSomeFloat = Read_double(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "someString":
-                                theSomeString = ReadString(
+                                theSomeString = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "someBytes":
-                                theSomeBytes = ReadBytes(
+                                theSomeBytes = Read_bytes(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -803,19 +803,19 @@ namespace dummy
                 that.Accept(_instance, writer);
             }
 
-            private static readonly ContentWriter<bool> WriteBool = (
+            private static readonly ContentWriter<bool> Write_bool = (
                 (that, writer) => writer.WriteValue(that));
 
-            private static readonly ContentWriter<long> WriteLong = (
+            private static readonly ContentWriter<long> Write_long = (
                 (that, writer) => writer.WriteValue(that));
 
-            private static readonly ContentWriter<double> WriteDouble = (
+            private static readonly ContentWriter<double> Write_double = (
                 (that, writer) => writer.WriteValue(that));
 
-            private static readonly ContentWriter<string> WriteString = (
+            private static readonly ContentWriter<string> Write_string = (
                 (that, writer) => writer.WriteValue(that));
 
-            private static readonly ContentWriter<byte[]> WriteBytes = (
+            private static readonly ContentWriter<byte[]> Write_bytes = (
                 (that, writer) => writer.WriteBase64(that, 0, that.Length));
 
             private static void SomethingToSequence(
@@ -823,19 +823,19 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "someBool", that.SomeBool, writer, WriteBool);
+                    "someBool", that.SomeBool, writer, Write_bool);
 
                 WriteElement(
-                    "someInt", that.SomeInt, writer, WriteLong);
+                    "someInt", that.SomeInt, writer, Write_long);
 
                 WriteElement(
-                    "someFloat", that.SomeFloat, writer, WriteDouble);
+                    "someFloat", that.SomeFloat, writer, Write_double);
 
                 WriteElement(
-                    "someString", that.SomeString, writer, WriteString);
+                    "someString", that.SomeString, writer, Write_string);
 
                 WriteElement(
-                    "someBytes", that.SomeBytes, writer, WriteBytes);
+                    "someBytes", that.SomeBytes, writer, Write_bytes);
             }  // private static void SomethingToSequence
 
             public override void VisitSomething(

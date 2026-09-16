@@ -194,7 +194,7 @@ func readText(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsBoolean(
+func readTextAs_bool(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value bool, next xml.Token, err error) {
@@ -236,7 +236,7 @@ func readTextAsBoolean(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsLong(
+func readTextAs_long(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value int64, next xml.Token, err error) {
@@ -296,7 +296,7 @@ func isValidXsDouble(text string) bool {
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsDouble(
+func readTextAs_double(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value float64, next xml.Token, err error) {
@@ -350,7 +350,7 @@ func readTextAsDouble(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsBase64EncodedBytes(
+func readTextAs_bytes(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value []byte, next xml.Token, err error) {
@@ -719,8 +719,8 @@ func readListOf[T any](
 // The arguments are the *results* of a read, not the reader itself. Go passes
 // a multi-valued call on as a complete argument list, so this composes with any read,
 // no matter how many arguments that read takes on its own --
-// `readOptional(readTextAsLong(decoder, current))` just as much as
-// `readOptional(readTuple2(decoder, current, readXAtV1, readYAtV2))`, which no
+// `readOptional(readTextAs_long(decoder, current))` just as much as
+// `readOptional(readTuple2(decoder, current, readAtV1_X, readAtV2_Y))`, which no
 // reader-taking signature could express, since the item readers of a tuple vary in
 // number and in type.
 func readOptional[T any](
@@ -877,7 +877,7 @@ func readExtensionAsSequence(
 			foundName = true
 		case "valueType":
 			theValueType, current, valueErr = readOptional(
-				readTextAsDataTypeDefXSD(decoder, current),
+				readTextAs_DataTypeDefXSD(decoder, current),
 			)
 		case "value":
 			theValue, current, valueErr = readOptional(
@@ -948,7 +948,7 @@ func readExtensionDispatched(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsModellingKind(
+func readTextAs_ModellingKind(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value aastypes.ModellingKind,
@@ -1060,7 +1060,7 @@ func readAdministrativeInformationAsSequence(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsQualifierKind(
+func readTextAs_QualifierKind(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value aastypes.QualifierKind,
@@ -1135,7 +1135,7 @@ func readQualifierAsSequence(
 			)
 		case "kind":
 			theKind, current, valueErr = readOptional(
-				readTextAsQualifierKind(decoder, current),
+				readTextAs_QualifierKind(decoder, current),
 			)
 		case "type":
 			theType, current, valueErr = readText(
@@ -1143,7 +1143,7 @@ func readQualifierAsSequence(
 			)
 			foundType = true
 		case "valueType":
-			theValueType, current, valueErr = readTextAsDataTypeDefXSD(
+			theValueType, current, valueErr = readTextAs_DataTypeDefXSD(
 				decoder, current,
 			)
 			foundValueType = true
@@ -1397,7 +1397,7 @@ func readAssetInformationAsSequence(
 		var valueErr error
 		switch local {
 		case "assetKind":
-			theAssetKind, current, valueErr = readTextAsAssetKind(
+			theAssetKind, current, valueErr = readTextAs_AssetKind(
 				decoder, current,
 			)
 			foundAssetKind = true
@@ -1521,7 +1521,7 @@ func readResourceAsSequence(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsAssetKind(
+func readTextAs_AssetKind(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value aastypes.AssetKind,
@@ -1735,7 +1735,7 @@ func readSubmodelAsSequence(
 			foundID = true
 		case "kind":
 			theKind, current, valueErr = readOptional(
-				readTextAsModellingKind(decoder, current),
+				readTextAs_ModellingKind(decoder, current),
 			)
 		case "semanticId":
 			theSemanticID, current, valueErr = readReferenceAsSequence(
@@ -2000,7 +2000,7 @@ func readRelationshipElementAsSequence(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsAASSubmodelElements(
+func readTextAs_AASSubmodelElements(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value aastypes.AASSubmodelElements,
@@ -2109,20 +2109,20 @@ func readSubmodelElementListAsSequence(
 			)
 		case "orderRelevant":
 			theOrderRelevant, current, valueErr = readOptional(
-				readTextAsBoolean(decoder, current),
+				readTextAs_bool(decoder, current),
 			)
 		case "semanticIdListElement":
 			theSemanticIDListElement, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
 		case "typeValueListElement":
-			theTypeValueListElement, current, valueErr = readTextAsAASSubmodelElements(
+			theTypeValueListElement, current, valueErr = readTextAs_AASSubmodelElements(
 				decoder, current,
 			)
 			foundTypeValueListElement = true
 		case "valueTypeListElement":
 			theValueTypeListElement, current, valueErr = readOptional(
-				readTextAsDataTypeDefXSD(decoder, current),
+				readTextAs_DataTypeDefXSD(decoder, current),
 			)
 		case "value":
 			theValue, current, valueErr = readListOf(
@@ -2381,7 +2381,7 @@ func readPropertyAsSequence(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
 		case "valueType":
-			theValueType, current, valueErr = readTextAsDataTypeDefXSD(
+			theValueType, current, valueErr = readTextAs_DataTypeDefXSD(
 				decoder, current,
 			)
 			foundValueType = true
@@ -2618,7 +2618,7 @@ func readRangeAsSequence(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
 		case "valueType":
-			theValueType, current, valueErr = readTextAsDataTypeDefXSD(
+			theValueType, current, valueErr = readTextAs_DataTypeDefXSD(
 				decoder, current,
 			)
 			foundValueType = true
@@ -2848,7 +2848,7 @@ func readBlobAsSequence(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
 		case "value":
-			theValue, current, valueErr = readTextAsBase64EncodedBytes(
+			theValue, current, valueErr = readTextAs_bytes(
 				decoder, current,
 			)
 		case "contentType":
@@ -3227,7 +3227,7 @@ func readEntityAsSequence(
 				decoder, current, readSubmodelElementDispatched,
 			)
 		case "entityType":
-			theEntityType, current, valueErr = readTextAsEntityType(
+			theEntityType, current, valueErr = readTextAs_EntityType(
 				decoder, current,
 			)
 			foundEntityType = true
@@ -3285,7 +3285,7 @@ func readEntityAsSequence(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsEntityType(
+func readTextAs_EntityType(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value aastypes.EntityType,
@@ -3322,7 +3322,7 @@ func readTextAsEntityType(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsDirection(
+func readTextAs_Direction(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value aastypes.Direction,
@@ -3359,7 +3359,7 @@ func readTextAsDirection(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsStateOfEvent(
+func readTextAs_StateOfEvent(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value aastypes.StateOfEvent,
@@ -3458,7 +3458,7 @@ func readEventPayloadAsSequence(
 			)
 			foundTimeStamp = true
 		case "payload":
-			thePayload, current, valueErr = readTextAsBase64EncodedBytes(
+			thePayload, current, valueErr = readTextAs_bytes(
 				decoder, current,
 			)
 		default:
@@ -3593,12 +3593,12 @@ func readBasicEventElementAsSequence(
 			)
 			foundObserved = true
 		case "direction":
-			theDirection, current, valueErr = readTextAsDirection(
+			theDirection, current, valueErr = readTextAs_Direction(
 				decoder, current,
 			)
 			foundDirection = true
 		case "state":
-			theState, current, valueErr = readTextAsStateOfEvent(
+			theState, current, valueErr = readTextAs_StateOfEvent(
 				decoder, current,
 			)
 			foundState = true
@@ -4110,7 +4110,7 @@ func readConceptDescriptionDispatched(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsReferenceTypes(
+func readTextAs_ReferenceTypes(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value aastypes.ReferenceTypes,
@@ -4172,7 +4172,7 @@ func readReferenceAsSequence(
 		var valueErr error
 		switch local {
 		case "type":
-			theType, current, valueErr = readTextAsReferenceTypes(
+			theType, current, valueErr = readTextAs_ReferenceTypes(
 				decoder, current,
 			)
 			foundType = true
@@ -4272,7 +4272,7 @@ func readKeyAsSequence(
 		var valueErr error
 		switch local {
 		case "type":
-			theType, current, valueErr = readTextAsKeyTypes(
+			theType, current, valueErr = readTextAs_KeyTypes(
 				decoder, current,
 			)
 			foundType = true
@@ -4343,7 +4343,7 @@ func readKeyDispatched(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsKeyTypes(
+func readTextAs_KeyTypes(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value aastypes.KeyTypes,
@@ -4380,7 +4380,7 @@ func readTextAsKeyTypes(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsDataTypeDefXSD(
+func readTextAs_DataTypeDefXSD(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value aastypes.DataTypeDefXSD,
@@ -4787,7 +4787,7 @@ func readEmbeddedDataSpecificationDispatched(
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsDataTypeIEC61360(
+func readTextAs_DataTypeIEC61360(
 	decoder *xml.Decoder,
 	current xml.Token,
 ) (value aastypes.DataTypeIEC61360,
@@ -4852,22 +4852,22 @@ func readLevelTypeAsSequence(
 		var valueErr error
 		switch local {
 		case "min":
-			theMin, current, valueErr = readTextAsBoolean(
+			theMin, current, valueErr = readTextAs_bool(
 				decoder, current,
 			)
 			foundMin = true
 		case "nom":
-			theNom, current, valueErr = readTextAsBoolean(
+			theNom, current, valueErr = readTextAs_bool(
 				decoder, current,
 			)
 			foundNom = true
 		case "typ":
-			theTyp, current, valueErr = readTextAsBoolean(
+			theTyp, current, valueErr = readTextAs_bool(
 				decoder, current,
 			)
 			foundTyp = true
 		case "max":
-			theMax, current, valueErr = readTextAsBoolean(
+			theMax, current, valueErr = readTextAs_bool(
 				decoder, current,
 			)
 			foundMax = true
@@ -5422,7 +5422,7 @@ func readDataSpecificationIEC61360AsSequence(
 			)
 		case "dataType":
 			theDataType, current, valueErr = readOptional(
-				readTextAsDataTypeIEC61360(decoder, current),
+				readTextAs_DataTypeIEC61360(decoder, current),
 			)
 		case "definition":
 			theDefinition, current, valueErr = readListOf(
@@ -5691,7 +5691,7 @@ func writeText(
 // Write the `value` as a `xs:boolean` in a text element.
 //
 // Do not flush.
-func writeBooleanAsText(
+func writeAsText_bool(
 	encoder *xml.Encoder,
 	value bool,
 ) (err error) {
@@ -5706,7 +5706,7 @@ func writeBooleanAsText(
 // Write the `value` as a `xs:long` in a text element.
 //
 // Do not flush.
-func writeLongAsText(
+func writeAsText_long(
 	encoder *xml.Encoder,
 	value int64,
 ) (err error) {
@@ -5718,7 +5718,7 @@ func writeLongAsText(
 // Write the `value` as a `xs:double` in a text element.
 //
 // Do not flush.
-func writeDoubleAsText(
+func writeAsText_double(
 	encoder *xml.Encoder,
 	value float64,
 ) (err error) {
@@ -5745,7 +5745,7 @@ func writeDoubleAsText(
 // Write the `value` as a `xs:string` in a text element.
 //
 // Do not flush.
-func writeStringAsText(
+func writeAsText_string(
 	encoder *xml.Encoder,
 	value string,
 ) (err error) {
@@ -5756,7 +5756,7 @@ func writeStringAsText(
 // Write the `value` as a base64-encoded bytes in a text element.
 //
 // Do not flush.
-func writeBytesAsText(
+func writeAsText_bytes(
 	encoder *xml.Encoder,
 	value []byte,
 ) (err error) {
@@ -5991,7 +5991,7 @@ func writeClassElement[T any](
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfIReference(
+func writeListOf_IReference(
 	encoder *xml.Encoder,
 	list []aastypes.IReference,
 ) error {
@@ -6003,7 +6003,7 @@ func writeListOfIReference(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfIEmbeddedDataSpecification(
+func writeListOf_IEmbeddedDataSpecification(
 	encoder *xml.Encoder,
 	list []aastypes.IEmbeddedDataSpecification,
 ) error {
@@ -6015,7 +6015,7 @@ func writeListOfIEmbeddedDataSpecification(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfIExtension(
+func writeListOf_IExtension(
 	encoder *xml.Encoder,
 	list []aastypes.IExtension,
 ) error {
@@ -6027,7 +6027,7 @@ func writeListOfIExtension(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfILangStringNameType(
+func writeListOf_ILangStringNameType(
 	encoder *xml.Encoder,
 	list []aastypes.ILangStringNameType,
 ) error {
@@ -6039,7 +6039,7 @@ func writeListOfILangStringNameType(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfILangStringTextType(
+func writeListOf_ILangStringTextType(
 	encoder *xml.Encoder,
 	list []aastypes.ILangStringTextType,
 ) error {
@@ -6051,7 +6051,7 @@ func writeListOfILangStringTextType(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfISpecificAssetID(
+func writeListOf_ISpecificAssetID(
 	encoder *xml.Encoder,
 	list []aastypes.ISpecificAssetID,
 ) error {
@@ -6063,7 +6063,7 @@ func writeListOfISpecificAssetID(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfIQualifier(
+func writeListOf_IQualifier(
 	encoder *xml.Encoder,
 	list []aastypes.IQualifier,
 ) error {
@@ -6075,7 +6075,7 @@ func writeListOfIQualifier(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfISubmodelElement(
+func writeListOf_ISubmodelElement(
 	encoder *xml.Encoder,
 	list []aastypes.ISubmodelElement,
 ) error {
@@ -6087,7 +6087,7 @@ func writeListOfISubmodelElement(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfIDataElement(
+func writeListOf_IDataElement(
 	encoder *xml.Encoder,
 	list []aastypes.IDataElement,
 ) error {
@@ -6099,7 +6099,7 @@ func writeListOfIDataElement(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfIOperationVariable(
+func writeListOf_IOperationVariable(
 	encoder *xml.Encoder,
 	list []aastypes.IOperationVariable,
 ) error {
@@ -6111,7 +6111,7 @@ func writeListOfIOperationVariable(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfIKey(
+func writeListOf_IKey(
 	encoder *xml.Encoder,
 	list []aastypes.IKey,
 ) error {
@@ -6123,7 +6123,7 @@ func writeListOfIKey(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfIAssetAdministrationShell(
+func writeListOf_IAssetAdministrationShell(
 	encoder *xml.Encoder,
 	list []aastypes.IAssetAdministrationShell,
 ) error {
@@ -6135,7 +6135,7 @@ func writeListOfIAssetAdministrationShell(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfISubmodel(
+func writeListOf_ISubmodel(
 	encoder *xml.Encoder,
 	list []aastypes.ISubmodel,
 ) error {
@@ -6147,7 +6147,7 @@ func writeListOfISubmodel(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfIConceptDescription(
+func writeListOf_IConceptDescription(
 	encoder *xml.Encoder,
 	list []aastypes.IConceptDescription,
 ) error {
@@ -6159,7 +6159,7 @@ func writeListOfIConceptDescription(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfIValueReferencePair(
+func writeListOf_IValueReferencePair(
 	encoder *xml.Encoder,
 	list []aastypes.IValueReferencePair,
 ) error {
@@ -6171,7 +6171,7 @@ func writeListOfIValueReferencePair(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfILangStringPreferredNameTypeIEC61360(
+func writeListOf_ILangStringPreferredNameTypeIEC61360(
 	encoder *xml.Encoder,
 	list []aastypes.ILangStringPreferredNameTypeIEC61360,
 ) error {
@@ -6183,7 +6183,7 @@ func writeListOfILangStringPreferredNameTypeIEC61360(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfILangStringShortNameTypeIEC61360(
+func writeListOf_ILangStringShortNameTypeIEC61360(
 	encoder *xml.Encoder,
 	list []aastypes.ILangStringShortNameTypeIEC61360,
 ) error {
@@ -6195,7 +6195,7 @@ func writeListOfILangStringShortNameTypeIEC61360(
 // Write the items of the `list` as a sequence of XML elements.
 //
 // Do not flush.
-func writeListOfILangStringDefinitionTypeIEC61360(
+func writeListOf_ILangStringDefinitionTypeIEC61360(
 	encoder *xml.Encoder,
 	list []aastypes.ILangStringDefinitionTypeIEC61360,
 ) error {
@@ -6232,7 +6232,7 @@ func writeExtensionAsSequence(
 			encoder,
 			"supplementalSemanticIds",
 			that.SupplementalSemanticIDs(),
-			writeListOfIReference,
+			writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -6242,7 +6242,7 @@ func writeExtensionAsSequence(
 	err = finishProperty(
 		"Name()",
 		writeElement(
-			encoder, "name", that.Name(), writeStringAsText,
+			encoder, "name", that.Name(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -6252,7 +6252,7 @@ func writeExtensionAsSequence(
 	err = finishProperty(
 		"ValueType()",
 		writeOptionalPointer(
-			encoder, "valueType", that.ValueType(), writeDataTypeDefXSDAsText,
+			encoder, "valueType", that.ValueType(), writeAsText_DataTypeDefXSD,
 		),
 	)
 	if err != nil {
@@ -6262,7 +6262,7 @@ func writeExtensionAsSequence(
 	err = finishProperty(
 		"Value()",
 		writeOptionalPointer(
-			encoder, "value", that.Value(), writeStringAsText,
+			encoder, "value", that.Value(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -6272,7 +6272,7 @@ func writeExtensionAsSequence(
 	err = finishProperty(
 		"RefersTo()",
 		writeOptionalSlice(
-			encoder, "refersTo", that.RefersTo(), writeListOfIReference,
+			encoder, "refersTo", that.RefersTo(), writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -6287,7 +6287,7 @@ func writeExtensionAsSequence(
 // in a text element.
 //
 // Do not flush.
-func writeModellingKindAsText(
+func writeAsText_ModellingKind(
 	encoder *xml.Encoder,
 	value aastypes.ModellingKind,
 ) (err error) {
@@ -6326,7 +6326,7 @@ func writeAdministrativeInformationAsSequence(
 			encoder,
 			"embeddedDataSpecifications",
 			that.EmbeddedDataSpecifications(),
-			writeListOfIEmbeddedDataSpecification,
+			writeListOf_IEmbeddedDataSpecification,
 		),
 	)
 	if err != nil {
@@ -6336,7 +6336,7 @@ func writeAdministrativeInformationAsSequence(
 	err = finishProperty(
 		"Version()",
 		writeOptionalPointer(
-			encoder, "version", that.Version(), writeStringAsText,
+			encoder, "version", that.Version(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -6346,7 +6346,7 @@ func writeAdministrativeInformationAsSequence(
 	err = finishProperty(
 		"Revision()",
 		writeOptionalPointer(
-			encoder, "revision", that.Revision(), writeStringAsText,
+			encoder, "revision", that.Revision(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -6366,7 +6366,7 @@ func writeAdministrativeInformationAsSequence(
 	err = finishProperty(
 		"TemplateID()",
 		writeOptionalPointer(
-			encoder, "templateId", that.TemplateID(), writeStringAsText,
+			encoder, "templateId", that.TemplateID(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -6381,7 +6381,7 @@ func writeAdministrativeInformationAsSequence(
 // in a text element.
 //
 // Do not flush.
-func writeQualifierKindAsText(
+func writeAsText_QualifierKind(
 	encoder *xml.Encoder,
 	value aastypes.QualifierKind,
 ) (err error) {
@@ -6430,7 +6430,7 @@ func writeQualifierAsSequence(
 			encoder,
 			"supplementalSemanticIds",
 			that.SupplementalSemanticIDs(),
-			writeListOfIReference,
+			writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -6440,7 +6440,7 @@ func writeQualifierAsSequence(
 	err = finishProperty(
 		"Kind()",
 		writeOptionalPointer(
-			encoder, "kind", that.Kind(), writeQualifierKindAsText,
+			encoder, "kind", that.Kind(), writeAsText_QualifierKind,
 		),
 	)
 	if err != nil {
@@ -6450,7 +6450,7 @@ func writeQualifierAsSequence(
 	err = finishProperty(
 		"Type()",
 		writeElement(
-			encoder, "type", that.Type(), writeStringAsText,
+			encoder, "type", that.Type(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -6460,7 +6460,7 @@ func writeQualifierAsSequence(
 	err = finishProperty(
 		"ValueType()",
 		writeElement(
-			encoder, "valueType", that.ValueType(), writeDataTypeDefXSDAsText,
+			encoder, "valueType", that.ValueType(), writeAsText_DataTypeDefXSD,
 		),
 	)
 	if err != nil {
@@ -6470,7 +6470,7 @@ func writeQualifierAsSequence(
 	err = finishProperty(
 		"Value()",
 		writeOptionalPointer(
-			encoder, "value", that.Value(), writeStringAsText,
+			encoder, "value", that.Value(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -6505,7 +6505,7 @@ func writeAssetAdministrationShellAsSequence(
 	err = finishProperty(
 		"Extensions()",
 		writeOptionalSlice(
-			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+			encoder, "extensions", that.Extensions(), writeListOf_IExtension,
 		),
 	)
 	if err != nil {
@@ -6515,7 +6515,7 @@ func writeAssetAdministrationShellAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeStringAsText,
+			encoder, "category", that.Category(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -6525,7 +6525,7 @@ func writeAssetAdministrationShellAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeStringAsText,
+			encoder, "idShort", that.IDShort(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -6535,7 +6535,7 @@ func writeAssetAdministrationShellAsSequence(
 	err = finishProperty(
 		"DisplayName()",
 		writeOptionalSlice(
-			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+			encoder, "displayName", that.DisplayName(), writeListOf_ILangStringNameType,
 		),
 	)
 	if err != nil {
@@ -6545,7 +6545,7 @@ func writeAssetAdministrationShellAsSequence(
 	err = finishProperty(
 		"Description()",
 		writeOptionalSlice(
-			encoder, "description", that.Description(), writeListOfILangStringTextType,
+			encoder, "description", that.Description(), writeListOf_ILangStringTextType,
 		),
 	)
 	if err != nil {
@@ -6568,7 +6568,7 @@ func writeAssetAdministrationShellAsSequence(
 	err = finishProperty(
 		"ID()",
 		writeElement(
-			encoder, "id", that.ID(), writeStringAsText,
+			encoder, "id", that.ID(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -6581,7 +6581,7 @@ func writeAssetAdministrationShellAsSequence(
 			encoder,
 			"embeddedDataSpecifications",
 			that.EmbeddedDataSpecifications(),
-			writeListOfIEmbeddedDataSpecification,
+			writeListOf_IEmbeddedDataSpecification,
 		),
 	)
 	if err != nil {
@@ -6614,7 +6614,7 @@ func writeAssetAdministrationShellAsSequence(
 	err = finishProperty(
 		"Submodels()",
 		writeOptionalSlice(
-			encoder, "submodels", that.Submodels(), writeListOfIReference,
+			encoder, "submodels", that.Submodels(), writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -6639,7 +6639,7 @@ func writeAssetInformationAsSequence(
 	err = finishProperty(
 		"AssetKind()",
 		writeElement(
-			encoder, "assetKind", that.AssetKind(), writeAssetKindAsText,
+			encoder, "assetKind", that.AssetKind(), writeAsText_AssetKind,
 		),
 	)
 	if err != nil {
@@ -6649,7 +6649,7 @@ func writeAssetInformationAsSequence(
 	err = finishProperty(
 		"GlobalAssetID()",
 		writeOptionalPointer(
-			encoder, "globalAssetId", that.GlobalAssetID(), writeStringAsText,
+			encoder, "globalAssetId", that.GlobalAssetID(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -6662,7 +6662,7 @@ func writeAssetInformationAsSequence(
 			encoder,
 			"specificAssetIds",
 			that.SpecificAssetIDs(),
-			writeListOfISpecificAssetID,
+			writeListOf_ISpecificAssetID,
 		),
 	)
 	if err != nil {
@@ -6672,7 +6672,7 @@ func writeAssetInformationAsSequence(
 	err = finishProperty(
 		"AssetType()",
 		writeOptionalPointer(
-			encoder, "assetType", that.AssetType(), writeStringAsText,
+			encoder, "assetType", that.AssetType(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -6710,7 +6710,7 @@ func writeResourceAsSequence(
 	err = finishProperty(
 		"Path()",
 		writeElement(
-			encoder, "path", that.Path(), writeStringAsText,
+			encoder, "path", that.Path(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -6720,7 +6720,7 @@ func writeResourceAsSequence(
 	err = finishProperty(
 		"ContentType()",
 		writeOptionalPointer(
-			encoder, "contentType", that.ContentType(), writeStringAsText,
+			encoder, "contentType", that.ContentType(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -6735,7 +6735,7 @@ func writeResourceAsSequence(
 // in a text element.
 //
 // Do not flush.
-func writeAssetKindAsText(
+func writeAsText_AssetKind(
 	encoder *xml.Encoder,
 	value aastypes.AssetKind,
 ) (err error) {
@@ -6784,7 +6784,7 @@ func writeSpecificAssetIDAsSequence(
 			encoder,
 			"supplementalSemanticIds",
 			that.SupplementalSemanticIDs(),
-			writeListOfIReference,
+			writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -6794,7 +6794,7 @@ func writeSpecificAssetIDAsSequence(
 	err = finishProperty(
 		"Name()",
 		writeElement(
-			encoder, "name", that.Name(), writeStringAsText,
+			encoder, "name", that.Name(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -6804,7 +6804,7 @@ func writeSpecificAssetIDAsSequence(
 	err = finishProperty(
 		"Value()",
 		writeElement(
-			encoder, "value", that.Value(), writeStringAsText,
+			encoder, "value", that.Value(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -6842,7 +6842,7 @@ func writeSubmodelAsSequence(
 	err = finishProperty(
 		"Extensions()",
 		writeOptionalSlice(
-			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+			encoder, "extensions", that.Extensions(), writeListOf_IExtension,
 		),
 	)
 	if err != nil {
@@ -6852,7 +6852,7 @@ func writeSubmodelAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeStringAsText,
+			encoder, "category", that.Category(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -6862,7 +6862,7 @@ func writeSubmodelAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeStringAsText,
+			encoder, "idShort", that.IDShort(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -6872,7 +6872,7 @@ func writeSubmodelAsSequence(
 	err = finishProperty(
 		"DisplayName()",
 		writeOptionalSlice(
-			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+			encoder, "displayName", that.DisplayName(), writeListOf_ILangStringNameType,
 		),
 	)
 	if err != nil {
@@ -6882,7 +6882,7 @@ func writeSubmodelAsSequence(
 	err = finishProperty(
 		"Description()",
 		writeOptionalSlice(
-			encoder, "description", that.Description(), writeListOfILangStringTextType,
+			encoder, "description", that.Description(), writeListOf_ILangStringTextType,
 		),
 	)
 	if err != nil {
@@ -6905,7 +6905,7 @@ func writeSubmodelAsSequence(
 	err = finishProperty(
 		"ID()",
 		writeElement(
-			encoder, "id", that.ID(), writeStringAsText,
+			encoder, "id", that.ID(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -6915,7 +6915,7 @@ func writeSubmodelAsSequence(
 	err = finishProperty(
 		"Kind()",
 		writeOptionalPointer(
-			encoder, "kind", that.Kind(), writeModellingKindAsText,
+			encoder, "kind", that.Kind(), writeAsText_ModellingKind,
 		),
 	)
 	if err != nil {
@@ -6938,7 +6938,7 @@ func writeSubmodelAsSequence(
 			encoder,
 			"supplementalSemanticIds",
 			that.SupplementalSemanticIDs(),
-			writeListOfIReference,
+			writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -6948,7 +6948,7 @@ func writeSubmodelAsSequence(
 	err = finishProperty(
 		"Qualifiers()",
 		writeOptionalSlice(
-			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+			encoder, "qualifiers", that.Qualifiers(), writeListOf_IQualifier,
 		),
 	)
 	if err != nil {
@@ -6961,7 +6961,7 @@ func writeSubmodelAsSequence(
 			encoder,
 			"embeddedDataSpecifications",
 			that.EmbeddedDataSpecifications(),
-			writeListOfIEmbeddedDataSpecification,
+			writeListOf_IEmbeddedDataSpecification,
 		),
 	)
 	if err != nil {
@@ -6974,7 +6974,7 @@ func writeSubmodelAsSequence(
 			encoder,
 			"submodelElements",
 			that.SubmodelElements(),
-			writeListOfISubmodelElement,
+			writeListOf_ISubmodelElement,
 		),
 	)
 	if err != nil {
@@ -6999,7 +6999,7 @@ func writeRelationshipElementAsSequence(
 	err = finishProperty(
 		"Extensions()",
 		writeOptionalSlice(
-			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+			encoder, "extensions", that.Extensions(), writeListOf_IExtension,
 		),
 	)
 	if err != nil {
@@ -7009,7 +7009,7 @@ func writeRelationshipElementAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeStringAsText,
+			encoder, "category", that.Category(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -7019,7 +7019,7 @@ func writeRelationshipElementAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeStringAsText,
+			encoder, "idShort", that.IDShort(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -7029,7 +7029,7 @@ func writeRelationshipElementAsSequence(
 	err = finishProperty(
 		"DisplayName()",
 		writeOptionalSlice(
-			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+			encoder, "displayName", that.DisplayName(), writeListOf_ILangStringNameType,
 		),
 	)
 	if err != nil {
@@ -7039,7 +7039,7 @@ func writeRelationshipElementAsSequence(
 	err = finishProperty(
 		"Description()",
 		writeOptionalSlice(
-			encoder, "description", that.Description(), writeListOfILangStringTextType,
+			encoder, "description", that.Description(), writeListOf_ILangStringTextType,
 		),
 	)
 	if err != nil {
@@ -7062,7 +7062,7 @@ func writeRelationshipElementAsSequence(
 			encoder,
 			"supplementalSemanticIds",
 			that.SupplementalSemanticIDs(),
-			writeListOfIReference,
+			writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -7072,7 +7072,7 @@ func writeRelationshipElementAsSequence(
 	err = finishProperty(
 		"Qualifiers()",
 		writeOptionalSlice(
-			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+			encoder, "qualifiers", that.Qualifiers(), writeListOf_IQualifier,
 		),
 	)
 	if err != nil {
@@ -7085,7 +7085,7 @@ func writeRelationshipElementAsSequence(
 			encoder,
 			"embeddedDataSpecifications",
 			that.EmbeddedDataSpecifications(),
-			writeListOfIEmbeddedDataSpecification,
+			writeListOf_IEmbeddedDataSpecification,
 		),
 	)
 	if err != nil {
@@ -7120,7 +7120,7 @@ func writeRelationshipElementAsSequence(
 // in a text element.
 //
 // Do not flush.
-func writeAASSubmodelElementsAsText(
+func writeAsText_AASSubmodelElements(
 	encoder *xml.Encoder,
 	value aastypes.AASSubmodelElements,
 ) (err error) {
@@ -7156,7 +7156,7 @@ func writeSubmodelElementListAsSequence(
 	err = finishProperty(
 		"Extensions()",
 		writeOptionalSlice(
-			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+			encoder, "extensions", that.Extensions(), writeListOf_IExtension,
 		),
 	)
 	if err != nil {
@@ -7166,7 +7166,7 @@ func writeSubmodelElementListAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeStringAsText,
+			encoder, "category", that.Category(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -7176,7 +7176,7 @@ func writeSubmodelElementListAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeStringAsText,
+			encoder, "idShort", that.IDShort(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -7186,7 +7186,7 @@ func writeSubmodelElementListAsSequence(
 	err = finishProperty(
 		"DisplayName()",
 		writeOptionalSlice(
-			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+			encoder, "displayName", that.DisplayName(), writeListOf_ILangStringNameType,
 		),
 	)
 	if err != nil {
@@ -7196,7 +7196,7 @@ func writeSubmodelElementListAsSequence(
 	err = finishProperty(
 		"Description()",
 		writeOptionalSlice(
-			encoder, "description", that.Description(), writeListOfILangStringTextType,
+			encoder, "description", that.Description(), writeListOf_ILangStringTextType,
 		),
 	)
 	if err != nil {
@@ -7219,7 +7219,7 @@ func writeSubmodelElementListAsSequence(
 			encoder,
 			"supplementalSemanticIds",
 			that.SupplementalSemanticIDs(),
-			writeListOfIReference,
+			writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -7229,7 +7229,7 @@ func writeSubmodelElementListAsSequence(
 	err = finishProperty(
 		"Qualifiers()",
 		writeOptionalSlice(
-			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+			encoder, "qualifiers", that.Qualifiers(), writeListOf_IQualifier,
 		),
 	)
 	if err != nil {
@@ -7242,7 +7242,7 @@ func writeSubmodelElementListAsSequence(
 			encoder,
 			"embeddedDataSpecifications",
 			that.EmbeddedDataSpecifications(),
-			writeListOfIEmbeddedDataSpecification,
+			writeListOf_IEmbeddedDataSpecification,
 		),
 	)
 	if err != nil {
@@ -7252,7 +7252,7 @@ func writeSubmodelElementListAsSequence(
 	err = finishProperty(
 		"OrderRelevant()",
 		writeOptionalPointer(
-			encoder, "orderRelevant", that.OrderRelevant(), writeBooleanAsText,
+			encoder, "orderRelevant", that.OrderRelevant(), writeAsText_bool,
 		),
 	)
 	if err != nil {
@@ -7278,7 +7278,7 @@ func writeSubmodelElementListAsSequence(
 			encoder,
 			"typeValueListElement",
 			that.TypeValueListElement(),
-			writeAASSubmodelElementsAsText,
+			writeAsText_AASSubmodelElements,
 		),
 	)
 	if err != nil {
@@ -7291,7 +7291,7 @@ func writeSubmodelElementListAsSequence(
 			encoder,
 			"valueTypeListElement",
 			that.ValueTypeListElement(),
-			writeDataTypeDefXSDAsText,
+			writeAsText_DataTypeDefXSD,
 		),
 	)
 	if err != nil {
@@ -7301,7 +7301,7 @@ func writeSubmodelElementListAsSequence(
 	err = finishProperty(
 		"Value()",
 		writeOptionalSlice(
-			encoder, "value", that.Value(), writeListOfISubmodelElement,
+			encoder, "value", that.Value(), writeListOf_ISubmodelElement,
 		),
 	)
 	if err != nil {
@@ -7326,7 +7326,7 @@ func writeSubmodelElementCollectionAsSequence(
 	err = finishProperty(
 		"Extensions()",
 		writeOptionalSlice(
-			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+			encoder, "extensions", that.Extensions(), writeListOf_IExtension,
 		),
 	)
 	if err != nil {
@@ -7336,7 +7336,7 @@ func writeSubmodelElementCollectionAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeStringAsText,
+			encoder, "category", that.Category(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -7346,7 +7346,7 @@ func writeSubmodelElementCollectionAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeStringAsText,
+			encoder, "idShort", that.IDShort(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -7356,7 +7356,7 @@ func writeSubmodelElementCollectionAsSequence(
 	err = finishProperty(
 		"DisplayName()",
 		writeOptionalSlice(
-			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+			encoder, "displayName", that.DisplayName(), writeListOf_ILangStringNameType,
 		),
 	)
 	if err != nil {
@@ -7366,7 +7366,7 @@ func writeSubmodelElementCollectionAsSequence(
 	err = finishProperty(
 		"Description()",
 		writeOptionalSlice(
-			encoder, "description", that.Description(), writeListOfILangStringTextType,
+			encoder, "description", that.Description(), writeListOf_ILangStringTextType,
 		),
 	)
 	if err != nil {
@@ -7389,7 +7389,7 @@ func writeSubmodelElementCollectionAsSequence(
 			encoder,
 			"supplementalSemanticIds",
 			that.SupplementalSemanticIDs(),
-			writeListOfIReference,
+			writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -7399,7 +7399,7 @@ func writeSubmodelElementCollectionAsSequence(
 	err = finishProperty(
 		"Qualifiers()",
 		writeOptionalSlice(
-			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+			encoder, "qualifiers", that.Qualifiers(), writeListOf_IQualifier,
 		),
 	)
 	if err != nil {
@@ -7412,7 +7412,7 @@ func writeSubmodelElementCollectionAsSequence(
 			encoder,
 			"embeddedDataSpecifications",
 			that.EmbeddedDataSpecifications(),
-			writeListOfIEmbeddedDataSpecification,
+			writeListOf_IEmbeddedDataSpecification,
 		),
 	)
 	if err != nil {
@@ -7422,7 +7422,7 @@ func writeSubmodelElementCollectionAsSequence(
 	err = finishProperty(
 		"Value()",
 		writeOptionalSlice(
-			encoder, "value", that.Value(), writeListOfISubmodelElement,
+			encoder, "value", that.Value(), writeListOf_ISubmodelElement,
 		),
 	)
 	if err != nil {
@@ -7447,7 +7447,7 @@ func writePropertyAsSequence(
 	err = finishProperty(
 		"Extensions()",
 		writeOptionalSlice(
-			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+			encoder, "extensions", that.Extensions(), writeListOf_IExtension,
 		),
 	)
 	if err != nil {
@@ -7457,7 +7457,7 @@ func writePropertyAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeStringAsText,
+			encoder, "category", that.Category(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -7467,7 +7467,7 @@ func writePropertyAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeStringAsText,
+			encoder, "idShort", that.IDShort(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -7477,7 +7477,7 @@ func writePropertyAsSequence(
 	err = finishProperty(
 		"DisplayName()",
 		writeOptionalSlice(
-			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+			encoder, "displayName", that.DisplayName(), writeListOf_ILangStringNameType,
 		),
 	)
 	if err != nil {
@@ -7487,7 +7487,7 @@ func writePropertyAsSequence(
 	err = finishProperty(
 		"Description()",
 		writeOptionalSlice(
-			encoder, "description", that.Description(), writeListOfILangStringTextType,
+			encoder, "description", that.Description(), writeListOf_ILangStringTextType,
 		),
 	)
 	if err != nil {
@@ -7510,7 +7510,7 @@ func writePropertyAsSequence(
 			encoder,
 			"supplementalSemanticIds",
 			that.SupplementalSemanticIDs(),
-			writeListOfIReference,
+			writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -7520,7 +7520,7 @@ func writePropertyAsSequence(
 	err = finishProperty(
 		"Qualifiers()",
 		writeOptionalSlice(
-			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+			encoder, "qualifiers", that.Qualifiers(), writeListOf_IQualifier,
 		),
 	)
 	if err != nil {
@@ -7533,7 +7533,7 @@ func writePropertyAsSequence(
 			encoder,
 			"embeddedDataSpecifications",
 			that.EmbeddedDataSpecifications(),
-			writeListOfIEmbeddedDataSpecification,
+			writeListOf_IEmbeddedDataSpecification,
 		),
 	)
 	if err != nil {
@@ -7543,7 +7543,7 @@ func writePropertyAsSequence(
 	err = finishProperty(
 		"ValueType()",
 		writeElement(
-			encoder, "valueType", that.ValueType(), writeDataTypeDefXSDAsText,
+			encoder, "valueType", that.ValueType(), writeAsText_DataTypeDefXSD,
 		),
 	)
 	if err != nil {
@@ -7553,7 +7553,7 @@ func writePropertyAsSequence(
 	err = finishProperty(
 		"Value()",
 		writeOptionalPointer(
-			encoder, "value", that.Value(), writeStringAsText,
+			encoder, "value", that.Value(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -7588,7 +7588,7 @@ func writeMultiLanguagePropertyAsSequence(
 	err = finishProperty(
 		"Extensions()",
 		writeOptionalSlice(
-			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+			encoder, "extensions", that.Extensions(), writeListOf_IExtension,
 		),
 	)
 	if err != nil {
@@ -7598,7 +7598,7 @@ func writeMultiLanguagePropertyAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeStringAsText,
+			encoder, "category", that.Category(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -7608,7 +7608,7 @@ func writeMultiLanguagePropertyAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeStringAsText,
+			encoder, "idShort", that.IDShort(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -7618,7 +7618,7 @@ func writeMultiLanguagePropertyAsSequence(
 	err = finishProperty(
 		"DisplayName()",
 		writeOptionalSlice(
-			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+			encoder, "displayName", that.DisplayName(), writeListOf_ILangStringNameType,
 		),
 	)
 	if err != nil {
@@ -7628,7 +7628,7 @@ func writeMultiLanguagePropertyAsSequence(
 	err = finishProperty(
 		"Description()",
 		writeOptionalSlice(
-			encoder, "description", that.Description(), writeListOfILangStringTextType,
+			encoder, "description", that.Description(), writeListOf_ILangStringTextType,
 		),
 	)
 	if err != nil {
@@ -7651,7 +7651,7 @@ func writeMultiLanguagePropertyAsSequence(
 			encoder,
 			"supplementalSemanticIds",
 			that.SupplementalSemanticIDs(),
-			writeListOfIReference,
+			writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -7661,7 +7661,7 @@ func writeMultiLanguagePropertyAsSequence(
 	err = finishProperty(
 		"Qualifiers()",
 		writeOptionalSlice(
-			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+			encoder, "qualifiers", that.Qualifiers(), writeListOf_IQualifier,
 		),
 	)
 	if err != nil {
@@ -7674,7 +7674,7 @@ func writeMultiLanguagePropertyAsSequence(
 			encoder,
 			"embeddedDataSpecifications",
 			that.EmbeddedDataSpecifications(),
-			writeListOfIEmbeddedDataSpecification,
+			writeListOf_IEmbeddedDataSpecification,
 		),
 	)
 	if err != nil {
@@ -7684,7 +7684,7 @@ func writeMultiLanguagePropertyAsSequence(
 	err = finishProperty(
 		"Value()",
 		writeOptionalSlice(
-			encoder, "value", that.Value(), writeListOfILangStringTextType,
+			encoder, "value", that.Value(), writeListOf_ILangStringTextType,
 		),
 	)
 	if err != nil {
@@ -7719,7 +7719,7 @@ func writeRangeAsSequence(
 	err = finishProperty(
 		"Extensions()",
 		writeOptionalSlice(
-			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+			encoder, "extensions", that.Extensions(), writeListOf_IExtension,
 		),
 	)
 	if err != nil {
@@ -7729,7 +7729,7 @@ func writeRangeAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeStringAsText,
+			encoder, "category", that.Category(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -7739,7 +7739,7 @@ func writeRangeAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeStringAsText,
+			encoder, "idShort", that.IDShort(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -7749,7 +7749,7 @@ func writeRangeAsSequence(
 	err = finishProperty(
 		"DisplayName()",
 		writeOptionalSlice(
-			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+			encoder, "displayName", that.DisplayName(), writeListOf_ILangStringNameType,
 		),
 	)
 	if err != nil {
@@ -7759,7 +7759,7 @@ func writeRangeAsSequence(
 	err = finishProperty(
 		"Description()",
 		writeOptionalSlice(
-			encoder, "description", that.Description(), writeListOfILangStringTextType,
+			encoder, "description", that.Description(), writeListOf_ILangStringTextType,
 		),
 	)
 	if err != nil {
@@ -7782,7 +7782,7 @@ func writeRangeAsSequence(
 			encoder,
 			"supplementalSemanticIds",
 			that.SupplementalSemanticIDs(),
-			writeListOfIReference,
+			writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -7792,7 +7792,7 @@ func writeRangeAsSequence(
 	err = finishProperty(
 		"Qualifiers()",
 		writeOptionalSlice(
-			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+			encoder, "qualifiers", that.Qualifiers(), writeListOf_IQualifier,
 		),
 	)
 	if err != nil {
@@ -7805,7 +7805,7 @@ func writeRangeAsSequence(
 			encoder,
 			"embeddedDataSpecifications",
 			that.EmbeddedDataSpecifications(),
-			writeListOfIEmbeddedDataSpecification,
+			writeListOf_IEmbeddedDataSpecification,
 		),
 	)
 	if err != nil {
@@ -7815,7 +7815,7 @@ func writeRangeAsSequence(
 	err = finishProperty(
 		"ValueType()",
 		writeElement(
-			encoder, "valueType", that.ValueType(), writeDataTypeDefXSDAsText,
+			encoder, "valueType", that.ValueType(), writeAsText_DataTypeDefXSD,
 		),
 	)
 	if err != nil {
@@ -7825,7 +7825,7 @@ func writeRangeAsSequence(
 	err = finishProperty(
 		"Min()",
 		writeOptionalPointer(
-			encoder, "min", that.Min(), writeStringAsText,
+			encoder, "min", that.Min(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -7835,7 +7835,7 @@ func writeRangeAsSequence(
 	err = finishProperty(
 		"Max()",
 		writeOptionalPointer(
-			encoder, "max", that.Max(), writeStringAsText,
+			encoder, "max", that.Max(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -7860,7 +7860,7 @@ func writeReferenceElementAsSequence(
 	err = finishProperty(
 		"Extensions()",
 		writeOptionalSlice(
-			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+			encoder, "extensions", that.Extensions(), writeListOf_IExtension,
 		),
 	)
 	if err != nil {
@@ -7870,7 +7870,7 @@ func writeReferenceElementAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeStringAsText,
+			encoder, "category", that.Category(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -7880,7 +7880,7 @@ func writeReferenceElementAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeStringAsText,
+			encoder, "idShort", that.IDShort(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -7890,7 +7890,7 @@ func writeReferenceElementAsSequence(
 	err = finishProperty(
 		"DisplayName()",
 		writeOptionalSlice(
-			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+			encoder, "displayName", that.DisplayName(), writeListOf_ILangStringNameType,
 		),
 	)
 	if err != nil {
@@ -7900,7 +7900,7 @@ func writeReferenceElementAsSequence(
 	err = finishProperty(
 		"Description()",
 		writeOptionalSlice(
-			encoder, "description", that.Description(), writeListOfILangStringTextType,
+			encoder, "description", that.Description(), writeListOf_ILangStringTextType,
 		),
 	)
 	if err != nil {
@@ -7923,7 +7923,7 @@ func writeReferenceElementAsSequence(
 			encoder,
 			"supplementalSemanticIds",
 			that.SupplementalSemanticIDs(),
-			writeListOfIReference,
+			writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -7933,7 +7933,7 @@ func writeReferenceElementAsSequence(
 	err = finishProperty(
 		"Qualifiers()",
 		writeOptionalSlice(
-			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+			encoder, "qualifiers", that.Qualifiers(), writeListOf_IQualifier,
 		),
 	)
 	if err != nil {
@@ -7946,7 +7946,7 @@ func writeReferenceElementAsSequence(
 			encoder,
 			"embeddedDataSpecifications",
 			that.EmbeddedDataSpecifications(),
-			writeListOfIEmbeddedDataSpecification,
+			writeListOf_IEmbeddedDataSpecification,
 		),
 	)
 	if err != nil {
@@ -7981,7 +7981,7 @@ func writeBlobAsSequence(
 	err = finishProperty(
 		"Extensions()",
 		writeOptionalSlice(
-			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+			encoder, "extensions", that.Extensions(), writeListOf_IExtension,
 		),
 	)
 	if err != nil {
@@ -7991,7 +7991,7 @@ func writeBlobAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeStringAsText,
+			encoder, "category", that.Category(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8001,7 +8001,7 @@ func writeBlobAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeStringAsText,
+			encoder, "idShort", that.IDShort(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8011,7 +8011,7 @@ func writeBlobAsSequence(
 	err = finishProperty(
 		"DisplayName()",
 		writeOptionalSlice(
-			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+			encoder, "displayName", that.DisplayName(), writeListOf_ILangStringNameType,
 		),
 	)
 	if err != nil {
@@ -8021,7 +8021,7 @@ func writeBlobAsSequence(
 	err = finishProperty(
 		"Description()",
 		writeOptionalSlice(
-			encoder, "description", that.Description(), writeListOfILangStringTextType,
+			encoder, "description", that.Description(), writeListOf_ILangStringTextType,
 		),
 	)
 	if err != nil {
@@ -8044,7 +8044,7 @@ func writeBlobAsSequence(
 			encoder,
 			"supplementalSemanticIds",
 			that.SupplementalSemanticIDs(),
-			writeListOfIReference,
+			writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -8054,7 +8054,7 @@ func writeBlobAsSequence(
 	err = finishProperty(
 		"Qualifiers()",
 		writeOptionalSlice(
-			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+			encoder, "qualifiers", that.Qualifiers(), writeListOf_IQualifier,
 		),
 	)
 	if err != nil {
@@ -8067,7 +8067,7 @@ func writeBlobAsSequence(
 			encoder,
 			"embeddedDataSpecifications",
 			that.EmbeddedDataSpecifications(),
-			writeListOfIEmbeddedDataSpecification,
+			writeListOf_IEmbeddedDataSpecification,
 		),
 	)
 	if err != nil {
@@ -8077,7 +8077,7 @@ func writeBlobAsSequence(
 	err = finishProperty(
 		"Value()",
 		writeOptionalSlice(
-			encoder, "value", that.Value(), writeBytesAsText,
+			encoder, "value", that.Value(), writeAsText_bytes,
 		),
 	)
 	if err != nil {
@@ -8087,7 +8087,7 @@ func writeBlobAsSequence(
 	err = finishProperty(
 		"ContentType()",
 		writeElement(
-			encoder, "contentType", that.ContentType(), writeStringAsText,
+			encoder, "contentType", that.ContentType(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8112,7 +8112,7 @@ func writeFileAsSequence(
 	err = finishProperty(
 		"Extensions()",
 		writeOptionalSlice(
-			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+			encoder, "extensions", that.Extensions(), writeListOf_IExtension,
 		),
 	)
 	if err != nil {
@@ -8122,7 +8122,7 @@ func writeFileAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeStringAsText,
+			encoder, "category", that.Category(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8132,7 +8132,7 @@ func writeFileAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeStringAsText,
+			encoder, "idShort", that.IDShort(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8142,7 +8142,7 @@ func writeFileAsSequence(
 	err = finishProperty(
 		"DisplayName()",
 		writeOptionalSlice(
-			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+			encoder, "displayName", that.DisplayName(), writeListOf_ILangStringNameType,
 		),
 	)
 	if err != nil {
@@ -8152,7 +8152,7 @@ func writeFileAsSequence(
 	err = finishProperty(
 		"Description()",
 		writeOptionalSlice(
-			encoder, "description", that.Description(), writeListOfILangStringTextType,
+			encoder, "description", that.Description(), writeListOf_ILangStringTextType,
 		),
 	)
 	if err != nil {
@@ -8175,7 +8175,7 @@ func writeFileAsSequence(
 			encoder,
 			"supplementalSemanticIds",
 			that.SupplementalSemanticIDs(),
-			writeListOfIReference,
+			writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -8185,7 +8185,7 @@ func writeFileAsSequence(
 	err = finishProperty(
 		"Qualifiers()",
 		writeOptionalSlice(
-			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+			encoder, "qualifiers", that.Qualifiers(), writeListOf_IQualifier,
 		),
 	)
 	if err != nil {
@@ -8198,7 +8198,7 @@ func writeFileAsSequence(
 			encoder,
 			"embeddedDataSpecifications",
 			that.EmbeddedDataSpecifications(),
-			writeListOfIEmbeddedDataSpecification,
+			writeListOf_IEmbeddedDataSpecification,
 		),
 	)
 	if err != nil {
@@ -8208,7 +8208,7 @@ func writeFileAsSequence(
 	err = finishProperty(
 		"Value()",
 		writeOptionalPointer(
-			encoder, "value", that.Value(), writeStringAsText,
+			encoder, "value", that.Value(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8218,7 +8218,7 @@ func writeFileAsSequence(
 	err = finishProperty(
 		"ContentType()",
 		writeElement(
-			encoder, "contentType", that.ContentType(), writeStringAsText,
+			encoder, "contentType", that.ContentType(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8243,7 +8243,7 @@ func writeAnnotatedRelationshipElementAsSequence(
 	err = finishProperty(
 		"Extensions()",
 		writeOptionalSlice(
-			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+			encoder, "extensions", that.Extensions(), writeListOf_IExtension,
 		),
 	)
 	if err != nil {
@@ -8253,7 +8253,7 @@ func writeAnnotatedRelationshipElementAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeStringAsText,
+			encoder, "category", that.Category(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8263,7 +8263,7 @@ func writeAnnotatedRelationshipElementAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeStringAsText,
+			encoder, "idShort", that.IDShort(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8273,7 +8273,7 @@ func writeAnnotatedRelationshipElementAsSequence(
 	err = finishProperty(
 		"DisplayName()",
 		writeOptionalSlice(
-			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+			encoder, "displayName", that.DisplayName(), writeListOf_ILangStringNameType,
 		),
 	)
 	if err != nil {
@@ -8283,7 +8283,7 @@ func writeAnnotatedRelationshipElementAsSequence(
 	err = finishProperty(
 		"Description()",
 		writeOptionalSlice(
-			encoder, "description", that.Description(), writeListOfILangStringTextType,
+			encoder, "description", that.Description(), writeListOf_ILangStringTextType,
 		),
 	)
 	if err != nil {
@@ -8306,7 +8306,7 @@ func writeAnnotatedRelationshipElementAsSequence(
 			encoder,
 			"supplementalSemanticIds",
 			that.SupplementalSemanticIDs(),
-			writeListOfIReference,
+			writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -8316,7 +8316,7 @@ func writeAnnotatedRelationshipElementAsSequence(
 	err = finishProperty(
 		"Qualifiers()",
 		writeOptionalSlice(
-			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+			encoder, "qualifiers", that.Qualifiers(), writeListOf_IQualifier,
 		),
 	)
 	if err != nil {
@@ -8329,7 +8329,7 @@ func writeAnnotatedRelationshipElementAsSequence(
 			encoder,
 			"embeddedDataSpecifications",
 			that.EmbeddedDataSpecifications(),
-			writeListOfIEmbeddedDataSpecification,
+			writeListOf_IEmbeddedDataSpecification,
 		),
 	)
 	if err != nil {
@@ -8359,7 +8359,7 @@ func writeAnnotatedRelationshipElementAsSequence(
 	err = finishProperty(
 		"Annotations()",
 		writeOptionalSlice(
-			encoder, "annotations", that.Annotations(), writeListOfIDataElement,
+			encoder, "annotations", that.Annotations(), writeListOf_IDataElement,
 		),
 	)
 	if err != nil {
@@ -8384,7 +8384,7 @@ func writeEntityAsSequence(
 	err = finishProperty(
 		"Extensions()",
 		writeOptionalSlice(
-			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+			encoder, "extensions", that.Extensions(), writeListOf_IExtension,
 		),
 	)
 	if err != nil {
@@ -8394,7 +8394,7 @@ func writeEntityAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeStringAsText,
+			encoder, "category", that.Category(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8404,7 +8404,7 @@ func writeEntityAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeStringAsText,
+			encoder, "idShort", that.IDShort(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8414,7 +8414,7 @@ func writeEntityAsSequence(
 	err = finishProperty(
 		"DisplayName()",
 		writeOptionalSlice(
-			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+			encoder, "displayName", that.DisplayName(), writeListOf_ILangStringNameType,
 		),
 	)
 	if err != nil {
@@ -8424,7 +8424,7 @@ func writeEntityAsSequence(
 	err = finishProperty(
 		"Description()",
 		writeOptionalSlice(
-			encoder, "description", that.Description(), writeListOfILangStringTextType,
+			encoder, "description", that.Description(), writeListOf_ILangStringTextType,
 		),
 	)
 	if err != nil {
@@ -8447,7 +8447,7 @@ func writeEntityAsSequence(
 			encoder,
 			"supplementalSemanticIds",
 			that.SupplementalSemanticIDs(),
-			writeListOfIReference,
+			writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -8457,7 +8457,7 @@ func writeEntityAsSequence(
 	err = finishProperty(
 		"Qualifiers()",
 		writeOptionalSlice(
-			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+			encoder, "qualifiers", that.Qualifiers(), writeListOf_IQualifier,
 		),
 	)
 	if err != nil {
@@ -8470,7 +8470,7 @@ func writeEntityAsSequence(
 			encoder,
 			"embeddedDataSpecifications",
 			that.EmbeddedDataSpecifications(),
-			writeListOfIEmbeddedDataSpecification,
+			writeListOf_IEmbeddedDataSpecification,
 		),
 	)
 	if err != nil {
@@ -8480,7 +8480,7 @@ func writeEntityAsSequence(
 	err = finishProperty(
 		"Statements()",
 		writeOptionalSlice(
-			encoder, "statements", that.Statements(), writeListOfISubmodelElement,
+			encoder, "statements", that.Statements(), writeListOf_ISubmodelElement,
 		),
 	)
 	if err != nil {
@@ -8490,7 +8490,7 @@ func writeEntityAsSequence(
 	err = finishProperty(
 		"EntityType()",
 		writeElement(
-			encoder, "entityType", that.EntityType(), writeEntityTypeAsText,
+			encoder, "entityType", that.EntityType(), writeAsText_EntityType,
 		),
 	)
 	if err != nil {
@@ -8500,7 +8500,7 @@ func writeEntityAsSequence(
 	err = finishProperty(
 		"GlobalAssetID()",
 		writeOptionalPointer(
-			encoder, "globalAssetId", that.GlobalAssetID(), writeStringAsText,
+			encoder, "globalAssetId", that.GlobalAssetID(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8513,7 +8513,7 @@ func writeEntityAsSequence(
 			encoder,
 			"specificAssetIds",
 			that.SpecificAssetIDs(),
-			writeListOfISpecificAssetID,
+			writeListOf_ISpecificAssetID,
 		),
 	)
 	if err != nil {
@@ -8528,7 +8528,7 @@ func writeEntityAsSequence(
 // in a text element.
 //
 // Do not flush.
-func writeEntityTypeAsText(
+func writeAsText_EntityType(
 	encoder *xml.Encoder,
 	value aastypes.EntityType,
 ) (err error) {
@@ -8554,7 +8554,7 @@ func writeEntityTypeAsText(
 // in a text element.
 //
 // Do not flush.
-func writeDirectionAsText(
+func writeAsText_Direction(
 	encoder *xml.Encoder,
 	value aastypes.Direction,
 ) (err error) {
@@ -8580,7 +8580,7 @@ func writeDirectionAsText(
 // in a text element.
 //
 // Do not flush.
-func writeStateOfEventAsText(
+func writeAsText_StateOfEvent(
 	encoder *xml.Encoder,
 	value aastypes.StateOfEvent,
 ) (err error) {
@@ -8665,7 +8665,7 @@ func writeEventPayloadAsSequence(
 	err = finishProperty(
 		"Topic()",
 		writeOptionalPointer(
-			encoder, "topic", that.Topic(), writeStringAsText,
+			encoder, "topic", that.Topic(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8685,7 +8685,7 @@ func writeEventPayloadAsSequence(
 	err = finishProperty(
 		"TimeStamp()",
 		writeElement(
-			encoder, "timeStamp", that.TimeStamp(), writeStringAsText,
+			encoder, "timeStamp", that.TimeStamp(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8695,7 +8695,7 @@ func writeEventPayloadAsSequence(
 	err = finishProperty(
 		"Payload()",
 		writeOptionalSlice(
-			encoder, "payload", that.Payload(), writeBytesAsText,
+			encoder, "payload", that.Payload(), writeAsText_bytes,
 		),
 	)
 	if err != nil {
@@ -8720,7 +8720,7 @@ func writeBasicEventElementAsSequence(
 	err = finishProperty(
 		"Extensions()",
 		writeOptionalSlice(
-			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+			encoder, "extensions", that.Extensions(), writeListOf_IExtension,
 		),
 	)
 	if err != nil {
@@ -8730,7 +8730,7 @@ func writeBasicEventElementAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeStringAsText,
+			encoder, "category", that.Category(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8740,7 +8740,7 @@ func writeBasicEventElementAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeStringAsText,
+			encoder, "idShort", that.IDShort(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8750,7 +8750,7 @@ func writeBasicEventElementAsSequence(
 	err = finishProperty(
 		"DisplayName()",
 		writeOptionalSlice(
-			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+			encoder, "displayName", that.DisplayName(), writeListOf_ILangStringNameType,
 		),
 	)
 	if err != nil {
@@ -8760,7 +8760,7 @@ func writeBasicEventElementAsSequence(
 	err = finishProperty(
 		"Description()",
 		writeOptionalSlice(
-			encoder, "description", that.Description(), writeListOfILangStringTextType,
+			encoder, "description", that.Description(), writeListOf_ILangStringTextType,
 		),
 	)
 	if err != nil {
@@ -8783,7 +8783,7 @@ func writeBasicEventElementAsSequence(
 			encoder,
 			"supplementalSemanticIds",
 			that.SupplementalSemanticIDs(),
-			writeListOfIReference,
+			writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -8793,7 +8793,7 @@ func writeBasicEventElementAsSequence(
 	err = finishProperty(
 		"Qualifiers()",
 		writeOptionalSlice(
-			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+			encoder, "qualifiers", that.Qualifiers(), writeListOf_IQualifier,
 		),
 	)
 	if err != nil {
@@ -8806,7 +8806,7 @@ func writeBasicEventElementAsSequence(
 			encoder,
 			"embeddedDataSpecifications",
 			that.EmbeddedDataSpecifications(),
-			writeListOfIEmbeddedDataSpecification,
+			writeListOf_IEmbeddedDataSpecification,
 		),
 	)
 	if err != nil {
@@ -8826,7 +8826,7 @@ func writeBasicEventElementAsSequence(
 	err = finishProperty(
 		"Direction()",
 		writeElement(
-			encoder, "direction", that.Direction(), writeDirectionAsText,
+			encoder, "direction", that.Direction(), writeAsText_Direction,
 		),
 	)
 	if err != nil {
@@ -8836,7 +8836,7 @@ func writeBasicEventElementAsSequence(
 	err = finishProperty(
 		"State()",
 		writeElement(
-			encoder, "state", that.State(), writeStateOfEventAsText,
+			encoder, "state", that.State(), writeAsText_StateOfEvent,
 		),
 	)
 	if err != nil {
@@ -8846,7 +8846,7 @@ func writeBasicEventElementAsSequence(
 	err = finishProperty(
 		"MessageTopic()",
 		writeOptionalPointer(
-			encoder, "messageTopic", that.MessageTopic(), writeStringAsText,
+			encoder, "messageTopic", that.MessageTopic(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8866,7 +8866,7 @@ func writeBasicEventElementAsSequence(
 	err = finishProperty(
 		"LastUpdate()",
 		writeOptionalPointer(
-			encoder, "lastUpdate", that.LastUpdate(), writeStringAsText,
+			encoder, "lastUpdate", that.LastUpdate(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8876,7 +8876,7 @@ func writeBasicEventElementAsSequence(
 	err = finishProperty(
 		"MinInterval()",
 		writeOptionalPointer(
-			encoder, "minInterval", that.MinInterval(), writeStringAsText,
+			encoder, "minInterval", that.MinInterval(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8886,7 +8886,7 @@ func writeBasicEventElementAsSequence(
 	err = finishProperty(
 		"MaxInterval()",
 		writeOptionalPointer(
-			encoder, "maxInterval", that.MaxInterval(), writeStringAsText,
+			encoder, "maxInterval", that.MaxInterval(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8911,7 +8911,7 @@ func writeOperationAsSequence(
 	err = finishProperty(
 		"Extensions()",
 		writeOptionalSlice(
-			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+			encoder, "extensions", that.Extensions(), writeListOf_IExtension,
 		),
 	)
 	if err != nil {
@@ -8921,7 +8921,7 @@ func writeOperationAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeStringAsText,
+			encoder, "category", that.Category(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8931,7 +8931,7 @@ func writeOperationAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeStringAsText,
+			encoder, "idShort", that.IDShort(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -8941,7 +8941,7 @@ func writeOperationAsSequence(
 	err = finishProperty(
 		"DisplayName()",
 		writeOptionalSlice(
-			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+			encoder, "displayName", that.DisplayName(), writeListOf_ILangStringNameType,
 		),
 	)
 	if err != nil {
@@ -8951,7 +8951,7 @@ func writeOperationAsSequence(
 	err = finishProperty(
 		"Description()",
 		writeOptionalSlice(
-			encoder, "description", that.Description(), writeListOfILangStringTextType,
+			encoder, "description", that.Description(), writeListOf_ILangStringTextType,
 		),
 	)
 	if err != nil {
@@ -8974,7 +8974,7 @@ func writeOperationAsSequence(
 			encoder,
 			"supplementalSemanticIds",
 			that.SupplementalSemanticIDs(),
-			writeListOfIReference,
+			writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -8984,7 +8984,7 @@ func writeOperationAsSequence(
 	err = finishProperty(
 		"Qualifiers()",
 		writeOptionalSlice(
-			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+			encoder, "qualifiers", that.Qualifiers(), writeListOf_IQualifier,
 		),
 	)
 	if err != nil {
@@ -8997,7 +8997,7 @@ func writeOperationAsSequence(
 			encoder,
 			"embeddedDataSpecifications",
 			that.EmbeddedDataSpecifications(),
-			writeListOfIEmbeddedDataSpecification,
+			writeListOf_IEmbeddedDataSpecification,
 		),
 	)
 	if err != nil {
@@ -9010,7 +9010,7 @@ func writeOperationAsSequence(
 			encoder,
 			"inputVariables",
 			that.InputVariables(),
-			writeListOfIOperationVariable,
+			writeListOf_IOperationVariable,
 		),
 	)
 	if err != nil {
@@ -9023,7 +9023,7 @@ func writeOperationAsSequence(
 			encoder,
 			"outputVariables",
 			that.OutputVariables(),
-			writeListOfIOperationVariable,
+			writeListOf_IOperationVariable,
 		),
 	)
 	if err != nil {
@@ -9036,7 +9036,7 @@ func writeOperationAsSequence(
 			encoder,
 			"inoutputVariables",
 			that.InoutputVariables(),
-			writeListOfIOperationVariable,
+			writeListOf_IOperationVariable,
 		),
 	)
 	if err != nil {
@@ -9086,7 +9086,7 @@ func writeCapabilityAsSequence(
 	err = finishProperty(
 		"Extensions()",
 		writeOptionalSlice(
-			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+			encoder, "extensions", that.Extensions(), writeListOf_IExtension,
 		),
 	)
 	if err != nil {
@@ -9096,7 +9096,7 @@ func writeCapabilityAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeStringAsText,
+			encoder, "category", that.Category(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9106,7 +9106,7 @@ func writeCapabilityAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeStringAsText,
+			encoder, "idShort", that.IDShort(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9116,7 +9116,7 @@ func writeCapabilityAsSequence(
 	err = finishProperty(
 		"DisplayName()",
 		writeOptionalSlice(
-			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+			encoder, "displayName", that.DisplayName(), writeListOf_ILangStringNameType,
 		),
 	)
 	if err != nil {
@@ -9126,7 +9126,7 @@ func writeCapabilityAsSequence(
 	err = finishProperty(
 		"Description()",
 		writeOptionalSlice(
-			encoder, "description", that.Description(), writeListOfILangStringTextType,
+			encoder, "description", that.Description(), writeListOf_ILangStringTextType,
 		),
 	)
 	if err != nil {
@@ -9149,7 +9149,7 @@ func writeCapabilityAsSequence(
 			encoder,
 			"supplementalSemanticIds",
 			that.SupplementalSemanticIDs(),
-			writeListOfIReference,
+			writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -9159,7 +9159,7 @@ func writeCapabilityAsSequence(
 	err = finishProperty(
 		"Qualifiers()",
 		writeOptionalSlice(
-			encoder, "qualifiers", that.Qualifiers(), writeListOfIQualifier,
+			encoder, "qualifiers", that.Qualifiers(), writeListOf_IQualifier,
 		),
 	)
 	if err != nil {
@@ -9172,7 +9172,7 @@ func writeCapabilityAsSequence(
 			encoder,
 			"embeddedDataSpecifications",
 			that.EmbeddedDataSpecifications(),
-			writeListOfIEmbeddedDataSpecification,
+			writeListOf_IEmbeddedDataSpecification,
 		),
 	)
 	if err != nil {
@@ -9197,7 +9197,7 @@ func writeConceptDescriptionAsSequence(
 	err = finishProperty(
 		"Extensions()",
 		writeOptionalSlice(
-			encoder, "extensions", that.Extensions(), writeListOfIExtension,
+			encoder, "extensions", that.Extensions(), writeListOf_IExtension,
 		),
 	)
 	if err != nil {
@@ -9207,7 +9207,7 @@ func writeConceptDescriptionAsSequence(
 	err = finishProperty(
 		"Category()",
 		writeOptionalPointer(
-			encoder, "category", that.Category(), writeStringAsText,
+			encoder, "category", that.Category(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9217,7 +9217,7 @@ func writeConceptDescriptionAsSequence(
 	err = finishProperty(
 		"IDShort()",
 		writeOptionalPointer(
-			encoder, "idShort", that.IDShort(), writeStringAsText,
+			encoder, "idShort", that.IDShort(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9227,7 +9227,7 @@ func writeConceptDescriptionAsSequence(
 	err = finishProperty(
 		"DisplayName()",
 		writeOptionalSlice(
-			encoder, "displayName", that.DisplayName(), writeListOfILangStringNameType,
+			encoder, "displayName", that.DisplayName(), writeListOf_ILangStringNameType,
 		),
 	)
 	if err != nil {
@@ -9237,7 +9237,7 @@ func writeConceptDescriptionAsSequence(
 	err = finishProperty(
 		"Description()",
 		writeOptionalSlice(
-			encoder, "description", that.Description(), writeListOfILangStringTextType,
+			encoder, "description", that.Description(), writeListOf_ILangStringTextType,
 		),
 	)
 	if err != nil {
@@ -9260,7 +9260,7 @@ func writeConceptDescriptionAsSequence(
 	err = finishProperty(
 		"ID()",
 		writeElement(
-			encoder, "id", that.ID(), writeStringAsText,
+			encoder, "id", that.ID(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9273,7 +9273,7 @@ func writeConceptDescriptionAsSequence(
 			encoder,
 			"embeddedDataSpecifications",
 			that.EmbeddedDataSpecifications(),
-			writeListOfIEmbeddedDataSpecification,
+			writeListOf_IEmbeddedDataSpecification,
 		),
 	)
 	if err != nil {
@@ -9283,7 +9283,7 @@ func writeConceptDescriptionAsSequence(
 	err = finishProperty(
 		"IsCaseOf()",
 		writeOptionalSlice(
-			encoder, "isCaseOf", that.IsCaseOf(), writeListOfIReference,
+			encoder, "isCaseOf", that.IsCaseOf(), writeListOf_IReference,
 		),
 	)
 	if err != nil {
@@ -9298,7 +9298,7 @@ func writeConceptDescriptionAsSequence(
 // in a text element.
 //
 // Do not flush.
-func writeReferenceTypesAsText(
+func writeAsText_ReferenceTypes(
 	encoder *xml.Encoder,
 	value aastypes.ReferenceTypes,
 ) (err error) {
@@ -9334,7 +9334,7 @@ func writeReferenceAsSequence(
 	err = finishProperty(
 		"Type()",
 		writeElement(
-			encoder, "type", that.Type(), writeReferenceTypesAsText,
+			encoder, "type", that.Type(), writeAsText_ReferenceTypes,
 		),
 	)
 	if err != nil {
@@ -9357,7 +9357,7 @@ func writeReferenceAsSequence(
 	err = finishProperty(
 		"Keys()",
 		writeElement(
-			encoder, "keys", that.Keys(), writeListOfIKey,
+			encoder, "keys", that.Keys(), writeListOf_IKey,
 		),
 	)
 	if err != nil {
@@ -9382,7 +9382,7 @@ func writeKeyAsSequence(
 	err = finishProperty(
 		"Type()",
 		writeElement(
-			encoder, "type", that.Type(), writeKeyTypesAsText,
+			encoder, "type", that.Type(), writeAsText_KeyTypes,
 		),
 	)
 	if err != nil {
@@ -9392,7 +9392,7 @@ func writeKeyAsSequence(
 	err = finishProperty(
 		"Value()",
 		writeElement(
-			encoder, "value", that.Value(), writeStringAsText,
+			encoder, "value", that.Value(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9407,7 +9407,7 @@ func writeKeyAsSequence(
 // in a text element.
 //
 // Do not flush.
-func writeKeyTypesAsText(
+func writeAsText_KeyTypes(
 	encoder *xml.Encoder,
 	value aastypes.KeyTypes,
 ) (err error) {
@@ -9433,7 +9433,7 @@ func writeKeyTypesAsText(
 // in a text element.
 //
 // Do not flush.
-func writeDataTypeDefXSDAsText(
+func writeAsText_DataTypeDefXSD(
 	encoder *xml.Encoder,
 	value aastypes.DataTypeDefXSD,
 ) (err error) {
@@ -9469,7 +9469,7 @@ func writeLangStringNameTypeAsSequence(
 	err = finishProperty(
 		"Language()",
 		writeElement(
-			encoder, "language", that.Language(), writeStringAsText,
+			encoder, "language", that.Language(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9479,7 +9479,7 @@ func writeLangStringNameTypeAsSequence(
 	err = finishProperty(
 		"Text()",
 		writeElement(
-			encoder, "text", that.Text(), writeStringAsText,
+			encoder, "text", that.Text(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9504,7 +9504,7 @@ func writeLangStringTextTypeAsSequence(
 	err = finishProperty(
 		"Language()",
 		writeElement(
-			encoder, "language", that.Language(), writeStringAsText,
+			encoder, "language", that.Language(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9514,7 +9514,7 @@ func writeLangStringTextTypeAsSequence(
 	err = finishProperty(
 		"Text()",
 		writeElement(
-			encoder, "text", that.Text(), writeStringAsText,
+			encoder, "text", that.Text(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9542,7 +9542,7 @@ func writeEnvironmentAsSequence(
 			encoder,
 			"assetAdministrationShells",
 			that.AssetAdministrationShells(),
-			writeListOfIAssetAdministrationShell,
+			writeListOf_IAssetAdministrationShell,
 		),
 	)
 	if err != nil {
@@ -9552,7 +9552,7 @@ func writeEnvironmentAsSequence(
 	err = finishProperty(
 		"Submodels()",
 		writeOptionalSlice(
-			encoder, "submodels", that.Submodels(), writeListOfISubmodel,
+			encoder, "submodels", that.Submodels(), writeListOf_ISubmodel,
 		),
 	)
 	if err != nil {
@@ -9565,7 +9565,7 @@ func writeEnvironmentAsSequence(
 			encoder,
 			"conceptDescriptions",
 			that.ConceptDescriptions(),
-			writeListOfIConceptDescription,
+			writeListOf_IConceptDescription,
 		),
 	)
 	if err != nil {
@@ -9621,7 +9621,7 @@ func writeEmbeddedDataSpecificationAsSequence(
 // in a text element.
 //
 // Do not flush.
-func writeDataTypeIEC61360AsText(
+func writeAsText_DataTypeIEC61360(
 	encoder *xml.Encoder,
 	value aastypes.DataTypeIEC61360,
 ) (err error) {
@@ -9657,7 +9657,7 @@ func writeLevelTypeAsSequence(
 	err = finishProperty(
 		"Min()",
 		writeElement(
-			encoder, "min", that.Min(), writeBooleanAsText,
+			encoder, "min", that.Min(), writeAsText_bool,
 		),
 	)
 	if err != nil {
@@ -9667,7 +9667,7 @@ func writeLevelTypeAsSequence(
 	err = finishProperty(
 		"Nom()",
 		writeElement(
-			encoder, "nom", that.Nom(), writeBooleanAsText,
+			encoder, "nom", that.Nom(), writeAsText_bool,
 		),
 	)
 	if err != nil {
@@ -9677,7 +9677,7 @@ func writeLevelTypeAsSequence(
 	err = finishProperty(
 		"Typ()",
 		writeElement(
-			encoder, "typ", that.Typ(), writeBooleanAsText,
+			encoder, "typ", that.Typ(), writeAsText_bool,
 		),
 	)
 	if err != nil {
@@ -9687,7 +9687,7 @@ func writeLevelTypeAsSequence(
 	err = finishProperty(
 		"Max()",
 		writeElement(
-			encoder, "max", that.Max(), writeBooleanAsText,
+			encoder, "max", that.Max(), writeAsText_bool,
 		),
 	)
 	if err != nil {
@@ -9712,7 +9712,7 @@ func writeValueReferencePairAsSequence(
 	err = finishProperty(
 		"Value()",
 		writeElement(
-			encoder, "value", that.Value(), writeStringAsText,
+			encoder, "value", that.Value(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9750,7 +9750,7 @@ func writeValueListAsSequence(
 			encoder,
 			"valueReferencePairs",
 			that.ValueReferencePairs(),
-			writeListOfIValueReferencePair,
+			writeListOf_IValueReferencePair,
 		),
 	)
 	if err != nil {
@@ -9775,7 +9775,7 @@ func writeLangStringPreferredNameTypeIEC61360AsSequence(
 	err = finishProperty(
 		"Language()",
 		writeElement(
-			encoder, "language", that.Language(), writeStringAsText,
+			encoder, "language", that.Language(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9785,7 +9785,7 @@ func writeLangStringPreferredNameTypeIEC61360AsSequence(
 	err = finishProperty(
 		"Text()",
 		writeElement(
-			encoder, "text", that.Text(), writeStringAsText,
+			encoder, "text", that.Text(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9810,7 +9810,7 @@ func writeLangStringShortNameTypeIEC61360AsSequence(
 	err = finishProperty(
 		"Language()",
 		writeElement(
-			encoder, "language", that.Language(), writeStringAsText,
+			encoder, "language", that.Language(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9820,7 +9820,7 @@ func writeLangStringShortNameTypeIEC61360AsSequence(
 	err = finishProperty(
 		"Text()",
 		writeElement(
-			encoder, "text", that.Text(), writeStringAsText,
+			encoder, "text", that.Text(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9845,7 +9845,7 @@ func writeLangStringDefinitionTypeIEC61360AsSequence(
 	err = finishProperty(
 		"Language()",
 		writeElement(
-			encoder, "language", that.Language(), writeStringAsText,
+			encoder, "language", that.Language(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9855,7 +9855,7 @@ func writeLangStringDefinitionTypeIEC61360AsSequence(
 	err = finishProperty(
 		"Text()",
 		writeElement(
-			encoder, "text", that.Text(), writeStringAsText,
+			encoder, "text", that.Text(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9883,7 +9883,7 @@ func writeDataSpecificationIEC61360AsSequence(
 			encoder,
 			"preferredName",
 			that.PreferredName(),
-			writeListOfILangStringPreferredNameTypeIEC61360,
+			writeListOf_ILangStringPreferredNameTypeIEC61360,
 		),
 	)
 	if err != nil {
@@ -9896,7 +9896,7 @@ func writeDataSpecificationIEC61360AsSequence(
 			encoder,
 			"shortName",
 			that.ShortName(),
-			writeListOfILangStringShortNameTypeIEC61360,
+			writeListOf_ILangStringShortNameTypeIEC61360,
 		),
 	)
 	if err != nil {
@@ -9906,7 +9906,7 @@ func writeDataSpecificationIEC61360AsSequence(
 	err = finishProperty(
 		"Unit()",
 		writeOptionalPointer(
-			encoder, "unit", that.Unit(), writeStringAsText,
+			encoder, "unit", that.Unit(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9926,7 +9926,10 @@ func writeDataSpecificationIEC61360AsSequence(
 	err = finishProperty(
 		"SourceOfDefinition()",
 		writeOptionalPointer(
-			encoder, "sourceOfDefinition", that.SourceOfDefinition(), writeStringAsText,
+			encoder,
+			"sourceOfDefinition",
+			that.SourceOfDefinition(),
+			writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9936,7 +9939,7 @@ func writeDataSpecificationIEC61360AsSequence(
 	err = finishProperty(
 		"Symbol()",
 		writeOptionalPointer(
-			encoder, "symbol", that.Symbol(), writeStringAsText,
+			encoder, "symbol", that.Symbol(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9946,7 +9949,7 @@ func writeDataSpecificationIEC61360AsSequence(
 	err = finishProperty(
 		"DataType()",
 		writeOptionalPointer(
-			encoder, "dataType", that.DataType(), writeDataTypeIEC61360AsText,
+			encoder, "dataType", that.DataType(), writeAsText_DataTypeIEC61360,
 		),
 	)
 	if err != nil {
@@ -9959,7 +9962,7 @@ func writeDataSpecificationIEC61360AsSequence(
 			encoder,
 			"definition",
 			that.Definition(),
-			writeListOfILangStringDefinitionTypeIEC61360,
+			writeListOf_ILangStringDefinitionTypeIEC61360,
 		),
 	)
 	if err != nil {
@@ -9969,7 +9972,7 @@ func writeDataSpecificationIEC61360AsSequence(
 	err = finishProperty(
 		"ValueFormat()",
 		writeOptionalPointer(
-			encoder, "valueFormat", that.ValueFormat(), writeStringAsText,
+			encoder, "valueFormat", that.ValueFormat(), writeAsText_string,
 		),
 	)
 	if err != nil {
@@ -9989,7 +9992,7 @@ func writeDataSpecificationIEC61360AsSequence(
 	err = finishProperty(
 		"Value()",
 		writeOptionalPointer(
-			encoder, "value", that.Value(), writeStringAsText,
+			encoder, "value", that.Value(), writeAsText_string,
 		),
 	)
 	if err != nil {

@@ -541,21 +541,21 @@ namespace dummy
                 AtElement<Aas.Container>(
                     ContainerFromSequence, "container"));
 
-            private static readonly ContentReader<string> ReadString = (
+            private static readonly ContentReader<string> Read_string = (
                 AsText<string>(ReadContentAsString, ""));
 
-            private static readonly ContentReader<long> ReadLong = (
+            private static readonly ContentReader<long> Read_long = (
                 AsText<long>(ReadContentAsLong));
 
-            private static readonly ContentReader<INode> ReadINode = (
+            private static readonly ContentReader<INode> Read_INode = (
                 AsElement<Aas.INode>(
                     INodeFromElement));
 
-            private static readonly ContentReader<IBranch> ReadIBranch = (
+            private static readonly ContentReader<IBranch> Read_IBranch = (
                 AsElement<Aas.IBranch>(
                     IBranchFromElement));
 
-            private static readonly ContentReader<ISomething> ReadISomething = (
+            private static readonly ContentReader<ISomething> Read_ISomething = (
                 SomethingFromSequence);
 
             /// <summary>
@@ -629,11 +629,11 @@ namespace dummy
                         switch (elementName)
                         {
                             case "identifier":
-                                theIdentifier = ReadString(
+                                theIdentifier = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadString(
+                                theDescription = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -770,15 +770,15 @@ namespace dummy
                         switch (elementName)
                         {
                             case "identifier":
-                                theIdentifier = ReadString(
+                                theIdentifier = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadString(
+                                theDescription = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
-                                theValue = ReadLong(
+                                theValue = Read_long(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -924,19 +924,19 @@ namespace dummy
                         switch (elementName)
                         {
                             case "identifier":
-                                theIdentifier = ReadString(
+                                theIdentifier = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
-                                theDescription = ReadString(
+                                theDescription = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
-                                theValue = ReadLong(
+                                theValue = Read_long(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "details":
-                                theDetails = ReadString(
+                                theDetails = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -1061,11 +1061,11 @@ namespace dummy
                         switch (elementName)
                         {
                             case "someChoice":
-                                theSomeChoice = ReadINode(
+                                theSomeChoice = Read_INode(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "somethingWithoutChoice":
-                                theSomethingWithoutChoice = ReadIBranch(
+                                theSomethingWithoutChoice = Read_IBranch(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -1168,11 +1168,11 @@ namespace dummy
                         switch (elementName)
                         {
                             case "node":
-                                theNode = ReadINode(
+                                theNode = Read_INode(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "something":
-                                theSomething = ReadISomething(
+                                theSomething = Read_ISomething(
                                     reader, isEmptyProperty, out error);
                                 break;
                             default:
@@ -1629,19 +1629,19 @@ namespace dummy
                 that.Accept(_instance, writer);
             }
 
-            private static readonly ContentWriter<string> WriteString = (
+            private static readonly ContentWriter<string> Write_string = (
                 (that, writer) => writer.WriteValue(that));
 
-            private static readonly ContentWriter<long> WriteLong = (
+            private static readonly ContentWriter<long> Write_long = (
                 (that, writer) => writer.WriteValue(that));
 
-            private static readonly ContentWriter<INode> WriteINode = (
+            private static readonly ContentWriter<INode> Write_INode = (
                 WriteIClass);
 
-            private static readonly ContentWriter<IBranch> WriteIBranch = (
+            private static readonly ContentWriter<IBranch> Write_IBranch = (
                 WriteIClass);
 
-            private static readonly ContentWriter<ISomething> WriteISomething = (
+            private static readonly ContentWriter<ISomething> Write_ISomething = (
                 SomethingToSequence);
 
             private static void BranchToSequence(
@@ -1649,10 +1649,10 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "identifier", that.Identifier, writer, WriteString);
+                    "identifier", that.Identifier, writer, Write_string);
 
                 WriteElement(
-                    "description", that.Description, writer, WriteString);
+                    "description", that.Description, writer, Write_string);
             }  // private static void BranchToSequence
 
             public override void VisitBranch(
@@ -1673,13 +1673,13 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "identifier", that.Identifier, writer, WriteString);
+                    "identifier", that.Identifier, writer, Write_string);
 
                 WriteElement(
-                    "description", that.Description, writer, WriteString);
+                    "description", that.Description, writer, Write_string);
 
                 WriteElement(
-                    "value", that.Value, writer, WriteLong);
+                    "value", that.Value, writer, Write_long);
             }  // private static void LeafToSequence
 
             public override void VisitLeaf(
@@ -1700,16 +1700,16 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "identifier", that.Identifier, writer, WriteString);
+                    "identifier", that.Identifier, writer, Write_string);
 
                 WriteElement(
-                    "description", that.Description, writer, WriteString);
+                    "description", that.Description, writer, Write_string);
 
                 WriteElement(
-                    "value", that.Value, writer, WriteLong);
+                    "value", that.Value, writer, Write_long);
 
                 WriteElement(
-                    "details", that.Details, writer, WriteString);
+                    "details", that.Details, writer, Write_string);
             }  // private static void BlossomToSequence
 
             public override void VisitBlossom(
@@ -1730,10 +1730,10 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "someChoice", that.SomeChoice, writer, WriteINode);
+                    "someChoice", that.SomeChoice, writer, Write_INode);
 
                 WriteElement(
-                    "somethingWithoutChoice", that.SomethingWithoutChoice, writer, WriteIBranch);
+                    "somethingWithoutChoice", that.SomethingWithoutChoice, writer, Write_IBranch);
             }  // private static void SomethingToSequence
 
             public override void VisitSomething(
@@ -1754,10 +1754,10 @@ namespace dummy
                 Xml.XmlWriter writer)
             {
                 WriteElement(
-                    "node", that.Node, writer, WriteINode);
+                    "node", that.Node, writer, Write_INode);
 
                 WriteElement(
-                    "something", that.Something, writer, WriteISomething);
+                    "something", that.Something, writer, Write_ISomething);
             }  // private static void ContainerToSequence
 
             public override void VisitContainer(

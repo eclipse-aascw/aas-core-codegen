@@ -54,16 +54,63 @@ def _join_arguments(arguments: Sequence[str], indention: int) -> str:
     return ",\n".join(arguments) + ","
 
 
-_SCALAR_NAME_BY_PRIMITIVE_TYPE = {
-    intermediate.PrimitiveType.BOOL: "boolean",
+# NOTE (mristin):
+# A Golang primitive is not usable as a part of an identifier as it is spelled
+# (``[]byte``), so the primitives need monikers of their own. The monikers are
+# *lower-case* on purpose: every one of our types is named through
+# :py:func:`aas_core_codegen.naming.capitalized_camel_case`, which always yields
+# an upper-case initial, so a primitive moniker can never be confused for one of
+# our types -- not even for an enumeration which somebody named ``String``. They
+# are keyed by the meta-model primitive rather than by the Golang spelling, so that
+# the mapping is total by construction.
+_PRIMITIVE_TYPE_TO_MONIKER = {
+    intermediate.PrimitiveType.BOOL: "bool",
     intermediate.PrimitiveType.INT: "long",
     intermediate.PrimitiveType.FLOAT: "double",
     intermediate.PrimitiveType.STR: "string",
-    intermediate.PrimitiveType.BYTEARRAY: "base64_encoded_bytes",
+    intermediate.PrimitiveType.BYTEARRAY: "bytes",
 }
 assert all(
-    literal in _SCALAR_NAME_BY_PRIMITIVE_TYPE for literal in intermediate.PrimitiveType
+    literal in _PRIMITIVE_TYPE_TO_MONIKER for literal in intermediate.PrimitiveType
 )
+assert all(
+    moniker.islower() for moniker in _PRIMITIVE_TYPE_TO_MONIKER.values()
+), "The primitive monikers have to be lower-case, see the note above"
+
+
+@ensure(lambda result: "_" not in result)
+def _leaf_moniker(type_anno: intermediate.AtomicTypeAnnotation) -> str:
+    """
+    Name the type of ``type_anno`` as a part of an identifier.
+
+    Everything which is not a primitive is named as the Golang type is, so that
+    the name of a function can not drift apart from the type it operates on.
+
+    The result must not contain an underscore, since the underscore is what
+    separates a moniker from the rest of a composed name -- see the note above
+    :py:func:`_scalar_item_reader_name`.
+    """
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        return _PRIMITIVE_TYPE_TO_MONIKER[primitive_type]
+
+    assert isinstance(
+        type_anno, intermediate.OurTypeAnnotation
+    ), f"Unexpected type annotation for a moniker: {type_anno}"
+
+    our_type = type_anno.our_type
+
+    if isinstance(our_type, intermediate.Enumeration):
+        return golang_naming.enum_name(our_type.name)
+
+    if isinstance(our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)):
+        return golang_naming.interface_name(our_type.name)
+
+    assert isinstance(
+        our_type, intermediate.NamedUnion
+    ), f"Unexpected our type for a moniker: {our_type}"
+
+    return golang_naming.union_name(our_type.name)
 
 
 class _ScalarItem:
@@ -88,92 +135,53 @@ class _ScalarItem:
         self.element_name = element_name
 
 
-def _scalar_name(type_anno: intermediate.AtomicTypeAnnotation) -> str:
-    """Name the scalar ``type_anno`` for the use in an identifier."""
-    primitive_type = intermediate.try_primitive_type(type_anno)
-    if primitive_type is not None:
-        return _SCALAR_NAME_BY_PRIMITIVE_TYPE[primitive_type]
+# NOTE (mristin):
+# Every name which spells out a *type* puts the moniker last, after an underscore:
+# ``readAtV{i}_{M}``, ``readTextAs_{M}``, ``writeListOf_{M}``,
+# ``writeTupleOf{N}_{M}_{M}...`` and their duals. A tuple states its arity and
+# separates its items, so these names are a Polish notation over ``_``-separated
+# tokens. Since a leaf moniker never contains an underscore (see
+# :py:func:`_leaf_moniker`), the encoding is injective -- two different types can
+# not be given the same moniker, and hence two different functions can not be
+# given the same name.
+#
+# The underscore also keeps these names apart from the ones keyed by one of our
+# symbols -- ``read*AsSequence``, ``read*Dispatched`` *etc.* Those go through
+# :py:func:`aas_core_codegen.golang.naming.private_function_name`, which never
+# emits an underscore.
 
-    assert isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
-        type_anno.our_type, intermediate.Enumeration
-    ), (
-        f"Expected a scalar type annotation, but got {type_anno}; "
-        f"the instances are de/serialized as their own element instead"
-    )
 
-    return type_anno.our_type.name
-
-
+@require(lambda element_name: element_name.startswith("v"))
 def _scalar_item_reader_name(
     type_anno: intermediate.AtomicTypeAnnotation, element_name: str
 ) -> Identifier:
     """Name the function reading a scalar ``type_anno`` in ``element_name``."""
-    return golang_naming.private_function_name(
-        Identifier(f"read_{_scalar_name(type_anno)}_at_{element_name}")
-    )
+    return Identifier(f"readAtV{element_name[1:]}_{_leaf_moniker(type_anno)}")
 
 
+@require(lambda element_name: element_name.startswith("v"))
 def _scalar_item_writer_name(
     type_anno: intermediate.AtomicTypeAnnotation, element_name: str
 ) -> Identifier:
     """Name the function writing a scalar ``type_anno`` in ``element_name``."""
-    return golang_naming.private_function_name(
-        Identifier(f"write_{_scalar_name(type_anno)}_at_{element_name}")
-    )
+    return Identifier(f"writeAtV{element_name[1:]}_{_leaf_moniker(type_anno)}")
 
 
-# NOTE (mristin):
-# A Golang primitive is not usable as a part of an identifier as it is spelled
-# (``[]byte``, and the lower-case names read badly), so the primitives are the only
-# types which have to be renamed. They are keyed by the meta-model primitive rather
-# than by the Golang spelling, so that the mapping is total by construction.
-_MONIKER_BY_PRIMITIVE_TYPE = {
-    intermediate.PrimitiveType.BOOL: "Bool",
-    intermediate.PrimitiveType.INT: "Long",
-    intermediate.PrimitiveType.FLOAT: "Double",
-    intermediate.PrimitiveType.STR: "String",
-    intermediate.PrimitiveType.BYTEARRAY: "Bytes",
-}
-assert all(
-    literal in _MONIKER_BY_PRIMITIVE_TYPE for literal in intermediate.PrimitiveType
-)
+def _enum_text_reader_name(enumeration: intermediate.Enumeration) -> Identifier:
+    """Name the function reading the text content of an element as ``enumeration``."""
+    return Identifier(f"readTextAs_{golang_naming.enum_name(enumeration.name)}")
 
 
-def _type_moniker(type_anno: intermediate.AtomicTypeAnnotation) -> str:
-    """
-    Name the type of ``type_anno`` as a part of an identifier.
-
-    Everything which is not a primitive is named as the Golang type is, so that
-    the name of a function can not drift apart from the type it operates on.
-    """
-    primitive_type = intermediate.try_primitive_type(type_anno)
-    if primitive_type is not None:
-        return _MONIKER_BY_PRIMITIVE_TYPE[primitive_type]
-
-    assert isinstance(
-        type_anno, intermediate.OurTypeAnnotation
-    ), f"Unexpected type annotation for a moniker: {type_anno}"
-
-    our_type = type_anno.our_type
-
-    if isinstance(our_type, intermediate.Enumeration):
-        return golang_naming.enum_name(our_type.name)
-
-    if isinstance(our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)):
-        return golang_naming.interface_name(our_type.name)
-
-    assert isinstance(
-        our_type, intermediate.NamedUnion
-    ), f"Unexpected our type for a moniker: {our_type}"
-
-    return golang_naming.union_name(our_type.name)
+def _enum_text_writer_name(enumeration: intermediate.Enumeration) -> Identifier:
+    """Name the function writing ``enumeration`` as the text content of an element."""
+    return Identifier(f"writeAsText_{golang_naming.enum_name(enumeration.name)}")
 
 
 def _list_content_writer_name(
     items_type_anno: intermediate.AtomicTypeAnnotation,
 ) -> Stripped:
     """Name the function which writes the content of a list of ``items_type_anno``."""
-    return Stripped(f"writeListOf{_type_moniker(items_type_anno)}")
+    return Stripped(f"writeListOf_{_leaf_moniker(items_type_anno)}")
 
 
 def _tuple_content_writer_name(type_anno: intermediate.TupleTypeAnnotation) -> Stripped:
@@ -181,11 +189,11 @@ def _tuple_content_writer_name(type_anno: intermediate.TupleTypeAnnotation) -> S
     monikers = []  # type: List[str]
     for item_type_anno in type_anno.items:
         assert isinstance(item_type_anno, intermediate.AtomicTypeAnnotationAsTuple)
-        monikers.append(_type_moniker(item_type_anno))
+        monikers.append(_leaf_moniker(item_type_anno))
 
-    joined = "".join(monikers)
+    joined = "_".join(monikers)
 
-    return Stripped(f"writeTupleOf{joined}")
+    return Stripped(f"writeTupleOf{len(monikers)}_{joined}")
 
 
 def _requires_dispatch(type_anno: intermediate.TypeAnnotation) -> bool:
@@ -271,7 +279,7 @@ def _collect_requirements(
             dispatched_type_ids.add(id(item_type_anno.our_type))
             return
 
-        key = (_scalar_name(item_type_anno), element_name)
+        key = (_leaf_moniker(item_type_anno), element_name)
         if key not in observed_scalar_items:
             observed_scalar_items.add(key)
             scalar_items.append(
@@ -514,7 +522,7 @@ func readText(
     )
 
 
-def _generate_read_text_as_boolean() -> Stripped:
+def _generate_read_text_as_bool() -> Stripped:
     return Stripped(
         f"""\
 // Consume the text tokens (char data) as a representation of a `xs:boolean`.
@@ -525,7 +533,7 @@ def _generate_read_text_as_boolean() -> Stripped:
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsBoolean(
+func readTextAs_bool(
 {I}decoder *xml.Decoder,
 {I}current xml.Token,
 ) (value bool, next xml.Token, err error) {{
@@ -572,7 +580,7 @@ def _generate_read_text_as_long() -> Stripped:
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsLong(
+func readTextAs_long(
 {I}decoder *xml.Decoder,
 {I}current xml.Token,
 ) (value int64, next xml.Token, err error) {{
@@ -655,7 +663,7 @@ def _generate_read_text_as_double() -> Stripped:
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsDouble(
+func readTextAs_double(
 {I}decoder *xml.Decoder,
 {I}current xml.Token,
 ) (value float64, next xml.Token, err error) {{
@@ -703,7 +711,7 @@ func readTextAsDouble(
     )
 
 
-def _generate_read_text_as_base64_encoded_bytes() -> Stripped:
+def _generate_read_text_as_bytes() -> Stripped:
     return Stripped(
         f"""\
 // Consume the text tokens (char data) as a base64-encoded bytes.
@@ -714,7 +722,7 @@ def _generate_read_text_as_base64_encoded_bytes() -> Stripped:
 // nor comment.
 //
 // If we reached the end-of-file, `next` is an [eof] sentinel token.
-func readTextAsBase64EncodedBytes(
+func readTextAs_bytes(
 {I}decoder *xml.Decoder,
 {I}current xml.Token,
 ) (value []byte, next xml.Token, err error) {{
@@ -1133,8 +1141,8 @@ def _generate_read_optional() -> Stripped:
 // The arguments are the *results* of a read, not the reader itself. Go passes
 // a multi-valued call on as a complete argument list, so this composes with any read,
 // no matter how many arguments that read takes on its own --
-// `readOptional(readTextAsLong(decoder, current))` just as much as
-// `readOptional(readTuple2(decoder, current, readXAtV1, readYAtV2))`, which no
+// `readOptional(readTextAs_long(decoder, current))` just as much as
+// `readOptional(readTuple2(decoder, current, readAtV1_X, readAtV2_Y))`, which no
 // reader-taking signature could express, since the item readers of a tuple vary in
 // number and in type.
 func readOptional[T any](
@@ -1330,9 +1338,7 @@ def _generate_read_text_as_enumeration(
         Identifier(f"{enumeration.name}_from_string")
     )
 
-    function_name = golang_naming.private_function_name(
-        Identifier(f"read_text_as_{enumeration.name}")
-    )
+    function_name = _enum_text_reader_name(enumeration)
 
     return Stripped(
         f"""\
@@ -1376,11 +1382,11 @@ func {function_name}(
 
 
 _READ_FUNCTION_BY_PRIMITIVE_TYPE = {
-    intermediate.PrimitiveType.BOOL: "readTextAsBoolean",
-    intermediate.PrimitiveType.INT: "readTextAsLong",
-    intermediate.PrimitiveType.FLOAT: "readTextAsDouble",
+    intermediate.PrimitiveType.BOOL: "readTextAs_bool",
+    intermediate.PrimitiveType.INT: "readTextAs_long",
+    intermediate.PrimitiveType.FLOAT: "readTextAs_double",
     intermediate.PrimitiveType.STR: "readText",
-    intermediate.PrimitiveType.BYTEARRAY: "readTextAsBase64EncodedBytes",
+    intermediate.PrimitiveType.BYTEARRAY: "readTextAs_bytes",
 }
 assert all(
     literal in _READ_FUNCTION_BY_PRIMITIVE_TYPE
@@ -1401,11 +1407,7 @@ def _read_text_function(type_anno: intermediate.AtomicTypeAnnotation) -> Strippe
         f"the instances are read by dispatch on their own element name instead"
     )
 
-    return Stripped(
-        golang_naming.private_function_name(
-            Identifier(f"read_text_as_{type_anno.our_type.name}")
-        )
-    )
+    return Stripped(_enum_text_reader_name(type_anno.our_type))
 
 
 def _item_reader_name(
@@ -2150,13 +2152,13 @@ func writeText(
     )
 
 
-def _generate_write_boolean_as_text() -> Stripped:
+def _generate_write_as_text_bool() -> Stripped:
     return Stripped(
         f"""\
 // Write the `value` as a `xs:boolean` in a text element.
 //
 // Do not flush.
-func writeBooleanAsText(
+func writeAsText_bool(
 {I}encoder *xml.Encoder,
 {I}value bool,
 ) (err error) {{
@@ -2170,13 +2172,13 @@ func writeBooleanAsText(
     )
 
 
-def _generate_write_long_as_text() -> Stripped:
+def _generate_write_as_text_long() -> Stripped:
     return Stripped(
         f"""\
 // Write the `value` as a `xs:long` in a text element.
 //
 // Do not flush.
-func writeLongAsText(
+func writeAsText_long(
 {I}encoder *xml.Encoder,
 {I}value int64,
 ) (err error) {{
@@ -2187,13 +2189,13 @@ func writeLongAsText(
     )
 
 
-def _generate_write_double_as_text() -> Stripped:
+def _generate_write_as_text_double() -> Stripped:
     return Stripped(
         f"""\
 // Write the `value` as a `xs:double` in a text element.
 //
 // Do not flush.
-func writeDoubleAsText(
+func writeAsText_double(
 {I}encoder *xml.Encoder,
 {I}value float64,
 ) (err error) {{
@@ -2219,13 +2221,13 @@ func writeDoubleAsText(
     )
 
 
-def _generate_write_string_as_text() -> Stripped:
+def _generate_write_as_text_string() -> Stripped:
     return Stripped(
         f"""\
 // Write the `value` as a `xs:string` in a text element.
 //
 // Do not flush.
-func writeStringAsText(
+func writeAsText_string(
 {I}encoder *xml.Encoder,
 {I}value string,
 ) (err error) {{
@@ -2235,13 +2237,13 @@ func writeStringAsText(
     )
 
 
-def _generate_write_bytes_as_text() -> Stripped:
+def _generate_write_as_text_bytes() -> Stripped:
     return Stripped(
         f"""\
 // Write the `value` as a base64-encoded bytes in a text element.
 //
 // Do not flush.
-func writeBytesAsText(
+func writeAsText_bytes(
 {I}encoder *xml.Encoder,
 {I}value []byte,
 ) (err error) {{
@@ -2655,9 +2657,7 @@ def _generate_write_enumeration_as_text(
     enumeration: intermediate.Enumeration,
 ) -> Stripped:
     enum_name = golang_naming.enum_name(enumeration.name)
-    function_name = golang_naming.private_function_name(
-        Identifier(f"write_{enumeration.name}_as_text")
-    )
+    function_name = _enum_text_writer_name(enumeration)
     to_string_name = golang_naming.function_name(
         Identifier(f"{enumeration.name}_to_string")
     )
@@ -2693,11 +2693,11 @@ func {function_name}(
 
 
 _WRITE_FUNCTION_BY_PRIMITIVE_TYPE = {
-    intermediate.PrimitiveType.BOOL: "writeBooleanAsText",
-    intermediate.PrimitiveType.INT: "writeLongAsText",
-    intermediate.PrimitiveType.FLOAT: "writeDoubleAsText",
-    intermediate.PrimitiveType.STR: "writeStringAsText",
-    intermediate.PrimitiveType.BYTEARRAY: "writeBytesAsText",
+    intermediate.PrimitiveType.BOOL: "writeAsText_bool",
+    intermediate.PrimitiveType.INT: "writeAsText_long",
+    intermediate.PrimitiveType.FLOAT: "writeAsText_double",
+    intermediate.PrimitiveType.STR: "writeAsText_string",
+    intermediate.PrimitiveType.BYTEARRAY: "writeAsText_bytes",
 }
 assert all(
     literal in _WRITE_FUNCTION_BY_PRIMITIVE_TYPE
@@ -2718,11 +2718,7 @@ def _write_text_function(type_anno: intermediate.AtomicTypeAnnotation) -> Stripp
         f"the instances are written as their own element instead"
     )
 
-    return Stripped(
-        golang_naming.private_function_name(
-            Identifier(f"write_{type_anno.our_type.name}_as_text")
-        )
-    )
+    return Stripped(_enum_text_writer_name(type_anno.our_type))
 
 
 def _generate_write_scalar_item(scalar_item: _ScalarItem) -> Stripped:
@@ -3260,11 +3256,11 @@ type eof struct{}"""
             _generate_read_next(),
             _generate_skip_empty_text_whitespace_and_comments(),
             _generate_read_text(),
-            _generate_read_text_as_boolean(),
+            _generate_read_text_as_bool(),
             _generate_read_text_as_long(),
             *_generate_is_valid_xs_double(),
             _generate_read_text_as_double(),
-            _generate_read_text_as_base64_encoded_bytes(),
+            _generate_read_text_as_bytes(),
             Stripped(
                 f"""\
 const Namespace = {namespace_literal}"""
@@ -3347,11 +3343,11 @@ const Namespace = {namespace_literal}"""
             _generate_write_start_element(),
             _generate_write_end_element(),
             _generate_write_text(),
-            _generate_write_boolean_as_text(),
-            _generate_write_long_as_text(),
-            _generate_write_double_as_text(),
-            _generate_write_string_as_text(),
-            _generate_write_bytes_as_text(),
+            _generate_write_as_text_bool(),
+            _generate_write_as_text_long(),
+            _generate_write_as_text_double(),
+            _generate_write_as_text_string(),
+            _generate_write_as_text_bytes(),
             _generate_write_element(),
             _generate_write_optional_pointer(),
             _generate_write_optional_instance(),
