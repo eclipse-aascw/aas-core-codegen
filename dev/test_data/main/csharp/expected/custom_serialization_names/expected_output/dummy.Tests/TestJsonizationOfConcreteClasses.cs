@@ -144,7 +144,9 @@ namespace dummy.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing QueryCondition, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");

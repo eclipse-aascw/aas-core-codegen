@@ -2,7 +2,7 @@
 
 import io
 import textwrap
-from typing import Tuple, Optional, List
+from typing import Final, List, Mapping, Optional, Set, Tuple
 
 from icontract import ensure, require
 
@@ -27,6 +27,388 @@ from aas_core_codegen.csharp.common import (
 )
 
 
+# NOTE (mristin):
+# The generated code is indented by the emitter after the fact, so
+# the generator has to compare against what is left of a line at the depth
+# where the snippet will end up. That depth is spelled out as ``len(I) * N``
+# at the comparison: a de-serializer field lands three levels in -- the
+# namespace, ``Jsonization`` and ``DeserializeImplementation``.
+#
+# The name of a de-serializer field spells out the name of its type, so both
+# occur twice in its declaration -- a list of a long class name alone runs to
+# some 145 characters. Where a declaration does not fit, the type argument is
+# broken out onto a line of its own.
+_MAX_LINE_LENGTH: Final[int] = 100
+
+
+def _generate_describe_helper() -> Stripped:
+    """Generate the helper describing a node in an error message."""
+    return Stripped(
+        f"""\
+/// <summary>
+/// Describe <paramref name="node" /> in an error message.
+/// </summary>
+/// <remarks>
+/// A JSON null is represented as a null node, so every "expected ..., but
+/// got ..." message has to account for it. Doing so here, once, is what lets
+/// a de-serializer take a nullable node and reject a null itself, instead of
+/// every one of its callers checking for a null before calling it.
+/// </remarks>
+/// <param name="node">JSON node to be described</param>
+private static string Describe(Nodes.JsonNode? node)
+{{
+{I}return (node == null)
+{II}? "a null"
+{II}: node.GetType().ToString();
+}}"""
+    )
+
+
+def _generate_deserializer_delegate() -> Stripped:
+    """Generate the one delegate shared by every de-serialization."""
+    return Stripped(
+        f"""\
+/// <summary>
+/// De-serialize a value from <paramref name="node" />.
+/// </summary>
+/// <remarks>
+/// This is the one shape of every de-serialization, which is what lets
+/// the de-serializations be composed: an <c>As*</c> combinator turns
+/// the de-serializers of the items into the de-serializer of a list or
+/// of a tuple of them, and the <c>...From</c> function of a primitive,
+/// an enumeration, a class, an interface or a named union already is one.
+///
+/// Return the value; on failure it is meaningless and
+/// <paramref name="error" /> says why. A plain <c>T</c> rather than
+/// a <c>T?</c>, so that one unconstrained delegate serves both the value
+/// and the reference types: for a value type an unconstrained <c>T?</c>
+/// erases to plain <c>T</c> rather than to <c>System.Nullable&lt;T&gt;</c>,
+/// so a <c>T?</c> would have to be split into a <c>class</c>- and
+/// a <c>struct</c>-constrained variant, and anything ranging over both --
+/// such as the items of a tuple -- would then need an adapter between them.
+///
+/// The <paramref name="node" /> is nullable since a JSON null is represented
+/// as a null node. Each de-serializer rejects it with a message of its own,
+/// so that the check is paid once per type instead of once per property.
+///
+/// <typeparamref name="T" /> is covariant, so that the de-serializer of
+/// a concrete class can be used as the de-serializer of an item of a list of
+/// its interface.
+/// </remarks>
+/// <typeparam name="T">Type of the de-serialized value</typeparam>
+private delegate T Deserializer<out T>(
+{I}Nodes.JsonNode? node,
+{I}out Reporting.Error? error);"""
+    )
+
+
+def _generate_as_array_of_helper() -> Stripped:
+    """Generate the combinator de-serializing a JSON array."""
+    return Stripped(
+        f"""\
+/// <summary>
+/// De-serialize every item of a JSON array with
+/// <paramref name="deserializeItem" />.
+/// </summary>
+/// <remarks>
+/// This is shared by all the list-typed constructor arguments, regardless of
+/// whether their items de-serialize into a reference or into a value type.
+/// The result is cached in a <c>static readonly</c> field per item type
+/// (see <c>Parse_ListOf_*</c>), so that composing it costs nothing at
+/// the point of use.
+/// </remarks>
+/// <typeparam name="T">Type of a single array item</typeparam>
+private static Deserializer<List<T>> AsArrayOf<T>(
+{I}Deserializer<T> deserializeItem)
+{{
+{I}return (
+{II}Nodes.JsonNode? node,
+{II}out Reporting.Error? error) =>
+{II}{{
+{III}error = null;
+
+{III}Nodes.JsonArray? array = node as Nodes.JsonArray;
+{III}if (array == null)
+{III}{{
+{IIII}error = new Reporting.Error(
+{IIIII}$"Expected a JsonArray, but got {{Describe(node)}}");
+{IIII}return default!;
+{III}}}
+
+{III}List<T> result = new List<T>(array.Count);
+
+{III}int index = 0;
+{III}foreach (Nodes.JsonNode? item in array)
+{III}{{
+{IIII}T parsedItem = deserializeItem(item, out error);
+{IIII}if (error != null)
+{IIII}{{
+{IIIII}error.PrependSegment(
+{IIIII}{I}new Reporting.IndexSegment(
+{IIIII}{II}index));
+{IIIII}return default!;
+{IIII}}}
+
+{IIII}result.Add(parsedItem);
+
+{IIII}index++;
+{III}}}
+
+{III}return result;
+{II}}};
+}}"""
+    )
+
+
+@require(lambda arity: arity > 0)
+def _generate_as_tuple_helper(arity: int) -> Stripped:
+    """
+    Generate the combinator de-serializing a tuple of the given ``arity``.
+
+    Unlike a list, a tuple is heterogeneous: each position has its own type,
+    possibly a mix of reference and value types. One unconstrained
+    ``Deserializer<T>`` per position is what lets a single ``AsTuple{N}``
+    serve every tuple-typed property of that arity -- see the remarks
+    on ``Deserializer<T>``.
+    """
+    type_params = [f"T{i}" for i in range(arity)]
+    type_params_joined = ", ".join(type_params)
+
+    if arity == 1:
+        tuple_type = f"System.ValueTuple<{type_params[0]}>"
+    else:
+        tuple_type = f"({type_params_joined})"
+
+    params_joined = ",\n".join(
+        f"Deserializer<T{i}> deserializeItem{i}" for i in range(arity)
+    )
+
+    item_blocks = []  # type: List[Stripped]
+    for i in range(arity):
+        item_blocks.append(
+            Stripped(
+                f"""\
+T{i} item{i} = deserializeItem{i}(array[{i}], out error);
+if (error != null)
+{{
+{I}error.PrependSegment(
+{II}new Reporting.IndexSegment(
+{III}{i}));
+{I}return default!;
+}}"""
+            )
+        )
+
+    item_blocks_joined = "\n\n".join(item_blocks)
+
+    item_vars_joined = ",\n".join(f"item{i}" for i in range(arity))
+
+    if arity == 1:
+        return_expr = "System.ValueTuple.Create(item0)"
+    else:
+        return_expr = f"""\
+(
+{I}{indent_but_first_line(item_vars_joined, I)}
+)"""
+
+    return Stripped(
+        f"""\
+/// <summary>
+/// De-serialize a JSON array as a tuple of {arity} item(s).
+/// </summary>
+/// <remarks>
+/// This is shared by all the tuple-typed properties of arity {arity}.
+/// </remarks>
+private static Deserializer<{tuple_type}> AsTuple{arity}<{type_params_joined}>(
+{I}{indent_but_first_line(params_joined, I)})
+{{
+{I}return (
+{II}Nodes.JsonNode? node,
+{II}out Reporting.Error? error) =>
+{II}{{
+{III}error = null;
+
+{III}Nodes.JsonArray? array = node as Nodes.JsonArray;
+{III}if (array == null)
+{III}{{
+{IIII}error = new Reporting.Error(
+{IIIII}$"Expected a JsonArray, but got {{Describe(node)}}");
+{IIII}return default!;
+{III}}}
+
+{III}if (array.Count != {arity})
+{III}{{
+{IIII}error = new Reporting.Error(
+{IIIII}$"Expected exactly {arity} item(s) in the JsonArray, " +
+{IIIII}$"but got: {{array.Count}}");
+{IIII}return default!;
+{III}}}
+
+{III}{indent_but_first_line(item_blocks_joined, III)}
+
+{III}return {indent_but_first_line(return_expr, III)};
+{II}}};
+}}"""
+    )
+
+
+def _generate_model_type_from_helper() -> Stripped:
+    """Generate the helper extracting the ``modelType`` of a JSON object."""
+    return Stripped(
+        f"""\
+/// <summary>
+/// Extract the <c>modelType</c> property of <paramref name="obj" />.
+/// </summary>
+/// <param name="obj">JSON object to be inspected</param>
+/// <param name="error">Error, if any, during the deserialization</param>
+private static string ModelTypeFrom(
+{I}Nodes.JsonObject obj,
+{I}out Reporting.Error? error)
+{{
+{I}Nodes.JsonNode? modelTypeNode = obj["modelType"];
+{I}if (modelTypeNode == null)
+{I}{{
+{II}error = new Reporting.Error(
+{III}"Expected a model type, but none is present");
+{II}return default!;
+{I}}}
+
+{I}return StringFrom(modelTypeNode, out error);
+}}"""
+    )
+
+
+# NOTE (mristin):
+# The de-serializer of an atomic value is a function named after the type, so
+# that a call site can simply name it. Only a list and a tuple have no type of
+# ours to be named after; they are composed by a combinator and cached in
+# a field, see :py:func:`_deserializer_name`.
+_FROM_METHOD_BY_PRIMITIVE_TYPE: Final[Mapping[intermediate.PrimitiveType, str]] = {
+    intermediate.PrimitiveType.BOOL: "BoolFrom",
+    intermediate.PrimitiveType.INT: "LongFrom",
+    intermediate.PrimitiveType.FLOAT: "DoubleFrom",
+    intermediate.PrimitiveType.STR: "StringFrom",
+    intermediate.PrimitiveType.BYTEARRAY: "BytesFrom",
+}
+
+# NOTE (mristin):
+# How a primitive is called in an error message. This is what the reader of
+# the message is after -- "a boolean" says what was expected, whereas
+# the name of the underlying ``System.Text.Json`` node type does not.
+_PRIMITIVE_TYPE_DESCRIPTION: Final[Mapping[intermediate.PrimitiveType, str]] = {
+    intermediate.PrimitiveType.BOOL: "a boolean",
+    intermediate.PrimitiveType.INT: "a 64-bit long integer",
+    intermediate.PrimitiveType.FLOAT: "a 64-bit double-precision float",
+    intermediate.PrimitiveType.STR: "a string",
+    intermediate.PrimitiveType.BYTEARRAY: "Base-64 encoded bytes",
+}
+
+assert all(
+    primitive_type in _FROM_METHOD_BY_PRIMITIVE_TYPE
+    and primitive_type in _PRIMITIVE_TYPE_DESCRIPTION
+    for primitive_type in intermediate.PrimitiveType
+)
+
+
+def _generate_primitive_converter(
+    primitive_type: intermediate.PrimitiveType,
+) -> Stripped:
+    """Generate the function converting a JSON node to the ``primitive_type``."""
+    name = _FROM_METHOD_BY_PRIMITIVE_TYPE[primitive_type]
+    description = _PRIMITIVE_TYPE_DESCRIPTION[primitive_type]
+    value_type = csharp_common.PRIMITIVE_TYPE_MAP[primitive_type]
+
+    conversion_failed = Stripped(
+        f"""\
+error = new Reporting.Error(
+{I}"Expected {description}, but the conversion failed " +
+{I}$"from {{value.ToJsonString()}}");
+return default!;"""
+    )
+
+    body: Stripped
+
+    if primitive_type is intermediate.PrimitiveType.BYTEARRAY:
+        body = Stripped(
+            f"""\
+bool ok = value.TryGetValue<string>(out string? text);
+if (!ok)
+{{
+{I}{indent_but_first_line(conversion_failed, I)}
+}}
+if (text == null)
+{{
+{I}error = new Reporting.Error(
+{II}"Expected {description}, but got a null");
+{I}return default!;
+}}
+try
+{{
+{I}return System.Convert.FromBase64String(text);
+}}
+catch (System.FormatException exception)
+{{
+{I}error = new Reporting.Error(
+{II}"Expected {description}, but the conversion failed " +
+{II}$"because: {{exception}}");
+{I}return default!;
+}}"""
+        )
+
+    elif primitive_type is intermediate.PrimitiveType.STR:
+        body = Stripped(
+            f"""\
+bool ok = value.TryGetValue<string>(out string? result);
+if (!ok)
+{{
+{I}{indent_but_first_line(conversion_failed, I)}
+}}
+if (result == null)
+{{
+{I}error = new Reporting.Error(
+{II}"Expected {description}, but got a null");
+{I}return default!;
+}}
+return result;"""
+        )
+
+    else:
+        body = Stripped(
+            f"""\
+bool ok = value.TryGetValue<{value_type}>(out {value_type} result);
+if (!ok)
+{{
+{I}{indent_but_first_line(conversion_failed, I)}
+}}
+return result;"""
+        )
+
+    return Stripped(
+        f"""\
+/// <summary>
+/// Convert <paramref name="node" /> to {description}.
+/// </summary>
+/// <param name="node">JSON node to be parsed</param>
+/// <param name="error">Error, if any, during the deserialization</param>
+internal static {value_type} {name}(
+{I}Nodes.JsonNode? node,
+{I}out Reporting.Error? error)
+{{
+{I}error = null;
+
+{I}Nodes.JsonValue? value = node as Nodes.JsonValue;
+{I}if (value == null)
+{I}{{
+{II}error = new Reporting.Error(
+{III}$"Expected {description}, but got {{Describe(node)}}");
+{II}return default!;
+{I}}}
+
+{I}{indent_but_first_line(body, I)}
+}}"""
+    )
+
+
 def _generate_from_method_for_enumeration(
     enumeration: intermediate.Enumeration,
 ) -> Stripped:
@@ -44,29 +426,25 @@ def _generate_from_method_for_enumeration(
 /// </summary>
 /// <param name="node">JSON node to be parsed</param>
 /// <param name="error">Error, if any, during the deserialization</param>
-internal static Aas.{name}? {name}From(
-{I}Nodes.JsonNode node,
+internal static Aas.{name} {name}From(
+{I}Nodes.JsonNode? node,
 {I}out Reporting.Error? error)
 {{
-{I}error = null;
-{I}string? text = DeserializeImplementation.StringFrom(
-{II}node, out error);
+{I}string text = StringFrom(node, out error);
 {I}if (error != null)
 {I}{{
-{II}return null;
+{II}return default!;
 {I}}}
-{I}if (text == null)
-{I}{{
-{II}throw new System.InvalidOperationException(
-{III}"Unexpected text null if error null");
-{I}}}
+
 {I}Aas.{name}? result = Stringification.{name}FromString(text);
 {I}if (result == null)
 {I}{{
 {II}error = new Reporting.Error(
 {III}{message_literal});
+{II}return default!;
 {I}}}
-{I}return result;
+
+{I}return result.Value;
 }}  // internal static {name}From"""
     )
 
@@ -77,77 +455,34 @@ def _generate_from_method_for_interface(
     """Generate the deserialization method for an interface."""
     name = csharp_naming.interface_name(interface.name)
 
-    blocks = [
-        Stripped("error = null;"),
-        Stripped(
-            f"""\
-var obj = node as Nodes.JsonObject;
-if (obj == null)
-{{
-{I}error = new Reporting.Error(
-{II}$"Expected Nodes.JsonObject, but got {{node.GetType()}}");
-{I}return null;
-}}"""
-        ),
-        Stripped(
-            f"""\
-Nodes.JsonNode? modelTypeNode = obj["modelType"];
-if (modelTypeNode == null)
-{{
-{I}error = new Reporting.Error(
-{II}"Expected a model type, but none is present");
-{I}return null;
-}}
-string? modelType = DeserializeImplementation.StringFrom(
-{I}modelTypeNode, out error);
-if (error != null)
-{{
-{I}return null;
-}}
-if (modelType == null)
-{{
-{I}throw new System.InvalidOperationException(
-{II}"Unexpected modelType null when error null");
-}}"""
-        ),
-    ]  # type: List[Stripped]
-
-    # region Write the switch block
-
-    switch_writer = io.StringIO()
-    switch_writer.write(
-        """\
-switch (modelType)
-{
-"""
-    )
-
+    case_blocks = []  # type: List[Stripped]
     for implementer in interface.implementers:
         model_type = naming.json_model_type(implementer.name)
         implementer_name = csharp_naming.class_name(implementer.name)
-        switch_writer.write(
-            f"""\
-{I}case {csharp_common.string_literal(model_type)}:
-{II}return {implementer_name}From(
-{III}node, out error);
-"""
+        case_blocks.append(
+            Stripped(
+                f"""\
+case {csharp_common.string_literal(model_type)}:
+{I}return {implementer_name}From(
+{II}node, out error);"""
+            )
         )
 
-    switch_writer.write(
-        f"""\
-{I}default:
-{II}error = new Reporting.Error(
-{III}$"Unexpected model type for {name}: {{modelType}}");
-{II}return null;
-}}"""
+    case_blocks.append(
+        Stripped(
+            f"""\
+default:
+{I}error = new Reporting.Error(
+{II}$"Unexpected model type for {name}: {{modelType}}");
+{I}return default!;"""
+        )
     )
-    blocks.append(Stripped(switch_writer.getvalue()))
 
-    # endregion
+    cases_joined = "\n".join(
+        textwrap.indent(case_block, I) for case_block in case_blocks
+    )
 
-    writer = io.StringIO()
-
-    writer.write(
+    return Stripped(
         f"""\
 /// <summary>
 /// Deserialize an instance of {name} by dispatching
@@ -156,21 +491,30 @@ switch (modelType)
 /// <param name="node">JSON node to be parsed</param>
 /// <param name="error">Error, if any, during the deserialization</param>
 [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
-public static Aas.{name}? {name}From(
-{I}Nodes.JsonNode node,
+public static Aas.{name} {name}From(
+{I}Nodes.JsonNode? node,
 {I}out Reporting.Error? error)
 {{
-"""
+{I}Nodes.JsonObject? obj = node as Nodes.JsonObject;
+{I}if (obj == null)
+{I}{{
+{II}error = new Reporting.Error(
+{III}$"Expected a JsonObject representing {name}, but got {{Describe(node)}}");
+{II}return default!;
+{I}}}
+
+{I}string modelType = ModelTypeFrom(obj, out error);
+{I}if (error != null)
+{I}{{
+{II}return default!;
+{I}}}
+
+{I}switch (modelType)
+{I}{{
+{cases_joined}
+{I}}}
+}}  // public static Aas.{name} {name}From"""
     )
-
-    for i, block in enumerate(blocks):
-        if i > 0:
-            writer.write("\n\n")
-        writer.write(textwrap.indent(block, I))
-
-    writer.write(f"\n}}  // public static Aas.{name} {name}From")
-
-    return Stripped(writer.getvalue())
 
 
 def _generate_from_method_for_named_union(
@@ -180,17 +524,16 @@ def _generate_from_method_for_named_union(
     name = csharp_naming.class_name(named_union.name)
 
     blocks = [
-        Stripped("error = null;"),
         Stripped(
             f"""\
-var obj = node as Nodes.JsonObject;
+Nodes.JsonObject? obj = node as Nodes.JsonObject;
 if (obj == null)
 {{
 {I}error = new Reporting.Error(
-{II}$"Expected Nodes.JsonObject, but got {{node.GetType()}}");
-{I}return null;
+{II}$"Expected a JsonObject representing {name}, but got {{Describe(node)}}");
+{I}return default!;
 }}"""
-        ),
+        )
     ]  # type: List[Stripped]
 
     implementers_with_model_type = []  # type: List[intermediate.ConcreteClass]
@@ -204,28 +547,7 @@ if (obj == null)
     # region Dispatch by model type
 
     if len(implementers_with_model_type) > 0:
-        switch_writer = io.StringIO()
-        switch_writer.write(
-            f"""\
-Nodes.JsonNode? modelTypeNode = obj["modelType"];
-if (modelTypeNode != null)
-{{
-{I}string? modelType = DeserializeImplementation.StringFrom(
-{II}modelTypeNode, out error);
-{I}if (error != null)
-{I}{{
-{II}return null;
-{I}}}
-{I}if (modelType == null)
-{I}{{
-{II}throw new System.InvalidOperationException(
-{III}"Unexpected modelType null when error null");
-{I}}}
-
-{I}switch (modelType)
-{I}{{
-"""
-        )
+        case_blocks = []  # type: List[Stripped]
 
         for implementer in implementers_with_model_type:
             model_type = naming.json_model_type(implementer.name)
@@ -234,38 +556,55 @@ if (modelTypeNode != null)
                 Identifier(f"from_{implementer.name}")
             )
 
-            case_stmt = Stripped(
-                f"""\
+            case_blocks.append(
+                Stripped(
+                    f"""\
 case {csharp_common.string_literal(model_type)}:
 {{
-{I}Aas.{implementer_name}? instance = {implementer_name}From(
+{I}Aas.{implementer_name} instance = {implementer_name}From(
 {II}node, out error);
 {I}if (error != null)
 {I}{{
-{II}return null;
-{I}}}
-{I}if (instance == null)
-{I}{{
-{II}throw new System.InvalidOperationException(
-{III}"Unexpected instance null when error null");
+{II}return default!;
 {I}}}
 {I}return Aas.{name}.{from_method_name}(instance);
 }}"""
+                )
             )
-            switch_writer.write(textwrap.indent(case_stmt, II))
-            switch_writer.write("\n")
 
-        switch_writer.write(
-            f"""\
-{II}default:
-{III}error = new Reporting.Error(
-{IIII}$"Unexpected model type for the union {name}: {{modelType}}");
-{III}return null;
-{I}}}
-}}"""
+        case_blocks.append(
+            Stripped(
+                f"""\
+default:
+{I}error = new Reporting.Error(
+{II}$"Unexpected model type for the union {name}: {{modelType}}");
+{I}return default!;"""
+            )
         )
 
-        blocks.append(Stripped(switch_writer.getvalue()))
+        cases_joined = "\n".join(
+            textwrap.indent(case_block, II) for case_block in case_blocks
+        )
+
+        blocks.append(
+            Stripped(
+                f"""\
+Nodes.JsonNode? modelTypeNode = obj["modelType"];
+if (modelTypeNode != null)
+{{
+{I}string modelType = StringFrom(modelTypeNode, out error);
+{I}if (error != null)
+{I}{{
+{II}return default!;
+{I}}}
+
+{I}switch (modelType)
+{I}{{
+{cases_joined}
+{I}}}
+}}"""
+            )
+        )
 
     # endregion
 
@@ -300,16 +639,11 @@ case {csharp_common.string_literal(model_type)}:
                 f"""\
 if ({indent_but_first_line(condition, I)})
 {{
-{I}Aas.{implementer_name}? instance = {implementer_name}From(
+{I}Aas.{implementer_name} instance = {implementer_name}From(
 {II}node, out error);
 {I}if (error != null)
 {I}{{
-{II}return null;
-{I}}}
-{I}if (instance == null)
-{I}{{
-{II}throw new System.InvalidOperationException(
-{III}"Unexpected instance null when error null");
+{II}return default!;
 {I}}}
 {I}return Aas.{name}.{from_method_name}(instance);
 }}"""
@@ -324,7 +658,7 @@ if ({indent_but_first_line(condition, I)})
 error = new Reporting.Error(
 {I}"Could not determine the concrete type of the union {name} " +
 {I}"from the given JSON object; none of its implementers matched");
-return null;"""
+return default!;"""
         )
     )
 
@@ -339,10 +673,12 @@ return null;"""
 /// </summary>
 /// <param name="node">JSON node to be parsed</param>
 /// <param name="error">Error, if any, during the deserialization</param>
-public static Aas.{name}? {name}From(
-{I}Nodes.JsonNode node,
+public static Aas.{name} {name}From(
+{I}Nodes.JsonNode? node,
 {I}out Reporting.Error? error)
 {{
+{I}error = null;
+
 """
     )
 
@@ -356,591 +692,154 @@ public static Aas.{name}? {name}From(
     return Stripped(writer.getvalue())
 
 
-_PARSE_METHOD_BY_PRIMITIVE_TYPE = {
-    intermediate.PrimitiveType.BOOL: "DeserializeImplementation.BoolFrom",
-    intermediate.PrimitiveType.INT: "DeserializeImplementation.LongFrom",
-    intermediate.PrimitiveType.FLOAT: "DeserializeImplementation.DoubleFrom",
-    intermediate.PrimitiveType.STR: "DeserializeImplementation.StringFrom",
-    intermediate.PrimitiveType.BYTEARRAY: "DeserializeImplementation.BytesFrom",
-}
-assert all(
-    literal in _PARSE_METHOD_BY_PRIMITIVE_TYPE for literal in intermediate.PrimitiveType
-)
-
-
-def _parse_method_for_atomic_value(
-    type_annotation: intermediate.AtomicTypeAnnotation,
-) -> Stripped:
-    """Determine the parse method for deserializing an atomic non-optional value."""
-    parse_method: str
-
-    if isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
-        parse_method = _PARSE_METHOD_BY_PRIMITIVE_TYPE[type_annotation.a_type]
-
-    elif isinstance(type_annotation, intermediate.OurTypeAnnotation):
-        our_type = type_annotation.our_type
-        if isinstance(our_type, intermediate.Enumeration):
-            enum_name = csharp_naming.enum_name(our_type.name)
-            parse_method = f"DeserializeImplementation.{enum_name}From"
-
-        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-            parse_method = _PARSE_METHOD_BY_PRIMITIVE_TYPE[our_type.constrainee]
-
-        elif isinstance(
-            our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
-        ):
-            if our_type.interface is not None:
-                interface_name = csharp_naming.interface_name(our_type.interface.name)
-                parse_method = f"DeserializeImplementation.{interface_name}From"
-            else:
-                cls_name = csharp_naming.class_name(our_type.name)
-                parse_method = f"DeserializeImplementation.{cls_name}From"
-
-        elif isinstance(our_type, intermediate.NamedUnion):
-            union_name = csharp_naming.class_name(our_type.name)
-            parse_method = f"DeserializeImplementation.{union_name}From"
-
-        else:
-            assert_never(our_type)
-    else:
-        assert_never(type_annotation)
-
-    return Stripped(parse_method)
-
-
-def _generate_parse_array_of_class_helper() -> Stripped:
-    """Generate the generic helper to de-serialize an array of reference-type items."""
-    return Stripped(
-        f"""\
-/// <summary>
-/// Read a single array item.
-/// </summary>
-/// <typeparam name="T">Type of the parsed item</typeparam>
-private delegate T? JsonClassItemDeserializer<T>(
-{I}Nodes.JsonNode node,
-{I}out Reporting.Error? error
-{I}) where T : class;
-
-/// <summary>
-/// Parse every item of <paramref name="array" /> with
-/// <paramref name="deserializeItem" />.
-/// </summary>
-/// <remarks>
-/// This is shared by all the list-typed constructor arguments whose items are
-/// de-serialized into a reference type (<em>e.g.</em>, a string, a byte array
-/// or a class instance).
-/// </remarks>
-/// <typeparam name="T">Type of a single array item</typeparam>
-private static List<T> ParseArrayOfClass<T>(
-{I}Nodes.JsonArray array,
-{I}JsonClassItemDeserializer<T> deserializeItem,
-{I}out Reporting.Error? error
-{I}) where T : class
-{{
-{I}error = null;
-{I}List<T> result = new List<T>(array.Count);
-
-{I}int index = 0;
-{I}foreach (Nodes.JsonNode? item in array)
-{I}{{
-{II}if (item == null)
-{II}{{
-{III}error = new Reporting.Error(
-{IIII}"Expected a non-null item, but got a null");
-{III}error.PrependSegment(
-{IIII}new Reporting.IndexSegment(
-{IIIII}index));
-{III}return result;
-{II}}}
-
-{II}T? parsedItem = deserializeItem(
-{III}item ?? throw new System.InvalidOperationException(),
-{III}out error);
-{II}if (error != null)
-{II}{{
-{III}error.PrependSegment(
-{IIII}new Reporting.IndexSegment(
-{IIIII}index));
-{III}return result;
-{II}}}
-
-{II}result.Add(
-{III}parsedItem
-{IIII}?? throw new System.InvalidOperationException(
-{IIIII}"Unexpected result null when error is null"));
-
-{II}index++;
-{I}}}
-
-{I}return result;
-}}"""
-    )
-
-
-def _generate_parse_array_of_struct_helper() -> Stripped:
-    """Generate the generic helper to de-serialize an array of value-type items."""
-    return Stripped(
-        f"""\
-/// <summary>
-/// Read a single array item.
-/// </summary>
-/// <typeparam name="T">Type of the parsed item</typeparam>
-private delegate T? JsonStructItemDeserializer<T>(
-{I}Nodes.JsonNode node,
-{I}out Reporting.Error? error
-{I}) where T : struct;
-
-/// <summary>
-/// Parse every item of <paramref name="array" /> with
-/// <paramref name="deserializeItem" />.
-/// </summary>
-/// <remarks>
-/// This is shared by all the list-typed constructor arguments whose items are
-/// de-serialized into a value type (<em>e.g.</em>, a bool, a number or
-/// an enumeration literal).
-/// </remarks>
-/// <typeparam name="T">Type of a single array item</typeparam>
-private static List<T> ParseArrayOfStruct<T>(
-{I}Nodes.JsonArray array,
-{I}JsonStructItemDeserializer<T> deserializeItem,
-{I}out Reporting.Error? error
-{I}) where T : struct
-{{
-{I}error = null;
-{I}List<T> result = new List<T>(array.Count);
-
-{I}int index = 0;
-{I}foreach (Nodes.JsonNode? item in array)
-{I}{{
-{II}if (item == null)
-{II}{{
-{III}error = new Reporting.Error(
-{IIII}"Expected a non-null item, but got a null");
-{III}error.PrependSegment(
-{IIII}new Reporting.IndexSegment(
-{IIIII}index));
-{III}return result;
-{II}}}
-
-{II}T? parsedItem = deserializeItem(
-{III}item ?? throw new System.InvalidOperationException(),
-{III}out error);
-{II}if (error != null)
-{II}{{
-{III}error.PrependSegment(
-{IIII}new Reporting.IndexSegment(
-{IIIII}index));
-{III}return result;
-{II}}}
-
-{II}result.Add(
-{III}parsedItem
-{IIII}?? throw new System.InvalidOperationException(
-{IIIII}"Unexpected result null when error is null"));
-
-{II}index++;
-{I}}}
-
-{I}return result;
-}}"""
-    )
-
-
-def _generate_tuple_item_deserializer_helpers() -> Stripped:
-    """Generate the delegate and adapters shared by all the generic tuple parsers."""
-    return Stripped(
-        f"""\
-/// <summary>
-/// Parse a single tuple item.
-/// </summary>
-/// <remarks>
-/// A tuple-typed property is parsed by <c>ParseTupleN</c> (see
-/// <see cref="ParseTuple2{{T0, T1}}" /> for the arity-2 case, *etc.*), one
-/// function shared by *every* tuple-typed property of a given arity,
-/// regardless of which mix of reference and value types appears at each
-/// position. If <c>ParseTupleN</c> demanded the same
-/// <c>JsonClassItemDeserializer&lt;T&gt;</c>/<c>JsonStructItemDeserializer&lt;T&gt;</c>
-/// shape already used for list items (a nullable return, constrained to
-/// <c>class</c> or <c>struct</c>), its own type parameters would need that
-/// constraint fixed once per position -- which breaks the moment two
-/// different tuple-typed properties of the same arity mix reference and
-/// value types differently at the same position (<em>e.g.</em>,
-/// <c>(string, long)</c> at one property and <c>(long, string)</c> at
-/// another could not share one <c>ParseTuple2</c>).
-///
-/// A single unconstrained <c>T? Method(Nodes.JsonNode node, out Reporting.Error? error)</c>
-/// shape shared by both reference and value types does not work around this
-/// either: for a value type, an unconstrained <c>T?</c> erases to plain
-/// <c>T</c> (not <c>System.Nullable&lt;T&gt;</c>), so a method returning
-/// <c>long?</c> can not even be assigned to it.
-///
-/// <c>TupleItemDeserializer&lt;T&gt;</c> sidesteps the class/struct split
-/// entirely by using an <c>out</c> parameter for the value instead of a
-/// nullable return, at the cost of needing an adapter --
-/// <see cref="AsTupleItemDeserializer{{T}}(JsonClassItemDeserializer{{T}})" /> --
-/// to convert an existing item parser (such as a bare <c>StringFrom</c> or
-/// <c>LongFrom</c> method group) into one.
-/// </remarks>
-/// <typeparam name="T">Type of the parsed item</typeparam>
-private delegate void TupleItemDeserializer<T>(
-{I}Nodes.JsonNode node,
-{I}out T value,
-{I}out Reporting.Error? error);
-
-/// <summary>
-/// Adapt <paramref name="deserializeItem" /> -- a reference-type item parser
-/// as used for list-typed properties -- into a <see cref="TupleItemDeserializer{{T}}" />
-/// for use in a tuple-typed property.
-/// </summary>
-/// <remarks>
-/// See the remarks on <see cref="TupleItemDeserializer{{T}}" /> for why this
-/// adapter -- rather than a shared constraint on <c>ParseTupleN</c> itself --
-/// is necessary. This overload and its <c>JsonStructItemDeserializer&lt;T&gt;</c>
-/// counterpart are dispatched on the parameter's delegate type alone, so a
-/// caller never has to pick between them by name; each encapsulates the
-/// "unwrap the nullable result, or propagate the error" check exactly once,
-/// mirroring how <see cref="ParseArrayOfClass{{T}}" />/
-/// <see cref="ParseArrayOfStruct{{T}}" /> encapsulate the very same check
-/// once for lists instead of repeating it at every call site.
-/// </remarks>
-/// <typeparam name="T">Type of the parsed item</typeparam>
-private static TupleItemDeserializer<T> AsTupleItemDeserializer<T>(
-{I}JsonClassItemDeserializer<T> deserializeItem
-{I}) where T : class
-{{
-{I}return (
-{II}Nodes.JsonNode node,
-{II}out T value,
-{II}out Reporting.Error? error) =>
-{II}{{
-{III}T? parsed = deserializeItem(node, out error);
-{III}if (error != null)
-{III}{{
-{IIII}value = default!;
-{IIII}return;
-{III}}}
-{III}value = parsed
-{IIII}?? throw new System.InvalidOperationException(
-{IIIII}"Unexpected result null when error is null");
-{II}}};
-}}
-
-/// <summary>
-/// Adapt <paramref name="deserializeItem" /> -- a value-type item parser
-/// as used for list-typed properties -- into a <see cref="TupleItemDeserializer{{T}}" />
-/// for use in a tuple-typed property.
-/// </summary>
-/// <remarks>
-/// See <see cref="AsTupleItemDeserializer{{T}}(JsonClassItemDeserializer{{T}})" />
-/// for why this adapter is necessary.
-/// </remarks>
-/// <typeparam name="T">Type of the parsed item</typeparam>
-private static TupleItemDeserializer<T> AsTupleItemDeserializer<T>(
-{I}JsonStructItemDeserializer<T> deserializeItem
-{I}) where T : struct
-{{
-{I}return (
-{II}Nodes.JsonNode node,
-{II}out T value,
-{II}out Reporting.Error? error) =>
-{II}{{
-{III}T? parsed = deserializeItem(node, out error);
-{III}if (error != null)
-{III}{{
-{IIII}value = default;
-{IIII}return;
-{III}}}
-{III}value = parsed
-{IIII}?? throw new System.InvalidOperationException(
-{IIIII}"Unexpected result null when error is null");
-{II}}};
-}}"""
-    )
-
-
-@require(lambda arity: arity > 0)
-def _generate_parse_tuple_helper(arity: int) -> Stripped:
+def _deserializer_name(type_anno: intermediate.TypeAnnotationUnion) -> Identifier:
     """
-    Generate a generic function to parse a tuple of the given ``arity``.
+    Name the field holding the de-serializer of a list or of a tuple.
 
-    Each positional item is parsed by its own ``deserializeItemI`` callback,
-    which sets the ``out value`` only if it does not also set ``out error``.
-    We can not reuse :py:func:`_generate_parse_array_of_class_helper`/
-    :py:func:`_generate_parse_array_of_struct_helper` here since a tuple is
-    heterogeneous: unlike a single generic ``T`` shared by every list item,
-    each tuple position has its own type, possibly a mix of reference and
-    value types, so the item delegate takes ``value`` as an ``out`` parameter
-    instead of returning a nullable ``T?`` (which would need a ``class`` or
-    ``struct`` constraint fixed once for all instantiations of this method).
+    The moniker comes last, after an underscore, so that the name of a field
+    can never coincide with one of the ``...From`` functions: those are keyed
+    by one of our symbols, and a symbol is named through
+    :py:func:`aas_core_codegen.naming.capitalized_camel_case`, which never
+    emits an underscore.
     """
-    type_params = [f"T{i}" for i in range(arity)]
-    type_params_joined = ", ".join(type_params)
-
-    if arity == 1:
-        tuple_type = f"System.ValueTuple<{type_params[0]}>"
-    else:
-        tuple_type = f"({type_params_joined})"
-
-    params_joined = ",\n".join(
-        f"TupleItemDeserializer<T{i}> deserializeItem{i}" for i in range(arity)
-    )
-
-    item_blocks = []  # type: List[Stripped]
-    for i in range(arity):
-        item_blocks.append(
-            Stripped(
-                f"""\
-Nodes.JsonNode? node{i} = array[{i}];
-if (node{i} == null)
-{{
-{I}error = new Reporting.Error(
-{II}"Expected a non-null item, but got a null");
-{I}error.PrependSegment(
-{II}new Reporting.IndexSegment(
-{III}{i}));
-{I}return default!;
-}}
-deserializeItem{i}(node{i}, out T{i} item{i}, out error);
-if (error != null)
-{{
-{I}error.PrependSegment(
-{II}new Reporting.IndexSegment(
-{III}{i}));
-{I}return default!;
-}}"""
-            )
-        )
-
-    item_blocks_joined = "\n\n".join(item_blocks)
-
-    item_vars_joined = ",\n".join(f"item{i}" for i in range(arity))
-
-    if arity == 1:
-        return_expr = "System.ValueTuple.Create(item0)"
-    else:
-        return_expr = f"""\
-(
-{I}{indent_but_first_line(item_vars_joined, I)}
-)"""
-
-    function_name = f"ParseTuple{arity}"
-
-    return Stripped(
-        f"""\
-/// <summary>
-/// Parse every item of <paramref name="array" /> as a tuple of {arity} item(s).
-/// </summary>
-/// <remarks>
-/// This is shared by all the tuple-typed properties of arity {arity}.
-/// </remarks>
-private static {tuple_type} {function_name}<{type_params_joined}>(
-{I}Nodes.JsonArray array,
-{I}{indent_but_first_line(params_joined, I)},
-{I}out Reporting.Error? error)
-{{
-{I}error = null;
-
-{I}if (array.Count != {arity})
-{I}{{
-{II}error = new Reporting.Error(
-{III}$"Expected exactly {arity} item(s) in the JsonArray, " +
-{III}$"but got: {{array.Count}}");
-{II}return default!;
-{I}}}
-
-{I}{indent_but_first_line(item_blocks_joined, I)}
-
-{I}return {indent_but_first_line(return_expr, I)};
-}}"""
-    )
+    return Identifier(f"Parse_{csharp_common.type_moniker(type_anno)}")
 
 
-@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
-def _generate_deserialize_constructor_argument(
-    arg: intermediate.Argument,
-    json_name: str,
-) -> Tuple[Optional[Stripped], Optional[Error]]:
-    """Generate the code snippet for de-serializing the constructor argument ``arg``."""
-    type_anno = intermediate.beneath_optional(arg.type_annotation)
+def _deserializer_expr(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
+    """
+    Generate the expression de-serializing a value of ``type_anno``.
 
-    # Prefix the variables to avoid naming conflicts
-    target_var = csharp_naming.variable_name(Identifier(f"the_{arg.name}"))
-
-    assert not csharp_common.needs_escaping(json_name)
-
-    json_literal = csharp_common.string_literal(json_name)
-
-    parse_block: Stripped
-
+    An atomic value is de-serialized by a function named after its type, and
+    a list or a tuple by the cached field composing the de-serializers of
+    its items. Either way the expression is a plain name, so that a call site
+    neither allocates a delegate nor composes anything.
+    """
     if isinstance(
         type_anno,
-        (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
+        (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
     ):
-        parse_method = _parse_method_for_atomic_value(type_anno)
+        return Stripped(_deserializer_name(type_anno))
 
-        parse_block = Stripped(
-            f"""\
-{target_var} = {parse_method}(
-{I}keyValue.Value,
-{I}out error);
-if (error != null)
-{{
-{I}error.PrependSegment(
-{II}new Reporting.NameSegment(
-{III}{json_literal}));
-{I}return null;
-}}
-if ({target_var} == null)
-{{
-{I}throw new System.InvalidOperationException(
-{II}"Unexpected {target_var} null when error is also null");
-}}"""
-        )
+    if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
+        return Stripped(_FROM_METHOD_BY_PRIMITIVE_TYPE[type_anno.a_type])
 
-    elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
-            f"(mristin): We generate only code for lists of atomic values in the JSON "
-            f"de-serialization, but got a list of type {type_anno}. "
-            f"Please contact the developers if you need this feature."
-        )
+    assert isinstance(
+        type_anno, intermediate.OurTypeAnnotation
+    ), f"Expected an atomic type annotation, but got {type_anno}"
 
-        item_type = csharp_common.generate_type(type_anno.items)
+    our_type = type_anno.our_type
 
-        array_var = csharp_naming.variable_name(Identifier(f"array_{arg.name}"))
+    if isinstance(our_type, intermediate.Enumeration):
+        return Stripped(f"{csharp_naming.enum_name(our_type.name)}From")
 
-        parse_method = _parse_method_for_atomic_value(type_anno.items)
+    if isinstance(our_type, intermediate.ConstrainedPrimitive):
+        return Stripped(_FROM_METHOD_BY_PRIMITIVE_TYPE[our_type.constrainee])
 
-        primitive_type = intermediate.try_primitive_type(type_anno.items)
-        if primitive_type is not None:
-            is_value_type = primitive_type in (
-                intermediate.PrimitiveType.BOOL,
-                intermediate.PrimitiveType.INT,
-                intermediate.PrimitiveType.FLOAT,
-            )
+    if isinstance(our_type, intermediate.NamedUnion):
+        return Stripped(f"{csharp_naming.class_name(our_type.name)}From")
+
+    assert isinstance(
+        our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+    )
+
+    if our_type.interface is not None:
+        return Stripped(f"{csharp_naming.interface_name(our_type.interface.name)}From")
+
+    return Stripped(f"{csharp_naming.class_name(our_type.name)}From")
+
+
+def _composed_types_in_initialization_order(
+    symbol_table: intermediate.SymbolTable,
+) -> List[intermediate.TypeAnnotationUnion]:
+    """
+    List the list- and tuple-typed values which need a de-serializer of their own.
+
+    Only a list and a tuple have no ``...From`` function to be named after, so
+    only they are composed by a combinator and cached in a ``static readonly``
+    field. The fields are emitted in this order and a field initializer may
+    reference only the fields declared before it -- hence the post-order:
+    the items first, then the container that composes them.
+
+    The result is de-duplicated by the moniker, which is injective (see
+    :py:func:`aas_core_codegen.csharp.common.type_moniker`), so that two
+    distinct types can never be conflated into one field.
+    """
+    result = []  # type: List[intermediate.TypeAnnotationUnion]
+    observed = set()  # type: Set[str]
+
+    def register(type_anno: intermediate.TypeAnnotationUnion) -> None:
+        """Register what ``type_anno`` needs, its items first."""
+        if isinstance(type_anno, intermediate.ListTypeAnnotation):
+            register(type_anno.items)
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            for item_type_anno in type_anno.items:
+                register(item_type_anno)
         else:
-            is_value_type = isinstance(
-                type_anno.items, intermediate.OurTypeAnnotation
-            ) and isinstance(type_anno.items.our_type, intermediate.Enumeration)
+            # NOTE (mristin):
+            # An atomic value de-serializes through a function of its own, so
+            # it needs no field.
+            return
 
-        parse_array_function = (
-            "ParseArrayOfStruct" if is_value_type else "ParseArrayOfClass"
-        )
+        moniker = csharp_common.type_moniker(type_anno)
+        if moniker not in observed:
+            observed.add(moniker)
+            result.append(type_anno)
 
-        parse_block = Stripped(
+    for cls in symbol_table.concrete_classes:
+        for prop in cls.properties:
+            register(intermediate.beneath_optional(prop.type_annotation))
+
+    return result
+
+
+def _generate_deserializer_field(
+    type_anno: intermediate.TypeAnnotationUnion,
+) -> Stripped:
+    """Generate the cached de-serializer of the list or the tuple ``type_anno``."""
+    name = _deserializer_name(type_anno)
+    value_type = csharp_common.generate_type(type_anno)
+
+    composition: Stripped
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        item_type = csharp_common.generate_type(type_anno.items)
+        composition = Stripped(
             f"""\
-Nodes.JsonArray? {array_var} = keyValue.Value as Nodes.JsonArray;
-if ({array_var} == null)
-{{
-{I}error = new Reporting.Error(
-{II}$"Expected a JsonArray, but got {{keyValue.Value.GetType()}}");
-{I}error.PrependSegment(
-{II}new Reporting.NameSegment(
-{III}{json_literal}));
-{I}return null;
-}}
-{target_var} = {parse_array_function}<{item_type}>(
-{I}{array_var},
-{I}{parse_method},
-{I}out error);
-if (error != null)
-{{
-{I}error.PrependSegment(
-{II}new Reporting.NameSegment(
-{III}{json_literal}));
-{I}return null;
-}}"""
+AsArrayOf<{item_type}>(
+{I}{_deserializer_expr(type_anno.items)})"""
         )
 
     elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        array_var = csharp_naming.variable_name(Identifier(f"array_{arg.name}"))
-
-        item_deserializer_exprs = []  # type: List[Stripped]
-
-        for item_type_anno in type_anno.items:
-            assert isinstance(
-                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
-            ), (
-                f"Expected an atomic tuple item (a primitive, a constrained "
-                f"primitive, an enumeration, a class or a named union), "
-                f"but got {item_type_anno}. "
-                f"This should have already been verified in "
-                f"intermediate._translate._verify_only_simple_type_patterns."
-            )
-
-            parse_method = _parse_method_for_atomic_value(item_type_anno)
-
-            item_deserializer_exprs.append(
-                Stripped(f"AsTupleItemDeserializer({parse_method})")
-            )
-
-        item_deserializer_exprs_joined = ",\n".join(item_deserializer_exprs)
-
-        arity = len(type_anno.items)
-
-        parse_block = Stripped(
-            f"""\
-Nodes.JsonArray? {array_var} = keyValue.Value as Nodes.JsonArray;
-if ({array_var} == null)
-{{
-{I}error = new Reporting.Error(
-{II}$"Expected a JsonArray, but got {{keyValue.Value.GetType()}}");
-{I}error.PrependSegment(
-{II}new Reporting.NameSegment(
-{III}{json_literal}));
-{I}return null;
-}}
-{target_var} = ParseTuple{arity}(
-{I}{array_var},
-{I}{indent_but_first_line(item_deserializer_exprs_joined, I)},
-{I}out error);
-if (error != null)
-{{
-{I}error.PrependSegment(
-{II}new Reporting.NameSegment(
-{III}{json_literal}));
-{I}return null;
-}}"""
+        item_types_joined = ", ".join(
+            csharp_common.generate_type(item_type_anno)
+            for item_type_anno in type_anno.items
         )
+        item_deserializers_joined = ",\n".join(
+            _deserializer_expr(item_type_anno) for item_type_anno in type_anno.items
+        )
+        composition = Stripped(
+            f"""\
+AsTuple{len(type_anno.items)}<{item_types_joined}>(
+{I}{indent_but_first_line(item_deserializers_joined, I)})"""
+        )
+
     else:
-        assert_never(arg.type_annotation)
-
-    # NOTE (mristin):
-    # We need to add a prologue to the parsing body to explicitly check for null
-    # values as the null values are not allowed for optional properties by
-    # specification.
-    if isinstance(arg.type_annotation, intermediate.OptionalTypeAnnotation):
-        parse_block = Stripped(
-            f"""\
-if (keyValue.Value == null)
-{{
-{I}error = new Reporting.Error(
-{II}"Expected optional property to be absent, " +
-{II}"but got null instead");
-{I}error.PrependSegment(
-{II}new Reporting.NameSegment(
-{III}{json_literal}));
-{I}return null;
-}}
-
-{parse_block}"""
-        )
-    else:
-        parse_block = Stripped(
-            f"""\
-if (keyValue.Value == null)
-{{
-{I}error = new Reporting.Error(
-{II}"Unexpected null for a required property");
-{I}error.PrependSegment(
-{II}new Reporting.NameSegment(
-{III}{json_literal}));
-{I}return null;
-}}
-
-{parse_block}"""
+        raise AssertionError(
+            f"Expected a list or a tuple type annotation, but got {type_anno}"
         )
 
-    return parse_block, None
+    declaration = f"private static readonly Deserializer<{value_type}> {name} = ("
+    if len(declaration) + len(I) * 3 > _MAX_LINE_LENGTH:
+        declaration = f"""\
+private static readonly Deserializer<
+{I}{value_type}
+> {name} = ("""
+
+    return Stripped(
+        f"""\
+{declaration}
+{I}{indent_but_first_line(composition, I)});"""
+    )
 
 
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -953,17 +852,18 @@ def _generate_from_method_for_class(
     name = csharp_naming.class_name(cls.name)
 
     blocks = [
-        Stripped("error = null;"),
         Stripped(
             f"""\
+error = null;
+
 Nodes.JsonObject? obj = node as Nodes.JsonObject;
 if (obj == null)
 {{
 {I}error = new Reporting.Error(
-{II}$"Expected a JsonObject, but got {{node.GetType()}}");
-{I}return null;
+{II}$"Expected a JsonObject representing {name}, but got {{Describe(node)}}");
+{I}return default!;
 }}"""
-        ),
+        )
     ]  # type: List[Stripped]
 
     # region Initialize argument variables to null
@@ -984,7 +884,8 @@ if (obj == null)
             args_init_writer.write("\n")
         args_init_writer.write(f"{arg_type} {arg_var} = null;")
 
-    blocks.append(Stripped(args_init_writer.getvalue()))
+    if len(cls.constructor.arguments) > 0:
+        blocks.append(Stripped(args_init_writer.getvalue()))
 
     if cls.serialization.with_model_type:
         blocks.append(Stripped("string? modelType = null;"))
@@ -996,28 +897,23 @@ if (obj == null)
     cases = []  # type: List[Stripped]
     for arg in cls.constructor.arguments:
         json_name = cls.properties_by_name[arg.name].json_name
+        assert not csharp_common.needs_escaping(json_name)
 
-        case_body, error = _generate_deserialize_constructor_argument(
-            arg=arg, json_name=json_name
+        target_var = csharp_naming.variable_name(Identifier(f"the_{arg.name}"))
+
+        deserializer_expr = _deserializer_expr(
+            intermediate.beneath_optional(arg.type_annotation)
         )
-        if error is not None:
-            errors.append(error)
-        else:
-            assert case_body is not None
 
-            cases.append(
-                Stripped(
-                    f"""\
+        cases.append(
+            Stripped(
+                f"""\
 case {csharp_common.string_literal(json_name)}:
-{{
-{I}{indent_but_first_line(case_body, I)}
-{I}break;
-}}"""
-                )
+{I}{target_var} = {deserializer_expr}(
+{II}keyValue.Value, out error);
+{I}break;"""
             )
-
-    if len(errors) > 0:
-        return None, errors
+        )
 
     if cls.serialization.with_model_type:
         model_type = naming.json_model_type(cls.name)
@@ -1026,36 +922,15 @@ case {csharp_common.string_literal(json_name)}:
             Stripped(
                 f"""\
 case "modelType":
+{I}modelType = StringFrom(
+{II}keyValue.Value, out error);
+{I}if (error == null && modelType != "{model_type}")
 {I}{{
-{II}if (keyValue.Value == null)
-{II}{{
-{III}error = new Reporting.Error(
-{IIII}"Expected a model type, but got null");
-{III}return null;
-{II}}}
-{II}modelType = DeserializeImplementation.StringFrom(
-{III}keyValue.Value,
-{III}out error);
-{II}if (error != null)
-{II}{{
-{III}error.PrependSegment(
-{IIII}new Reporting.NameSegment(
-{IIIII}"modelType"));
-{III}return null;
-{II}}}
-
-{II}if (modelType != "{model_type}")
-{II}{{
-{III}error = new Reporting.Error(
-{IIII}"Expected the model type '{model_type}', " +
-{IIII}$"but got {{modelType}}");
-{III}error.PrependSegment(
-{IIII}new Reporting.NameSegment(
-{IIIII}"modelType"));
-{III}return null;
-{II}}}
-{II}break;
-{I}}}"""
+{II}error = new Reporting.Error(
+{III}"Expected the model type '{model_type}', " +
+{III}$"but got {{modelType}}");
+{I}}}
+{I}break;"""
             )
         )
 
@@ -1065,33 +940,55 @@ case "modelType":
 default:
 {I}error = new Reporting.Error(
 {II}$"Unexpected property: {{keyValue.Key}}");
-{I}return null;"""
+{I}return default!;"""
         )
     )
 
-    foreach_writer = io.StringIO()
-    foreach_writer.write(
-        f"""\
+    cases_joined = "\n".join(textwrap.indent(case_block, II) for case_block in cases)
+
+    # NOTE (mristin):
+    # A class without a single property switches on nothing but its ``default``,
+    # which returns, so the marking below would be unreachable code.
+    mark_the_property = (
+        ""
+        if len(cases) == 1
+        else f"""\
+
+{I}if (error != null)
+{I}{{
+{II}error.PrependSegment(
+{III}new Reporting.NameSegment(
+{IIII}keyValue.Key));
+{II}return default!;
+{I}}}"""
+    )
+
+    # NOTE (mristin):
+    # The error is marked with the name of the property once, here, instead of
+    # in every single ``case``: a ``case`` is matched exactly when
+    # ``keyValue.Key`` is its literal, so the two are one and the same name.
+    # The ``default`` returns before this, as its message already names
+    # the unexpected property.
+    blocks.append(
+        Stripped(
+            f"""\
 foreach (var keyValue in obj)
 {{
 {I}switch (keyValue.Key)
-{I}{{"""
+{I}{{
+{cases_joined}
+{I}}}
+{mark_the_property}
+}}"""
+        )
     )
-
-    for case_block in cases:
-        foreach_writer.write("\n")
-        foreach_writer.write(textwrap.indent(case_block, II))
-
-    foreach_writer.write(f"\n{I}}}\n}}")
-
-    blocks.append(Stripped(foreach_writer.getvalue()))
 
     # endregion
 
     # region Check required
 
-    required_check_writer = io.StringIO()
-    for i, arg in enumerate(cls.constructor.arguments):
+    required_checks = []  # type: List[Stripped]
+    for arg in cls.constructor.arguments:
         if isinstance(arg.type_annotation, intermediate.OptionalTypeAnnotation):
             continue
 
@@ -1099,33 +996,33 @@ foreach (var keyValue in obj)
         json_name = cls.properties_by_name[arg.name].json_name
         assert not csharp_common.needs_escaping(json_name)
 
-        if i > 0:
-            required_check_writer.write("\n\n")
-
-        required_check_writer.write(
-            f"""\
+        required_checks.append(
+            Stripped(
+                f"""\
 if ({arg_var} == null)
 {{
 {I}error = new Reporting.Error(
 {II}"Required property \\"{json_name}\\" is missing");
-{I}return null;
+{I}return default!;
 }}"""
+            )
         )
 
-    blocks.append(Stripped(required_check_writer.getvalue()))
-
     if cls.serialization.with_model_type:
-        blocks.append(
+        required_checks.append(
             Stripped(
                 f"""\
 if (modelType == null)
 {{
 {I}error = new Reporting.Error(
 {II}"Required property \\"modelType\\" is missing");
-{I}return null;
+{I}return default!;
 }}"""
             )
         )
+
+    if len(required_checks) > 0:
+        blocks.append(Stripped("\n\n".join(required_checks)))
 
     # endregion
 
@@ -1219,8 +1116,8 @@ if (modelType == null)
 /// </summary>
 /// <param name="node">JSON node to be parsed</param>
 /// <param name="error">Error, if any, during the deserialization</param>
-internal static Aas.{name}? {name}From(
-{I}Nodes.JsonNode node,
+internal static Aas.{name} {name}From(
+{I}Nodes.JsonNode? node,
 {I}out Reporting.Error? error)
 {{
 """
@@ -1244,187 +1141,46 @@ def _generate_deserialize_impl(
     """Generate the implementation of the deserialization."""
     errors = []  # type: List[Error]
 
-    blocks = [
-        Stripped(
-            f"""\
-/// <summary>Convert <paramref name="node" /> to a boolean.</summary>
-/// <param name="node">JSON node to be parsed</param>
-/// <param name="error">Error, if any, during the deserialization</param>
-internal static bool? BoolFrom(
-{I}Nodes.JsonNode node,
-{I}out Reporting.Error? error)
-{{
-{I}error = null;
-{I}Nodes.JsonValue? value = node as Nodes.JsonValue;
-{I}if (value == null)
-{I}{{
-{II}error = new Reporting.Error(
-{III}$"Expected a JsonValue, but got {{node.GetType()}}");
-{II}return null;
-{I}}}
-{I}bool ok = value.TryGetValue<bool>(out bool result);
-{I}if (!ok)
-{I}{{
-{II}error = new Reporting.Error(
-{III}"Expected a boolean, but the conversion failed " +
-{III}$"from {{value.ToJsonString()}}");
-{II}return null;
-{I}}}
-{I}return result;
-}}"""
-        ),
-        Stripped(
-            f"""\
-/// <summary>
-/// Convert the <paramref name="node" /> to a long 64-bit integer.
-/// </summary>
-/// <param name="node">JSON node to be parsed</param>
-/// <param name="error">Error, if any, during the deserialization</param>
-internal static long? LongFrom(
-{I}Nodes.JsonNode node,
-{I}out Reporting.Error? error)
-{{
-{I}error = null;
-{I}Nodes.JsonValue? value = node as Nodes.JsonValue;
-{I}if (value == null)
-{I}{{
-{II}error = new Reporting.Error(
-{III}$"Expected a JsonValue, but got {{node.GetType()}}");
-{II}return null;
-{I}}}
-{I}bool ok = value.TryGetValue<long>(out long result);
-{I}if (!ok)
-{I}{{
-{II}error = new Reporting.Error(
-{III}"Expected a 64-bit long integer, but the conversion failed " +
-{III}$"from {{value.ToJsonString()}}");
-{II}return null;
-{I}}}
-{I}return result;
-}}"""
-        ),
-        Stripped(
-            f"""\
-/// <summary>
-/// Convert the <paramref name="node" /> to a double-precision 64-bit float.
-/// </summary>
-/// <param name="node">JSON node to be parsed</param>
-/// <param name="error">Error, if any, during the deserialization</param>
-internal static double? DoubleFrom(
-{I}Nodes.JsonNode node,
-{I}out Reporting.Error? error)
-{{
-{I}error = null;
-{I}Nodes.JsonValue? value = node as Nodes.JsonValue;
-{I}if (value == null)
-{I}{{
-{II}error = new Reporting.Error(
-{III}$"Expected a JsonValue, but got {{node.GetType()}}");
-{II}return null;
-{I}}}
-{I}bool ok = value.TryGetValue<double>(out double result);
-{I}if (!ok)
-{I}{{
-{II}error = new Reporting.Error(
-{III}"Expected a 64-bit double-precision float, " +
-{III}"but the conversion failed " +
-{III}$"from {{value.ToJsonString()}}");
-{II}return null;
-{I}}}
-{I}return result;
-}}"""
-        ),
-        Stripped(
-            f"""\
-/// <summary>
-/// Convert the <paramref name="node" /> to a string.
-/// </summary>
-/// <param name="node">JSON node to be parsed</param>
-/// <param name="error">Error, if any, during the deserialization</param>
-internal static string? StringFrom(
-{I}Nodes.JsonNode node,
-{I}out Reporting.Error? error)
-{{
-{I}error = null;
-{I}Nodes.JsonValue? value = node as Nodes.JsonValue;
-{I}if (value == null)
-{I}{{
-{II}error = new Reporting.Error(
-{III}$"Expected a JsonValue, but got {{node.GetType()}}");
-{II}return null;
-{I}}}
-{I}bool ok = value.TryGetValue<string>(out string? result);
-{I}if (!ok)
-{I}{{
-{II}error = new Reporting.Error(
-{III}"Expected a string, but the conversion failed " +
-{III}$"from {{value.ToJsonString()}}");
-{II}return null;
-{I}}}
-{I}if (result == null)
-{I}{{
-{II}error = new Reporting.Error(
-{III}"Expected a string, but got a null");
-{II}return null;
-{I}}}
-{I}return result;
-}}"""
-        ),
-        Stripped(
-            f"""\
-/// <summary>
-/// Convert the <paramref name="node" /> to bytes.
-/// </summary>
-/// <param name="node">JSON node to be parsed</param>
-/// <param name="error">Error, if any, during the deserialization</param>
-internal static byte[]? BytesFrom(
-{I}Nodes.JsonNode node,
-{I}out Reporting.Error? error)
-{{
-{I}error = null;
-{I}Nodes.JsonValue? value = node as Nodes.JsonValue;
-{I}if (value == null)
-{I}{{
-{II}error = new Reporting.Error(
-{III}$"Expected a JsonValue, but got {{node.GetType()}}");
-{II}return null;
-{I}}}
-{I}bool ok = value.TryGetValue<string>(out string? text);
-{I}if (!ok)
-{I}{{
-{II}error = new Reporting.Error(
-{III}"Expected a string, but the conversion failed " +
-{III}$"from {{value.ToJsonString()}}");
-{II}return null;
-{I}}}
-{I}if (text == null)
-{I}{{
-{II}error = new Reporting.Error(
-{III}"Expected a string, but got a null");
-{II}return null;
-{I}}}
-{I}try
-{I}{{
-{II}return System.Convert.FromBase64String(text);
-{I}}}
-{I}catch (System.FormatException exception)
-{I}{{
-{II}error = new Reporting.Error(
-{III}"Expected Base-64 encoded bytes, but the conversion failed " +
-{III}$"because: {{exception}}");
-{II}return null;
-{I}}}
-}}"""
-        ),
-        _generate_parse_array_of_class_helper(),
-        _generate_parse_array_of_struct_helper(),
-    ]  # type: List[Stripped]
+    blocks = [_generate_describe_helper()]  # type: List[Stripped]
 
-    tuple_arities = intermediate.tuple_arities(symbol_table)
-    if len(tuple_arities) > 0:
-        blocks.append(_generate_tuple_item_deserializer_helpers())
-        for arity in tuple_arities:
-            blocks.append(_generate_parse_tuple_helper(arity))
+    for primitive_type in intermediate.PrimitiveType:
+        blocks.append(_generate_primitive_converter(primitive_type))
+
+    # region Shared combinators and the de-serializers they compose
+
+    # NOTE (mristin):
+    # Only a list and a tuple are composed, so a model without any of them pays
+    # for neither the delegate nor the combinators. The gating follows what is
+    # actually called: every other de-serializer is a function emitted for
+    # the very type it de-serializes, and hence can never be missing.
+    composed_types = _composed_types_in_initialization_order(symbol_table)
+
+    if len(composed_types) > 0:
+        blocks.append(_generate_deserializer_delegate())
+
+    if any(
+        isinstance(type_anno, intermediate.ListTypeAnnotation)
+        for type_anno in composed_types
+    ):
+        blocks.append(_generate_as_array_of_helper())
+
+    tuple_arities = sorted(
+        {
+            len(type_anno.items)
+            for type_anno in composed_types
+            if isinstance(type_anno, intermediate.TupleTypeAnnotation)
+        }
+    )
+    for arity in tuple_arities:
+        blocks.append(_generate_as_tuple_helper(arity))
+
+    if any(our_type.interface is not None for our_type in symbol_table.classes):
+        blocks.append(_generate_model_type_from_helper())
+
+    for type_anno in composed_types:
+        blocks.append(_generate_deserializer_field(type_anno))
+
+    # endregion
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
@@ -1496,6 +1252,13 @@ internal static byte[]? BytesFrom(
 /// we distinguish the implementation, realized in
 /// <see cref="DeserializeImplementation" />, and the facade given in
 /// <see cref="Deserialize" /> class.
+///
+/// Every value is de-serialized through one and the same shape,
+/// <c>Deserializer&lt;T&gt;</c>, so that the de-serialization of a list or of
+/// a tuple can be composed out of the de-serialization of its items. A value
+/// is returned as a plain <c>T</c>, meaningless unless the <c>error</c> is
+/// null, since a <c>T?</c> can not be written down for an unconstrained
+/// <c>T</c>.
 /// </remarks>
 internal static class DeserializeImplementation
 {
@@ -1538,7 +1301,7 @@ def _generate_deserialize_from(name: str) -> Stripped:
 public static Aas.{name} {name}From(
 {I}Nodes.JsonNode node)
 {{
-{I}Aas.{name}? result = DeserializeImplementation.{name}From(
+{I}Aas.{name} result = DeserializeImplementation.{name}From(
 {II}node,
 {II}out Reporting.Error? error);
 {I}if (error != null)
@@ -1547,9 +1310,7 @@ public static Aas.{name} {name}From(
 {III}Reporting.GenerateJsonPath(error.PathSegments),
 {III}error.Cause);
 {I}}}
-{I}return result
-{II}?? throw new System.InvalidOperationException(
-{III}"Unexpected output null when error is null");
+{I}return result;
 }}"""
     )
 

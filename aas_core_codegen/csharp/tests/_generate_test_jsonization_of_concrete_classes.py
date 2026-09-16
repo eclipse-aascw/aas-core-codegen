@@ -178,7 +178,9 @@ public void Test_{cls_name_csharp}_deserialization_from_non_object_fail()
 {II}throw new AssertionException("Expected an exception, but got none");
 {I}}}
 
-{I}if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+{I}if (
+{II}!exception.Message.StartsWith(
+{III}"Expected a JsonObject representing {cls_name_csharp}, but got "))
 {I}{{
 {II}throw new AssertionException(
 {III}$"Unexpected exception message: {{exception.Message}}");

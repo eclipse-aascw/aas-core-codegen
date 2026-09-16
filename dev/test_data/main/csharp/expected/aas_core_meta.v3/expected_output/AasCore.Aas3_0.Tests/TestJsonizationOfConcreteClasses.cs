@@ -144,7 +144,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing Extension, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -302,7 +304,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing AdministrativeInformation, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -460,7 +464,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing Qualifier, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -618,7 +624,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing AssetAdministrationShell, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -776,7 +784,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing AssetInformation, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -934,7 +944,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing Resource, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -1092,7 +1104,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing SpecificAssetId, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -1250,7 +1264,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing Submodel, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -1408,7 +1424,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing RelationshipElement, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -1566,7 +1584,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing SubmodelElementList, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -1724,7 +1744,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing SubmodelElementCollection, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -1882,7 +1904,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing Property, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -2040,7 +2064,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing MultiLanguageProperty, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -2198,7 +2224,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing Range, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -2356,7 +2384,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing ReferenceElement, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -2514,7 +2544,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing Blob, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -2672,7 +2704,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing File, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -2830,7 +2864,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing AnnotatedRelationshipElement, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -2988,7 +3024,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing Entity, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -3146,7 +3184,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing EventPayload, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -3304,7 +3344,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing BasicEventElement, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -3462,7 +3504,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing Operation, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -3620,7 +3664,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing OperationVariable, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -3778,7 +3824,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing Capability, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -3936,7 +3984,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing ConceptDescription, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -4094,7 +4144,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing Reference, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -4252,7 +4304,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing Key, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -4410,7 +4464,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing LangStringNameType, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -4568,7 +4624,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing LangStringTextType, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -4726,7 +4784,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing Environment, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -4884,7 +4944,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing EmbeddedDataSpecification, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -5042,7 +5104,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing LevelType, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -5200,7 +5264,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing ValueReferencePair, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -5358,7 +5424,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing ValueList, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -5516,7 +5584,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing LangStringPreferredNameTypeIec61360, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -5674,7 +5744,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing LangStringShortNameTypeIec61360, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -5832,7 +5904,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing LangStringDefinitionTypeIec61360, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
@@ -5990,7 +6064,9 @@ namespace AasCore.Aas3_0.Tests
                 throw new AssertionException("Expected an exception, but got none");
             }
 
-            if (!exception.Message.StartsWith("Expected a JsonObject, but got "))
+            if (
+                !exception.Message.StartsWith(
+                    "Expected a JsonObject representing DataSpecificationIec61360, but got "))
             {
                 throw new AssertionException(
                     $"Unexpected exception message: {exception.Message}");
