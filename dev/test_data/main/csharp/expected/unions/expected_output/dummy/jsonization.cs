@@ -1873,6 +1873,32 @@ namespace dummy
             : Visitation.AbstractTransformer<Nodes.JsonObject>
         {
             /// <summary>
+            /// Dispatch the serialization over the run-time type of an instance.
+            /// </summary>
+            /// <remarks>
+            /// The transformer carries no state, so a single instance serves the whole
+            /// program. No field initializer reads it, only
+            /// <see cref="TransformIClass" /> does, so it does not matter where among
+            /// the serializers it is initialized.
+            /// </remarks>
+            [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
+            private static readonly Transformer _instance = new Transformer();
+
+            /// <summary>
+            /// Serialize <paramref name="that" /> into a JSON object.
+            /// </summary>
+            /// <remarks>
+            /// Which JSON object that is, is decided by the run-time type of
+            /// <paramref name="that" />, so this one serializer serves every abstract
+            /// class and every concrete class with descendants, as well as the item of
+            /// a list or of a tuple of any of them.
+            /// </remarks>
+            internal static Nodes.JsonObject TransformIClass(Aas.IClass that)
+            {
+                return _instance.Transform(that);
+            }
+
+            /// <summary>
             /// Convert <paramref name="that" /> 64-bit long integer to a JSON value.
             /// </summary>
             /// <param name="that">value to be converted</param>
@@ -1893,82 +1919,111 @@ namespace dummy
             }
 
             /// <summary>
-            /// Serialize every item of <paramref name="items" /> with
-            /// <paramref name="serializeItem" /> into a JSON array.
+            /// Serialize the named union <paramref name="that" /> into a JSON object.
             /// </summary>
             /// <remarks>
-            /// This is shared by all the list-typed properties.
+            /// A named union is not an <see cref="Aas.IClass" />, so it can not be
+            /// dispatched by <see cref="TransformIClass" />. Dispatching over the
+            /// common, non-generic <see cref="Aas.IUnion" /> means we need only this one
+            /// serializer for *all* named unions, and not one per union.
+            ///
+            /// Should a named union ever be allowed to flatten primitive or enumeration
+            /// alternatives, only the body of this method has to change (to dispatch on
+            /// the underlying value's kind) -- every call site stays the same.
+            /// </remarks>
+            private static Nodes.JsonObject TransformIUnion(Aas.IUnion that)
+            {
+                return TransformIClass(that.Underlying);
+            }
+
+            /// <summary>
+            /// Serialize <paramref name="that" /> into a JSON value.
+            /// </summary>
+            /// <remarks>
+            /// This is the shape shared by every serialization step, so that the steps
+            /// can be composed. Unlike the XML side, no combinator is needed to frame
+            /// the value -- a JSON value stands on its own -- so the only composition
+            /// is over the items of a list or of a tuple.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to be serialized</typeparam>
+            private delegate Nodes.JsonNode? Serializer<in T>(T that);
+
+            /// <summary>
+            /// Compose the serializer of a list whose items are serialized with
+            /// <paramref name="serializeItem" />.
+            /// </summary>
+            /// <remarks>
+            /// This is shared by all the list-typed properties. The composition is
+            /// performed once, when the field holding the result is initialized, so
+            /// serializing a list allocates nothing besides the JSON array itself.
+            ///
+            /// The parameter is a <c>List</c> rather than an <c>IEnumerable</c> so that
+            /// the iteration does not box the enumerator -- which is also the type that
+            /// every list-typed property actually has.
             /// </remarks>
             /// <typeparam name="T">Type of a single list item</typeparam>
-            private static Nodes.JsonArray SerializeArray<T>(
-                IEnumerable<T> items,
-                System.Func<T, Nodes.JsonNode?> serializeItem)
+            private static Serializer<List<T>> SerializeList<T>(
+                Serializer<T> serializeItem)
             {
-                var result = new Nodes.JsonArray();
-                foreach (T item in items)
+                return (that) =>
                 {
-                    result.Add(
-                        serializeItem(item));
-                }
-                return result;
+                    var result = new Nodes.JsonArray();
+                    foreach (T item in that)
+                    {
+                        result.Add(serializeItem(item));
+                    }
+                    return result;
+                };
             }
 
             /// <summary>
-            /// Convert <paramref name="that" /> to a JSON value.
-            /// </summary>
-            [CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
-            private static Nodes.JsonValue ToJsonValue(bool that)
-            {
-                return Nodes.JsonValue.Create(that);
-            }
-
-            /// <summary>
-            /// Convert <paramref name="that" /> to a JSON value.
-            /// </summary>
-            [CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
-            private static Nodes.JsonValue ToJsonValue(double that)
-            {
-                return Nodes.JsonValue.Create(that);
-            }
-
-            /// <summary>
-            /// Convert <paramref name="that" /> to a JSON value.
-            /// </summary>
-            [CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
-            private static Nodes.JsonValue ToJsonValue(string that)
-            {
-                return Nodes.JsonValue.Create(that);
-            }
-
-            /// <summary>
-            /// Convert <paramref name="that" /> to a JSON value.
-            /// </summary>
-            [CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
-            private static Nodes.JsonValue ToJsonValue(byte[] that)
-            {
-                return Nodes.JsonValue.Create(System.Convert.ToBase64String(that));
-            }
-
-            /// <summary>
-            /// Serialize the tuple <paramref name="that" /> of 3 item(s) with
-            /// <paramref name="serializeItem0" />, <paramref name="serializeItem1" />, *etc.*
-            /// into a JSON array.
+            /// Compose the serializer of a tuple of 3 item(s), whose items are
+            /// serialized with <paramref name="serializeItem0" />,
+            /// <paramref name="serializeItem1" />, *etc.*
             /// </summary>
             /// <remarks>
-            /// This is shared by all the tuple-typed properties of arity 3.
+            /// This is shared by all the tuple-typed properties of arity 3. Just
+            /// like for a list, the composition is performed once, when the field
+            /// holding the result is initialized.
             /// </remarks>
-            private static Nodes.JsonArray SerializeTuple3<T0, T1, T2>(
-                (T0, T1, T2) that,
-                System.Func<T0, Nodes.JsonNode?> serializeItem0,
-                System.Func<T1, Nodes.JsonNode?> serializeItem1,
-                System.Func<T2, Nodes.JsonNode?> serializeItem2)
+            private static Serializer<(T0, T1, T2)> SerializeTuple3<T0, T1, T2>(
+                Serializer<T0> serializeItem0,
+                Serializer<T1> serializeItem1,
+                Serializer<T2> serializeItem2)
             {
-                var result = new Nodes.JsonArray();
-                result.Add(serializeItem0(that.Item1));
-                result.Add(serializeItem1(that.Item2));
-                result.Add(serializeItem2(that.Item3));
-                return result;
+                return (that) =>
+                {
+                    var result = new Nodes.JsonArray();
+                    result.Add(serializeItem0(that.Item1));
+                    result.Add(serializeItem1(that.Item2));
+                    result.Add(serializeItem2(that.Item3));
+                    return result;
+                };
             }
+
+            private static readonly Serializer<
+                List<StructuralUnion>
+            > Serialize_ListOf_StructuralUnion = (
+                SerializeList<StructuralUnion>(
+                    TransformIUnion));
+
+            private static readonly Serializer<List<MixedUnion>> Serialize_ListOf_MixedUnion = (
+                SerializeList<MixedUnion>(
+                    TransformIUnion));
+
+            private static readonly Serializer<
+                List<ModelTypedUnion>
+            > Serialize_ListOf_ModelTypedUnion = (
+                SerializeList<ModelTypedUnion>(
+                    TransformIUnion));
+
+            private static readonly Serializer<
+                (StructuralUnion, MixedUnion, ModelTypedUnion)
+            > Serialize_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion = (
+                SerializeTuple3<StructuralUnion, MixedUnion, ModelTypedUnion>(
+                    TransformIUnion,
+                    TransformIUnion,
+                    TransformIUnion));
 
             public override Nodes.JsonObject TransformStructuralFirst(
                 Aas.IStructuralFirst that
@@ -2095,67 +2150,46 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                result["structuralProperty"] = Transform(
+                result["structuralProperty"] = TransformIUnion(
                     that.StructuralProperty);
 
-                result["mixedProperty"] = Transform(
+                result["mixedProperty"] = TransformIUnion(
                     that.MixedProperty);
 
-                result["modelTypedProperty"] = Transform(
+                result["modelTypedProperty"] = TransformIUnion(
                     that.ModelTypedProperty);
 
-                Nodes.JsonArray arrayListStructuralProperty = SerializeArray(
-                    that.ListStructuralProperty,
-                    (StructuralUnion item) =>
-                        Transform(
-                            item));
-                result["listStructuralProperty"] = arrayListStructuralProperty;
+                result["listStructuralProperty"] = Serialize_ListOf_StructuralUnion(
+                    that.ListStructuralProperty);
 
-                Nodes.JsonArray arrayListMixedProperty = SerializeArray(
-                    that.ListMixedProperty,
-                    (MixedUnion item) =>
-                        Transform(
-                            item));
-                result["listMixedProperty"] = arrayListMixedProperty;
+                result["listMixedProperty"] = Serialize_ListOf_MixedUnion(
+                    that.ListMixedProperty);
 
-                Nodes.JsonArray arrayListModelTypedProperty = SerializeArray(
-                    that.ListModelTypedProperty,
-                    (ModelTypedUnion item) =>
-                        Transform(
-                            item));
-                result["listModelTypedProperty"] = arrayListModelTypedProperty;
+                result["listModelTypedProperty"] = Serialize_ListOf_ModelTypedUnion(
+                    that.ListModelTypedProperty);
 
-                Nodes.JsonArray arrayTupleProperty = SerializeTuple3(
-                    that.TupleProperty,
-                    Transform,
-                    Transform,
-                    Transform);
-                result["tupleProperty"] = arrayTupleProperty;
+                result["tupleProperty"] = Serialize_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(
+                    that.TupleProperty);
 
                 if (that.OptionalStructuralProperty != null)
                 {
-                    result["optionalStructuralProperty"] = Transform(
+                    result["optionalStructuralProperty"] = TransformIUnion(
                         that.OptionalStructuralProperty);
                 }
 
                 if (that.OptionalMixedProperty != null)
                 {
-                    result["optionalMixedProperty"] = Transform(
+                    result["optionalMixedProperty"] = TransformIUnion(
                         that.OptionalMixedProperty);
                 }
 
                 if (that.OptionalModelTypedProperty != null)
                 {
-                    result["optionalModelTypedProperty"] = Transform(
+                    result["optionalModelTypedProperty"] = TransformIUnion(
                         that.OptionalModelTypedProperty);
                 }
 
                 return result;
-            }
-
-            private Nodes.JsonObject Transform(Aas.IUnion that)
-            {
-                return Transform(that.Underlying);
             }
         }  // internal class Transformer
 
@@ -2175,14 +2209,12 @@ namespace dummy
         /// </example>
         public static class Serialize
         {
-            private static readonly Transformer Transformer = new Transformer();
-
             /// <summary>
             /// Serialize an instance of the meta-model into a JSON object.
             /// </summary>
             public static Nodes.JsonObject ToJsonObject(Aas.IClass that)
             {
-                return Serialize.Transformer.Transform(that);
+                return Transformer.TransformIClass(that);
             }
         }  // public static class Serialize
     }  // public static class Jsonization

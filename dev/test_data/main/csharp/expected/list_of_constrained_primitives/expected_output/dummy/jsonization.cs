@@ -437,6 +437,32 @@ namespace dummy
             : Visitation.AbstractTransformer<Nodes.JsonObject>
         {
             /// <summary>
+            /// Dispatch the serialization over the run-time type of an instance.
+            /// </summary>
+            /// <remarks>
+            /// The transformer carries no state, so a single instance serves the whole
+            /// program. No field initializer reads it, only
+            /// <see cref="TransformIClass" /> does, so it does not matter where among
+            /// the serializers it is initialized.
+            /// </remarks>
+            [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
+            private static readonly Transformer _instance = new Transformer();
+
+            /// <summary>
+            /// Serialize <paramref name="that" /> into a JSON object.
+            /// </summary>
+            /// <remarks>
+            /// Which JSON object that is, is decided by the run-time type of
+            /// <paramref name="that" />, so this one serializer serves every abstract
+            /// class and every concrete class with descendants, as well as the item of
+            /// a list or of a tuple of any of them.
+            /// </remarks>
+            internal static Nodes.JsonObject TransformIClass(Aas.IClass that)
+            {
+                return _instance.Transform(that);
+            }
+
+            /// <summary>
             /// Convert <paramref name="that" /> 64-bit long integer to a JSON value.
             /// </summary>
             /// <param name="that">value to be converted</param>
@@ -457,25 +483,56 @@ namespace dummy
             }
 
             /// <summary>
-            /// Serialize every item of <paramref name="items" /> with
-            /// <paramref name="serializeItem" /> into a JSON array.
+            /// Serialize <paramref name="that" /> into a JSON value.
             /// </summary>
             /// <remarks>
-            /// This is shared by all the list-typed properties.
+            /// This is the shape shared by every serialization step, so that the steps
+            /// can be composed. Unlike the XML side, no combinator is needed to frame
+            /// the value -- a JSON value stands on its own -- so the only composition
+            /// is over the items of a list or of a tuple.
+            /// </remarks>
+            /// <typeparam name="T">Type of the value to be serialized</typeparam>
+            private delegate Nodes.JsonNode? Serializer<in T>(T that);
+
+            /// <summary>
+            /// Convert <paramref name="that" /> to a JSON value.
+            /// </summary>
+            private static Nodes.JsonValue ToJsonValue(string that)
+            {
+                return Nodes.JsonValue.Create(that);
+            }
+
+            /// <summary>
+            /// Compose the serializer of a list whose items are serialized with
+            /// <paramref name="serializeItem" />.
+            /// </summary>
+            /// <remarks>
+            /// This is shared by all the list-typed properties. The composition is
+            /// performed once, when the field holding the result is initialized, so
+            /// serializing a list allocates nothing besides the JSON array itself.
+            ///
+            /// The parameter is a <c>List</c> rather than an <c>IEnumerable</c> so that
+            /// the iteration does not box the enumerator -- which is also the type that
+            /// every list-typed property actually has.
             /// </remarks>
             /// <typeparam name="T">Type of a single list item</typeparam>
-            private static Nodes.JsonArray SerializeArray<T>(
-                IEnumerable<T> items,
-                System.Func<T, Nodes.JsonNode?> serializeItem)
+            private static Serializer<List<T>> SerializeList<T>(
+                Serializer<T> serializeItem)
             {
-                var result = new Nodes.JsonArray();
-                foreach (T item in items)
+                return (that) =>
                 {
-                    result.Add(
-                        serializeItem(item));
-                }
-                return result;
+                    var result = new Nodes.JsonArray();
+                    foreach (T item in that)
+                    {
+                        result.Add(serializeItem(item));
+                    }
+                    return result;
+                };
             }
+
+            private static readonly Serializer<List<string>> Serialize_ListOf_string = (
+                SerializeList<string>(
+                    ToJsonValue));
 
             public override Nodes.JsonObject TransformSomething(
                 Aas.ISomething that
@@ -483,12 +540,8 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                Nodes.JsonArray arraySomeNames = SerializeArray(
-                    that.SomeNames,
-                    (string item) =>
-                        Nodes.JsonValue.Create(
-                            item));
-                result["someNames"] = arraySomeNames;
+                result["someNames"] = Serialize_ListOf_string(
+                    that.SomeNames);
 
                 return result;
             }
@@ -510,14 +563,12 @@ namespace dummy
         /// </example>
         public static class Serialize
         {
-            private static readonly Transformer Transformer = new Transformer();
-
             /// <summary>
             /// Serialize an instance of the meta-model into a JSON object.
             /// </summary>
             public static Nodes.JsonObject ToJsonObject(Aas.IClass that)
             {
-                return Serialize.Transformer.Transform(that);
+                return Transformer.TransformIClass(that);
             }
         }  // public static class Serialize
     }  // public static class Jsonization

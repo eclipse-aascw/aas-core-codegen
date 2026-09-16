@@ -2,7 +2,7 @@
 
 import io
 import textwrap
-from typing import Final, List, Mapping, Optional, Set, Tuple
+from typing import Final, List, Mapping, Optional, Sequence, Set, Tuple
 
 from icontract import ensure, require
 
@@ -752,13 +752,15 @@ def _composed_types_in_initialization_order(
     symbol_table: intermediate.SymbolTable,
 ) -> List[intermediate.TypeAnnotationUnion]:
     """
-    List the list- and tuple-typed values which need a de-serializer of their own.
+    List the list- and tuple-typed values which need a de/serializer of their own.
 
-    Only a list and a tuple have no ``...From`` function to be named after, so
-    only they are composed by a combinator and cached in a ``static readonly``
-    field. The fields are emitted in this order and a field initializer may
-    reference only the fields declared before it -- hence the post-order:
-    the items first, then the container that composes them.
+    Only a list and a tuple have no function of their own to be named after
+    (a ``...From`` when de-serializing, a ``...ToJsonValue``, ``TransformIClass``
+    or ``TransformIUnion`` when serializing), so only they are composed by
+    a combinator and cached in a ``static readonly`` field. The fields are
+    emitted in this order and a field initializer may reference only the fields
+    declared before it -- hence the post-order: the items first, then the
+    container that composes them.
 
     The result is de-duplicated by the moniker, which is injective (see
     :py:func:`aas_core_codegen.csharp.common.type_moniker`), so that two
@@ -776,7 +778,7 @@ def _composed_types_in_initialization_order(
                 register(item_type_anno)
         else:
             # NOTE (mristin):
-            # An atomic value de-serializes through a function of its own, so
+            # An atomic value de/serializes through a function of its own, so
             # it needs no field.
             return
 
@@ -1451,6 +1453,60 @@ Nodes.JsonValue.Create(
         assert_never(primitive_type)
 
 
+def _serializer_name(type_anno: intermediate.TypeAnnotationUnion) -> Identifier:
+    """
+    Name the field holding the serializer of a list or of a tuple.
+
+    The moniker comes last, after an underscore, so that the name of a field
+    can never coincide with one of the ``...ToJsonValue`` functions: those are
+    keyed by one of our symbols, and a symbol is named through
+    :py:func:`aas_core_codegen.naming.capitalized_camel_case`, which never
+    emits an underscore.
+    """
+    return Identifier(f"Serialize_{csharp_common.type_moniker(type_anno)}")
+
+
+def _serializer_expr(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
+    """
+    Generate the expression serializing a value of ``type_anno``.
+
+    An atomic value is serialized by a function named after its type, and
+    a list or a tuple by the cached field composing the serializers of its
+    items. Either way the expression is a plain name, so that a call site
+    neither allocates a delegate nor composes anything.
+    """
+    if isinstance(
+        type_anno,
+        (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
+    ):
+        return Stripped(_serializer_name(type_anno))
+
+    if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
+        return Stripped("ToJsonValue")
+
+    assert isinstance(
+        type_anno, intermediate.OurTypeAnnotation
+    ), f"Expected an atomic type annotation, but got {type_anno}"
+
+    our_type = type_anno.our_type
+
+    if isinstance(our_type, intermediate.Enumeration):
+        name = csharp_naming.enum_name(our_type.name)
+        return Stripped(f"Serialize.{name}ToJsonValue")
+
+    if isinstance(our_type, intermediate.ConstrainedPrimitive):
+        return Stripped("ToJsonValue")
+
+    if isinstance(our_type, intermediate.NamedUnion):
+        return Stripped("TransformIUnion")
+
+    assert isinstance(
+        our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+    )
+
+    return Stripped("TransformIClass")
+
+
 def _generate_serialize_atomic_value(
     type_annotation: intermediate.AtomicTypeAnnotation, source_expr: Stripped
 ) -> Stripped:
@@ -1483,14 +1539,16 @@ Serialize.{name}ToJsonValue(
             ),
         ):
             # NOTE (mristin):
-            # A named union is not itself an ``Aas.IClass``, but the
-            # ``Transformer`` class defines a ``Transform`` overload for every
-            # named union (see :py:func:`_generate_union_transform_helper`)
-            # that unwraps it to its underlying instance, so we can transform
-            # it exactly like a class instance here.
+            # A class is dispatched over its run-time type by ``TransformIClass``
+            # and a named union is unwrapped by ``TransformIUnion``, both of them
+            # static so that they can be named -- here, and equally as an item of
+            # a list or of a tuple (see :py:func:`_serializer_expr`).
+            function = _serializer_expr(type_annotation)
+
+            # We can not use textwrap due to indent_but_first_line.
             return Stripped(
                 f"""\
-Transform(
+{function}(
 {I}{indent_but_first_line(source_expr, I)})"""
             )
         else:
@@ -1499,52 +1557,64 @@ Transform(
         assert_never(type_annotation)
 
 
-def _generate_tuple_atomic_serializer_helpers() -> List[Stripped]:
+def _generate_atomic_serializer_helpers(
+    primitive_types: Set[intermediate.PrimitiveType],
+) -> List[Stripped]:
     """
-    Generate ``ToJsonValue`` overloads so every atomic tuple item is a bare method group.
+    Generate ``ToJsonValue`` overloads so every composed atomic item is a bare name.
 
-    ``SerializeTupleN`` (see :py:func:`_generate_serialize_tuple_helper`)
-    accepts a plain ``System.Func<T, Nodes.JsonNode?>`` per item, so a tuple
-    item whose serialization is already a single call to one of our own
-    methods (the existing ``Transformer.ToJsonValue(long)``, a class's own
-    ``Transform``, an enum's own ``...ToJsonValue``) can be passed on
-    directly, with no wrapping lambda -- see
-    :py:func:`_tuple_item_serializer_expr`.
+    ``SerializeList`` and ``SerializeTuple{N}`` take a :py:class:`Serializer` per
+    item, and :py:func:`_serializer_expr` names one with a plain identifier, so
+    that the field composing them converts the delegates once and a call site
+    allocates none. An item whose serialization is already a single call to one
+    of our own methods (the existing ``Transformer.ToJsonValue``, a class's
+    ``TransformIClass``, an enumeration's ``...ToJsonValue``) can therefore be
+    named directly, with no wrapping lambda.
 
     ``bool``, ``float`` (``double``), ``str`` and ``bytearray`` (the latter
     additionally composing a base64 encoding step) route through the BCL's
-    ``Nodes.JsonValue.Create`` instead, which can NOT be passed on directly
-    as a bare method group -- verified against the compiler:
-    ``Nodes.JsonValue.Create`` is a *generic* method with an optional second
-    parameter (``Create<T>(T value, JsonNodeOptions? options = null)``), and
-    the C# compiler refuses to convert a method group to a delegate in that
+    ``Nodes.JsonValue.Create`` at a direct call site, which can NOT be named
+    directly -- verified against the compiler: ``Nodes.JsonValue.Create`` is
+    a *generic* method with an optional second parameter
+    (``Create<T>(T value, JsonNodeOptions? options = null)``), and the C#
+    compiler refuses to convert a method group to a delegate in that
     combination (CS1503), regardless of whether ``T`` would otherwise be
     inferable from the target delegate.
 
     So we add more overloads of the already-existing, single-purpose,
     non-generic ``Transformer.ToJsonValue`` here -- one per such primitive
     type -- exactly so that *an overload of ours*, not
-    ``Nodes.JsonValue.Create`` itself, can be forwarded as a bare method
-    group; unlike a generic method, a plain overload set is resolved by the
-    compiler purely from the (already-known, at every call site here) target
-    delegate type, which is exactly the case that fails for
-    ``Nodes.JsonValue.Create`` -- also verified against the compiler.
+    ``Nodes.JsonValue.Create`` itself, can be named; unlike a generic method,
+    a plain overload set is resolved by the compiler purely from the
+    (already-known, at every composition) target delegate type, which is
+    exactly the case that fails for ``Nodes.JsonValue.Create`` -- also
+    verified against the compiler.
+
+    Only the overloads which are actually composed are emitted. The ``long``
+    overload is not among them, as it is emitted unconditionally: a direct
+    call site converting an integer property needs it as well.
     """
     result = []  # type: List[Stripped]
 
-    for csharp_type, conversion_expr in (
-        ("bool", "Nodes.JsonValue.Create(that)"),
-        ("double", "Nodes.JsonValue.Create(that)"),
-        ("string", "Nodes.JsonValue.Create(that)"),
-        ("byte[]", "Nodes.JsonValue.Create(System.Convert.ToBase64String(that))"),
+    for primitive_type, csharp_type, conversion_expr in (
+        (intermediate.PrimitiveType.BOOL, "bool", "Nodes.JsonValue.Create(that)"),
+        (intermediate.PrimitiveType.FLOAT, "double", "Nodes.JsonValue.Create(that)"),
+        (intermediate.PrimitiveType.STR, "string", "Nodes.JsonValue.Create(that)"),
+        (
+            intermediate.PrimitiveType.BYTEARRAY,
+            "byte[]",
+            "Nodes.JsonValue.Create(System.Convert.ToBase64String(that))",
+        ),
     ):
+        if primitive_type not in primitive_types:
+            continue
+
         result.append(
             Stripped(
                 f"""\
 /// <summary>
 /// Convert <paramref name="that" /> to a JSON value.
 /// </summary>
-[CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
 private static Nodes.JsonValue ToJsonValue({csharp_type} that)
 {{
 {I}return {conversion_expr};
@@ -1555,68 +1625,170 @@ private static Nodes.JsonValue ToJsonValue({csharp_type} that)
     return result
 
 
-def _tuple_item_serializer_expr(
-    type_annotation: intermediate.AtomicTypeAnnotation,
+def _composed_primitive_types(
+    composed_types: Sequence[intermediate.TypeAnnotationUnion],
+) -> Set[intermediate.PrimitiveType]:
+    """
+    Collect the primitive types serialized as an item of a list or of a tuple.
+
+    Only these need a ``ToJsonValue`` overload of their own -- see
+    :py:func:`_generate_atomic_serializer_helpers`.
+    """
+    result = set()  # type: Set[intermediate.PrimitiveType]
+
+    def register(item_type_anno: intermediate.TypeAnnotationUnion) -> None:
+        """Register the primitive type of ``item_type_anno``, if it has one."""
+        if isinstance(item_type_anno, intermediate.PrimitiveTypeAnnotation):
+            result.add(item_type_anno.a_type)
+        elif isinstance(item_type_anno, intermediate.OurTypeAnnotation) and isinstance(
+            item_type_anno.our_type, intermediate.ConstrainedPrimitive
+        ):
+            result.add(item_type_anno.our_type.constrainee)
+
+    for composed_type in composed_types:
+        if isinstance(composed_type, intermediate.ListTypeAnnotation):
+            register(composed_type.items)
+        elif isinstance(composed_type, intermediate.TupleTypeAnnotation):
+            for item_type_anno in composed_type.items:
+                register(item_type_anno)
+        else:
+            raise AssertionError(
+                f"Expected a list or a tuple type annotation, "
+                f"but got {composed_type}"
+            )
+
+    return result
+
+
+def _generate_serializer_delegate() -> Stripped:
+    """Generate the delegate which every serialization step implements."""
+    return Stripped(
+        """\
+/// <summary>
+/// Serialize <paramref name="that" /> into a JSON value.
+/// </summary>
+/// <remarks>
+/// This is the shape shared by every serialization step, so that the steps
+/// can be composed. Unlike the XML side, no combinator is needed to frame
+/// the value -- a JSON value stands on its own -- so the only composition
+/// is over the items of a list or of a tuple.
+/// </remarks>
+/// <typeparam name="T">Type of the value to be serialized</typeparam>
+private delegate Nodes.JsonNode? Serializer<in T>(T that);"""
+    )
+
+
+def _generate_transform_iunion_helper() -> Stripped:
+    """Generate a single serializer shared by every named union."""
+    return Stripped(
+        f"""\
+/// <summary>
+/// Serialize the named union <paramref name="that" /> into a JSON object.
+/// </summary>
+/// <remarks>
+/// A named union is not an <see cref="Aas.IClass" />, so it can not be
+/// dispatched by <see cref="TransformIClass" />. Dispatching over the
+/// common, non-generic <see cref="Aas.IUnion" /> means we need only this one
+/// serializer for *all* named unions, and not one per union.
+///
+/// Should a named union ever be allowed to flatten primitive or enumeration
+/// alternatives, only the body of this method has to change (to dispatch on
+/// the underlying value's kind) -- every call site stays the same.
+/// </remarks>
+private static Nodes.JsonObject TransformIUnion(Aas.IUnion that)
+{{
+{I}return TransformIClass(that.Underlying);
+}}"""
+    )
+
+
+def _generate_serialize_list_helper() -> Stripped:
+    """Generate the combinator composing the serializer of a list."""
+    return Stripped(
+        f"""\
+/// <summary>
+/// Compose the serializer of a list whose items are serialized with
+/// <paramref name="serializeItem" />.
+/// </summary>
+/// <remarks>
+/// This is shared by all the list-typed properties. The composition is
+/// performed once, when the field holding the result is initialized, so
+/// serializing a list allocates nothing besides the JSON array itself.
+///
+/// The parameter is a <c>List</c> rather than an <c>IEnumerable</c> so that
+/// the iteration does not box the enumerator -- which is also the type that
+/// every list-typed property actually has.
+/// </remarks>
+/// <typeparam name="T">Type of a single list item</typeparam>
+private static Serializer<List<T>> SerializeList<T>(
+{I}Serializer<T> serializeItem)
+{{
+{I}return (that) =>
+{I}{{
+{II}var result = new Nodes.JsonArray();
+{II}foreach (T item in that)
+{II}{{
+{III}result.Add(serializeItem(item));
+{II}}}
+{II}return result;
+{I}}};
+}}"""
+    )
+
+
+def _generate_serializer_field(
+    type_anno: intermediate.TypeAnnotationUnion,
 ) -> Stripped:
-    """
-    Generate an expression usable directly as a tuple item's serializer.
+    """Generate the cached serializer of the list or the tuple ``type_anno``."""
+    name = _serializer_name(type_anno)
+    value_type = csharp_common.generate_type(type_anno)
 
-    ``SerializeTupleN`` (see :py:func:`_generate_serialize_tuple_helper`)
-    infers its type parameters from the tuple value itself (its first
-    argument), so -- unlike the adapters needed on the deserialization side
-    -- a bare method group already matching ``System.Func<T, Nodes.JsonNode?>``
-    can be passed on directly here, without a wrapping lambda, for every
-    atomic kind: every primitive routes through one of the
-    ``Transformer.ToJsonValue`` overloads (see
-    :py:func:`_generate_tuple_atomic_serializer_helpers` for why we route
-    ``bool``/``float``/``str``/``bytearray`` through overloads of our own
-    instead of the BCL's ``Nodes.JsonValue.Create`` directly), and classes,
-    named unions and enums route through their own existing single-overload,
-    non-generic ``Transform``/``...ToJsonValue`` methods.
-    """
-    if isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
-        primitive_type = type_annotation.a_type
-    elif isinstance(type_annotation, intermediate.OurTypeAnnotation) and isinstance(
-        type_annotation.our_type, intermediate.ConstrainedPrimitive
-    ):
-        primitive_type = type_annotation.our_type.constrainee
-    else:
-        primitive_type = None
+    composition: Stripped
 
-    if primitive_type is not None:
-        return Stripped("Transformer.ToJsonValue")
-
-    assert isinstance(type_annotation, intermediate.OurTypeAnnotation)
-    our_type = type_annotation.our_type
-
-    if isinstance(our_type, intermediate.Enumeration):
-        name = csharp_naming.enum_name(our_type.name)
-        return Stripped(f"Serialize.{name}ToJsonValue")
-    elif isinstance(
-        our_type,
-        (
-            intermediate.AbstractClass,
-            intermediate.ConcreteClass,
-            intermediate.NamedUnion,
-        ),
-    ):
-        # A named union has its own ``Transform`` overload in the
-        # ``Transformer`` class (see
-        # :py:func:`_generate_union_transform_helper`), so it can be
-        # passed on as a bare method group just like a class.
-        return Stripped("Transform")
-    elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-        raise AssertionError(
-            f"Unexpected {our_type=}: a constrained primitive should have "
-            f"already been handled above through ``primitive_type``"
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        item_type = csharp_common.generate_type(type_anno.items)
+        composition = Stripped(
+            f"""\
+SerializeList<{item_type}>(
+{I}{_serializer_expr(type_anno.items)})"""
         )
+
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        item_types_joined = ", ".join(
+            csharp_common.generate_type(item_type_anno)
+            for item_type_anno in type_anno.items
+        )
+        item_serializers_joined = ",\n".join(
+            _serializer_expr(item_type_anno) for item_type_anno in type_anno.items
+        )
+        composition = Stripped(
+            f"""\
+SerializeTuple{len(type_anno.items)}<{item_types_joined}>(
+{I}{indent_but_first_line(item_serializers_joined, I)})"""
+        )
+
     else:
-        assert_never(our_type)
+        raise AssertionError(
+            f"Expected a list or a tuple type annotation, but got {type_anno}"
+        )
+
+    declaration = f"private static readonly Serializer<{value_type}> {name} = ("
+    if len(declaration) + len(I) * 3 > _MAX_LINE_LENGTH:
+        declaration = f"""\
+private static readonly Serializer<
+{I}{value_type}
+> {name} = ("""
+
+    return Stripped(
+        f"""\
+{declaration}
+{I}{indent_but_first_line(composition, I)});"""
+    )
 
 
 @require(lambda arity: arity > 0)
 def _generate_serialize_tuple_helper(arity: int) -> Stripped:
-    """Generate a generic function to serialize a tuple of the given ``arity``."""
+    """Generate the combinator composing the serializer of a tuple of ``arity``."""
     type_params = [f"T{i}" for i in range(arity)]
     type_params_joined = ", ".join(type_params)
 
@@ -1626,7 +1798,7 @@ def _generate_serialize_tuple_helper(arity: int) -> Stripped:
         tuple_type = f"({type_params_joined})"
 
     params_joined = ",\n".join(
-        f"System.Func<T{i}, Nodes.JsonNode?> serializeItem{i}" for i in range(arity)
+        f"Serializer<T{i}> serializeItem{i}" for i in range(arity)
     )
 
     add_stmts_joined = "\n".join(
@@ -1638,20 +1810,24 @@ def _generate_serialize_tuple_helper(arity: int) -> Stripped:
     return Stripped(
         f"""\
 /// <summary>
-/// Serialize the tuple <paramref name="that" /> of {arity} item(s) with
-/// <paramref name="serializeItem0" />, <paramref name="serializeItem1" />, *etc.*
-/// into a JSON array.
+/// Compose the serializer of a tuple of {arity} item(s), whose items are
+/// serialized with <paramref name="serializeItem0" />,
+/// <paramref name="serializeItem1" />, *etc.*
 /// </summary>
 /// <remarks>
-/// This is shared by all the tuple-typed properties of arity {arity}.
+/// This is shared by all the tuple-typed properties of arity {arity}. Just
+/// like for a list, the composition is performed once, when the field
+/// holding the result is initialized.
 /// </remarks>
-private static Nodes.JsonArray {function_name}<{type_params_joined}>(
-{I}{tuple_type} that,
+private static Serializer<{tuple_type}> {function_name}<{type_params_joined}>(
 {I}{indent_but_first_line(params_joined, I)})
 {{
-{I}var result = new Nodes.JsonArray();
-{I}{indent_but_first_line(add_stmts_joined, I)}
-{I}return result;
+{I}return (that) =>
+{I}{{
+{II}var result = new Nodes.JsonArray();
+{II}{indent_but_first_line(add_stmts_joined, II)}
+{II}return result;
+{I}}};
 }}"""
     )
 
@@ -1663,26 +1839,26 @@ def _generate_transform_property(
     """Generate the snippet to transform a property into a JSON node."""
     type_anno = intermediate.beneath_optional(prop.type_annotation)
 
-    stmts = []  # type: List[Stripped]
-
     name = csharp_naming.property_name(prop.name)
     prop_literal = csharp_common.string_literal(prop.json_name)
 
-    # NOTE (mristin, 2022-03-12):
-    # For some unexplainable reason, C# compiler can not infer that properties which
-    # are enumerations are not null after an ``if (that.someProperty != null)``.
-    # Hence, we need to add a null-coalescing for these particular cases.
-    # Otherwise, we can just stick to ``that.someProperty``.
-
-    needs_null_coalescing = (
+    # NOTE (mristin):
+    # An optional enumeration is a ``System.Nullable`` of that enumeration, and
+    # not the enumeration itself, so it has to be unwrapped before it can be
+    # converted. Every other optional property is of a reference type, which
+    # needs no unwrapping.
+    is_optional_enumeration = (
         isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
         and isinstance(prop.type_annotation.value, intermediate.OurTypeAnnotation)
         and isinstance(prop.type_annotation.value.our_type, intermediate.Enumeration)
     )
-    if needs_null_coalescing:
-        source_expr = Stripped("value")
+
+    if is_optional_enumeration:
+        source_expr = Stripped(f"that.{name}.Value")
     else:
         source_expr = Stripped(f"that.{name}")
+
+    serialize_block: Stripped
 
     if isinstance(
         type_anno,
@@ -1691,109 +1867,56 @@ def _generate_transform_property(
         conversion_expr = _generate_serialize_atomic_value(
             type_annotation=type_anno, source_expr=source_expr
         )
-        stmts.append(Stripped(f"result[{prop_literal}] = {conversion_expr};"))
-    elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
-            f"(mristin): We generate only code for lists of atomic values in the JSON "
-            f"serialization, but got a list of type {type_anno}. "
-            f"Please contact the developers if you need this feature."
+        serialize_block = Stripped(f"result[{prop_literal}] = {conversion_expr};")
+
+    elif isinstance(
+        type_anno,
+        (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
+    ):
+        item_type_annos = (
+            [type_anno.items]
+            if isinstance(type_anno, intermediate.ListTypeAnnotation)
+            else list(type_anno.items)
         )
 
-        item_type = csharp_common.generate_type(type_anno.items)
-        array_var = csharp_naming.variable_name(Identifier(f"array_{prop.name}"))
-
-        item_conversion_expr = _generate_serialize_atomic_value(
-            type_annotation=type_anno.items, source_expr=Stripped("item")
-        )
-
-        # We can not use textwrap due to indent_but_first_line.
-        stmts.append(
-            Stripped(
-                f"""\
-Nodes.JsonArray {array_var} = SerializeArray(
-{I}{source_expr},
-{I}({item_type} item) =>
-{II}{indent_but_first_line(item_conversion_expr, II)});
-result[{prop_literal}] = {array_var};"""
-            )
-        )
-
-    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        array_var = csharp_naming.variable_name(Identifier(f"array_{prop.name}"))
-
-        item_serializer_exprs = []  # type: List[Stripped]
-        for item_type_anno in type_anno.items:
+        for item_type_anno in item_type_annos:
             assert isinstance(
                 item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
             ), (
-                f"Expected an atomic tuple item (a primitive, a constrained "
-                f"primitive, an enumeration, a class or a named union), "
+                f"Expected an atomic item (a primitive, a constrained primitive, "
+                f"an enumeration, a class or a named union) of {type_anno}, "
                 f"but got {item_type_anno}. "
                 f"This should have already been verified in "
                 f"intermediate._translate._verify_only_simple_type_patterns."
             )
 
-            item_serializer_exprs.append(_tuple_item_serializer_expr(item_type_anno))
-
-        item_serializer_exprs_joined = ",\n".join(item_serializer_exprs)
-
-        arity = len(type_anno.items)
-
-        stmts.append(
-            Stripped(
-                f"""\
-Nodes.JsonArray {array_var} = SerializeTuple{arity}(
-{I}{source_expr},
-{I}{indent_but_first_line(item_serializer_exprs_joined, I)});
-result[{prop_literal}] = {array_var};"""
-            )
+        # We can not use textwrap due to indent_but_first_line.
+        serialize_block = Stripped(
+            f"""\
+result[{prop_literal}] = {_serializer_expr(type_anno)}(
+{I}{indent_but_first_line(source_expr, I)});"""
         )
+
     else:
         assert_never(type_anno)
 
-    serialize_block = Stripped("\n".join(stmts))
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        if needs_null_coalescing:
-            value_type = csharp_common.generate_type(prop.type_annotation.value)
-            if isinstance(prop.type_annotation.value, intermediate.OurTypeAnnotation):
-                our_type = prop.type_annotation.value.our_type
-                if isinstance(
-                    our_type,
-                    (
-                        intermediate.Enumeration,
-                        intermediate.AbstractClass,
-                        intermediate.ConcreteClass,
-                    ),
-                ):
-                    value_type = Stripped(f"Aas.{value_type}")
-
-            return (
-                Stripped(
-                    f"""\
-if (that.{name} != null)
-{{
-{I}// We need to help the static analyzer with a null coalescing.
-{I}{value_type} value = that.{name}
-{II}?? throw new System.InvalidOperationException();
-{I}{indent_but_first_line(serialize_block, I)}
-}}"""
-                ),
-                None,
-            )
-
-        else:
-            return (
-                Stripped(
-                    f"""\
-if (that.{name} != null)
-{{
-{I}{indent_but_first_line(serialize_block, I)}
-}}"""
-                ),
-                None,
-            )
-    else:
+    if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
         return serialize_block, None
+
+    condition = (
+        f"that.{name}.HasValue" if is_optional_enumeration else f"that.{name} != null"
+    )
+
+    return (
+        Stripped(
+            f"""\
+if ({condition})
+{{
+{I}{indent_but_first_line(serialize_block, I)}
+}}"""
+        ),
+        None,
+    )
 
 
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
@@ -1846,36 +1969,6 @@ public override Nodes.JsonObject {transform_name}(
     return Stripped(writer.getvalue()), None
 
 
-def _generate_union_transform_helper() -> Stripped:
-    """
-    Generate a single ``Transform`` overload shared by every named union.
-
-    A named union is not itself an ``Aas.IClass``, so it can not be dispatched
-    by the inherited, ``IClass``-typed ``Transform`` overload. We add this
-    overload, single-purpose and non-virtual just like the tuple atomic
-    serializer helpers above, so that call sites can keep passing ``Transform``
-    around as a plain method group or calling it directly, regardless of
-    whether the value at hand is a class instance or a named union -- see
-    :py:func:`_generate_serialize_atomic_value` and
-    :py:func:`_tuple_item_serializer_expr`.
-
-    Dispatching over the common, non-generic ``Aas.IUnion`` (see ``generate()``
-    in ``_generate_types.py``) instead of the union's own type means we need
-    only this one overload for *all* named unions, not one per union.
-
-    Should a named union ever be allowed to flatten primitive or enumeration
-    alternatives, only the body of this method has to change (to dispatch on
-    the underlying value's kind) -- every call site stays the same.
-    """
-    return Stripped(
-        f"""\
-private Nodes.JsonObject Transform(Aas.IUnion that)
-{{
-{I}return Transform(that.Underlying);
-}}"""
-    )
-
-
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_transformer(
     symbol_table: intermediate.SymbolTable,
@@ -1885,6 +1978,36 @@ def _generate_transformer(
     errors = []  # type: List[Error]
 
     blocks = [
+        Stripped(
+            """\
+/// <summary>
+/// Dispatch the serialization over the run-time type of an instance.
+/// </summary>
+/// <remarks>
+/// The transformer carries no state, so a single instance serves the whole
+/// program. No field initializer reads it, only
+/// <see cref="TransformIClass" /> does, so it does not matter where among
+/// the serializers it is initialized.
+/// </remarks>
+[CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
+private static readonly Transformer _instance = new Transformer();"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Serialize <paramref name="that" /> into a JSON object.
+/// </summary>
+/// <remarks>
+/// Which JSON object that is, is decided by the run-time type of
+/// <paramref name="that" />, so this one serializer serves every abstract
+/// class and every concrete class with descendants, as well as the item of
+/// a list or of a tuple of any of them.
+/// </remarks>
+internal static Nodes.JsonObject TransformIClass(Aas.IClass that)
+{{
+{I}return _instance.Transform(that);
+}}"""
+        ),
         Stripped(
             f"""\
 /// <summary>
@@ -1907,36 +2030,38 @@ private static Nodes.JsonValue ToJsonValue(long that)
 {I}return Nodes.JsonValue.Create(that);
 }}"""
         ),
-        Stripped(
-            f"""\
-/// <summary>
-/// Serialize every item of <paramref name="items" /> with
-/// <paramref name="serializeItem" /> into a JSON array.
-/// </summary>
-/// <remarks>
-/// This is shared by all the list-typed properties.
-/// </remarks>
-/// <typeparam name="T">Type of a single list item</typeparam>
-private static Nodes.JsonArray SerializeArray<T>(
-{I}IEnumerable<T> items,
-{I}System.Func<T, Nodes.JsonNode?> serializeItem)
-{{
-{I}var result = new Nodes.JsonArray();
-{I}foreach (T item in items)
-{I}{{
-{II}result.Add(
-{III}serializeItem(item));
-{I}}}
-{I}return result;
-}}"""
-        ),
     ]  # type: List[Stripped]
 
-    tuple_arities = intermediate.tuple_arities(symbol_table)
-    if len(tuple_arities) > 0:
-        blocks.extend(_generate_tuple_atomic_serializer_helpers())
-        for arity in tuple_arities:
+    if len(symbol_table.named_unions) > 0:
+        blocks.append(_generate_transform_iunion_helper())
+
+    # NOTE (mristin):
+    # The gating follows the call graph: only a list and a tuple are composed,
+    # so a model with neither pays for neither the delegate nor the
+    # combinators. Every atomic value is serialized by a function emitted for
+    # the very type it serializes, and hence can never be missing.
+    composed_types = _composed_types_in_initialization_order(symbol_table)
+
+    if len(composed_types) > 0:
+        blocks.append(_generate_serializer_delegate())
+
+        blocks.extend(
+            _generate_atomic_serializer_helpers(
+                primitive_types=_composed_primitive_types(composed_types)
+            )
+        )
+
+        if any(
+            isinstance(composed_type, intermediate.ListTypeAnnotation)
+            for composed_type in composed_types
+        ):
+            blocks.append(_generate_serialize_list_helper())
+
+        for arity in intermediate.tuple_arities(symbol_table):
             blocks.append(_generate_serialize_tuple_helper(arity))
+
+        for composed_type in composed_types:
+            blocks.append(_generate_serializer_field(composed_type))
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
@@ -1979,15 +2104,12 @@ private static Nodes.JsonArray SerializeArray<T>(
 
         elif isinstance(our_type, intermediate.NamedUnion):
             # A named union is never double-dispatched here directly -- it
-            # is unwrapped by the single shared ``Transform(Aas.IUnion)``
-            # overload instead (see :py:func:`_generate_union_transform_helper`).
+            # is unwrapped by the single shared ``TransformIUnion`` instead
+            # (see :py:func:`_generate_transform_iunion_helper`).
             pass
 
         else:
             assert_never(our_type)
-
-    if len(symbol_table.named_unions) > 0:
-        blocks.append(_generate_union_transform_helper())
 
     if len(errors) > 0:
         return None, errors
@@ -2017,16 +2139,13 @@ def _generate_serialize(
     """Generate the static serializer."""
     blocks = [
         Stripped(
-            "private static readonly Transformer Transformer = new Transformer();"
-        ),
-        Stripped(
             f"""\
 /// <summary>
 /// Serialize an instance of the meta-model into a JSON object.
 /// </summary>
 public static Nodes.JsonObject ToJsonObject(Aas.IClass that)
 {{
-{I}return Serialize.Transformer.Transform(that);
+{I}return Transformer.TransformIClass(that);
 }}"""
         ),
     ]  # type: List[Stripped]
