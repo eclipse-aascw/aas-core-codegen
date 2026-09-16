@@ -4151,7 +4151,310 @@ _READERS_FOR_SOMETHING: Mapping[
 # region Serialization
 
 
-_ItemT = TypeVar("_ItemT")
+def _write_str_as_element(
+    name: str,
+    value: str,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write the :paramref:`value` of a string enclosed in
+    the :paramref:`name` element.
+
+    :param name: of the corresponding element tag
+    :param value: to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+
+    # NOTE (mristin, 2022-10-14):
+    # We ran ``timeit`` on manual code which escaped XML special characters with
+    # a dictionary, and on another snippet which called three ``.replace()``.
+    # The code with ``.replace()`` was an order of magnitude faster on our computers.
+    #
+    # The escaping is written out here, and not put in a function of its own, since
+    # a string is the commonest value in a meta-model and a call is not free.
+    serializer.stream.write(
+        value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    )
+
+    serializer._write_end_element(name)
+
+
+def _write_nested_element(
+    name: str,
+    value: aas_types.Class,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`value` nested in the :paramref:`name` element.
+
+    The instance writes the element which designates its model type, so it has to be
+    nested in an element of its own when it is the value of a property. Mind that
+    an *item* of a list is not nested that way -- see
+    :py:func:`_write_list_of_instances` -- as it is the item's own element which
+    already sits in the list's element.
+
+    :param name: of the enclosing element
+    :param value: to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    serializer.visit(value)
+    serializer._write_end_element(name)
+
+
+def _write_list_of_instances(
+    name: str,
+    items: Sequence[aas_types.Class],
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`items` enclosed in the :paramref:`name` element.
+
+    Every item writes the element which designates its model type, so no positional
+    tag is necessary. If there are no items, the enclosing element is collapsed to
+    an empty one.
+
+    :param name: of the enclosing element
+    :param items: to be serialized
+    :param serializer: to write to
+    """
+    if len(items) == 0:
+        serializer._write_empty_element(name)
+    else:
+        serializer._write_start_element(name)
+        for item in items:
+            serializer.visit(item)
+        serializer._write_end_element(name)
+
+
+def _write_tuple3_of__structural_union__mixed_union__model_typed_union(
+    name: str,
+    value: Tuple[
+        aas_types.StructuralUnion,
+        aas_types.MixedUnion,
+        aas_types.ModelTypedUnion,
+    ],
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write the 3 item(s) of :paramref:`value` enclosed in
+    the :paramref:`name` element.
+
+    :param name: of the enclosing element
+    :param value: to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    serializer.visit(value[0])
+    serializer.visit(value[1])
+    serializer.visit(value[2])
+    serializer._write_end_element(name)
+
+
+def _write_structural_first_as_element(
+    name: str,
+    that: aas_types.StructuralFirst,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element('uniqueToFirst', that.unique_to_first, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_structural_second_as_element(
+    name: str,
+    that: aas_types.StructuralSecond,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element('uniqueToSecond', that.unique_to_second, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_mixed_abstract_descendant_one_as_element(
+    name: str,
+    that: aas_types.MixedAbstractDescendantOne,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element(
+        'uniqueToAbstractDescendantOne',
+        that.unique_to_abstract_descendant_one,
+        serializer
+    )
+    serializer._write_end_element(name)
+
+
+def _write_mixed_abstract_descendant_two_as_element(
+    name: str,
+    that: aas_types.MixedAbstractDescendantTwo,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element(
+        'uniqueToAbstractDescendantTwo',
+        that.unique_to_abstract_descendant_two,
+        serializer
+    )
+    serializer._write_end_element(name)
+
+
+def _write_mixed_concrete_with_descendants_as_element(
+    name: str,
+    that: aas_types.MixedConcreteWithDescendants,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element('someBaseProperty', that.some_base_property, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_mixed_concrete_with_descendants_child_as_element(
+    name: str,
+    that: aas_types.MixedConcreteWithDescendantsChild,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element('someBaseProperty', that.some_base_property, serializer)
+    _write_str_as_element('someChildProperty', that.some_child_property, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_mixed_concrete_leaf_as_element(
+    name: str,
+    that: aas_types.MixedConcreteLeaf,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element(
+        'uniqueToConcreteLeaf', that.unique_to_concrete_leaf, serializer
+    )
+    serializer._write_end_element(name)
+
+
+def _write_model_typed_first_as_element(
+    name: str,
+    that: aas_types.ModelTypedFirst,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element('someProperty', that.some_property, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_model_typed_second_as_element(
+    name: str,
+    that: aas_types.ModelTypedSecond,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_str_as_element('someProperty', that.some_property, serializer)
+    serializer._write_end_element(name)
+
+
+def _write_something_as_element(
+    name: str,
+    that: aas_types.Something,
+    serializer: '_Serializer'
+) -> None:
+    """
+    Write :paramref:`that` enclosed in the :paramref:`name` element.
+
+    :param name: of the element tag. Expected to contain no XML special characters.
+    :param that: instance to be serialized
+    :param serializer: to write to
+    """
+    serializer._write_start_element(name)
+    _write_nested_element('structuralProperty', that.structural_property, serializer)
+    _write_nested_element('mixedProperty', that.mixed_property, serializer)
+    _write_nested_element('modelTypedProperty', that.model_typed_property, serializer)
+    _write_list_of_instances(
+        'listStructuralProperty', that.list_structural_property, serializer
+    )
+    _write_list_of_instances('listMixedProperty', that.list_mixed_property, serializer)
+    _write_list_of_instances(
+        'listModelTypedProperty', that.list_model_typed_property, serializer
+    )
+    _write_tuple3_of__structural_union__mixed_union__model_typed_union(
+        'tupleProperty', that.tuple_property, serializer
+    )
+    if that.optional_structural_property is not None:
+        _write_nested_element(
+            'optionalStructuralProperty', that.optional_structural_property, serializer
+        )
+    if that.optional_mixed_property is not None:
+        _write_nested_element(
+            'optionalMixedProperty', that.optional_mixed_property, serializer
+        )
+    if that.optional_model_typed_property is not None:
+        _write_nested_element(
+            'optionalModelTypedProperty', that.optional_model_typed_property, serializer
+        )
+    serializer._write_end_element(name)
 
 
 class _Serializer(aas_types.AbstractVisitor):
@@ -4229,23 +4532,6 @@ class _Serializer(aas_types.AbstractVisitor):
         """
         self.stream.write(f'<{name}>')
 
-    def _escape_and_write_text(
-            self,
-            text: str
-    ) -> None:
-        """
-        Escape :paramref:`text` for XML and write it.
-
-        :param text: to be escaped and written
-        """
-        # NOTE (mristin, 2022-10-14):
-        # We ran ``timeit`` on manual code which escaped XML special characters with
-        # a dictionary, and on another snippet which called three ``.replace()``.
-        # The code with ``.replace()`` was an order of magnitude faster on our computers.
-        self.stream.write(
-            text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-        )
-
     def _write_end_element(
             self,
             name: str
@@ -4297,136 +4583,6 @@ class _Serializer(aas_types.AbstractVisitor):
         """
         self.stream.write(f'<{name}/>')
 
-    def _write_bool_as_element(
-            self,
-            name: str,
-            value: bool
-    ) -> None:
-        """
-        Write the :paramref:`value` of a boolean enclosed in
-        the :paramref:`name` element.
-
-        :param name: of the corresponding element tag
-        :param value: to be serialized
-        """
-        self._write_start_element(name)
-        self.stream.write('true' if value else 'false')
-        self._write_end_element(name)
-
-    def _write_int_as_element(
-            self,
-            name: str,
-            value: int
-    ) -> None:
-        """
-        Write the :paramref:`value` of an integer enclosed in
-        the :paramref:`name` element.
-
-        :param name: of the corresponding element tag
-        :param value: to be serialized
-        """
-        self._write_start_element(name)
-        self.stream.write(str(value))
-        self._write_end_element(name)
-
-    def _write_float_as_element(
-            self,
-            name: str,
-            value: float
-    ) -> None:
-        """
-        Write the :paramref:`value` of a floating-point number enclosed in
-        the :paramref:`name` element.
-
-        :param name: of the corresponding element tag
-        :param value: to be serialized
-        """
-        self._write_start_element(name)
-
-        if value == math.inf:
-            self.stream.write('INF')
-        elif value == -math.inf:
-            self.stream.write('-INF')
-        elif math.isnan(value):
-            self.stream.write('NaN')
-        elif value == 0:
-            if math.copysign(1.0, value) < 0.0:
-                self.stream.write('-0.0')
-            else:
-                self.stream.write('0.0')
-        else:
-            self.stream.write(str(value))
-
-        self._write_end_element(name)
-
-    def _write_str_as_element(
-            self,
-            name: str,
-            value: str
-    ) -> None:
-        """
-        Write the :paramref:`value` of a string enclosed in
-        the :paramref:`name` element.
-
-        :param name: of the corresponding element tag
-        :param value: to be serialized
-        """
-        self._write_start_element(name)
-        self._escape_and_write_text(value)
-        self._write_end_element(name)
-
-    def _write_bytes_as_element(
-            self,
-            name: str,
-            value: bytes
-    ) -> None:
-        """
-        Write the :paramref:`value` of a binary content enclosed in
-        the :paramref:`name` element.
-
-        :param name: of the corresponding element tag
-        :param value: to be serialized
-        """
-        self._write_start_element(name)
-
-        # NOTE (mristin):
-        # We need to decode the result of the base64-encoding to ASCII since we are
-        # writing to an XML *text* stream. ``base64.b64encode(.)`` gives us bytes,
-        # not a string.
-        encoded = base64.b64encode(value).decode('ascii')
-
-        # NOTE (mristin):
-        # Base64 alphabet excludes ``<``, ``>`` and ``&``, so we can directly
-        # write the ``encoded`` content to the stream as XML text.
-        #
-        # See: https://datatracker.ietf.org/doc/html/rfc4648#section-4
-        self.stream.write(encoded)
-        self._write_end_element(name)
-
-    def _write_list_of_items(
-        self,
-        name: str,
-        items: Sequence[_ItemT],
-        write_item: Callable[[_ItemT], None]
-    ) -> None:
-        """
-        Write :paramref:`items` enclosed in the :paramref:`name` element.
-
-        :param name: of the enclosing element
-        :param items: to be written
-        :param write_item:
-            to write a single item of :paramref:`items` -- either into its own
-            ``v`` element (for scalars/enumerations) or its own natural class
-            element (for classes, via :py:meth:`~visit`)
-        """
-        if len(items) == 0:
-            self._write_empty_element(name)
-        else:
-            self._write_start_element(name)
-            for item in items:
-                write_item(item)
-            self._write_end_element(name)
-
     def __init__(
         self,
         stream: TextIO
@@ -4447,24 +4603,6 @@ class _Serializer(aas_types.AbstractVisitor):
             self._write_first_empty_element_with_namespace
         )
 
-    def _write_structural_first_as_sequence(
-        self,
-        that: aas_types.StructuralFirst
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'uniqueToFirst',
-            that.unique_to_first
-        )
-
     def visit_structural_first(
         self,
         that: aas_types.StructuralFirst
@@ -4477,29 +4615,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('structuralFirst')
-        self._write_structural_first_as_sequence(
-            that
-        )
-        self._write_end_element('structuralFirst')
-
-    def _write_structural_second_as_sequence(
-        self,
-        that: aas_types.StructuralSecond
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'uniqueToSecond',
-            that.unique_to_second
-        )
+        _write_structural_first_as_element('structuralFirst', that, self)
 
     def visit_structural_second(
         self,
@@ -4513,29 +4629,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('structuralSecond')
-        self._write_structural_second_as_sequence(
-            that
-        )
-        self._write_end_element('structuralSecond')
-
-    def _write_mixed_abstract_descendant_one_as_sequence(
-        self,
-        that: aas_types.MixedAbstractDescendantOne
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'uniqueToAbstractDescendantOne',
-            that.unique_to_abstract_descendant_one
-        )
+        _write_structural_second_as_element('structuralSecond', that, self)
 
     def visit_mixed_abstract_descendant_one(
         self,
@@ -4549,28 +4643,8 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('mixedAbstractDescendantOne')
-        self._write_mixed_abstract_descendant_one_as_sequence(
-            that
-        )
-        self._write_end_element('mixedAbstractDescendantOne')
-
-    def _write_mixed_abstract_descendant_two_as_sequence(
-        self,
-        that: aas_types.MixedAbstractDescendantTwo
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'uniqueToAbstractDescendantTwo',
-            that.unique_to_abstract_descendant_two
+        _write_mixed_abstract_descendant_one_as_element(
+            'mixedAbstractDescendantOne', that, self
         )
 
     def visit_mixed_abstract_descendant_two(
@@ -4585,28 +4659,8 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('mixedAbstractDescendantTwo')
-        self._write_mixed_abstract_descendant_two_as_sequence(
-            that
-        )
-        self._write_end_element('mixedAbstractDescendantTwo')
-
-    def _write_mixed_concrete_with_descendants_as_sequence(
-        self,
-        that: aas_types.MixedConcreteWithDescendants
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'someBaseProperty',
-            that.some_base_property
+        _write_mixed_abstract_descendant_two_as_element(
+            'mixedAbstractDescendantTwo', that, self
         )
 
     def visit_mixed_concrete_with_descendants(
@@ -4621,33 +4675,8 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('mixedConcreteWithDescendants')
-        self._write_mixed_concrete_with_descendants_as_sequence(
-            that
-        )
-        self._write_end_element('mixedConcreteWithDescendants')
-
-    def _write_mixed_concrete_with_descendants_child_as_sequence(
-        self,
-        that: aas_types.MixedConcreteWithDescendantsChild
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'someBaseProperty',
-            that.some_base_property
-        )
-
-        self._write_str_as_element(
-            'someChildProperty',
-            that.some_child_property
+        _write_mixed_concrete_with_descendants_as_element(
+            'mixedConcreteWithDescendants', that, self
         )
 
     def visit_mixed_concrete_with_descendants_child(
@@ -4662,28 +4691,8 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('mixedConcreteWithDescendantsChild')
-        self._write_mixed_concrete_with_descendants_child_as_sequence(
-            that
-        )
-        self._write_end_element('mixedConcreteWithDescendantsChild')
-
-    def _write_mixed_concrete_leaf_as_sequence(
-        self,
-        that: aas_types.MixedConcreteLeaf
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'uniqueToConcreteLeaf',
-            that.unique_to_concrete_leaf
+        _write_mixed_concrete_with_descendants_child_as_element(
+            'mixedConcreteWithDescendantsChild', that, self
         )
 
     def visit_mixed_concrete_leaf(
@@ -4698,29 +4707,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('mixedConcreteLeaf')
-        self._write_mixed_concrete_leaf_as_sequence(
-            that
-        )
-        self._write_end_element('mixedConcreteLeaf')
-
-    def _write_model_typed_first_as_sequence(
-        self,
-        that: aas_types.ModelTypedFirst
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'someProperty',
-            that.some_property
-        )
+        _write_mixed_concrete_leaf_as_element('mixedConcreteLeaf', that, self)
 
     def visit_model_typed_first(
         self,
@@ -4734,29 +4721,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('modelTypedFirst')
-        self._write_model_typed_first_as_sequence(
-            that
-        )
-        self._write_end_element('modelTypedFirst')
-
-    def _write_model_typed_second_as_sequence(
-        self,
-        that: aas_types.ModelTypedSecond
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_str_as_element(
-            'someProperty',
-            that.some_property
-        )
+        _write_model_typed_first_as_element('modelTypedFirst', that, self)
 
     def visit_model_typed_second(
         self,
@@ -4770,75 +4735,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('modelTypedSecond')
-        self._write_model_typed_second_as_sequence(
-            that
-        )
-        self._write_end_element('modelTypedSecond')
-
-    def _write_something_as_sequence(
-        self,
-        that: aas_types.Something
-    ) -> None:
-        """
-        Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-        XML elements.
-
-        Each element in the sequence corresponds to a property. If no properties
-        are set, nothing is written to the :py:attr:`~stream`.
-
-        :param that: instance to be serialized
-        """
-        self._write_start_element('structuralProperty')
-        self.visit(that.structural_property)
-        self._write_end_element('structuralProperty')
-
-        self._write_start_element('mixedProperty')
-        self.visit(that.mixed_property)
-        self._write_end_element('mixedProperty')
-
-        self._write_start_element('modelTypedProperty')
-        self.visit(that.model_typed_property)
-        self._write_end_element('modelTypedProperty')
-
-        self._write_list_of_items(
-            'listStructuralProperty',
-            that.list_structural_property,
-            self.visit
-        )
-
-        self._write_list_of_items(
-            'listMixedProperty',
-            that.list_mixed_property,
-            self.visit
-        )
-
-        self._write_list_of_items(
-            'listModelTypedProperty',
-            that.list_model_typed_property,
-            self.visit
-        )
-
-        self._write_start_element('tupleProperty')
-        self.visit(that.tuple_property[0])
-        self.visit(that.tuple_property[1])
-        self.visit(that.tuple_property[2])
-        self._write_end_element('tupleProperty')
-
-        if that.optional_structural_property is not None:
-            self._write_start_element('optionalStructuralProperty')
-            self.visit(that.optional_structural_property)
-            self._write_end_element('optionalStructuralProperty')
-
-        if that.optional_mixed_property is not None:
-            self._write_start_element('optionalMixedProperty')
-            self.visit(that.optional_mixed_property)
-            self._write_end_element('optionalMixedProperty')
-
-        if that.optional_model_typed_property is not None:
-            self._write_start_element('optionalModelTypedProperty')
-            self.visit(that.optional_model_typed_property)
-            self._write_end_element('optionalModelTypedProperty')
+        _write_model_typed_second_as_element('modelTypedSecond', that, self)
 
     def visit_something(
         self,
@@ -4852,11 +4749,7 @@ class _Serializer(aas_types.AbstractVisitor):
 
         :param that: instance to be serialized
         """
-        self._write_start_element('something')
-        self._write_something_as_sequence(
-            that
-        )
-        self._write_end_element('something')
+        _write_something_as_element('something', that, self)
 
 
 def write(instance: aas_types.Class, stream: TextIO) -> None:

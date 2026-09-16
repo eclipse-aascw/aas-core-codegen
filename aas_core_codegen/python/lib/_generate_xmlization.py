@@ -1772,7 +1772,7 @@ def _generate_general_dispatch_map(symbol_table: intermediate.SymbolTable) -> St
     return Stripped(mapping_writer.getvalue())
 
 
-_WRITE_METHOD_BY_PRIMITIVE_TYPE = {
+_WRITE_FUNCTION_BY_PRIMITIVE_TYPE = {
     intermediate.PrimitiveType.BOOL: "_write_bool_as_element",
     intermediate.PrimitiveType.INT: "_write_int_as_element",
     intermediate.PrimitiveType.FLOAT: "_write_float_as_element",
@@ -1780,7 +1780,8 @@ _WRITE_METHOD_BY_PRIMITIVE_TYPE = {
     intermediate.PrimitiveType.BYTEARRAY: "_write_bytes_as_element",
 }
 assert all(
-    literal in _WRITE_METHOD_BY_PRIMITIVE_TYPE for literal in intermediate.PrimitiveType
+    literal in _WRITE_FUNCTION_BY_PRIMITIVE_TYPE
+    for literal in intermediate.PrimitiveType
 )
 
 
@@ -1793,448 +1794,581 @@ def _count_required_properties(cls: intermediate.Class) -> int:
     )
 
 
-# fmt: off
-@require(
-    lambda prop:
-    (
-        type_anno := intermediate.beneath_optional(prop.type_annotation),
-        isinstance(type_anno, intermediate.OurTypeAnnotation)
-        and isinstance(type_anno.our_type, intermediate.ConcreteClass)
-        and len(type_anno.our_type.concrete_descendants) == 0
-    )[1],
-    "We expect the property to be of a concrete class with no descendants so that "
-    "its value can be represented as a sequence of XML elements, each corresponding "
-    "to a property of the value."
-)
-# fmt: on
-def _generate_snippet_for_writing_concrete_cls_prop(
-    prop: intermediate.Property,
+def _collapses_to_empty_element(cls: intermediate.ConcreteClass) -> bool:
+    """
+    Check whether the element enclosing an instance of the ``cls`` can be empty.
+
+    If none of the properties is required, an instance with nothing set writes no
+    content at all, and we collapse the enclosing element to ``<name/>`` instead of
+    writing ``<name></name>``.
+    """
+    return _count_required_properties(cls) == 0
+
+
+#: Maximum length of a line of the generated code, in columns
+_MAX_LINE_LENGTH = 88
+
+
+def _join_arguments(
+    function: Identifier, arguments: Sequence[str], columns: int
 ) -> Stripped:
-    """Generate code snippet to write a class property as a sequence."""
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
-    assert isinstance(type_anno, intermediate.OurTypeAnnotation)
+    """
+    Render the call to the ``function`` with the ``arguments``.
 
-    our_type = type_anno.our_type
-    assert isinstance(our_type, intermediate.ConcreteClass)
+    The rendered call is expected to be finally indented by ``columns`` columns. The
+    arguments go on the same line as the ``function`` if the call fits in
+    :py:attr:`_MAX_LINE_LENGTH` columns, on a single continuation line if *that* fits,
+    and one argument per line otherwise.
+    """
+    joined = ", ".join(arguments)
 
-    xml_prop_literal = python_common.string_literal(prop.xml_name)
+    if columns + len(function) + len("(") + len(joined) + len(")") <= _MAX_LINE_LENGTH:
+        return Stripped(f"{function}({joined})")
 
-    write_cls_as_sequence = python_naming.private_method_name(
-        Identifier(f"write_{our_type.name}_as_sequence")
-    )
-
-    prop_name = python_naming.property_name(prop.name)
-
-    if _count_required_properties(our_type) > 0:
+    if columns + len(I) + len(joined) <= _MAX_LINE_LENGTH:
         return Stripped(
             f"""\
-self._write_start_element({xml_prop_literal})
-self.{write_cls_as_sequence}(
-{I}that.{prop_name}
-)
-self._write_end_element({xml_prop_literal})"""
+{function}(
+{I}{joined}
+)"""
         )
 
-    # NOTE (mristin, 2022-10-14):
-    # Prefix with "the" so that we avoid naming conflicts.
-    variable = python_naming.variable_name(Identifier(f"the_{prop.name}"))
+    arguments_joined = ",\n".join(f"{I}{argument}" for argument in arguments)
+    return Stripped(
+        f"""\
+{function}(
+{arguments_joined}
+)"""
+    )
 
-    writer = io.StringIO()
-    writer.write(f"{variable} = that.{prop_name}\n")
 
-    conjunction = [
-        f"{variable}.{python_naming.property_name(prop.name)} is None"
-        for prop in our_type.properties
+def _cls_element_writer_name(cls: intermediate.ConcreteClass) -> Identifier:
+    """Give out the name of the writer of an instance of the ``cls`` as an element."""
+    return python_naming.private_function_name(
+        Identifier(f"write_{cls.name}_as_element")
+    )
+
+
+def _cls_sequence_writer_name(cls: intermediate.ConcreteClass) -> Identifier:
+    """
+    Give out the name of the writer of the properties of the ``cls`` as a sequence.
+
+    Only an implementation-specific class has such a writer, and it comes from
+    a snippet. Every other class writes its properties directly in its element
+    writer, see :py:func:`_cls_element_writer_name`, since nothing else would call
+    the sequence.
+    """
+    return python_naming.private_function_name(
+        Identifier(f"write_{cls.name}_as_sequence")
+    )
+
+
+def _enum_element_writer_name(enumeration: intermediate.Enumeration) -> Identifier:
+    """Give out the name of the writer of an ``enumeration`` literal as an element."""
+    return python_naming.private_function_name(
+        Identifier(f"write_{enumeration.name}_as_element")
+    )
+
+
+def _tuple_writer_name(type_annotation: intermediate.TupleTypeAnnotation) -> Identifier:
+    """Give out the name of the writer of a tuple of the ``type_annotation``."""
+    monikers = [_atomic_moniker(item) for item in type_annotation.items]
+
+    return Identifier(
+        f"_write_tuple{len(type_annotation.items)}_of__" + "__".join(monikers)
+    )
+
+
+def _element_writer_call(
+    type_annotation: intermediate.TypeAnnotationUnion, value: str
+) -> Tuple[Identifier, List[str]]:
+    """
+    Give out the function, and the arguments which follow the element name, writing
+    the ``value`` of the ``type_annotation`` as a whole XML element.
+
+    Every writer shares the shape ``(name, value, serializer) 🠒 None``: it writes
+    the element tag as well, since the tag either comes from the position of
+    the value -- the XML name of a property, or ``v``/``v1``, ``v2``, *etc.* -- or
+    from the run-time type of the value. A writer therefore owns its element, which
+    is what lets it collapse the element to ``<name/>``: an empty list and an instance
+    with nothing set do so.
+
+    This is a pure function of its arguments. The code of the writers which have to be
+    composed is generated by :py:class:`_WriterRegistry`.
+    """
+    type_anno = intermediate.beneath_optional(type_annotation)
+
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        return (
+            Identifier(_WRITE_FUNCTION_BY_PRIMITIVE_TYPE[primitive_type]),
+            [value, "serializer"],
+        )
+
+    if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
+        raise AssertionError("Expected to handle this case before")
+
+    elif isinstance(type_anno, intermediate.OurTypeAnnotation):
+        our_type = type_anno.our_type
+
+        if isinstance(our_type, intermediate.Enumeration):
+            # NOTE (mristin):
+            # The literal is written as the text of the element, so we spell out
+            # the access to its value here instead of paying for a function of its
+            # own. Only a list needs such a function, as it has to be given one, see
+            # :py:meth:`_WriterRegistry._register_enum_writer`.
+            return (
+                Identifier("_write_str_as_element"),
+                [f"{value}.value", "serializer"],
+            )
+
+        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+            raise AssertionError("Expected to handle this case before")
+
+        elif isinstance(
+            our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+        ):
+            if len(our_type.concrete_descendants) > 0:
+                return (Identifier("_write_nested_element"), [value, "serializer"])
+
+            assert isinstance(our_type, intermediate.ConcreteClass), (
+                f"Unexpected abstract class with no concrete "
+                f"descendants: {our_type.name!r}"
+            )
+
+            return (_cls_element_writer_name(our_type), [value, "serializer"])
+
+        elif isinstance(our_type, intermediate.NamedUnion):
+            # NOTE (mristin):
+            # We keep this as its own branch, separate from the polymorphic-class case
+            # above, even though the code is identical at the moment. We might want to
+            # support unions of primitives in the future, at which point this branch
+            # would need to diverge. Unlike a plain class, a named union always takes
+            # the discriminator-nesting path, regardless of how many implementers it
+            # flattens to.
+            return (Identifier("_write_nested_element"), [value, "serializer"])
+
+        else:
+            assert_never(our_type)
+
+    elif isinstance(type_anno, intermediate.ListTypeAnnotation):
+        items_type_anno = intermediate.beneath_optional(type_anno.items)
+
+        if not _is_encoded_as_text(items_type_anno):
+            return (Identifier("_write_list_of_instances"), [value, "serializer"])
+
+        items_primitive_type = intermediate.try_primitive_type(items_type_anno)
+        if items_primitive_type is not None:
+            write_item = Identifier(
+                _WRITE_FUNCTION_BY_PRIMITIVE_TYPE[items_primitive_type]
+            )
+        else:
+            assert isinstance(items_type_anno, intermediate.OurTypeAnnotation)
+            assert isinstance(items_type_anno.our_type, intermediate.Enumeration)
+
+            write_item = _enum_element_writer_name(items_type_anno.our_type)
+
+        return (
+            Identifier("_write_list_of_items"),
+            [value, write_item, "serializer"],
+        )
+
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        return (_tuple_writer_name(type_anno), [value, "serializer"])
+
+    else:
+        assert_never(type_anno)
+
+    raise AssertionError("Should not have gotten here")
+
+
+class _WriterRegistry:
+    """
+    Generate the code of the writers which a meta-model needs to be composed.
+
+    This is the write-side dual of :py:class:`_ReaderRegistry`. All the writers share
+    the same shape, ``(name, value, serializer) 🠒 None``: write the ``value`` as
+    a whole XML element tagged ``name``, the tag included. As the shape is uniform,
+    a writer can be given to another writer as its item writer, so that a list of
+    enumeration literals -- or anything deeper that a meta-model might grow -- falls
+    out of the pieces which are already there.
+
+    The composed writers are de-duplicated by the type which they write, so that all
+    the classes share them, and they are named by :py:func:`_element_writer_call`.
+    Nothing is composed at the time of the writing: a writer is a module-level
+    function, so the serialization allocates neither a closure nor a bound method.
+
+    The methods come grouped: first the queries, which give out what has been
+    registered so far and change nothing, and then the commands, which register and
+    give out nothing.
+    """
+
+    def __init__(self) -> None:
+        """Initialize with nothing registered."""
+        self._blocks_by_name = dict()  # type: MutableMapping[Identifier, Stripped]
+        self._needed_helpers = set()  # type: Set[str]
+
+    @property
+    def blocks(self) -> List[Stripped]:
+        """Give out the code of the registered writers, ordered by the writer name."""
+        return [self._blocks_by_name[name] for name in sorted(self._blocks_by_name)]
+
+    @property
+    def needed_helpers(self) -> AbstractSet[str]:
+        """Give out the names of the shared helpers which the writers need."""
+        return self._needed_helpers
+
+    def note_needed_helper(self, name: str) -> None:
+        """Note that the shared helper ``name`` is needed."""
+        self._needed_helpers.add(name)
+
+    def _add(self, name: Identifier, block: Stripped) -> None:
+        """Register the ``block`` which defines the writer ``name``."""
+        self._blocks_by_name[name] = block
+
+    def _register_enum_writer(self, enumeration: intermediate.Enumeration) -> None:
+        """
+        Register the writer of a literal of the ``enumeration`` as a whole element.
+
+        A property of an enumeration needs no such writer -- it spells out the access
+        to the literal's value instead, see :py:func:`_element_writer_call` -- but
+        a list has to be *given* the writer of its items.
+        """
+        self.note_needed_helper("_write_str_as_element")
+
+        name = _enum_element_writer_name(enumeration)
+
+        enum_name = python_naming.enum_name(enumeration.name)
+
+        self._add(
+            name,
+            Stripped(
+                f"""\
+def {name}(
+{I}name: str,
+{I}value: aas_types.{enum_name},
+{I}serializer: '_Serializer'
+) -> None:
+{I}\"\"\"
+{I}Write the literal :paramref:`value` enclosed in the :paramref:`name` element.
+
+{I}:param name: of the element tag
+{I}:param value: to be serialized
+{I}:param serializer: to write to
+{I}\"\"\"
+{I}_write_str_as_element(name, value.value, serializer)"""
+            ),
+        )
+
+    def _register_tuple_writer(
+        self, type_annotation: intermediate.TupleTypeAnnotation
+    ) -> None:
+        """Register the writer of a tuple with the items of the ``type_annotation``."""
+        arity = len(type_annotation.items)
+
+        name = _tuple_writer_name(type_annotation)
+
+        value_type = python_common.generate_type(
+            type_annotation, types_module=Identifier("aas_types")
+        )
+
+        statements = []  # type: List[Stripped]
+
+        for i, item_type_anno in enumerate(type_annotation.items):
+            assert isinstance(
+                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
+                "Tuple items are restricted to atomic types (primitives, constrained "
+                "primitives, classes and enumerations) by "
+                "intermediate._translate._verify_only_simple_type_patterns, so "
+                "no nested optionals, lists or tuples are expected here."
+            )
+
+            item_value = f"value[{i}]"
+
+            # NOTE (mristin):
+            # An instance is self-describing -- the element tag *is* its model type --
+            # so it writes its own element and the positional tag plays no role. Only
+            # a value encoded as text needs the tag which its position prescribes.
+            if not _is_encoded_as_text(item_type_anno):
+                statements.append(Stripped(f"serializer.visit({item_value})"))
+                continue
+
+            self.register_property_writer(item_type_anno)
+
+            function, arguments = _element_writer_call(item_type_anno, item_value)
+
+            statements.append(
+                _join_arguments(
+                    function,
+                    [python_common.string_literal(f"v{i + 1}")] + arguments,
+                    columns=len(I),
+                )
+            )
+
+        statements_joined = "\n".join(statements)
+
+        self._add(
+            name,
+            Stripped(
+                f"""\
+def {name}(
+{I}name: str,
+{I}value: {indent_but_first_line(value_type, I)},
+{I}serializer: '_Serializer'
+) -> None:
+{I}\"\"\"
+{I}Write the {arity} item(s) of :paramref:`value` enclosed in
+{I}the :paramref:`name` element.
+
+{I}:param name: of the enclosing element
+{I}:param value: to be serialized
+{I}:param serializer: to write to
+{I}\"\"\"
+{I}serializer._write_start_element(name)
+{I}{indent_but_first_line(statements_joined, I)}
+{I}serializer._write_end_element(name)"""
+            ),
+        )
+
+    def register_property_writer(
+        self, type_annotation: intermediate.TypeAnnotationUnion
+    ) -> None:
+        """
+        Register the writers, and note the shared helpers, needed to write a value of
+        the ``type_annotation`` as a whole XML element.
+        """
+        type_anno = intermediate.beneath_optional(type_annotation)
+
+        primitive_type = intermediate.try_primitive_type(type_anno)
+        if primitive_type is not None:
+            self.note_needed_helper(_WRITE_FUNCTION_BY_PRIMITIVE_TYPE[primitive_type])
+            return
+
+        if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
+            raise AssertionError("Expected to handle this case before")
+
+        elif isinstance(type_anno, intermediate.OurTypeAnnotation):
+            our_type = type_anno.our_type
+
+            if isinstance(our_type, intermediate.Enumeration):
+                self.note_needed_helper("_write_str_as_element")
+
+            elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+                raise AssertionError("Expected to handle this case before")
+
+            elif isinstance(
+                our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+            ):
+                # NOTE (mristin):
+                # A class without concrete descendants is written by the function which
+                # is generated together with the class, so there is nothing to register.
+                if len(our_type.concrete_descendants) > 0:
+                    self.note_needed_helper("_write_nested_element")
+
+            elif isinstance(our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # See the note in :py:func:`_element_writer_call` on why a named union
+                # is kept in a branch of its own.
+                self.note_needed_helper("_write_nested_element")
+
+            else:
+                assert_never(our_type)
+
+        elif isinstance(type_anno, intermediate.ListTypeAnnotation):
+            items_type_anno = intermediate.beneath_optional(type_anno.items)
+
+            if isinstance(
+                items_type_anno,
+                (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
+            ):
+                raise AssertionError(
+                    "(mristin) We handle only lists of primitive types and of our types "
+                    "in the XML serialization at the moment. The meta-model does not "
+                    "contain any other lists, so we wanted to keep the code as simple "
+                    "as possible, and avoid unrolling. Please contact the developers "
+                    "if you need this feature."
+                )
+
+            if not _is_encoded_as_text(items_type_anno):
+                self.note_needed_helper("_write_list_of_instances")
+                return
+
+            self.note_needed_helper("_write_list_of_items")
+
+            if isinstance(
+                items_type_anno, intermediate.OurTypeAnnotation
+            ) and isinstance(items_type_anno.our_type, intermediate.Enumeration):
+                self._register_enum_writer(items_type_anno.our_type)
+            else:
+                self.register_property_writer(items_type_anno)
+
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            self._register_tuple_writer(type_anno)
+
+        else:
+            assert_never(type_anno)
+
+
+def _generate_write_property(prop: intermediate.Property) -> Stripped:
+    """Generate the statement which writes the property ``prop`` of ``that``."""
+    prop_name = python_naming.property_name(prop.name)
+    xml_prop_literal = python_common.string_literal(prop.xml_name)
+
+    optional = isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
+
+    function, arguments = _element_writer_call(
+        prop.type_annotation, f"that.{prop_name}"
+    )
+
+    call = _join_arguments(
+        function,
+        [xml_prop_literal] + arguments,
+        columns=len(II) if optional else len(I),
+    )
+
+    if not optional:
+        return call
+
+    return Stripped(
+        f"""\
+if that.{prop_name} is not None:
+{I}{indent_but_first_line(call, I)}"""
+    )
+
+
+def _generate_write_cls_as_element(cls: intermediate.ConcreteClass) -> Stripped:
+    """
+    Generate the function to write an instance of the ``cls`` as an XML element.
+
+    The element tag comes from the caller, as it depends on where the instance sits:
+    it is the XML name of the class when the instance is visited, and the XML name of
+    a property when the instance is the value of that property. The writer owning its
+    element is what lets it collapse to ``<name/>``, see
+    :py:func:`_collapses_to_empty_element`.
+
+    The properties are written directly in the body, since nothing else would call
+    a writer of the sequence. An implementation-specific class is the exception: its
+    content comes from a snippet, so the generated writer only frames the element
+    around it, just as the reading side frames the dispatch around the snippet.
+    """
+    cls_name = python_naming.class_name(cls.name)
+    function_name = _cls_element_writer_name(cls)
+
+    body_blocks = []  # type: List[Stripped]
+    docstring_blocks = [
+        Stripped(
+            """\
+Write :paramref:`that` enclosed in the :paramref:`name` element."""
+        )
     ]
 
-    writer.write(
-        """\
+    if cls.is_implementation_specific:
+        docstring_blocks.append(
+            Stripped(
+                f"""\
+The content is written by :py:func:`{_cls_sequence_writer_name(cls)}`, which comes
+from an implementation-specific snippet. The element is therefore never collapsed
+to an empty one: what an instance of this class writes does not follow from its
+properties, so we can not tell in advance that it writes nothing."""
+            )
+        )
+
+        body_blocks.append(
+            Stripped(
+                f"""\
+serializer._write_start_element(name)
+{_cls_sequence_writer_name(cls)}(that, serializer)
+serializer._write_end_element(name)"""
+            )
+        )
+    elif len(cls.properties) == 0:
+        docstring_blocks.append(
+            Stripped(
+                """\
+There are no properties specified for this class, so the element is always
+empty."""
+            )
+        )
+
+        body_blocks.append(Stripped("serializer._write_empty_element(name)"))
+    else:
+        if _collapses_to_empty_element(cls):
+            docstring_blocks.append(
+                Stripped(
+                    """\
+All the properties are optional, so the element is collapsed to an empty one
+if none of them is set."""
+                )
+            )
+
+            conjunction = "\n".join(
+                (
+                    f"that.{python_naming.property_name(prop.name)} is None"
+                    if i == 0
+                    else f"and that.{python_naming.property_name(prop.name)} is None"
+                )
+                for i, prop in enumerate(cls.properties)
+            )
+
+            body_blocks.append(
+                Stripped(
+                    f"""\
 # We optimize for the case where all the optional properties are not set,
 # so that we can simply output an empty element.
 if (
-"""
-    )
-    for i, expr in enumerate(conjunction):
-        if i > 0:
-            writer.write(f"{II}and {indent_but_first_line(expr, II)}\n")
-        else:
-            writer.write(f"{II}{indent_but_first_line(expr, II)}\n")
-
-    writer.write(
-        f"""\
+{II}{indent_but_first_line(conjunction, II)}
 ):
-{I}self._write_empty_element(
-{II}{xml_prop_literal}
-{I})
-else:
-{I}self._write_start_element({xml_prop_literal})
-{I}self.{write_cls_as_sequence}(
-{II}{variable}
-{I})
-{I}self._write_end_element({xml_prop_literal})"""
-    )
+{I}serializer._write_empty_element(name)
+{I}return"""
+                )
+            )
 
-    return Stripped(writer.getvalue())
+        property_blocks = [
+            _generate_write_property(prop=prop) for prop in cls.properties
+        ]
 
+        property_blocks_joined = "\n".join(property_blocks)
 
-def _generate_write_cls_as_sequence(cls: intermediate.ConcreteClass) -> Stripped:
-    """
-    Generate the method to serialize the ``cls`` as a sequence of XML elements.
-
-    The elements correspond to the properties of the ``cls``.
-
-    The generated method lives in the ``_Serializer`` class.
-    """
-    # fmt: off
-    assert (
-            sorted(
-                (arg.name, str(arg.type_annotation))
-                for arg in cls.constructor.arguments
-            ) == sorted(
-        (prop.name, str(prop.type_annotation))
-        for prop in cls.properties
-    )
-    ), (
-        "(mristin, 2022-10-14) We assume that the properties and constructor arguments "
-        "are identical at this point. If this is not the case, we have to re-write the "
-        "logic substantially! Please contact the developers if you see this."
-    )
-    # fmt: on
-
-    body_blocks = []  # type: List[Stripped]
-
-    if len(cls.properties) == 0:
         body_blocks.append(
             Stripped(
-                """\
-# There are no properties specified for this class, so nothing can be written.
-return"""
+                f"""\
+serializer._write_start_element(name)
+{property_blocks_joined}
+serializer._write_end_element(name)"""
             )
         )
-    else:
-        for prop in cls.properties:
-            prop_name = python_naming.property_name(prop.name)
-            xml_prop_literal = python_common.string_literal(prop.xml_name)
 
-            type_anno = intermediate.beneath_optional(prop.type_annotation)
+    docstring_blocks.append(
+        Stripped(
+            """\
+:param name: of the element tag. Expected to contain no XML special characters.
+:param that: instance to be serialized
+:param serializer: to write to"""
+        )
+    )
 
-            primitive_type = intermediate.try_primitive_type(type_anno)
-
-            write_prop: Stripped
-
-            if primitive_type is not None:
-                write_method = _WRITE_METHOD_BY_PRIMITIVE_TYPE[primitive_type]
-
-                write_prop = Stripped(
-                    f"""\
-self.{write_method}(
-{I}{xml_prop_literal},
-{I}that.{prop_name}
-)"""
-                )
-            else:
-                assert not isinstance(type_anno, intermediate.PrimitiveTypeAnnotation)
-
-                if isinstance(type_anno, intermediate.OurTypeAnnotation):
-                    our_type = type_anno.our_type
-                    if isinstance(our_type, intermediate.Enumeration):
-                        write_prop = Stripped(
-                            f"""\
-self._write_str_as_element(
-{I}{xml_prop_literal},
-{I}that.{prop_name}.value
-)"""
-                        )
-
-                    elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-                        raise AssertionError("Expected to be handled before")
-
-                    elif isinstance(
-                        our_type,
-                        (intermediate.AbstractClass, intermediate.ConcreteClass),
-                    ):
-                        if len(our_type.concrete_descendants) > 0:
-                            write_prop = Stripped(
-                                f"""\
-self._write_start_element({xml_prop_literal})
-self.visit(that.{prop_name})
-self._write_end_element({xml_prop_literal})"""
-                            )
-                        else:
-                            assert isinstance(our_type, intermediate.ConcreteClass), (
-                                f"Unexpected abstract class with no concrete "
-                                f"descendants: {our_type.name!r}"
-                            )
-
-                            # NOTE (mristin, 2022-10-14):
-                            # We have to put the code in a separate function as it
-                            # became barely readable *this* indented.
-                            write_prop = (
-                                _generate_snippet_for_writing_concrete_cls_prop(
-                                    prop=prop
-                                )
-                            )
-
-                    elif isinstance(our_type, intermediate.NamedUnion):
-                        # NOTE (mristin):
-                        # We keep this as its own branch, separate from the
-                        # polymorphic-class case above, even though the code
-                        # is identical at the moment. We might want to
-                        # support unions of primitives in the future, at
-                        # which point this branch would need to diverge.
-                        # Unlike a plain class, a named union always takes
-                        # the discriminator-nesting path.
-                        write_prop = Stripped(
-                            f"""\
-self._write_start_element({xml_prop_literal})
-self.visit(that.{prop_name})
-self._write_end_element({xml_prop_literal})"""
-                        )
-
-                    else:
-                        assert_never(our_type)
-
-                elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-                    items_primitive_type = intermediate.try_primitive_type(
-                        type_anno.items
-                    )
-
-                    if items_primitive_type is not None:
-                        write_method = _WRITE_METHOD_BY_PRIMITIVE_TYPE[
-                            items_primitive_type
-                        ]
-                        write_prop = Stripped(
-                            f"""\
-self._write_list_of_items(
-{I}{xml_prop_literal},
-{I}that.{prop_name},
-{I}lambda v: self.{write_method}(
-{II}'v', v
-{I})
-)"""
-                        )
-                    else:
-                        if isinstance(
-                            type_anno.items, intermediate.PrimitiveTypeAnnotation
-                        ):
-                            raise AssertionError("Expected to be handled before")
-
-                        elif isinstance(
-                            type_anno.items, intermediate.OurTypeAnnotation
-                        ):
-                            if isinstance(
-                                type_anno.items.our_type, intermediate.Enumeration
-                            ):
-                                write_prop = Stripped(
-                                    f"""\
-self._write_list_of_items(
-{I}{xml_prop_literal},
-{I}that.{prop_name},
-{I}lambda v: self._write_str_as_element(
-{II}'v', v.value
-{I})
-)"""
-                                )
-
-                            elif isinstance(
-                                type_anno.items.our_type,
-                                intermediate.ConstrainedPrimitive,
-                            ):
-                                raise AssertionError("Expected to be handled before")
-
-                            elif isinstance(
-                                type_anno.items.our_type,
-                                (
-                                    intermediate.AbstractClass,
-                                    intermediate.ConcreteClass,
-                                ),
-                            ):
-                                write_prop = Stripped(
-                                    f"""\
-self._write_list_of_items(
-{I}{xml_prop_literal},
-{I}that.{prop_name},
-{I}self.visit
-)"""
-                                )
-
-                            elif isinstance(
-                                type_anno.items.our_type, intermediate.NamedUnion
-                            ):
-                                # NOTE (mristin):
-                                # We keep this as its own branch, separate
-                                # from the class case above, even though the
-                                # code is identical at the moment. We might
-                                # want to support unions of primitives in
-                                # the future, at which point this branch
-                                # would need to diverge.
-                                write_prop = Stripped(
-                                    f"""\
-self._write_list_of_items(
-{I}{xml_prop_literal},
-{I}that.{prop_name},
-{I}self.visit
-)"""
-                                )
-
-                            else:
-                                # noinspection PyTypeChecker
-                                assert_never(type_anno.items.our_type)
-
-                        else:
-                            raise NotImplementedError(
-                                f"(mristin) We currently generate only "
-                                f"the XML serialization for lists of primitive types "
-                                f"and our types, but you supplied the following "
-                                f"type: {type_anno}. "
-                                f"Please contact the developers if you need this feature."
-                            )
-
-                elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-                    item_write_stmts = []  # type: List[Stripped]
-                    for i, item_type_anno in enumerate(type_anno.items):
-                        assert isinstance(
-                            item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
-                        ), (
-                            "Tuple items are restricted to atomic types "
-                            "(primitives, constrained primitives, classes and "
-                            "enumerations) by "
-                            "intermediate._translate._verify_only_simple_type_patterns"
-                            ", so no nested optionals, lists or tuples are expected "
-                            "here."
-                        )
-
-                        item_access = f"that.{prop_name}[{i}]"
-                        item_xml_literal = python_common.string_literal(f"v{i + 1}")
-
-                        item_primitive_type = intermediate.try_primitive_type(
-                            item_type_anno
-                        )
-
-                        if item_primitive_type is not None:
-                            write_method = _WRITE_METHOD_BY_PRIMITIVE_TYPE[
-                                item_primitive_type
-                            ]
-                            item_write_stmts.append(
-                                Stripped(
-                                    f"""\
-self.{write_method}(
-{I}{item_xml_literal},
-{I}{item_access}
-)"""
-                                )
-                            )
-
-                        elif isinstance(
-                            item_type_anno, intermediate.PrimitiveTypeAnnotation
-                        ):
-                            raise AssertionError("Expected to be handled before")
-
-                        elif isinstance(item_type_anno, intermediate.OurTypeAnnotation):
-                            if isinstance(
-                                item_type_anno.our_type, intermediate.Enumeration
-                            ):
-                                item_write_stmts.append(
-                                    Stripped(
-                                        f"""\
-self._write_str_as_element(
-{I}{item_xml_literal},
-{I}{item_access}.value
-)"""
-                                    )
-                                )
-
-                            elif isinstance(
-                                item_type_anno.our_type,
-                                intermediate.ConstrainedPrimitive,
-                            ):
-                                raise AssertionError("Expected to be handled before")
-
-                            elif isinstance(
-                                item_type_anno.our_type,
-                                (
-                                    intermediate.AbstractClass,
-                                    intermediate.ConcreteClass,
-                                ),
-                            ):
-                                # NOTE (mristin):
-                                # Unlike primitives, constrained primitives and
-                                # enumeration literals, a class writes its own
-                                # element tag through ``self.visit``, exactly
-                                # as we do for the lists above.
-                                item_write_stmts.append(
-                                    Stripped(f"self.visit({item_access})")
-                                )
-
-                            elif isinstance(
-                                item_type_anno.our_type, intermediate.NamedUnion
-                            ):
-                                # NOTE (mristin):
-                                # We keep this as its own branch, separate
-                                # from the class case above, even though the
-                                # code is identical at the moment. We might
-                                # want to support unions of primitives in
-                                # the future, at which point this branch
-                                # would need to diverge.
-                                item_write_stmts.append(
-                                    Stripped(f"self.visit({item_access})")
-                                )
-
-                            else:
-                                # noinspection PyTypeChecker
-                                assert_never(item_type_anno.our_type)
-                        else:
-                            # noinspection PyTypeChecker
-                            assert_never(item_type_anno)
-
-                    item_write_stmts_joined = "\n".join(item_write_stmts)
-
-                    write_prop = Stripped(
-                        f"""\
-self._write_start_element({xml_prop_literal})
-{item_write_stmts_joined}
-self._write_end_element({xml_prop_literal})"""
-                    )
-
-                else:
-                    assert_never(type_anno)
-
-            if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-                write_prop = Stripped(
-                    f"""\
-if that.{prop_name} is not None:
-{I}{indent_but_first_line(write_prop, I)}"""
-                )
-
-            body_blocks.append(write_prop)
-
-    cls_name = python_naming.class_name(cls.name)
-    function_name = python_naming.private_method_name(
-        Identifier(f"write_{cls.name}_as_sequence")
+    escaped_text = "\n\n".join(docstring_blocks).replace('"""', '\\"\\"\\"')
+    docstring = Stripped(
+        f"""\
+\"\"\"
+{escaped_text}
+\"\"\""""
     )
 
     writer = io.StringIO()
     writer.write(
         f"""\
 def {function_name}(
-{I}self,
-{I}that: aas_types.{cls_name}
+{I}name: str,
+{I}that: aas_types.{cls_name},
+{I}serializer: '_Serializer'
 ) -> None:
-{I}\"\"\"
-{I}Serialize :paramref:`that` to :py:attr:`~stream` as a sequence of
-{I}XML elements.
-
-{I}Each element in the sequence corresponds to a property. If no properties
-{I}are set, nothing is written to the :py:attr:`~stream`.
-
-{I}:param that: instance to be serialized
-{I}\"\"\"
-"""
+{I}{indent_but_first_line(docstring, I)}"""
     )
 
     for i, body_block in enumerate(body_blocks):
-        if i > 0:
-            writer.write("\n\n")
+        writer.write("\n\n" if i > 0 else "\n")
         writer.write(textwrap.indent(body_block, I))
 
     return Stripped(writer.getvalue())
@@ -2244,99 +2378,20 @@ def _generate_visit_cls(cls: intermediate.ConcreteClass) -> Stripped:
     """
     Generate the method to serialize the ``cls`` as an XML element.
 
-    The generated method lives in the ``_Serializer`` class.
+    The generated method lives in the ``_Serializer`` class, and only gives the XML
+    name of the class as the element tag to the writer of the class.
     """
-    # fmt: off
-    assert (
-            sorted(
-                (arg.name, str(arg.type_annotation))
-                for arg in cls.constructor.arguments
-            ) == sorted(
-        (prop.name, str(prop.type_annotation))
-        for prop in cls.properties
-    )
-    ), (
-        "(mristin, 2022-10-11) We assume that the properties and constructor arguments "
-        "are identical at this point. If this is not the case, we have to re-write the "
-        "logic substantially! Please contact the developers if you see this."
-    )
-    # fmt: on
-
-    xml_cls_literal = python_common.string_literal(naming.xml_class_name(cls.name))
-
-    body_blocks = []  # type: List[Stripped]
-
-    if len(cls.properties) == 0:
-        body_blocks.append(
-            Stripped(
-                f"""\
-self._write_empty_element(
-{I}{xml_cls_literal}
-)"""
-            )
-        )
-    else:
-        write_cls_as_sequence = python_naming.private_method_name(
-            Identifier(f"write_{cls.name}_as_sequence")
-        )
-
-        if _count_required_properties(cls) > 0:
-            body_blocks.append(
-                Stripped(
-                    f"""\
-self._write_start_element({xml_cls_literal})
-self.{write_cls_as_sequence}(
-{I}that
-)
-self._write_end_element({xml_cls_literal})"""
-                )
-            )
-        else:
-            # NOTE (mristin, 2022-10-14):
-            # We optimize for the case where all the optional properties are not set,
-            # so that we can simply output an empty element.
-            conjunction = [
-                f"that.{python_naming.property_name(prop.name)} is None"
-                for prop in cls.properties
-            ]
-
-            if_empty_writer = io.StringIO()
-            if_empty_writer.write(
-                """\
-# We optimize for the case where all the optional properties are not set,
-# so that we can simply output an empty element.
-if (
-"""
-            )
-            for i, expr in enumerate(conjunction):
-                if i > 0:
-                    if_empty_writer.write(
-                        f"{II}and {indent_but_first_line(expr, II)}\n"
-                    )
-                else:
-                    if_empty_writer.write(f"{II}{indent_but_first_line(expr, II)}\n")
-
-            if_empty_writer.write(
-                f"""\
-):
-{I}self._write_empty_element(
-{II}{xml_cls_literal}
-{I})
-else:
-{I}self._write_start_element({xml_cls_literal})
-{I}self.{write_cls_as_sequence}(
-{II}that
-{I})
-{I}self._write_end_element({xml_cls_literal})"""
-            )
-
-            body_blocks.append(Stripped(if_empty_writer.getvalue()))
-
     cls_name = python_naming.class_name(cls.name)
     visit_name = python_naming.method_name(Identifier(f"visit_{cls.name}"))
+    xml_cls_literal = python_common.string_literal(naming.xml_class_name(cls.name))
 
-    writer = io.StringIO()
-    writer.write(
+    call = _join_arguments(
+        _cls_element_writer_name(cls),
+        [xml_cls_literal, "that", "self"],
+        columns=len(II),
+    )
+
+    return Stripped(
         f"""\
 def {visit_name}(
 {I}self,
@@ -2350,15 +2405,8 @@ def {visit_name}(
 
 {I}:param that: instance to be serialized
 {I}\"\"\"
-"""
+{I}{indent_but_first_line(call, I)}"""
     )
-
-    for i, body_block in enumerate(body_blocks):
-        if i > 0:
-            writer.write("\n\n")
-        writer.write(textwrap.indent(body_block, I))
-
-    return Stripped(writer.getvalue())
 
 
 # fmt: off
@@ -2370,7 +2418,14 @@ def {visit_name}(
 )
 # fmt: on
 def _generate_serializer(symbol_table: intermediate.SymbolTable) -> Stripped:
-    """Generate the serializer as a visitor which writes to a stream on visits."""
+    """
+    Generate the serializer as a visitor which writes to a stream on visits.
+
+    The serializer carries the state of the writing -- the stream and whether the XML
+    namespace still has to be specified -- and dispatches an instance to its writer.
+    Everything else is a module-level function which is given the serializer, so that
+    the writers can be composed without allocating a closure or a bound method.
+    """
     body_blocks = [
         Stripped(
             """\
@@ -2458,25 +2513,6 @@ def _write_start_element_without_namespace(
         ),
         Stripped(
             f"""\
-def _escape_and_write_text(
-{II}self,
-{II}text: str
-) -> None:
-{I}\"\"\"
-{I}Escape :paramref:`text` for XML and write it.
-
-{I}:param text: to be escaped and written
-{I}\"\"\"
-{I}# NOTE (mristin, 2022-10-14):
-{I}# We ran ``timeit`` on manual code which escaped XML special characters with
-{I}# a dictionary, and on another snippet which called three ``.replace()``.
-{I}# The code with ``.replace()`` was an order of magnitude faster on our computers.
-{I}self.stream.write(
-{II}text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
-{I})"""
-        ),
-        Stripped(
-            f"""\
 def _write_end_element(
 {II}self,
 {II}name: str
@@ -2536,148 +2572,6 @@ def _write_empty_element_without_namespace(
         ),
         Stripped(
             f"""\
-def _write_bool_as_element(
-{II}self,
-{II}name: str,
-{II}value: bool
-) -> None:
-{I}\"\"\"
-{I}Write the :paramref:`value` of a boolean enclosed in
-{I}the :paramref:`name` element.
-
-{I}:param name: of the corresponding element tag
-{I}:param value: to be serialized
-{I}\"\"\"
-{I}self._write_start_element(name)
-{I}self.stream.write('true' if value else 'false')
-{I}self._write_end_element(name)"""
-        ),
-        Stripped(
-            f"""\
-def _write_int_as_element(
-{II}self,
-{II}name: str,
-{II}value: int
-) -> None:
-{I}\"\"\"
-{I}Write the :paramref:`value` of an integer enclosed in
-{I}the :paramref:`name` element.
-
-{I}:param name: of the corresponding element tag
-{I}:param value: to be serialized
-{I}\"\"\"
-{I}self._write_start_element(name)
-{I}self.stream.write(str(value))
-{I}self._write_end_element(name)"""
-        ),
-        Stripped(
-            f"""\
-def _write_float_as_element(
-{II}self,
-{II}name: str,
-{II}value: float
-) -> None:
-{I}\"\"\"
-{I}Write the :paramref:`value` of a floating-point number enclosed in
-{I}the :paramref:`name` element.
-
-{I}:param name: of the corresponding element tag
-{I}:param value: to be serialized
-{I}\"\"\"
-{I}self._write_start_element(name)
-
-{I}if value == math.inf:
-{II}self.stream.write('INF')
-{I}elif value == -math.inf:
-{II}self.stream.write('-INF')
-{I}elif math.isnan(value):
-{II}self.stream.write('NaN')
-{I}elif value == 0:
-{II}if math.copysign(1.0, value) < 0.0:
-{III}self.stream.write('-0.0')
-{II}else:
-{III}self.stream.write('0.0')
-{I}else:
-{II}self.stream.write(str(value))
-
-{I}self._write_end_element(name)"""
-        ),
-        Stripped(
-            f"""\
-def _write_str_as_element(
-{II}self,
-{II}name: str,
-{II}value: str
-) -> None:
-{I}\"\"\"
-{I}Write the :paramref:`value` of a string enclosed in
-{I}the :paramref:`name` element.
-
-{I}:param name: of the corresponding element tag
-{I}:param value: to be serialized
-{I}\"\"\"
-{I}self._write_start_element(name)
-{I}self._escape_and_write_text(value)
-{I}self._write_end_element(name)"""
-        ),
-        Stripped(
-            f"""\
-def _write_bytes_as_element(
-{II}self,
-{II}name: str,
-{II}value: bytes
-) -> None:
-{I}\"\"\"
-{I}Write the :paramref:`value` of a binary content enclosed in
-{I}the :paramref:`name` element.
-
-{I}:param name: of the corresponding element tag
-{I}:param value: to be serialized
-{I}\"\"\"
-{I}self._write_start_element(name)
-
-{I}# NOTE (mristin):
-{I}# We need to decode the result of the base64-encoding to ASCII since we are
-{I}# writing to an XML *text* stream. ``base64.b64encode(.)`` gives us bytes,
-{I}# not a string.
-{I}encoded = base64.b64encode(value).decode('ascii')
-
-{I}# NOTE (mristin):
-{I}# Base64 alphabet excludes ``<``, ``>`` and ``&``, so we can directly
-{I}# write the ``encoded`` content to the stream as XML text.
-{I}#
-{I}# See: https://datatracker.ietf.org/doc/html/rfc4648#section-4
-{I}self.stream.write(encoded)
-{I}self._write_end_element(name)"""
-        ),
-        Stripped(
-            f"""\
-def _write_list_of_items(
-{I}self,
-{I}name: str,
-{I}items: Sequence[_ItemT],
-{I}write_item: Callable[[_ItemT], None]
-) -> None:
-{I}\"\"\"
-{I}Write :paramref:`items` enclosed in the :paramref:`name` element.
-
-{I}:param name: of the enclosing element
-{I}:param items: to be written
-{I}:param write_item:
-{II}to write a single item of :paramref:`items` -- either into its own
-{II}``v`` element (for scalars/enumerations) or its own natural class
-{II}element (for classes, via :py:meth:`~visit`)
-{I}\"\"\"
-{I}if len(items) == 0:
-{II}self._write_empty_element(name)
-{I}else:
-{II}self._write_start_element(name)
-{II}for item in items:
-{III}write_item(item)
-{II}self._write_end_element(name)"""
-        ),
-        Stripped(
-            f"""\
 def __init__(
 {I}self,
 {I}stream: TextIO
@@ -2698,10 +2592,9 @@ def __init__(
 {II}self._write_first_empty_element_with_namespace
 {I})"""
         ),
-    ]
+    ]  # type: List[Stripped]
 
     for cls in symbol_table.concrete_classes:
-        body_blocks.append(_generate_write_cls_as_sequence(cls=cls))
         body_blocks.append(_generate_visit_cls(cls=cls))
 
     writer = io.StringIO()
@@ -2822,6 +2715,9 @@ _READING_PATTERN_NOTE = Stripped(
 
 #: Note the shared reading helpers which a helper itself needs, so that we can
 #: generate only the helpers which a meta-model actually reaches
+#: Shared helpers which a helper needs, by the name of the helper. Both
+#: the de-serialization and the serialization are covered, as they are gated
+#: the same way, see :py:func:`_collect_needed_helpers`.
 _HELPER_DEPENDENCIES = {
     "_parse_element_tag": [],
     "_raise_if_has_tail_or_attrib": [],
@@ -2843,6 +2739,14 @@ _HELPER_DEPENDENCIES = {
     ],
     "_read_bytes_from_element_text": ["_read_text_from_element"],
     "_read_enum_from_element_text": ["_read_text_from_element"],
+    "_write_nested_element": [],
+    "_write_list_of_instances": [],
+    "_write_list_of_items": [],
+    "_write_bool_as_element": [],
+    "_write_int_as_element": [],
+    "_write_float_as_element": [],
+    "_write_str_as_element": [],
+    "_write_bytes_as_element": [],
 }  # type: Mapping[str, Sequence[str]]
 
 
@@ -3567,13 +3471,237 @@ def _read_enum_from_element_text(
     }
 
 
+def _generate_writing_helpers() -> Mapping[str, Stripped]:
+    """
+    Generate the code of the shared writing helpers, by the name of the helper.
+
+    Every helper shares the shape of a writer, ``(name, value, serializer) 🠒 None``,
+    save for :py:func:`_write_list_of_items` which is additionally given the writer of
+    its items. Only the helpers which a meta-model reaches are finally generated, see
+    :py:func:`_collect_needed_helpers`, so that a small meta-model does not pay for
+    the writers which it never calls.
+    """
+    return {
+        "_write_bool_as_element": Stripped(
+            f"""\
+def _write_bool_as_element(
+{I}name: str,
+{I}value: bool,
+{I}serializer: '_Serializer'
+) -> None:
+{I}\"\"\"
+{I}Write the :paramref:`value` of a boolean enclosed in
+{I}the :paramref:`name` element.
+
+{I}:param name: of the corresponding element tag
+{I}:param value: to be serialized
+{I}:param serializer: to write to
+{I}\"\"\"
+{I}serializer._write_start_element(name)
+{I}serializer.stream.write('true' if value else 'false')
+{I}serializer._write_end_element(name)"""
+        ),
+        "_write_int_as_element": Stripped(
+            f"""\
+def _write_int_as_element(
+{I}name: str,
+{I}value: int,
+{I}serializer: '_Serializer'
+) -> None:
+{I}\"\"\"
+{I}Write the :paramref:`value` of an integer enclosed in
+{I}the :paramref:`name` element.
+
+{I}:param name: of the corresponding element tag
+{I}:param value: to be serialized
+{I}:param serializer: to write to
+{I}\"\"\"
+{I}serializer._write_start_element(name)
+{I}serializer.stream.write(str(value))
+{I}serializer._write_end_element(name)"""
+        ),
+        "_write_float_as_element": Stripped(
+            f"""\
+def _write_float_as_element(
+{I}name: str,
+{I}value: float,
+{I}serializer: '_Serializer'
+) -> None:
+{I}\"\"\"
+{I}Write the :paramref:`value` of a floating-point number enclosed in
+{I}the :paramref:`name` element.
+
+{I}:param name: of the corresponding element tag
+{I}:param value: to be serialized
+{I}:param serializer: to write to
+{I}\"\"\"
+{I}serializer._write_start_element(name)
+
+{I}if value == math.inf:
+{II}serializer.stream.write('INF')
+{I}elif value == -math.inf:
+{II}serializer.stream.write('-INF')
+{I}elif math.isnan(value):
+{II}serializer.stream.write('NaN')
+{I}elif value == 0:
+{II}if math.copysign(1.0, value) < 0.0:
+{III}serializer.stream.write('-0.0')
+{II}else:
+{III}serializer.stream.write('0.0')
+{I}else:
+{II}serializer.stream.write(str(value))
+
+{I}serializer._write_end_element(name)"""
+        ),
+        "_write_str_as_element": Stripped(
+            f"""\
+def _write_str_as_element(
+{I}name: str,
+{I}value: str,
+{I}serializer: '_Serializer'
+) -> None:
+{I}\"\"\"
+{I}Write the :paramref:`value` of a string enclosed in
+{I}the :paramref:`name` element.
+
+{I}:param name: of the corresponding element tag
+{I}:param value: to be serialized
+{I}:param serializer: to write to
+{I}\"\"\"
+{I}serializer._write_start_element(name)
+
+{I}# NOTE (mristin, 2022-10-14):
+{I}# We ran ``timeit`` on manual code which escaped XML special characters with
+{I}# a dictionary, and on another snippet which called three ``.replace()``.
+{I}# The code with ``.replace()`` was an order of magnitude faster on our computers.
+{I}#
+{I}# The escaping is written out here, and not put in a function of its own, since
+{I}# a string is the commonest value in a meta-model and a call is not free.
+{I}serializer.stream.write(
+{II}value.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+{I})
+
+{I}serializer._write_end_element(name)"""
+        ),
+        "_write_bytes_as_element": Stripped(
+            f"""\
+def _write_bytes_as_element(
+{I}name: str,
+{I}value: bytes,
+{I}serializer: '_Serializer'
+) -> None:
+{I}\"\"\"
+{I}Write the :paramref:`value` of a binary content enclosed in
+{I}the :paramref:`name` element.
+
+{I}:param name: of the corresponding element tag
+{I}:param value: to be serialized
+{I}:param serializer: to write to
+{I}\"\"\"
+{I}serializer._write_start_element(name)
+
+{I}# NOTE (mristin):
+{I}# We need to decode the result of the base64-encoding to ASCII since we are
+{I}# writing to an XML *text* stream. ``base64.b64encode(.)`` gives us bytes,
+{I}# not a string.
+{I}encoded = base64.b64encode(value).decode('ascii')
+
+{I}# NOTE (mristin):
+{I}# Base64 alphabet excludes ``<``, ``>`` and ``&``, so we can directly
+{I}# write the ``encoded`` content to the stream as XML text.
+{I}#
+{I}# See: https://datatracker.ietf.org/doc/html/rfc4648#section-4
+{I}serializer.stream.write(encoded)
+{I}serializer._write_end_element(name)"""
+        ),
+        "_write_nested_element": Stripped(
+            f"""\
+def _write_nested_element(
+{I}name: str,
+{I}value: aas_types.Class,
+{I}serializer: '_Serializer'
+) -> None:
+{I}\"\"\"
+{I}Write :paramref:`value` nested in the :paramref:`name` element.
+
+{I}The instance writes the element which designates its model type, so it has to be
+{I}nested in an element of its own when it is the value of a property. Mind that
+{I}an *item* of a list is not nested that way -- see
+{I}:py:func:`_write_list_of_instances` -- as it is the item's own element which
+{I}already sits in the list's element.
+
+{I}:param name: of the enclosing element
+{I}:param value: to be serialized
+{I}:param serializer: to write to
+{I}\"\"\"
+{I}serializer._write_start_element(name)
+{I}serializer.visit(value)
+{I}serializer._write_end_element(name)"""
+        ),
+        "_write_list_of_instances": Stripped(
+            f"""\
+def _write_list_of_instances(
+{I}name: str,
+{I}items: Sequence[aas_types.Class],
+{I}serializer: '_Serializer'
+) -> None:
+{I}\"\"\"
+{I}Write :paramref:`items` enclosed in the :paramref:`name` element.
+
+{I}Every item writes the element which designates its model type, so no positional
+{I}tag is necessary. If there are no items, the enclosing element is collapsed to
+{I}an empty one.
+
+{I}:param name: of the enclosing element
+{I}:param items: to be serialized
+{I}:param serializer: to write to
+{I}\"\"\"
+{I}if len(items) == 0:
+{II}serializer._write_empty_element(name)
+{I}else:
+{II}serializer._write_start_element(name)
+{II}for item in items:
+{III}serializer.visit(item)
+{II}serializer._write_end_element(name)"""
+        ),
+        "_write_list_of_items": Stripped(
+            f"""\
+def _write_list_of_items(
+{I}name: str,
+{I}items: Sequence[_ItemT],
+{I}write_item: '_ElementWriter[_ItemT]',
+{I}serializer: '_Serializer'
+) -> None:
+{I}\"\"\"
+{I}Write :paramref:`items` enclosed in the :paramref:`name` element.
+
+{I}An item is encoded as the text of an element, so it is not self-describing, and
+{I}every item is written in an element tagged ``v``. If there are no items,
+{I}the enclosing element is collapsed to an empty one.
+
+{I}:param name: of the enclosing element
+{I}:param items: to be serialized
+{I}:param write_item: to write a single item of :paramref:`items`
+{I}:param serializer: to write to
+{I}\"\"\"
+{I}if len(items) == 0:
+{II}serializer._write_empty_element(name)
+{I}else:
+{II}serializer._write_start_element(name)
+{II}for item in items:
+{III}write_item('v', item, serializer)
+{II}serializer._write_end_element(name)"""
+        ),
+    }
+
+
 assert sorted(_HELPER_DEPENDENCIES.keys()) == sorted(
-    _generate_reading_helpers().keys()
+    list(_generate_reading_helpers().keys()) + list(_generate_writing_helpers().keys())
 ), (
     "Expected the dependencies to be noted for exactly the generated helpers, "
     "but got: "
     f"{sorted(_HELPER_DEPENDENCIES.keys())} and "
-    f"{sorted(_generate_reading_helpers().keys())}"
+    f"{sorted(list(_generate_reading_helpers().keys()) + list(_generate_writing_helpers().keys()))}"
 )
 
 
@@ -3983,7 +4111,7 @@ def _with_elements_cleared_after_yield(
         elif isinstance(our_type, intermediate.ConcreteClass):
             if our_type.is_implementation_specific:
                 implementation_key = specific_implementations.ImplementationKey(
-                    f"Xmlization/read_{our_type.name}.py"
+                    f"Xmlization/read_{our_type.name}_as_sequence.py"
                 )
 
                 implementation = spec_impls.get(implementation_key, None)
@@ -4062,9 +4190,21 @@ def _with_elements_cleared_after_yield(
     ):
         registry.note_needed_helper("_read_named_element")
 
-    needed_helpers = _collect_needed_helpers(registry.needed_helpers)
-
     helper_blocks = _generate_reading_helpers()
+
+    # NOTE (mristin):
+    # We can not see inside a snippet, so we do not know which of the shared helpers
+    # it calls. As soon as a meta-model has an implementation-specific class, we
+    # therefore generate all of them, instead of letting the snippet fail with
+    # a ``NameError`` at the time of the reading.
+    if any(
+        concrete_cls.is_implementation_specific
+        for concrete_cls in symbol_table.concrete_classes
+    ):
+        for helper_name in helper_blocks:
+            registry.note_needed_helper(helper_name)
+
+    needed_helpers = _collect_needed_helpers(registry.needed_helpers)
 
     blocks.append(_READING_PATTERN_NOTE)
 
@@ -4094,7 +4234,103 @@ _ContentReader = Callable[
 
     blocks.append(Stripped("# region Serialization"))
 
-    blocks.append(Stripped('_ItemT = TypeVar("_ItemT")'))
+    # region Compose the writers
+
+    # NOTE (mristin):
+    # As on the reading side, we compose the writers first so that we know which of
+    # them, and which of the shared helpers, a meta-model actually reaches. Only those
+    # are finally generated, gated along the call graph.
+
+    writer_registry = _WriterRegistry()
+
+    for concrete_cls in symbol_table.concrete_classes:
+        # NOTE (mristin):
+        # The content of an implementation-specific class is written by a snippet,
+        # so the writers which its properties would need are never called. We skip
+        # it here, as the reading side does, and the snippet is on its own.
+        if concrete_cls.is_implementation_specific:
+            continue
+
+        for prop in concrete_cls.properties:
+            writer_registry.register_property_writer(prop.type_annotation)
+
+    writing_helper_blocks = _generate_writing_helpers()
+
+    # NOTE (mristin):
+    # As on the reading side, we can not see inside a snippet, so all the shared
+    # helpers are generated as soon as a meta-model has an implementation-specific
+    # class.
+    if any(
+        concrete_cls.is_implementation_specific
+        for concrete_cls in symbol_table.concrete_classes
+    ):
+        for helper_name in writing_helper_blocks:
+            writer_registry.note_needed_helper(helper_name)
+
+    # NOTE (mristin):
+    # An instance is nested in the element of a property, and the element of a class
+    # is written by the writer generated together with the class, so the only helpers
+    # which are always needed are the ones which the visits reach.
+    needed_writing_helpers = _collect_needed_helpers(writer_registry.needed_helpers)
+
+    # endregion
+
+    # region Generate the writers
+
+    if "_write_list_of_items" in needed_writing_helpers:
+        blocks.append(
+            Stripped(
+                f"""\
+_ItemT = TypeVar("_ItemT")
+
+#: Write a value as a whole XML element, the element tag included
+_ElementWriter = Callable[
+{I}[str, _ValueT, '_Serializer'],
+{I}None
+]"""
+            )
+        )
+
+    blocks.extend(
+        block
+        for name, block in writing_helper_blocks.items()
+        if name in needed_writing_helpers
+    )
+
+    blocks.extend(writer_registry.blocks)
+
+    for concrete_cls in symbol_table.concrete_classes:
+        if concrete_cls.is_implementation_specific:
+            implementation_key = specific_implementations.ImplementationKey(
+                f"Xmlization/write_{concrete_cls.name}_as_sequence.py"
+            )
+
+            implementation = spec_impls.get(implementation_key, None)
+            if implementation is None:
+                errors.append(
+                    Error(
+                        concrete_cls.parsed.node,
+                        f"The xmlization snippet is missing "
+                        f"for the implementation-specific "
+                        f"class {concrete_cls.name}: {implementation_key}",
+                    )
+                )
+                continue
+
+            # NOTE (mristin):
+            # The snippet is expected to define the function which writes the content
+            # of the element, the properties of the instance. The element around it is
+            # framed by the generated writer, so that the snippet needs to know
+            # nothing about the element tag or about the namespace which only the very
+            # first element specifies.
+            blocks.append(implementation)
+
+        blocks.append(_generate_write_cls_as_element(cls=concrete_cls))
+
+    if len(errors) > 0:
+        return None, errors
+
+    # endregion
 
     blocks.append(_generate_serializer(symbol_table=symbol_table))
 
