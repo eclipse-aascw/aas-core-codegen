@@ -26,26 +26,157 @@ from aas_core_codegen.typescript.common import (
 )
 
 
-# region De-serialization
+# region Shared between the de-serialization and the serialization
 
 
-_CONTENT_PARSER_BY_PRIMITIVE_TYPE = {
-    intermediate.PrimitiveType.BOOL: Identifier("parseBooleanContent"),
-    intermediate.PrimitiveType.INT: Identifier("parseIntegerContent"),
-    intermediate.PrimitiveType.FLOAT: Identifier("parseFloatContent"),
-    intermediate.PrimitiveType.STR: Identifier("parseStringContent"),
-    intermediate.PrimitiveType.BYTEARRAY: Identifier("parseBase64EncodedBytesContent"),
-}
-
-#: Moniker of a primitive type, for the name of a composed parser, see
-#: :py:func:`_atomic_moniker`
+#: Moniker of a primitive type, see :py:func:`_type_moniker`.
+#:
+#: The monikers are spelled in lower case, while a moniker of one of our types goes
+#: through :py:func:`aas_core_codegen.naming.capitalized_camel_case`, so a primitive
+#: can never be confused with a type which somebody named ``Str`` or ``Float``.
 _MONIKER_BY_PRIMITIVE_TYPE = {
-    intermediate.PrimitiveType.BOOL: Identifier("Bool"),
-    intermediate.PrimitiveType.INT: Identifier("Int"),
-    intermediate.PrimitiveType.FLOAT: Identifier("Float"),
-    intermediate.PrimitiveType.STR: Identifier("Str"),
-    intermediate.PrimitiveType.BYTEARRAY: Identifier("Bytes"),
+    intermediate.PrimitiveType.BOOL: Identifier("bool"),
+    intermediate.PrimitiveType.INT: Identifier("int"),
+    intermediate.PrimitiveType.FLOAT: Identifier("float"),
+    intermediate.PrimitiveType.STR: Identifier("str"),
+    intermediate.PrimitiveType.BYTEARRAY: Identifier("bytes"),
 }
+
+
+#: Maximum length of a line of the generated code, in columns
+#:
+#: This is deliberately well above the ``printWidth`` of 88 which the Prettier
+#: configuration sets. The consuming project runs Prettier over the generated code,
+#: so neither spelling is the "wrong" one, and this is only about keeping what we
+#: record readable: breaking a call of three short arguments over five lines costs far
+#: more, at the hundreds of property sites, than the long line saves.
+_MAX_LINE_LENGTH = 100
+
+
+def _join_call_arguments(
+    callee: str, arguments: Sequence[str], columns: int
+) -> Stripped:
+    """
+    Render the call to the ``callee`` with the ``arguments``.
+
+    The ``callee`` is the whole expression in front of the parenthesis, so it carries
+    the explicit type arguments of a generic function as well. The ``columns`` are
+    the columns already taken on the line before the call -- the indention plus
+    whatever precedes it, such as ``return ``. The arguments go on the same line as
+    the ``callee`` if the call fits in :py:attr:`_MAX_LINE_LENGTH` columns, and one
+    argument per line otherwise.
+    """
+    joined = ", ".join(arguments)
+
+    if columns + len(callee) + len("(") + len(joined) + len(");") <= _MAX_LINE_LENGTH:
+        return Stripped(f"{callee}({joined})")
+
+    arguments_joined = ",\n".join(f"{I}{argument}" for argument in arguments)
+    return Stripped(
+        f"""\
+{callee}(
+{arguments_joined}
+)"""
+    )
+
+
+def _type_name_of_our_type(our_type: intermediate.OurType) -> Identifier:
+    """Give out the TypeScript type which the parser of ``our_type`` gives out."""
+    if isinstance(our_type, intermediate.Enumeration):
+        return typescript_naming.enum_name(our_type.name)
+
+    elif isinstance(our_type, intermediate.AbstractClass):
+        return typescript_naming.interface_name(our_type.name)
+
+    elif isinstance(our_type, intermediate.ConcreteClass):
+        return typescript_naming.class_name(our_type.name)
+
+    elif isinstance(our_type, intermediate.NamedUnion):
+        return typescript_naming.union_name(our_type.name)
+
+    elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+        raise AssertionError("Expected to handle this case before")
+
+    else:
+        assert_never(our_type)
+
+    raise AssertionError("Should not have gotten here")
+
+
+def _atomic_moniker(type_annotation: intermediate.TypeAnnotationUnion) -> Identifier:
+    """
+    Determine the leaf moniker of the atomic ``type_annotation``.
+
+    The monikers are the parts out of which we build the names of the de/serializers
+    which are keyed by a *structural* type -- a list, a tuple, an item at a fixed
+    element name -- rather than by a symbol of the meta-model. A leaf moniker never
+    contains an underscore: our types go through
+    :py:func:`aas_core_codegen.naming.capitalized_camel_case`, and a primitive is
+    spelled in lower case, which also keeps it apart from a type of the same name.
+    See :py:func:`_type_moniker` for the compound monikers built on top of these.
+    """
+    primitive_type = intermediate.try_primitive_type(type_annotation)
+    if primitive_type is not None:
+        return _MONIKER_BY_PRIMITIVE_TYPE[primitive_type]
+
+    assert isinstance(
+        type_annotation, intermediate.OurTypeAnnotation
+    ), f"Expected an atomic type annotation, but got: {type_annotation}"
+
+    return _type_name_of_our_type(type_annotation.our_type)
+
+
+def _is_dispatched(type_anno: intermediate.TypeAnnotationUnion) -> bool:
+    """
+    Check whether a value of ``type_anno`` is parsed by dispatching on the local name
+    of its XML element.
+
+    This is the case for an abstract class, for a concrete class with concrete
+    descendants, and for a named union -- none of them prescribes the element tag,
+    so the tag is what tells us which parser to use.
+    """
+    if not isinstance(type_anno, intermediate.OurTypeAnnotation):
+        return False
+
+    our_type = type_anno.our_type
+
+    if isinstance(our_type, intermediate.NamedUnion):
+        return True
+
+    if isinstance(our_type, intermediate.AbstractClass):
+        return True
+
+    if isinstance(our_type, intermediate.ConcreteClass):
+        return len(our_type.concrete_descendants) > 0
+
+    return False
+
+
+def _type_moniker(type_annotation: intermediate.TypeAnnotationUnion) -> str:
+    """
+    Determine the moniker of the ``type_annotation``.
+
+    A moniker of a list or of a tuple is a Polish notation over ``_``-separated
+    tokens: ``ListOf_{M}`` takes exactly one argument, and ``TupleOf{N}_{M}...``
+    exactly ``N`` of them. As a leaf moniker never contains an underscore, such
+    a name can always be split back into its parts, so the monikers are unique by
+    construction and we need no check for collisions.
+    """
+    type_anno = intermediate.beneath_optional(type_annotation)
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        return f"ListOf_{_type_moniker(type_anno.items)}"
+
+    if isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        monikers = "_".join(_type_moniker(item) for item in type_anno.items)
+        return f"TupleOf{len(type_anno.items)}_{monikers}"
+
+    return _atomic_moniker(type_anno)
+
+
+# endregion
+
+# region De-serialization
 
 
 def _generate_parse_content_for_primitive_type(
@@ -59,7 +190,7 @@ def _generate_parse_content_for_primitive_type(
     and a text parser of its own would be called from nowhere else -- a list item and
     a tuple item go through ``parseNamedElement``, which is given this parser.
     """
-    function_name = _CONTENT_PARSER_BY_PRIMITIVE_TYPE[primitive_type]
+    function_name = Identifier(f"parse_{_MONIKER_BY_PRIMITIVE_TYPE[primitive_type]}")
 
     if primitive_type is intermediate.PrimitiveType.BOOL:
         return Stripped(
@@ -173,50 +304,11 @@ function {function_name}(
         assert_never(primitive_type)
 
 
-#: Maximum length of a line of the generated code, in columns
-#:
-#: This is deliberately well above the ``printWidth`` of 88 which the Prettier
-#: configuration sets. The consuming project runs Prettier over the generated code,
-#: so neither spelling is the "wrong" one, and this is only about keeping what we
-#: record readable: breaking a call of three short arguments over five lines costs far
-#: more, at the hundreds of property sites, than the long line saves.
-_MAX_LINE_LENGTH = 100
-
-
-def _join_call_arguments(
-    callee: str, arguments: Sequence[str], columns: int
-) -> Stripped:
-    """
-    Render the call to the ``callee`` with the ``arguments``.
-
-    The ``callee`` is the whole expression in front of the parenthesis, so it carries
-    the explicit type arguments of a generic function as well. The ``columns`` are
-    the columns already taken on the line before the call -- the indention plus
-    whatever precedes it, such as ``return ``. The arguments go on the same line as
-    the ``callee`` if the call fits in :py:attr:`_MAX_LINE_LENGTH` columns, and one
-    argument per line otherwise.
-    """
-    joined = ", ".join(arguments)
-
-    if columns + len(callee) + len("(") + len(joined) + len(");") <= _MAX_LINE_LENGTH:
-        return Stripped(f"{callee}({joined})")
-
-    arguments_joined = ",\n".join(f"{I}{argument}" for argument in arguments)
-    return Stripped(
-        f"""\
-{callee}(
-{arguments_joined}
-)"""
-    )
-
-
 def _content_parser_name_for_enumeration(
     enumeration: intermediate.Enumeration,
 ) -> Identifier:
     """Give out the name of the parser of an ``enumeration`` literal."""
-    return typescript_naming.function_name(
-        Identifier(f"parse_{enumeration.name}_content")
-    )
+    return Identifier(f"parse_{typescript_naming.enum_name(enumeration.name)}")
 
 
 def _generate_parse_content_for_enumeration(
@@ -296,77 +388,6 @@ def _dispatch_map_name(name: Identifier) -> Identifier:
     return typescript_naming.constant_name(Identifier(f"parsers_of_{name}"))
 
 
-def _type_name_of_our_type(our_type: intermediate.OurType) -> Identifier:
-    """Give out the TypeScript type which the parser of ``our_type`` gives out."""
-    if isinstance(our_type, intermediate.Enumeration):
-        return typescript_naming.enum_name(our_type.name)
-
-    elif isinstance(our_type, intermediate.AbstractClass):
-        return typescript_naming.interface_name(our_type.name)
-
-    elif isinstance(our_type, intermediate.ConcreteClass):
-        return typescript_naming.class_name(our_type.name)
-
-    elif isinstance(our_type, intermediate.NamedUnion):
-        return typescript_naming.union_name(our_type.name)
-
-    elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-        raise AssertionError("Expected to handle this case before")
-
-    else:
-        assert_never(our_type)
-
-    raise AssertionError("Should not have gotten here")
-
-
-def _atomic_moniker(type_annotation: intermediate.TypeAnnotationUnion) -> Identifier:
-    """
-    Determine the moniker of the atomic ``type_annotation``.
-
-    The monikers are the parts out of which we build the names of the composed
-    parsers. A moniker never contains an underscore -- a TypeScript type name is
-    camel-cased -- so a name whose parts are separated by an underscore can always
-    be split back into its parts. The arity is spelled out in a tuple's name for
-    the same reason. The names are thus unique by construction, and we need no check
-    for collisions.
-    """
-    primitive_type = intermediate.try_primitive_type(type_annotation)
-    if primitive_type is not None:
-        return _MONIKER_BY_PRIMITIVE_TYPE[primitive_type]
-
-    assert isinstance(
-        type_annotation, intermediate.OurTypeAnnotation
-    ), f"Expected an atomic type annotation, but got: {type_annotation}"
-
-    return _type_name_of_our_type(type_annotation.our_type)
-
-
-def _is_dispatched(type_anno: intermediate.TypeAnnotationUnion) -> bool:
-    """
-    Check whether a value of ``type_anno`` is parsed by dispatching on the local name
-    of its XML element.
-
-    This is the case for an abstract class, for a concrete class with concrete
-    descendants, and for a named union -- none of them prescribes the element tag,
-    so the tag is what tells us which parser to use.
-    """
-    if not isinstance(type_anno, intermediate.OurTypeAnnotation):
-        return False
-
-    our_type = type_anno.our_type
-
-    if isinstance(our_type, intermediate.NamedUnion):
-        return True
-
-    if isinstance(our_type, intermediate.AbstractClass):
-        return True
-
-    if isinstance(our_type, intermediate.ConcreteClass):
-        return len(our_type.concrete_descendants) > 0
-
-    return False
-
-
 def _dispatch_parse_function_name(
     type_anno: intermediate.OurTypeAnnotation,
 ) -> Identifier:
@@ -403,64 +424,35 @@ def _content_parser_name(
     generated together with the type already wears the shape -- a class embeds its
     properties directly, so ``parse{Cls}FromSequence`` *is* the content of
     the element, and a dispatched value nests an element of its own, which
-    ``dispatchParse{X}Element`` reads whole.
+    ``dispatchParse{X}Element`` reads whole. Those two are keyed by a *symbol* of
+    the meta-model, and their names contain no underscore; everything else is keyed
+    by a *type*, and its name ends in an underscore and the type's moniker, see
+    :py:func:`_type_moniker`.
 
     This is a pure function of its argument. The code of the parsers which have to be
     composed is generated by :py:class:`_ParserRegistry`.
     """
     type_anno = intermediate.beneath_optional(type_annotation)
 
-    primitive_type = intermediate.try_primitive_type(type_anno)
-    if primitive_type is not None:
-        return _CONTENT_PARSER_BY_PRIMITIVE_TYPE[primitive_type]
+    if isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+        type_anno.our_type,
+        (
+            intermediate.AbstractClass,
+            intermediate.ConcreteClass,
+            intermediate.NamedUnion,
+        ),
+    ):
+        if _is_dispatched(type_anno):
+            return _dispatch_parse_function_name(type_anno)
 
-    if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
-        raise AssertionError("Expected to handle this case before")
-
-    elif isinstance(type_anno, intermediate.OurTypeAnnotation):
-        our_type = type_anno.our_type
-
-        if isinstance(our_type, intermediate.Enumeration):
-            return _content_parser_name_for_enumeration(our_type)
-
-        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-            raise AssertionError("Expected to handle this case before")
-
-        elif isinstance(
-            our_type,
-            (
-                intermediate.AbstractClass,
-                intermediate.ConcreteClass,
-                intermediate.NamedUnion,
-            ),
-        ):
-            if _is_dispatched(type_anno):
-                return _dispatch_parse_function_name(type_anno)
-
-            assert isinstance(our_type, intermediate.ConcreteClass), (
-                f"Unexpected abstract class with no concrete "
-                f"descendants: {our_type.name!r}"
-            )
-
-            return _parse_sequence_function_name_for_concrete_class(cls=our_type)
-
-        else:
-            assert_never(our_type)
-
-    elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        moniker = _atomic_moniker(intermediate.beneath_optional(type_anno.items))
-        return Identifier(f"parseListOf{moniker}Content")
-
-    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        monikers = [_atomic_moniker(item) for item in type_anno.items]
-        return Identifier(
-            f"parseTuple{len(type_anno.items)}Of" + "_".join(monikers) + "Content"
+        assert isinstance(type_anno.our_type, intermediate.ConcreteClass), (
+            f"Unexpected abstract class with no concrete "
+            f"descendants: {type_anno.our_type.name!r}"
         )
 
-    else:
-        assert_never(type_anno)
+        return _parse_sequence_function_name_for_concrete_class(cls=type_anno.our_type)
 
-    raise AssertionError("Should not have gotten here")
+    return Identifier(f"parse_{_type_moniker(type_anno)}")
 
 
 def _element_parser_name(
@@ -472,8 +464,9 @@ def _element_parser_name(
 
     This is what an item of a list or of a tuple is parsed with. A dispatched value
     picks the tag from its own model type, so it needs no name and no generated
-    parser; everything else sits in an element tagged ``v``, ``v1``, ``v2``, *etc.*,
-    prescribed by the position, which the ``tag_suffix`` gives.
+    parser; a class picks the tag from its own model type as well, and everything
+    else sits in an element tagged ``v``, ``v1``, ``v2``, *etc.*, prescribed by
+    the position, which the ``tag_suffix`` gives.
     """
     if _is_dispatched(type_anno):
         assert isinstance(type_anno, intermediate.OurTypeAnnotation)
@@ -482,11 +475,9 @@ def _element_parser_name(
     if isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
         type_anno.our_type, intermediate.ConcreteClass
     ):
-        cls_name = typescript_naming.class_name(type_anno.our_type.name)
-        return Identifier(f"parse{cls_name}Element")
+        return Identifier(f"parseElement_{_atomic_moniker(type_anno)}")
 
-    moniker = _atomic_moniker(type_anno)
-    return Identifier(f"parse{moniker}V{tag_suffix}Element")
+    return Identifier(f"parseAtV{tag_suffix}_{_atomic_moniker(type_anno)}")
 
 
 class _ParserRegistry:
@@ -1102,322 +1093,388 @@ const ROOT_DISPATCH_BY_LOCAL_NAME = new Map<
 # region Serialization
 
 
-_SERIALIZE_FUNCTION_BY_PRIMITIVE_TYPE = {
-    intermediate.PrimitiveType.BOOL: Identifier("serializeBooleanText"),
-    intermediate.PrimitiveType.INT: Identifier("serializeIntegerText"),
-    intermediate.PrimitiveType.FLOAT: Identifier("serializeFloatText"),
-    intermediate.PrimitiveType.STR: Identifier("serializeStringText"),
-    intermediate.PrimitiveType.BYTEARRAY: Identifier("serializeBase64EncodedBytesText"),
-}
+def _is_instance_type(type_anno: intermediate.TypeAnnotationUnion) -> bool:
+    """
+    Check whether a value of ``type_anno`` is written as its own, self-describing
+    XML element.
+
+    This is the case for every class and for every named union: the element is
+    picked by the run-time type of the value, which one virtual call answers for
+    all of them at once. The reading needs a dispatcher per interface instead, as
+    it has to decide what to construct before it has read anything.
+    """
+    return isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
+        type_anno.our_type,
+        (
+            intermediate.AbstractClass,
+            intermediate.ConcreteClass,
+            intermediate.NamedUnion,
+        ),
+    )
 
 
-def _serialize_function_for_atomic_type(
-    type_annotation: intermediate.AtomicTypeAnnotation,
+def _write_sequence_function_name_for_concrete_class(
+    cls: intermediate.ConcreteClass,
 ) -> Identifier:
-    """Resolve the name of the serialization function name for an atomic XML text value."""
-    if isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
-        return _SERIALIZE_FUNCTION_BY_PRIMITIVE_TYPE[type_annotation.a_type]
+    """
+    Generate the name of the function writing the properties of ``cls``.
 
-    elif isinstance(type_annotation, intermediate.OurTypeAnnotation):
-        our_type = type_annotation.our_type
+    The function writes only the properties, and neither the opening nor the closing
+    tag of the element which holds them -- which is exactly the contract of
+    a ``ContentWriter``, so this function needs no wrapper to serve as one.
+    """
+    return Identifier(f"write{typescript_naming.class_name(cls.name)}AsSequence")
 
-        # NOTE (mristin):
-        # A class or a named union is never serialized as an atomic text
-        # value -- it always writes its own element, tagged either with the
-        # property's name (statically known concrete type) or with its own
-        # runtime class name (polymorphic dispatch), see
-        # :py:func:`_generate_serialize_block_for_property`.
-        assert not isinstance(
-            our_type,
-            (
-                intermediate.AbstractClass,
-                intermediate.ConcreteClass,
-                intermediate.NamedUnion,
-            ),
+
+def _content_writer_name(
+    type_annotation: intermediate.TypeAnnotationUnion,
+) -> Identifier:
+    """
+    Give out the writer of the content of the element holding a value of
+    the ``type_annotation``.
+
+    Every writer shares the shape ``ContentWriter<T>``: it writes what sits between
+    the opening and the closing tag, both of which the caller writes. As on
+    the reading side, two kinds need no generated writer at all -- a class embeds
+    its properties directly, so ``write{Cls}AsSequence`` *is* the content of
+    the element, and an instance nests an element of its own, which ``writeClass``
+    writes whole. A list of instances needs none either, since the item writer is
+    ``writeClass`` whatever the item type is, so ``writeListOfInstances`` serves
+    every such list.
+
+    This is a pure function of its argument. The code of the writers which have to
+    be composed is generated by :py:class:`_WriterRegistry`.
+    """
+    type_anno = intermediate.beneath_optional(type_annotation)
+
+    if _is_instance_type(type_anno):
+        assert isinstance(type_anno, intermediate.OurTypeAnnotation)
+
+        if _is_dispatched(type_anno):
+            return Identifier("writeClass")
+
+        assert isinstance(type_anno.our_type, intermediate.ConcreteClass), (
+            f"Unexpected abstract class with no concrete "
+            f"descendants: {type_anno.our_type.name!r}"
         )
 
-        if isinstance(our_type, intermediate.Enumeration):
-            return typescript_naming.function_name(
-                Identifier(f"serialize_{our_type.name}_text")
-            )
+        return _write_sequence_function_name_for_concrete_class(cls=type_anno.our_type)
 
-        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-            return _SERIALIZE_FUNCTION_BY_PRIMITIVE_TYPE[our_type.constrainee]
+    if isinstance(type_anno, intermediate.ListTypeAnnotation) and _is_instance_type(
+        intermediate.beneath_optional(type_anno.items)
+    ):
+        return Identifier("writeListOfInstances")
 
-        else:
-            assert_never(our_type)
-
-    else:
-        assert_never(type_annotation)
+    return Identifier(f"write_{_type_moniker(type_anno)}")
 
 
-def _generate_serialize_text_as_enumeration(
-    enumeration: intermediate.Enumeration,
-) -> Stripped:
-    """Generate serializer for text representation of an enumeration literal."""
-    enum_name = typescript_naming.enum_name(enumeration.name)
-    serialize_function_name = typescript_naming.function_name(
-        Identifier(f"serialize_{enumeration.name}_text")
-    )
-    to_string_function = typescript_naming.function_name(
-        Identifier(f"must_{enumeration.name}_to_string")
-    )
+def _element_writer_name(
+    type_anno: intermediate.AtomicTypeAnnotation, tag_suffix: str
+) -> Identifier:
+    """
+    Give out the writer of a whole XML element, the tags included, holding a value
+    of the ``type_anno``.
 
-    return Stripped(
-        f"""\
-function {serialize_function_name}(
-{I}value: AasTypes.{enum_name}
-): string {{
-{I}return escapeXmlText(AasStringification.{to_string_function}(value));
-}}"""
-    )
+    This is what an item of a list or of a tuple is written with. An instance tags
+    its element with its own model type, which ``writeClass`` reads off the value;
+    everything else sits in an element tagged ``v``, ``v1``, ``v2``, *etc.*,
+    prescribed by the position, which the ``tag_suffix`` gives.
+    """
+    if _is_instance_type(type_anno):
+        return Identifier("writeClass")
+
+    return Identifier(f"writeAtV{tag_suffix}_{_atomic_moniker(type_anno)}")
 
 
-def _generate_serialize_text_for_primitive_type(
+def _generate_write_content_for_primitive_type(
     primitive_type: intermediate.PrimitiveType,
 ) -> Stripped:
-    """Generate serializer for a primitive XML text representation."""
+    """
+    Generate the writer of the content of an element holding a primitive value.
+
+    The value is rendered and pushed in the very same function. Unlike the reading,
+    which has to validate the text before it can hand out a value, there is nothing
+    left to separate here once the value is at hand.
+    """
+    function_name = Identifier(f"write_{_MONIKER_BY_PRIMITIVE_TYPE[primitive_type]}")
+
     if primitive_type is intermediate.PrimitiveType.BOOL:
         return Stripped(
             f"""\
-function serializeBooleanText(value: boolean): string {{
-{I}return value ? "true" : "false";
+function {function_name}(
+{I}parts: Array<string>,
+{I}value: boolean
+): void {{
+{I}parts.push(value ? "true" : "false");
 }}"""
         )
 
     elif primitive_type is intermediate.PrimitiveType.INT:
         return Stripped(
             f"""\
-function serializeIntegerText(value: number): string {{
+function {function_name}(
+{I}parts: Array<string>,
+{I}value: number
+): void {{
 {I}if (!Number.isInteger(value)) {{
-{II}throw new Error(`Expected an integer, but got: ${{value}}`);
+{II}throw new SerializationError(
+{III}`Expected an integer, but got: ${{value}}`
+{II});
 {I}}}
 
-{I}return `${{value}}`;
+{I}parts.push(`${{value}}`);
 }}"""
         )
 
     elif primitive_type is intermediate.PrimitiveType.FLOAT:
         return Stripped(
             f"""\
-function serializeFloatText(value: number): string {{
+function {function_name}(
+{I}parts: Array<string>,
+{I}value: number
+): void {{
 {I}if (Number.isNaN(value)) {{
-{II}return "NaN";
+{II}parts.push("NaN");
+{I}}} else if (value === Infinity) {{
+{II}parts.push("INF");
+{I}}} else if (value === -Infinity) {{
+{II}parts.push("-INF");
+{I}}} else {{
+{II}parts.push(`${{value}}`);
 {I}}}
-{I}if (value === Infinity) {{
-{II}return "INF";
-{I}}}
-{I}if (value === -Infinity) {{
-{II}return "-INF";
-{I}}}
-
-{I}return `${{value}}`;
 }}"""
         )
 
     elif primitive_type is intermediate.PrimitiveType.STR:
         return Stripped(
             f"""\
-function serializeStringText(value: string): string {{
-{I}return escapeXmlText(value);
+function {function_name}(
+{I}parts: Array<string>,
+{I}value: string
+): void {{
+{I}parts.push(escapeXmlText(value));
 }}"""
         )
 
     elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
         return Stripped(
             f"""\
-function serializeBase64EncodedBytesText(value: Uint8Array): string {{
-{I}return escapeXmlText(AasCommon.base64Encode(value));
+function {function_name}(
+{I}parts: Array<string>,
+{I}value: Uint8Array
+): void {{
+{I}parts.push(escapeXmlText(AasCommon.base64Encode(value)));
 }}"""
         )
 
     else:
         assert_never(primitive_type)
 
+    raise AssertionError("Should not have gotten here")
 
-def _generate_serialize_atomic_element(
-    element_name_literal: Stripped,
-    serialize_function: Identifier,
-    access_expr: Stripped,
+
+def _generate_write_content_for_enumeration(
+    enumeration: intermediate.Enumeration,
 ) -> Stripped:
     """
-    Generate the statement to write an atomic value wrapped in an element.
+    Generate the writer of the content of an element holding a literal.
 
-    This is used both for a single atomic property and for an atomic item of
-    a list or a tuple, where ``element_name_literal`` is either the property's
-    own XML name or a fixed item element name (*e.g.*, ``"v"`` or ``"v1"``).
+    The work is done by the shared ``writeEnumerationContent``, which is given
+    the ``toString`` of the stringification module -- the lookup lives there
+    already, and the only thing this function adds is the name of the enumeration
+    for the error message.
     """
+    enum_name = typescript_naming.enum_name(enumeration.name)
+    function_name = Identifier(f"write_{enum_name}")
+    to_string_function = typescript_naming.function_name(
+        Identifier(f"{enumeration.name}_to_string")
+    )
+
     return Stripped(
-        f"writeVElement(parts, {element_name_literal}, "
-        f"{serialize_function}({access_expr}));"
+        f"""\
+function {function_name}(
+{I}parts: Array<string>,
+{I}value: AasTypes.{enum_name}
+): void {{
+{I}writeEnumerationContent(
+{II}parts,
+{II}value,
+{II}{typescript_common.string_literal(enum_name)},
+{II}AasStringification.{to_string_function}
+{I});
+}}"""
     )
 
 
-def _generate_serialize_class_element(access_expr: Stripped) -> Stripped:
+def _generate_write_tuple_function(arity: int) -> Stripped:
     """
-    Generate the statement to write a class instance using its own element tag.
+    Generate a generic function to write a tuple of the given ``arity``.
 
-    This is used whenever the runtime type of the value is not statically known
-    to be a concrete class without descendants (*i.e.*, for polymorphic
-    properties, and for every item of a list or a tuple of class instances).
+    Each positional item is written by its own ``writeItem{i}``, which writes its
+    own opening and closing tags -- see, for example, a ``writeAtV{i}_{M}`` or
+    ``writeClass``, both of which do. The index is advanced only after an item has
+    been written, so that a failure reports the item which actually failed.
     """
-    return Stripped(f"writeClassElement(parts, this.transform({access_expr}));")
+    type_params_joined = ", ".join(f"T{i}" for i in range(arity))
+    tuple_type = f"[{', '.join(f'T{i}' for i in range(arity))}]"
+
+    params_joined = ",\n".join(
+        f"{I}writeItem{i}: ContentWriter<T{i}>" for i in range(arity)
+    )
+
+    item_statements = []  # type: List[str]
+    for i in range(arity):
+        if i > 0:
+            item_statements.append(f"index = {i};")
+        item_statements.append(f"writeItem{i}(parts, value[{i}]);")
+
+    item_statements_joined = "\n".join(item_statements)
+
+    return Stripped(
+        f"""\
+function writeTuple{arity}<{type_params_joined}>(
+{I}parts: Array<string>,
+{I}value: {tuple_type},
+{params_joined}
+): void {{
+{I}let index = 0;
+{I}try {{
+{II}{indent_but_first_line(item_statements_joined, II)}
+{I}}} catch (error) {{
+{II}if (error instanceof SerializationError) {{
+{III}error.path.prepend(new IndexSegment(index));
+{II}}}
+{II}throw error;
+{I}}}
+}}"""
+    )
 
 
-def _generate_serialize_block_for_property(
-    prop: intermediate.Property,
-) -> Stripped:
-    """Generate serialization statements for a property."""
-    xml_name_literal = typescript_common.string_literal(prop.xml_name)
-    prop_name = typescript_naming.property_name(prop.name)
-    access_expr = Stripped(f"that.{prop_name}")
+class _WriterRegistry:
+    """
+    Generate the code of the writers which a meta-model needs to be composed.
 
-    type_anno = intermediate.beneath_optional(prop.type_annotation)
+    All the writers share the same shape, ``ContentWriter<T>``, so a writer can be
+    given to another writer as its item writer, and a list of enumeration literals --
+    or anything deeper that a meta-model might grow -- falls out of the pieces which
+    are already there.
 
-    if isinstance(
-        type_anno,
-        (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
-    ):
-        if isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
-            type_anno.our_type, intermediate.NamedUnion
-        ):
+    The composed writers are de-duplicated by the type which they write, so that all
+    the classes share them, and they are named by :py:func:`_content_writer_name` and
+    :py:func:`_element_writer_name`. Nothing is composed at the time of the writing:
+    a writer is a module-level function declaration, which is hoisted, so the order
+    in which we emit them does not matter, and the serialization allocates no closure.
+
+    The methods come grouped: first the queries, which give out what has been
+    registered so far and change nothing, and then the commands, which register and
+    give out nothing.
+    """
+
+    def __init__(self) -> None:
+        """Initialize with nothing registered."""
+        self._blocks_by_name = dict()  # type: Dict[Identifier, Stripped]
+
+    @property
+    def blocks(self) -> List[Stripped]:
+        """Give out the code of the registered writers, ordered by the writer name."""
+        return [self._blocks_by_name[name] for name in sorted(self._blocks_by_name)]
+
+    def _add(self, name: Identifier, block: Stripped) -> None:
+        """Register the ``block`` which defines the writer ``name``."""
+        self._blocks_by_name[name] = block
+
+    def _register_element_writer(
+        self, type_anno: intermediate.AtomicTypeAnnotation, tag_suffix: str
+    ) -> None:
+        """
+        Register the writer of a whole element holding a value of the ``type_anno``.
+
+        An instance needs none, see :py:func:`_element_writer_name`.
+        """
+        if _is_instance_type(type_anno):
+            return
+
+        name = _element_writer_name(type_anno, tag_suffix)
+
+        value_type = typescript_common.generate_type(
+            type_anno, types_module=Identifier("AasTypes")
+        )
+
+        call = _join_call_arguments(
+            "writeElement",
+            [
+                "parts",
+                typescript_common.string_literal(f"v{tag_suffix}"),
+                "value",
+                _content_writer_name(type_anno),
+            ],
+            columns=len(I),
+        )
+
+        self._add(
+            name,
+            Stripped(
+                f"""\
+function {name}(
+{I}parts: Array<string>,
+{I}value: {value_type}
+): void {{
+{I}{indent_but_first_line(call, I)};
+}}"""
+            ),
+        )
+
+    def _register_list_writer(self, type_anno: intermediate.ListTypeAnnotation) -> None:
+        """Register the writer of the content of an element holding a list."""
+        items_type_anno = intermediate.beneath_optional(type_anno.items)
+
+        assert isinstance(items_type_anno, intermediate.AtomicTypeAnnotationAsTuple), (
+            f"(mristin) We only handle XML de/serialization of lists "
+            f"containing atomic values, but you want to generate the code "
+            f"for a list of type {type_anno}. Please contact the "
+            f"developers if you need this feature."
+        )
+
+        if _is_instance_type(items_type_anno):
             # NOTE (mristin):
-            # A named union always writes its own element, self-tagged with
-            # the runtime class's own name, exactly as we do for a
-            # polymorphic class property.
-            body = Stripped(
+            # Every item of every list of instances is written by ``writeClass``,
+            # so the one shared ``writeListOfInstances`` serves them all.
+            return
+
+        self._register_element_writer(items_type_anno, tag_suffix="")
+
+        name = _content_writer_name(type_anno)
+
+        item_type = typescript_common.generate_type(
+            items_type_anno, types_module=Identifier("AasTypes")
+        )
+        call = _join_call_arguments(
+            "writeList",
+            ["parts", "values", _element_writer_name(items_type_anno, tag_suffix="")],
+            columns=len(I),
+        )
+
+        self._add(
+            name,
+            Stripped(
                 f"""\
-parts.push(openTag({xml_name_literal}));
-{indent_but_first_line(
-    _generate_serialize_class_element(access_expr=access_expr),
-    I,
-)}
-parts.push(closeTag({xml_name_literal}));"""
-            )
-        elif isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
-            type_anno.our_type,
-            (intermediate.AbstractClass, intermediate.ConcreteClass),
-        ):
-            our_type = type_anno.our_type
-            if (
-                isinstance(our_type, intermediate.ConcreteClass)
-                and len(our_type.concrete_descendants) == 0
-            ):
-                serialized_var = typescript_naming.variable_name(
-                    Identifier(f"serialized_{prop.name}")
-                )
-                body = Stripped(
-                    f"""\
-const {serialized_var} = this.transform({access_expr});
-parts.push(openTag({xml_name_literal}));
-parts.push({serialized_var}.innerXml);
-parts.push(closeTag({xml_name_literal}));"""
-                )
-            else:
-                body = Stripped(
-                    f"""\
-parts.push(openTag({xml_name_literal}));
-{indent_but_first_line(
-    _generate_serialize_class_element(access_expr=access_expr),
-    I,
-)}
-parts.push(closeTag({xml_name_literal}));"""
-                )
-        else:
-            serialize_function = _serialize_function_for_atomic_type(type_anno)
-            body = _generate_serialize_atomic_element(
-                element_name_literal=xml_name_literal,
-                serialize_function=serialize_function,
-                access_expr=access_expr,
-            )
+function {name}(
+{I}parts: Array<string>,
+{I}values: Array<{item_type}>
+): void {{
+{I}{indent_but_first_line(call, I)};
+}}"""
+            ),
+        )
 
-    elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        if isinstance(type_anno.items, intermediate.OurTypeAnnotation) and isinstance(
-            type_anno.items.our_type, intermediate.NamedUnion
-        ):
-            # NOTE (mristin):
-            # A named union always writes its own element, self-tagged with
-            # the runtime class's own name, exactly as we do for a list of
-            # a polymorphic class.
-            item_var = typescript_naming.variable_name(Identifier(f"item_{prop.name}"))
+    def _register_tuple_writer(
+        self, type_anno: intermediate.TupleTypeAnnotation
+    ) -> None:
+        """Register the writer of the content of an element holding a tuple."""
+        arity = len(type_anno.items)
 
-            body = Stripped(
-                f"""\
-parts.push(openTag({xml_name_literal}));
-for (const {item_var} of {access_expr}) {{
-{I}{indent_but_first_line(
-    _generate_serialize_class_element(access_expr=Stripped(item_var)),
-    I,
-)}
-}}
-parts.push(closeTag({xml_name_literal}));"""
-            )
+        write_items = []  # type: List[str]
 
-        elif isinstance(
-            type_anno.items,
-            (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
-        ) and not (
-            isinstance(type_anno.items, intermediate.OurTypeAnnotation)
-            and isinstance(
-                type_anno.items.our_type,
-                (intermediate.AbstractClass, intermediate.ConcreteClass),
-            )
-        ):
-            serialize_item_function = _serialize_function_for_atomic_type(
-                type_anno.items
-            )
-            item_var = typescript_naming.variable_name(Identifier(f"item_{prop.name}"))
-            v_literal = typescript_common.string_literal("v")
-
-            body = Stripped(
-                f"""\
-parts.push(openTag({xml_name_literal}));
-for (const {item_var} of {access_expr}) {{
-{I}{indent_but_first_line(
-    _generate_serialize_atomic_element(
-        element_name_literal=v_literal,
-        serialize_function=serialize_item_function,
-        access_expr=Stripped(item_var),
-    ),
-    I,
-)}
-}}
-parts.push(closeTag({xml_name_literal}));"""
-            )
-
-        elif isinstance(type_anno.items, intermediate.OurTypeAnnotation) and isinstance(
-            type_anno.items.our_type,
-            (intermediate.AbstractClass, intermediate.ConcreteClass),
-        ):
-            item_var = typescript_naming.variable_name(Identifier(f"item_{prop.name}"))
-
-            body = Stripped(
-                f"""\
-parts.push(openTag({xml_name_literal}));
-for (const {item_var} of {access_expr}) {{
-{I}{indent_but_first_line(
-    _generate_serialize_class_element(access_expr=Stripped(item_var)),
-    I,
-)}
-}}
-parts.push(closeTag({xml_name_literal}));"""
-            )
-
-        else:
-            # NOTE (mristin):
-            # This is a limitation of our code generation, not of the input
-            # instances, so we fail immediately at generation time instead of
-            # emitting code which would only fail at runtime -- see how the
-            # other languages (*e.g.*, C# and C++) handle this same case.
-            raise NotImplementedError(
-                f"(mristin) We only handle XML serialization of lists "
-                f"containing atomic values, but you want to generate the code "
-                f"for a list of type {type_anno}. Please contact the "
-                f"developers if you need this feature."
-            )
-
-    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        item_write_stmts = []  # type: List[Stripped]
         for i, item_type_anno in enumerate(type_anno.items):
             assert isinstance(
                 item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
@@ -1428,133 +1485,176 @@ parts.push(closeTag({xml_name_literal}));"""
                 "nested optionals, lists or tuples are expected here."
             )
 
-            item_access = Stripped(f"{access_expr}[{i}]")
+            self._register_element_writer(item_type_anno, tag_suffix=str(i + 1))
 
-            if isinstance(
-                item_type_anno, intermediate.OurTypeAnnotation
-            ) and isinstance(item_type_anno.our_type, intermediate.NamedUnion):
-                # NOTE (mristin):
-                # A named union always writes its own element, self-tagged
-                # with the runtime class's own name, exactly as we do for a
-                # tuple item of a polymorphic class. We keep this as a
-                # branch of its own, separate from the class case below,
-                # since a future named union of primitives would need to
-                # diverge here.
-                item_write_stmts.append(
-                    _generate_serialize_class_element(access_expr=item_access)
-                )
-            elif isinstance(
-                item_type_anno, intermediate.OurTypeAnnotation
-            ) and isinstance(
-                item_type_anno.our_type,
-                (intermediate.AbstractClass, intermediate.ConcreteClass),
-            ):
-                item_write_stmts.append(
-                    _generate_serialize_class_element(access_expr=item_access)
-                )
-            else:
-                serialize_function = _serialize_function_for_atomic_type(item_type_anno)
-                v_name_literal = typescript_common.string_literal(f"v{i + 1}")
-                item_write_stmts.append(
-                    _generate_serialize_atomic_element(
-                        element_name_literal=v_name_literal,
-                        serialize_function=serialize_function,
-                        access_expr=item_access,
-                    )
-                )
+            write_items.append(_element_writer_name(item_type_anno, str(i + 1)))
 
-        item_write_stmts_joined = "\n".join(item_write_stmts)
+        name = _content_writer_name(type_anno)
 
-        body = Stripped(
-            f"""\
-parts.push(openTag({xml_name_literal}));
-{item_write_stmts_joined}
-parts.push(closeTag({xml_name_literal}));"""
+        value_type = typescript_common.generate_type(
+            type_anno, types_module=Identifier("AasTypes")
         )
 
-    else:
-        assert_never(type_anno)
+        call = _join_call_arguments(
+            f"writeTuple{arity}",
+            ["parts", "value"] + write_items,
+            columns=len(I),
+        )
 
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        return Stripped(
-            f"""\
-if ({access_expr} !== null) {{
-{I}{indent_but_first_line(body, I)}
+        self._add(
+            name,
+            Stripped(
+                f"""\
+function {name}(
+{I}parts: Array<string>,
+{I}value: {value_type}
+): void {{
+{I}{indent_but_first_line(call, I)};
 }}"""
+            ),
         )
 
-    return body
+    def register_property_writer(
+        self, type_annotation: intermediate.TypeAnnotationUnion
+    ) -> None:
+        """
+        Register the writers needed to write the content of the element holding
+        a value of the ``type_annotation``.
+        """
+        type_anno = intermediate.beneath_optional(type_annotation)
+
+        if isinstance(type_anno, intermediate.ListTypeAnnotation):
+            self._register_list_writer(type_anno)
+
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            self._register_tuple_writer(type_anno)
+
+        else:
+            # NOTE (mristin):
+            # An atomic value is written either by a writer which is generated
+            # together with its type -- a class and an instance -- or by one of
+            # the writers which we generate once for the whole module, for a
+            # primitive and for an enumeration. There is nothing to compose in
+            # either case.
+            pass
 
 
-def _generate_transform_of_concrete_class(cls: intermediate.ConcreteClass) -> Stripped:
-    """Generate ``transformX`` to serialize a concrete class to XML parts."""
-    method_name = typescript_naming.method_name(Identifier(f"transform_{cls.name}"))
+@require(lambda cls, prop: id(prop) in cls.property_id_set)
+def _generate_write_property(
+    cls: intermediate.ConcreteClass,
+    prop: intermediate.Property,
+) -> Stripped:
+    """Generate the statement writing the XML element of a property."""
+    del cls  # only used for the pre-condition
+
+    function_name = (
+        "writeOptionalProperty"
+        if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
+        else "writeProperty"
+    )
+
+    call = _join_call_arguments(
+        function_name,
+        [
+            "parts",
+            typescript_common.string_literal(prop.xml_name),
+            f"that.{typescript_naming.property_name(prop.name)}",
+            _content_writer_name(prop.type_annotation),
+        ],
+        columns=len(I),
+    )
+
+    return Stripped(f"{call};")
+
+
+def _generate_write_sequence_of_concrete_class(
+    cls: intermediate.ConcreteClass,
+) -> Stripped:
+    """Generate the writer of the properties of a concrete class."""
+    function_name = _write_sequence_function_name_for_concrete_class(cls=cls)
     cls_name = typescript_naming.class_name(cls.name)
-    local_name_literal = typescript_common.string_literal(
-        naming.xml_class_name(cls.name)
-    )
 
-    blocks = [Stripped("const parts = new Array<string>();")]  # type: List[Stripped]
-
-    for prop in cls.properties:
-        blocks.append(_generate_serialize_block_for_property(prop=prop))
-
-    blocks.append(
-        Stripped(
-            f"""\
-return {{
-{I}localName: {local_name_literal},
-{I}innerXml: parts.join("")
-}};"""
+    if len(cls.properties) == 0:
+        body = Stripped("// No properties")
+    else:
+        body = Stripped(
+            "\n".join(
+                _generate_write_property(cls=cls, prop=prop) for prop in cls.properties
+            )
         )
-    )
 
-    writer = io.StringIO()
-    writer.write(
+    return Stripped(
         f"""\
 /**
- * Serialize `that` to an XML element representation.
- *
- * @param that - instance to be serialized
- * @returns serialized XML element representation
+ * Write the properties of an instance
+ * of {{@link {typescript_common.TYPES_MODULE}!{cls_name}}}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
  */
-{method_name}(
+function {function_name}(
+{I}parts: Array<string>,
 {I}that: AasTypes.{cls_name}
-): SerializedElement {{
-"""
+): void {{
+{I}{indent_but_first_line(body, I)}
+}}"""
     )
-
-    for i, block in enumerate(blocks):
-        if i > 0:
-            writer.write("\n\n")
-        writer.write(indent_but_first_line(block, I))
-
-    writer.write("\n}")
-    return Stripped(writer.getvalue())
 
 
 def _generate_serializer(symbol_table: intermediate.SymbolTable) -> Stripped:
-    """Generate the serializer transformer over all concrete classes."""
+    """Generate the visitor dispatching on the run-time type of an instance."""
     methods = []  # type: List[Stripped]
 
     for cls in symbol_table.concrete_classes:
-        methods.append(_generate_transform_of_concrete_class(cls=cls))
+        method_name = typescript_naming.method_name(
+            Identifier(f"visit_{cls.name}_with_context")
+        )
+        cls_name = typescript_naming.class_name(cls.name)
+        local_name_literal = typescript_common.string_literal(
+            naming.xml_class_name(cls.name)
+        )
+
+        call = _join_call_arguments(
+            "writeElement",
+            [
+                "parts",
+                local_name_literal,
+                "that",
+                _write_sequence_function_name_for_concrete_class(cls=cls),
+            ],
+            columns=len(II),
+        )
+
+        methods.append(
+            Stripped(
+                f"""\
+{method_name}(
+{I}that: AasTypes.{cls_name},
+{I}parts: Array<string>
+): void {{
+{I}{indent_but_first_line(call, I)};
+}}"""
+            )
+        )
 
     writer = io.StringIO()
     writer.write(
         """\
 /**
- * Serialize an AAS instance to XML parts.
+ * Write the XML element of an instance, dispatching on its run-time type.
+ *
+ * Each method writes the whole element -- the tags included -- since the element
+ * is picked by the run-time type, which this dispatch has just established. The
+ * properties are written by the corresponding module-level `write{Cls}AsSequence`,
+ * which is the content writer of that very element.
  */
-class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
-"""
+class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {"""
     )
 
     for method in methods:
-        writer.write("\n\n")
-        writer.write(indent_but_first_line(method, I))
+        writer.write("\n")
+        writer.write(f"{I}{indent_but_first_line(method, I)}\n")
 
-    writer.write("\n}")
+    writer.write("}")
 
     return Stripped(writer.getvalue())
 
@@ -1699,13 +1799,23 @@ export class DeserializationError {{
             f"""\
 /**
  * Signal that XML serialization could not be performed.
+ *
+ * @remarks
+ *
+ * The {{@link SerializationError.path}} points into the instance which was to be
+ * serialized, and not into a document: it names the property, and the index within
+ * a list or a tuple, at which the offending value sits. Two segments which
+ * the de-serialization does report are therefore deliberately absent here. The
+ * outermost element is one, as {{@link toXmlString}} serializes whatever instance
+ * it is given; the element which tells a polymorphic value apart is the other,
+ * since a caller holding the instance reaches the value as, say, `value.idShort`
+ * and not as `value/idShort`.
  */
-export class SerializationError {{
-{I}readonly message: string;
+export class SerializationError extends Error {{
 {I}readonly path: Path;
 
 {I}constructor(message: string, path: Path | null = null) {{
-{II}this.message = message;
+{II}super(message);
 {II}this.path = path ?? new Path();
 {I}}}
 }}"""
@@ -2313,10 +2423,11 @@ function duplicatePropertyError(localName: string): DeserializationError {{
         blocks.append(_generate_parse_content_for_enumeration(enumeration))
 
     for enumeration in symbol_table.enumerations:
-        blocks.append(_generate_serialize_text_as_enumeration(enumeration))
+        blocks.append(_generate_write_content_for_enumeration(enumeration))
 
     for arity in intermediate.tuple_arities(symbol_table=symbol_table):
         blocks.append(_generate_parse_tuple_function(arity))
+        blocks.append(_generate_write_tuple_function(arity))
 
     # NOTE (mristin):
     # We compose the parsers first, so that we know which of them a meta-model
@@ -2331,8 +2442,22 @@ function duplicatePropertyError(localName: string): DeserializationError {{
 
     blocks.extend(parser_registry.blocks)
 
+    # NOTE (mristin):
+    # The writers are composed in the same way, and for the same reasons, as
+    # the parsers just above.
+    writer_registry = _WriterRegistry()
+
+    for concrete_cls in symbol_table.concrete_classes:
+        for prop in concrete_cls.properties:
+            writer_registry.register_property_writer(prop.type_annotation)
+
+    blocks.extend(writer_registry.blocks)
+
     for concrete_cls in symbol_table.concrete_classes:
         blocks.append(_generate_parse_concrete_class(cls=concrete_cls))
+
+    for concrete_cls in symbol_table.concrete_classes:
+        blocks.append(_generate_write_sequence_of_concrete_class(cls=concrete_cls))
 
     for cls in symbol_table.classes:
         interface = None  # type: Optional[intermediate.Interface]
@@ -2477,52 +2602,170 @@ export function fromXmlString(
             ),
             Stripped(
                 f"""\
-type SerializedElement = {{
-{I}localName: string;
-{I}innerXml: string;
-}};
-
-function openTag(localName: string, withNamespace = false): string {{
-{I}if (withNamespace) {{
-{II}return `<${{localName}} xmlns="${{NAMESPACE}}">`;
-{I}}}
-
-{I}return `<${{localName}}>`;
-}}
-
-function closeTag(localName: string): string {{
-{I}return `</${{localName}}>`;
-}}
+/**
+ * Write the content of an XML element -- everything between its opening and its
+ * closing tag -- into `parts`.
+ *
+ * @remarks
+ *
+ * This is the one shape which every writer wears, so that a writer can be given
+ * to another writer as its item writer. The framing of the element around such
+ * a content is written by {{@link writeElement}}, and only there.
+ *
+ * The content is pushed as one or more separate entries instead of being
+ * concatenated as it is produced, so that the single `parts.join("")` at the very
+ * end copies every piece of text exactly once, however deeply it is nested.
+ */
+type ContentWriter<T> = (parts: Array<string>, value: T) => void;
 
 /**
- * Push `content` wrapped in its own `localName` element onto `parts`.
+ * Write `value` as the XML element `localName`, its content written
+ * by `writeContent`.
  *
- * We push the opening tag, the content and the closing tag as three separate
- * entries instead of pre-concatenating them, so that ``parts.join("")`` at
- * the top level copies the (possibly large, deeply nested) `content` exactly
- * once.
+ * @remarks
+ *
+ * The root element, and only the root element, declares the XML namespace. It is
+ * by definition the first element to be written, so `parts` is still empty when
+ * we push its opening tag, and we need no flag threaded through the writers to
+ * tell it apart.
  */
-function writeVElement(
+function writeElement<T>(
 {I}parts: Array<string>,
 {I}localName: string,
-{I}content: string
+{I}value: T,
+{I}writeContent: ContentWriter<T>
 ): void {{
-{I}parts.push(openTag(localName));
-{I}parts.push(content);
-{I}parts.push(closeTag(localName));
+{I}parts.push(
+{II}parts.length === 0
+{III}? `<${{localName}} xmlns="${{NAMESPACE}}">`
+{III}: `<${{localName}}>`
+{I});
+{I}writeContent(parts, value);
+{I}parts.push(`</${{localName}}>`);
 }}
 
 /**
- * Push a class instance already serialized to XML parts onto `parts`, wrapped
- * in its own element as given by {{@link SerializedElement.localName}}.
+ * Write `value` as the XML element of the property `name`.
+ *
+ * @remarks
+ *
+ * This is {{@link writeElement}} plus the reporting: a failure anywhere beneath
+ * this property is reported at a path which begins with the property. The framing
+ * of an *item* of a list or of a tuple deliberately goes through
+ * {{@link writeElement}} instead, as an item is reported by its index.
  */
-function writeClassElement(
+function writeProperty<T>(
 {I}parts: Array<string>,
-{I}serialized: SerializedElement
+{I}name: string,
+{I}value: T,
+{I}writeContent: ContentWriter<T>
 ): void {{
-{I}parts.push(openTag(serialized.localName));
-{I}parts.push(serialized.innerXml);
-{I}parts.push(closeTag(serialized.localName));
+{I}try {{
+{II}writeElement(parts, name, value, writeContent);
+{I}}} catch (error) {{
+{II}if (error instanceof SerializationError) {{
+{III}error.path.prepend(new NameSegment(name));
+{II}}}
+{II}throw error;
+{I}}}
+}}
+
+/**
+ * Write `value` as the XML element of the property `name` if it has been given,
+ * and write nothing at all otherwise.
+ */
+function writeOptionalProperty<T>(
+{I}parts: Array<string>,
+{I}name: string,
+{I}value: T | null,
+{I}writeContent: ContentWriter<T>
+): void {{
+{I}if (value !== null) {{
+{II}writeProperty(parts, name, value, writeContent);
+{I}}}
+}}
+
+/**
+ * Write the items of `values`, each as its own whole XML element.
+ *
+ * @remarks
+ *
+ * The index is advanced only after an item has been written, so that a failure is
+ * reported at the item which actually failed.
+ */
+function writeList<T>(
+{I}parts: Array<string>,
+{I}values: Array<T>,
+{I}writeItemElement: ContentWriter<T>
+): void {{
+{I}let index = 0;
+{I}try {{
+{II}for (const value of values) {{
+{III}writeItemElement(parts, value);
+{III}index++;
+{II}}}
+{I}}} catch (error) {{
+{II}if (error instanceof SerializationError) {{
+{III}error.path.prepend(new IndexSegment(index));
+{II}}}
+{II}throw error;
+{I}}}
+}}
+
+/**
+ * Write the instances of `values`, each as its own, self-describing XML element.
+ *
+ * @remarks
+ *
+ * Every item goes through {{@link writeClass}} whatever its declared type is, so
+ * this one writer serves every list of instances in the meta-model.
+ */
+function writeListOfInstances(
+{I}parts: Array<string>,
+{I}values: Array<AasTypes.Class>
+): void {{
+{I}writeList(parts, values, writeClass);
+}}
+
+/**
+ * Write `that` as its own, self-describing XML element.
+ *
+ * @remarks
+ *
+ * Which element that is, is decided by the run-time type of `that`, so this one
+ * writer serves every abstract class, every named union, and the item of a list
+ * or of a tuple of any class at all. The reading, which has to decide what to
+ * construct before it has read anything, needs a dispatcher per interface instead.
+ */
+function writeClass(parts: Array<string>, that: AasTypes.Class): void {{
+{I}SERIALIZER.visitWithContext(that, parts);
+}}
+
+/**
+ * Write the literal `value` of the enumeration `enumerationName` as the content
+ * of an XML element.
+ *
+ * @remarks
+ *
+ * We deliberately go through the `toString` of the stringification module, which
+ * gives out `null` for a literal it does not know, and not through its `mustToString`,
+ * which throws an error of its own. An instance carrying a literal outside its
+ * enumeration is exactly the kind of failure this module reports with a path.
+ */
+function writeEnumerationContent<T>(
+{I}parts: Array<string>,
+{I}value: T,
+{I}enumerationName: string,
+{I}toString: (value: T) => string | null
+): void {{
+{I}const text = toString(value);
+{I}if (text === null) {{
+{II}throw new SerializationError(
+{III}`Invalid literal of ${{enumerationName}}: ${{value}}`
+{II});
+{I}}}
+
+{I}parts.push(escapeXmlText(text));
 }}
 
 function escapeXmlText(text: string): string {{
@@ -2538,7 +2781,7 @@ function escapeXmlText(text: string): string {{
     )
 
     for primitive_type in intermediate.PrimitiveType:
-        blocks.append(_generate_serialize_text_for_primitive_type(primitive_type))
+        blocks.append(_generate_write_content_for_primitive_type(primitive_type))
 
     blocks.extend(
         [
@@ -2551,13 +2794,12 @@ function escapeXmlText(text: string): string {{
  *
  * @param that - AAS instance to serialize
  * @returns serialized XML string
+ * @throws {{@link SerializationError}} if `that` can not be serialized, *e.g.*, if
+ * a property expected to be an integer holds a fractional number
  */
 export function toXmlString(that: AasTypes.Class): string {{
-{I}const serialized = SERIALIZER.transform(that);
 {I}const parts = new Array<string>();
-{I}parts.push(openTag(serialized.localName, true));
-{I}parts.push(serialized.innerXml);
-{I}parts.push(closeTag(serialized.localName));
+{I}writeClass(parts, that);
 {I}return parts.join("");
 }}"""
             ),

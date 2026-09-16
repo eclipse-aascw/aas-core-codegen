@@ -99,13 +99,23 @@ export class DeserializationError {
 
 /**
  * Signal that XML serialization could not be performed.
+ *
+ * @remarks
+ *
+ * The {@link SerializationError.path} points into the instance which was to be
+ * serialized, and not into a document: it names the property, and the index within
+ * a list or a tuple, at which the offending value sits. Two segments which
+ * the de-serialization does report are therefore deliberately absent here. The
+ * outermost element is one, as {@link toXmlString} serializes whatever instance
+ * it is given; the element which tells a polymorphic value apart is the other,
+ * since a caller holding the instance reaches the value as, say, `value.idShort`
+ * and not as `value/idShort`.
  */
-export class SerializationError {
-  readonly message: string;
+export class SerializationError extends Error {
   readonly path: Path;
 
   constructor(message: string, path: Path | null = null) {
-    this.message = message;
+    super(message);
     this.path = path ?? new Path();
   }
 }
@@ -640,7 +650,7 @@ function duplicatePropertyError(localName: string): DeserializationError {
   );
 }
 
-function parseBooleanContent(
+function parse_bool(
   cursor: XmlCursor
 ): AasCommon.Either<boolean, DeserializationError> {
   const text = parseTextContent(cursor);
@@ -657,7 +667,7 @@ function parseBooleanContent(
   );
 }
 
-function parseIntegerContent(
+function parse_int(
   cursor: XmlCursor
 ): AasCommon.Either<number, DeserializationError> {
   const text = parseTextContent(cursor);
@@ -678,7 +688,7 @@ function parseIntegerContent(
   return new AasCommon.Either<number, DeserializationError>(value, null);
 }
 
-function parseFloatContent(
+function parse_float(
   cursor: XmlCursor
 ): AasCommon.Either<number, DeserializationError> {
   const text = parseTextContent(cursor);
@@ -703,7 +713,7 @@ function parseFloatContent(
   return new AasCommon.Either<number, DeserializationError>(value, null);
 }
 
-function parseStringContent(
+function parse_str(
   cursor: XmlCursor
 ): AasCommon.Either<string, DeserializationError> {
   return new AasCommon.Either<string, DeserializationError>(
@@ -712,7 +722,7 @@ function parseStringContent(
   );
 }
 
-function parseBase64EncodedBytesContent(
+function parse_bytes(
   cursor: XmlCursor
 ): AasCommon.Either<Uint8Array, DeserializationError> {
   const decodedOrError = AasCommon.base64Decode(parseTextContent(cursor));
@@ -728,22 +738,22 @@ function parseBase64EncodedBytesContent(
   );
 }
 
-function parseListOfIAbstractItemContent(
+function parseElement_Simple(
+  cursor: XmlCursor
+): AasCommon.Either<AasTypes.Simple, DeserializationError> {
+  return parseNamedElement(cursor, "simple", parseSimpleFromSequence);
+}
+
+function parse_ListOf_IAbstractItem(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.IAbstractItem>, DeserializationError> {
   return parseList<AasTypes.IAbstractItem>(cursor, dispatchParseAbstractItemElement);
 }
 
-function parseListOfSimpleContent(
+function parse_ListOf_Simple(
   cursor: XmlCursor
 ): AasCommon.Either<Array<AasTypes.Simple>, DeserializationError> {
-  return parseList<AasTypes.Simple>(cursor, parseSimpleElement);
-}
-
-function parseSimpleElement(
-  cursor: XmlCursor
-): AasCommon.Either<AasTypes.Simple, DeserializationError> {
-  return parseNamedElement(cursor, "simple", parseSimpleFromSequence);
+  return parseList<AasTypes.Simple>(cursor, parseElement_Simple);
 }
 
 /**
@@ -787,7 +797,7 @@ function parseSomeItemFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theName = parsed.value;
         break;
@@ -868,7 +878,7 @@ function parseAnotherItemFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseIntegerContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_int);
         propertyError = parsed.error;
         theSerialNumber = parsed.value;
         break;
@@ -949,7 +959,7 @@ function parseSimpleFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseStringContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_str);
         propertyError = parsed.error;
         theName = parsed.value;
         break;
@@ -1031,11 +1041,7 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(
-          cursor,
-          propertyLocalName,
-          parseListOfIAbstractItemContent
-        );
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_IAbstractItem);
         propertyError = parsed.error;
         theSomeItems = parsed.value;
         break;
@@ -1047,7 +1053,7 @@ function parseSomethingFromSequence(
           break;
         }
 
-        const parsed = parseElementContent(cursor, propertyLocalName, parseListOfSimpleContent);
+        const parsed = parseElementContent(cursor, propertyLocalName, parse_ListOf_Simple);
         propertyError = parsed.error;
         theSomeSimples = parsed.value;
         break;
@@ -1092,6 +1098,59 @@ function parseSomethingFromSequence(
     instance,
     null
   );
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!SomeItem}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeSomeItemAsSequence(
+  parts: Array<string>,
+  that: AasTypes.SomeItem
+): void {
+  writeProperty(parts, "name", that.name, write_str);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!AnotherItem}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeAnotherItemAsSequence(
+  parts: Array<string>,
+  that: AasTypes.AnotherItem
+): void {
+  writeProperty(parts, "serialNumber", that.serialNumber, write_int);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!Simple}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeSimpleAsSequence(
+  parts: Array<string>,
+  that: AasTypes.Simple
+): void {
+  writeProperty(parts, "name", that.name, write_str);
+}
+
+/**
+ * Write the properties of an instance
+ * of {@link types!Something}, and neither the opening
+ * nor the closing tag of the element which holds them -- which is the contract of
+ * a `ContentWriter`, so this function is used as one.
+ */
+function writeSomethingAsSequence(
+  parts: Array<string>,
+  that: AasTypes.Something
+): void {
+  writeProperty(parts, "someItems", that.someItems, writeListOfInstances);
+  writeProperty(parts, "someSimples", that.someSimples, writeListOfInstances);
 }
 
 const PARSERS_OF_ABSTRACT_ITEM = new Map<
@@ -1235,52 +1294,170 @@ export function fromXmlString(
   return instanceOrError;
 }
 
-type SerializedElement = {
-  localName: string;
-  innerXml: string;
-};
-
-function openTag(localName: string, withNamespace = false): string {
-  if (withNamespace) {
-    return `<${localName} xmlns="${NAMESPACE}">`;
-  }
-
-  return `<${localName}>`;
-}
-
-function closeTag(localName: string): string {
-  return `</${localName}>`;
-}
+/**
+ * Write the content of an XML element -- everything between its opening and its
+ * closing tag -- into `parts`.
+ *
+ * @remarks
+ *
+ * This is the one shape which every writer wears, so that a writer can be given
+ * to another writer as its item writer. The framing of the element around such
+ * a content is written by {@link writeElement}, and only there.
+ *
+ * The content is pushed as one or more separate entries instead of being
+ * concatenated as it is produced, so that the single `parts.join("")` at the very
+ * end copies every piece of text exactly once, however deeply it is nested.
+ */
+type ContentWriter<T> = (parts: Array<string>, value: T) => void;
 
 /**
- * Push `content` wrapped in its own `localName` element onto `parts`.
+ * Write `value` as the XML element `localName`, its content written
+ * by `writeContent`.
  *
- * We push the opening tag, the content and the closing tag as three separate
- * entries instead of pre-concatenating them, so that ``parts.join("")`` at
- * the top level copies the (possibly large, deeply nested) `content` exactly
- * once.
+ * @remarks
+ *
+ * The root element, and only the root element, declares the XML namespace. It is
+ * by definition the first element to be written, so `parts` is still empty when
+ * we push its opening tag, and we need no flag threaded through the writers to
+ * tell it apart.
  */
-function writeVElement(
+function writeElement<T>(
   parts: Array<string>,
   localName: string,
-  content: string
+  value: T,
+  writeContent: ContentWriter<T>
 ): void {
-  parts.push(openTag(localName));
-  parts.push(content);
-  parts.push(closeTag(localName));
+  parts.push(
+    parts.length === 0
+      ? `<${localName} xmlns="${NAMESPACE}">`
+      : `<${localName}>`
+  );
+  writeContent(parts, value);
+  parts.push(`</${localName}>`);
 }
 
 /**
- * Push a class instance already serialized to XML parts onto `parts`, wrapped
- * in its own element as given by {@link SerializedElement.localName}.
+ * Write `value` as the XML element of the property `name`.
+ *
+ * @remarks
+ *
+ * This is {@link writeElement} plus the reporting: a failure anywhere beneath
+ * this property is reported at a path which begins with the property. The framing
+ * of an *item* of a list or of a tuple deliberately goes through
+ * {@link writeElement} instead, as an item is reported by its index.
  */
-function writeClassElement(
+function writeProperty<T>(
   parts: Array<string>,
-  serialized: SerializedElement
+  name: string,
+  value: T,
+  writeContent: ContentWriter<T>
 ): void {
-  parts.push(openTag(serialized.localName));
-  parts.push(serialized.innerXml);
-  parts.push(closeTag(serialized.localName));
+  try {
+    writeElement(parts, name, value, writeContent);
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.path.prepend(new NameSegment(name));
+    }
+    throw error;
+  }
+}
+
+/**
+ * Write `value` as the XML element of the property `name` if it has been given,
+ * and write nothing at all otherwise.
+ */
+function writeOptionalProperty<T>(
+  parts: Array<string>,
+  name: string,
+  value: T | null,
+  writeContent: ContentWriter<T>
+): void {
+  if (value !== null) {
+    writeProperty(parts, name, value, writeContent);
+  }
+}
+
+/**
+ * Write the items of `values`, each as its own whole XML element.
+ *
+ * @remarks
+ *
+ * The index is advanced only after an item has been written, so that a failure is
+ * reported at the item which actually failed.
+ */
+function writeList<T>(
+  parts: Array<string>,
+  values: Array<T>,
+  writeItemElement: ContentWriter<T>
+): void {
+  let index = 0;
+  try {
+    for (const value of values) {
+      writeItemElement(parts, value);
+      index++;
+    }
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.path.prepend(new IndexSegment(index));
+    }
+    throw error;
+  }
+}
+
+/**
+ * Write the instances of `values`, each as its own, self-describing XML element.
+ *
+ * @remarks
+ *
+ * Every item goes through {@link writeClass} whatever its declared type is, so
+ * this one writer serves every list of instances in the meta-model.
+ */
+function writeListOfInstances(
+  parts: Array<string>,
+  values: Array<AasTypes.Class>
+): void {
+  writeList(parts, values, writeClass);
+}
+
+/**
+ * Write `that` as its own, self-describing XML element.
+ *
+ * @remarks
+ *
+ * Which element that is, is decided by the run-time type of `that`, so this one
+ * writer serves every abstract class, every named union, and the item of a list
+ * or of a tuple of any class at all. The reading, which has to decide what to
+ * construct before it has read anything, needs a dispatcher per interface instead.
+ */
+function writeClass(parts: Array<string>, that: AasTypes.Class): void {
+  SERIALIZER.visitWithContext(that, parts);
+}
+
+/**
+ * Write the literal `value` of the enumeration `enumerationName` as the content
+ * of an XML element.
+ *
+ * @remarks
+ *
+ * We deliberately go through the `toString` of the stringification module, which
+ * gives out `null` for a literal it does not know, and not through its `mustToString`,
+ * which throws an error of its own. An instance carrying a literal outside its
+ * enumeration is exactly the kind of failure this module reports with a path.
+ */
+function writeEnumerationContent<T>(
+  parts: Array<string>,
+  value: T,
+  enumerationName: string,
+  toString: (value: T) => string | null
+): void {
+  const text = toString(value);
+  if (text === null) {
+    throw new SerializationError(
+      `Invalid literal of ${enumerationName}: ${value}`
+    );
+  }
+
+  parts.push(escapeXmlText(text));
 }
 
 function escapeXmlText(text: string): string {
@@ -1292,130 +1469,90 @@ function escapeXmlText(text: string): string {
     .replace(/'/g, "&apos;");
 }
 
-function serializeBooleanText(value: boolean): string {
-  return value ? "true" : "false";
+function write_bool(
+  parts: Array<string>,
+  value: boolean
+): void {
+  parts.push(value ? "true" : "false");
 }
 
-function serializeIntegerText(value: number): string {
+function write_int(
+  parts: Array<string>,
+  value: number
+): void {
   if (!Number.isInteger(value)) {
-    throw new Error(`Expected an integer, but got: ${value}`);
+    throw new SerializationError(
+      `Expected an integer, but got: ${value}`
+    );
   }
 
-  return `${value}`;
+  parts.push(`${value}`);
 }
 
-function serializeFloatText(value: number): string {
+function write_float(
+  parts: Array<string>,
+  value: number
+): void {
   if (Number.isNaN(value)) {
-    return "NaN";
+    parts.push("NaN");
+  } else if (value === Infinity) {
+    parts.push("INF");
+  } else if (value === -Infinity) {
+    parts.push("-INF");
+  } else {
+    parts.push(`${value}`);
   }
-  if (value === Infinity) {
-    return "INF";
-  }
-  if (value === -Infinity) {
-    return "-INF";
-  }
-
-  return `${value}`;
 }
 
-function serializeStringText(value: string): string {
-  return escapeXmlText(value);
+function write_str(
+  parts: Array<string>,
+  value: string
+): void {
+  parts.push(escapeXmlText(value));
 }
 
-function serializeBase64EncodedBytesText(value: Uint8Array): string {
-  return escapeXmlText(AasCommon.base64Encode(value));
+function write_bytes(
+  parts: Array<string>,
+  value: Uint8Array
+): void {
+  parts.push(escapeXmlText(AasCommon.base64Encode(value)));
 }
 
 /**
- * Serialize an AAS instance to XML parts.
+ * Write the XML element of an instance, dispatching on its run-time type.
+ *
+ * Each method writes the whole element -- the tags included -- since the element
+ * is picked by the run-time type, which this dispatch has just established. The
+ * properties are written by the corresponding module-level `write{Cls}AsSequence`,
+ * which is the content writer of that very element.
  */
-class Serializer extends AasTypes.AbstractTransformer<SerializedElement> {
-
-
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformSomeItem(
-    that: AasTypes.SomeItem
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  writeVElement(parts, "name", serializeStringText(that.name));
-
-  return {
-      localName: "someItem",
-      innerXml: parts.join("")
-    };
+class Serializer extends AasTypes.AbstractVisitorWithContext<Array<string>> {
+  visitSomeItemWithContext(
+    that: AasTypes.SomeItem,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "someItem", that, writeSomeItemAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformAnotherItem(
-    that: AasTypes.AnotherItem
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  writeVElement(parts, "serialNumber", serializeIntegerText(that.serialNumber));
-
-  return {
-      localName: "anotherItem",
-      innerXml: parts.join("")
-    };
+  visitAnotherItemWithContext(
+    that: AasTypes.AnotherItem,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "anotherItem", that, writeAnotherItemAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformSimple(
-    that: AasTypes.Simple
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  writeVElement(parts, "name", serializeStringText(that.name));
-
-  return {
-      localName: "simple",
-      innerXml: parts.join("")
-    };
+  visitSimpleWithContext(
+    that: AasTypes.Simple,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "simple", that, writeSimpleAsSequence);
   }
 
-/**
-   * Serialize `that` to an XML element representation.
-   *
-   * @param that - instance to be serialized
-   * @returns serialized XML element representation
-   */
-  transformSomething(
-    that: AasTypes.Something
-  ): SerializedElement {
-  const parts = new Array<string>();
-
-  parts.push(openTag("someItems"));
-    for (const itemSomeItems of that.someItems) {
-      writeClassElement(parts, this.transform(itemSomeItems));
-    }
-    parts.push(closeTag("someItems"));
-
-  parts.push(openTag("someSimples"));
-    for (const itemSomeSimples of that.someSimples) {
-      writeClassElement(parts, this.transform(itemSomeSimples));
-    }
-    parts.push(closeTag("someSimples"));
-
-  return {
-      localName: "something",
-      innerXml: parts.join("")
-    };
+  visitSomethingWithContext(
+    that: AasTypes.Something,
+    parts: Array<string>
+  ): void {
+    writeElement(parts, "something", that, writeSomethingAsSequence);
   }
 }
 
@@ -1426,13 +1563,12 @@ const SERIALIZER = new Serializer();
  *
  * @param that - AAS instance to serialize
  * @returns serialized XML string
+ * @throws {@link SerializationError} if `that` can not be serialized, *e.g.*, if
+ * a property expected to be an integer holds a fractional number
  */
 export function toXmlString(that: AasTypes.Class): string {
-  const serialized = SERIALIZER.transform(that);
   const parts = new Array<string>();
-  parts.push(openTag(serialized.localName, true));
-  parts.push(serialized.innerXml);
-  parts.push(closeTag(serialized.localName));
+  writeClass(parts, that);
   return parts.join("");
 }
 
