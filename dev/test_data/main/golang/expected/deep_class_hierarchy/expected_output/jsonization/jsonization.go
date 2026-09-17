@@ -52,26 +52,45 @@ func (de *DeserializationError) PathString() string {
 	return aasreporting.ToJSONPath(de.Path)
 }
 
-// Prepend the `name` segment to the path of the `err`, if it is
-// a de-serialization error, and return the `err` back for chaining.
-func prependName(err error, name string) error {
-	if deseriaErr, ok := err.(*DeserializationError); ok {
-		deseriaErr.Path.PrependName(
-			&aasreporting.NameSegment{Name: name},
-		)
-	}
-	return err
+// Prepend the `name` segment to the path, and return the error back
+// for chaining.
+func (de *DeserializationError) prependName(
+	name string,
+) *DeserializationError {
+	de.Path.PrependName(
+		&aasreporting.NameSegment{Name: name},
+	)
+	return de
 }
 
-// Prepend the `index` segment to the path of the `err`, if it is
-// a de-serialization error, and return the `err` back for chaining.
-func prependIndex(err error, index int) error {
-	if deseriaErr, ok := err.(*DeserializationError); ok {
-		deseriaErr.Path.PrependIndex(
-			&aasreporting.IndexSegment{Index: index},
+// Prepend the `index` segment to the path, and return the error back
+// for chaining.
+func (de *DeserializationError) prependIndex(
+	index int,
+) *DeserializationError {
+	de.Path.PrependIndex(
+		&aasreporting.IndexSegment{Index: index},
+	)
+	return de
+}
+
+// Cast `err` to a de-serialization error, or panic.
+//
+// Every error which originates in this package is
+// a [DeserializationError], so the cast can only fail if a de-serialization
+// snippet specific to an implementation returned a foreign error.
+func mustDeserializationError(err error) *DeserializationError {
+	deseriaErr, ok := err.(*DeserializationError)
+	if !ok {
+		panic(
+			fmt.Sprintf(
+				"Expected a *DeserializationError, but got %T: %v",
+				err,
+				err,
+			),
 		)
 	}
-	return err
+	return deseriaErr
 }
 
 // Parse `jsonable` as a boolean, or return an error.
@@ -293,7 +312,7 @@ func modelTypeFromMap(
 
 	modelType, err = stringFromJsonable(jsonable)
 	if err != nil {
-		err = prependName(err, "modelType")
+		mustDeserializationError(err).prependName("modelType")
 	}
 	return
 }
@@ -310,16 +329,13 @@ func checkModelType(
 	}
 
 	if modelType != expected {
-		err = prependName(
-			newDeserializationError(
-				fmt.Sprintf(
-					"Expected the model type '%s', but got %s",
-					expected,
-					modelType,
-				),
+		err = newDeserializationError(
+			fmt.Sprintf(
+				"Expected the model type '%s', but got %s",
+				expected,
+				modelType,
 			),
-			"modelType",
-		)
+		).prependName("modelType")
 	}
 	return
 }
@@ -346,7 +362,7 @@ func parseArray[T any](
 		var item T
 		item, err = parseItem(itemJsonable)
 		if err != nil {
-			err = prependIndex(err, i)
+			mustDeserializationError(err).prependIndex(i)
 			return
 		}
 		result[i] = item
@@ -433,7 +449,7 @@ func branchFromMapWithoutDispatch(
 		}
 
 		if err != nil {
-			err = prependName(err, k)
+			mustDeserializationError(err).prependName(k)
 			return
 		}
 	}
@@ -528,7 +544,7 @@ func leafFromMapWithoutDispatch(
 		}
 
 		if err != nil {
-			err = prependName(err, k)
+			mustDeserializationError(err).prependName(k)
 			return
 		}
 	}
@@ -635,7 +651,7 @@ func blossomFromMapWithoutDispatch(
 		}
 
 		if err != nil {
-			err = prependName(err, k)
+			mustDeserializationError(err).prependName(k)
 			return
 		}
 	}
@@ -730,7 +746,7 @@ func somethingFromMapWithoutDispatch(
 		}
 
 		if err != nil {
-			err = prependName(err, k)
+			mustDeserializationError(err).prependName(k)
 			return
 		}
 	}
@@ -809,7 +825,7 @@ func containerFromMapWithoutDispatch(
 		}
 
 		if err != nil {
-			err = prependName(err, k)
+			mustDeserializationError(err).prependName(k)
 			return
 		}
 	}
@@ -968,6 +984,47 @@ func (se *SerializationError) PathString() string {
 	return aasreporting.ToGolangPath(se.Path)
 }
 
+// Prepend the `name` segment to the path, and return the error back
+// for chaining.
+func (se *SerializationError) prependName(
+	name string,
+) *SerializationError {
+	se.Path.PrependName(
+		&aasreporting.NameSegment{Name: name},
+	)
+	return se
+}
+
+// Prepend the `index` segment to the path, and return the error back
+// for chaining.
+func (se *SerializationError) prependIndex(
+	index int,
+) *SerializationError {
+	se.Path.PrependIndex(
+		&aasreporting.IndexSegment{Index: index},
+	)
+	return se
+}
+
+// Cast `err` to a serialization error, or panic.
+//
+// Every error which originates in this package is a [SerializationError],
+// so the cast can only fail if a serialization snippet specific to
+// an implementation returned a foreign error.
+func mustSerializationError(err error) *SerializationError {
+	seriaErr, ok := err.(*SerializationError)
+	if !ok {
+		panic(
+			fmt.Sprintf(
+				"Expected a *SerializationError, but got %T: %v",
+				err,
+				err,
+			),
+		)
+	}
+	return seriaErr
+}
+
 // Try to cast `that` to a float64 and box it as a JSON-able value, or
 // return an error.
 //
@@ -1023,17 +1080,11 @@ func serializeArray[T any](
 ) (result []interface{}, err error) {
 	result = make([]interface{}, len(items))
 	for i, item := range items {
-		var jsonable interface{}
-		jsonable, err = serializeItem(item)
+		result[i], err = serializeItem(item)
 		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependIndex(
-					&aasreporting.IndexSegment{Index: i},
-				)
-			}
+			mustSerializationError(err).prependIndex(i)
 			return
 		}
-		result[i] = jsonable
 	}
 	return
 }
@@ -1073,22 +1124,11 @@ func leafToMap(
 
 	result["description"] = that.Description()
 
-	var jsonableValue interface{}
-	jsonableValue, err = int64ToJsonable(
-		that.Value(),
-	)
+	result["value"], err = int64ToJsonable(that.Value())
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Value()",
-				},
-			)
-		}
-
+		mustSerializationError(err).prependName("Value()")
 		return
 	}
-	result["value"] = jsonableValue
 
 	result["modelType"] = "Leaf"
 
@@ -1110,22 +1150,11 @@ func blossomToMap(
 
 	result["description"] = that.Description()
 
-	var jsonableValue interface{}
-	jsonableValue, err = int64ToJsonable(
-		that.Value(),
-	)
+	result["value"], err = int64ToJsonable(that.Value())
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Value()",
-				},
-			)
-		}
-
+		mustSerializationError(err).prependName("Value()")
 		return
 	}
-	result["value"] = jsonableValue
 
 	result["details"] = that.Details()
 
@@ -1145,39 +1174,17 @@ func somethingToMap(
 ) (result map[string]interface{}, err error) {
 	result = make(map[string]interface{})
 
-	var jsonableSomeChoice interface{}
-	jsonableSomeChoice, err = ToJsonable(
-		that.SomeChoice(),
-	)
+	result["someChoice"], err = ToJsonable(that.SomeChoice())
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "SomeChoice()",
-				},
-			)
-		}
-
+		mustSerializationError(err).prependName("SomeChoice()")
 		return
 	}
-	result["someChoice"] = jsonableSomeChoice
 
-	var jsonableSomethingWithoutChoice interface{}
-	jsonableSomethingWithoutChoice, err = ToJsonable(
-		that.SomethingWithoutChoice(),
-	)
+	result["somethingWithoutChoice"], err = ToJsonable(that.SomethingWithoutChoice())
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "SomethingWithoutChoice()",
-				},
-			)
-		}
-
+		mustSerializationError(err).prependName("SomethingWithoutChoice()")
 		return
 	}
-	result["somethingWithoutChoice"] = jsonableSomethingWithoutChoice
 
 	return
 }
@@ -1193,39 +1200,17 @@ func containerToMap(
 ) (result map[string]interface{}, err error) {
 	result = make(map[string]interface{})
 
-	var jsonableNode interface{}
-	jsonableNode, err = ToJsonable(
-		that.Node(),
-	)
+	result["node"], err = ToJsonable(that.Node())
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Node()",
-				},
-			)
-		}
-
+		mustSerializationError(err).prependName("Node()")
 		return
 	}
-	result["node"] = jsonableNode
 
-	var jsonableSomething interface{}
-	jsonableSomething, err = ToJsonable(
-		that.Something(),
-	)
+	result["something"], err = ToJsonable(that.Something())
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "Something()",
-				},
-			)
-		}
-
+		mustSerializationError(err).prependName("Something()")
 		return
 	}
-	result["something"] = jsonableSomething
 
 	return
 }
