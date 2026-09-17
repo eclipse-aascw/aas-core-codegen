@@ -9,8 +9,6 @@ from typing import (
     Tuple,
     cast,
     Union,
-    Mapping,
-    Final,
 )
 
 from icontract import ensure, require
@@ -31,7 +29,6 @@ from aas_core_codegen.typescript import (
     common as typescript_common,
     naming as typescript_naming,
     description as typescript_description,
-    unrolling as typescript_unrolling,
 )
 from aas_core_codegen.typescript.common import (
     INDENT as I,
@@ -569,212 +566,159 @@ export function *{function_name}(
     )
 
 
-class _DescendBodyUnroller(typescript_unrolling.AbstractUnroller):
-    """Generate code that unrolls descent into an element."""
-
-    #: If set, generates the code with unrolled yields.
-    #: Otherwise, we do not unroll recursively.
-    _recurse: Final[bool]
-
-    #: Pre-computed descendability map. A type is descendable if we should unroll it
-    #: further.
-    _descendability: Final[Mapping[intermediate.TypeAnnotationUnion, bool]]
-
-    #: Generator of loop variable names.
-    #:
-    #: We generate for each list iteration a new variable to avoid shadowing
-    #: of the variables. Even though TypeScript tracks variables in the block scope,
-    #: we want to avoid confusion for the reader.
-    _generator_for_loop_variables: Final[typescript_common.GeneratorForLoopVariables]
-
-    def __init__(
-        self,
-        recurse: bool,
-        descendability: Mapping[intermediate.TypeAnnotationUnion, bool],
-        generator_for_loop_variables: typescript_common.GeneratorForLoopVariables,
-    ) -> None:
-        """Initialize with the given values."""
-        self._recurse = recurse
-        self._descendability = descendability
-        self._generator_for_loop_variables = generator_for_loop_variables
-
-    def _unroll_primitive_type_annotation(
-        self,
-        unrollee_expr: str,
-        type_annotation: intermediate.PrimitiveTypeAnnotation,
-        path: List[str],
-        list_loop_level: int,
-    ) -> List[typescript_unrolling.Node]:
-        """Generate code for the given specific ``type_annotation``."""
-        # We can not descend into a primitive type.
-        return []
-
-    def _unroll_our_type_annotation(
-        self,
-        unrollee_expr: str,
-        type_annotation: intermediate.OurTypeAnnotation,
-        path: List[str],
-        list_loop_level: int,
-    ) -> List[typescript_unrolling.Node]:
-        """Generate code for the given specific ``type_annotation``."""
-        our_type = type_annotation.our_type
-
-        if isinstance(our_type, intermediate.Enumeration):
-            # We can not descend into an enumeration.
-            return []
-
-        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-            # We can not descend into a primitive type.
-            return []
-
-        assert isinstance(
-            our_type, (intermediate.Class, intermediate.NamedUnion)
-        )  # Exhaustively match
-
-        result = [typescript_unrolling.Node(f"yield {unrollee_expr};", children=[])]
-
-        if self._recurse:
-            if self._descendability[type_annotation]:
-                result.append(
-                    typescript_unrolling.Node(
-                        text=f"yield * {unrollee_expr}.descend();",
-                        children=[],
-                    )
-                )
-
-        return result
-
-    def _unroll_list_type_annotation(
-        self,
-        unrollee_expr: str,
-        type_annotation: intermediate.ListTypeAnnotation,
-        path: List[str],
-        list_loop_level: int,
-    ) -> List[typescript_unrolling.Node]:
-        """Generate code for the given specific ``type_annotation``."""
-        if (
-            not self._recurse
-            and isinstance(type_annotation.items, intermediate.OurTypeAnnotation)
-            and isinstance(
-                type_annotation.items.our_type,
-                (
-                    intermediate.AbstractClass,
-                    intermediate.ConcreteClass,
-                    intermediate.NamedUnion,
-                ),
-            )
-        ):
-            return [typescript_unrolling.Node(f"yield * {unrollee_expr};", children=[])]
-
-        loop_var = next(self._generator_for_loop_variables)
-        children = self.unroll(
-            unrollee_expr=loop_var,
-            type_annotation=type_annotation.items,
-            path=[],  # Path is unused in this context
-            list_loop_level=list_loop_level + 1,
-        )
-
-        if len(children) == 0:
-            return []
-
-        node = typescript_unrolling.Node(
-            text=f"for (const {loop_var} of {unrollee_expr})",
-            children=children,
-        )
-
-        return [node]
-
-    def _unroll_optional_type_annotation(
-        self,
-        unrollee_expr: str,
-        type_annotation: intermediate.OptionalTypeAnnotation,
-        path: List[str],
-        list_loop_level: int,
-    ) -> List[typescript_unrolling.Node]:
-        """Generate code for the given specific ``type_annotation``."""
-        children = self.unroll(
-            unrollee_expr=unrollee_expr,
-            type_annotation=type_annotation.value,
-            path=path,
-            list_loop_level=list_loop_level,
-        )
-
-        if len(children) == 0:
-            return []
-
-        return [
-            typescript_unrolling.Node(
-                text=f"if ({unrollee_expr} !== null)", children=children
-            )
-        ]
-
-    def _unroll_tuple_type_annotation(
-        self,
-        unrollee_expr: str,
-        type_annotation: intermediate.TupleTypeAnnotation,
-        path: List[str],
-        list_loop_level: int,
-    ) -> List[typescript_unrolling.Node]:
-        """Generate code for the given specific ``type_annotation``."""
-        # NOTE (mristin):
-        # Unlike lists, tuples are heterogeneous and fixed-length, so we unroll
-        # every item at its own fixed index instead of looping.
-        result = []  # type: List[typescript_unrolling.Node]
-        for i, item_type_annotation in enumerate(type_annotation.items):
-            result.extend(
-                self.unroll(
-                    unrollee_expr=f"{unrollee_expr}[{i}]",
-                    type_annotation=item_type_annotation,
-                    path=[],  # Path is unused in this context
-                    list_loop_level=list_loop_level,
-                )
-            )
-
-        return result
-
-
 def _generate_descend_body(cls: intermediate.ConcreteClass, recurse: bool) -> Stripped:
     """
-    Generate the body of the ``descend`` and ``descend_once`` methods.
+    Generate the body of the ``descend`` and ``descendOnce`` methods.
 
-    With this function, we unroll the recursion as a simple optimization
-    in the recursive case.
+    In the recursive case, we in-line the descent into the directly referenced
+    instances instead of delegating to ``descendOnce``, as a simple optimization.
     """
     blocks = []  # type: List[Stripped]
 
     generator_for_loop_variables = typescript_common.GeneratorForLoopVariables()
 
     for prop in cls.properties:
-        descendability = intermediate.map_descendability(
-            type_annotation=prop.type_annotation
-        )
+        prop_name = typescript_naming.property_name(prop.name)
 
-        if not descendability[prop.type_annotation]:
+        prop_blocks = []  # type: List[Stripped]
+
+        type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+        if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
             continue
 
-        # region Unroll
+        elif isinstance(type_anno, intermediate.OurTypeAnnotation):
+            if isinstance(type_anno.our_type, intermediate.Enumeration):
+                continue
 
-        unroller = _DescendBodyUnroller(
-            recurse=recurse,
-            descendability=descendability,
-            generator_for_loop_variables=generator_for_loop_variables,
-        )
+            elif isinstance(type_anno.our_type, intermediate.ConstrainedPrimitive):
+                continue
 
-        roots = unroller.unroll(
-            unrollee_expr=f"this.{typescript_naming.property_name(prop.name)}",
-            type_annotation=prop.type_annotation,
-            path=[],  # We do not use path in this context
-            list_loop_level=0,
-        )
+            elif isinstance(
+                type_anno.our_type,
+                (intermediate.AbstractClass, intermediate.ConcreteClass),
+            ):
+                prop_blocks.append(Stripped(f"yield this.{prop_name};"))
 
-        assert len(roots) > 0, (
-            "Since the type annotation was descendable, we must have obtained "
-            "at least one unrolling node"
-        )
+                if recurse:
+                    prop_blocks.append(Stripped(f"yield * this.{prop_name}.descend();"))
 
-        blocks.extend(Stripped(typescript_unrolling.render(root)) for root in roots)
+            elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # A named union is a plain union type alias in TypeScript, so its
+                # values are already instances of the member classes. We keep this
+                # as its own branch, separate from the class branch above, even
+                # though the code is identical at the moment, so that it can
+                # diverge independently, *e.g.*, if primitive alternatives are
+                # ever allowed into a named union.
+                prop_blocks.append(Stripped(f"yield this.{prop_name};"))
 
-        # endregion
+                if recurse:
+                    prop_blocks.append(Stripped(f"yield * this.{prop_name}.descend();"))
+
+            else:
+                # noinspection PyTypeChecker
+                assert_never(type_anno.our_type)
+
+        elif isinstance(type_anno, intermediate.ListTypeAnnotation):
+            assert isinstance(
+                type_anno.items, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
+                f"NOTE (mristin): We currently generate only the code to descend into "
+                f"lists of atomic values, but you specified {type_anno}. "
+                f"Please contact the developers if you need this feature."
+            )
+
+            if isinstance(type_anno.items, intermediate.PrimitiveTypeAnnotation):
+                continue
+
+            elif isinstance(type_anno.items, intermediate.OurTypeAnnotation):
+                if isinstance(
+                    type_anno.items.our_type,
+                    (intermediate.Enumeration, intermediate.ConstrainedPrimitive),
+                ):
+                    continue
+
+                elif isinstance(
+                    type_anno.items.our_type,
+                    (
+                        intermediate.AbstractClass,
+                        intermediate.ConcreteClass,
+                        intermediate.NamedUnion,
+                    ),
+                ):
+                    # NOTE (mristin):
+                    # A named union is a plain union type alias in TypeScript, so
+                    # we descend into a union-typed item exactly as we do into
+                    # a class-typed one.
+                    if not recurse:
+                        prop_blocks.append(Stripped(f"yield * this.{prop_name};"))
+                    else:
+                        loop_var = next(generator_for_loop_variables)
+
+                        prop_blocks.append(
+                            Stripped(
+                                f"""\
+for (const {loop_var} of this.{prop_name}) {{
+{I}yield {loop_var};
+
+{I}yield * {loop_var}.descend();
+}}"""
+                            )
+                        )
+
+                else:
+                    # noinspection PyTypeChecker
+                    assert_never(type_anno.items.our_type)
+
+            else:
+                # noinspection PyTypeChecker
+                assert_never(type_anno.items)
+
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            for i, item_type_anno in enumerate(type_anno.items):
+                if not isinstance(item_type_anno, intermediate.OurTypeAnnotation):
+                    continue
+
+                if isinstance(
+                    item_type_anno.our_type,
+                    (
+                        intermediate.AbstractClass,
+                        intermediate.ConcreteClass,
+                        intermediate.NamedUnion,
+                    ),
+                ):
+                    # NOTE (mristin):
+                    # A named union is a plain union type alias in TypeScript, so
+                    # we descend into a union-typed tuple item exactly as we do
+                    # into a class-typed one.
+                    item_expr = Stripped(f"this.{prop_name}[{i}]")
+                else:
+                    continue
+
+                prop_blocks.append(Stripped(f"yield {item_expr};"))
+
+                if recurse:
+                    prop_blocks.append(Stripped(f"yield * {item_expr}.descend();"))
+
+            if len(prop_blocks) == 0:
+                continue
+
+        else:
+            # noinspection PyTypeChecker
+            assert_never(type_anno)
+
+        block = Stripped("\n\n".join(prop_blocks))
+
+        if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
+            block = Stripped(
+                f"""\
+if (this.{prop_name} !== null) {{
+{I}{indent_but_first_line(block, I)}
+}}"""
+            )
+
+        blocks.append(block)
 
     if len(blocks) == 0:
         blocks.append(Stripped("// No descendable properties"))

@@ -8,7 +8,6 @@ from typing import (
     Tuple,
     cast,
     Union,
-    Mapping,
     Final,
 )
 
@@ -26,7 +25,6 @@ from aas_core_codegen.common import (
 from aas_core_codegen.csharp import (
     common as csharp_common,
     naming as csharp_naming,
-    unrolling as csharp_unrolling,
     description as csharp_description,
 )
 from aas_core_codegen.csharp.common import (
@@ -577,246 +575,201 @@ public IEnumerable<{items_type}> Over{prop_name}OrEmpty();"""
     return Stripped(writer.getvalue()), None
 
 
-class _DescendBodyUnroller(csharp_unrolling.AbstractUnroller):
-    """Generate the code that unrolls descent into an element."""
+# NOTE (mristin):
+# The meta-model allows only lists of atomic values, so the descent nests at most
+# one loop deep. We therefore name the loop variables with two fixed identifiers
+# instead of deriving them from a nesting level.
 
-    #: If set, generates the code with unrolled yields.
-    #: Otherwise, we do not unroll recursively.
-    _recurse: Final[bool]
+#: Name of the loop variable in the outer-most loop of a descent
+_OUTER_ITEM_VAR: Final[Identifier] = Identifier("anItem")
 
-    #: Pre-computed descendability map. A type is descendable if we should unroll it
-    #: further.
-    _descendability: Final[Mapping[intermediate.TypeAnnotationUnion, bool]]
+#: Name of the loop variable in a loop nested within :py:data:`_OUTER_ITEM_VAR`
+_INNER_ITEM_VAR: Final[Identifier] = Identifier("anotherItem")
 
-    def __init__(
-        self,
-        recurse: bool,
-        descendability: Mapping[intermediate.TypeAnnotationUnion, bool],
-    ) -> None:
-        """Initialize with the given values."""
-        self._recurse = recurse
-        self._descendability = descendability
 
-    def _unroll_primitive_type_annotation(
-        self,
-        unrollee_expr: str,
-        type_annotation: intermediate.PrimitiveTypeAnnotation,
-        path: List[str],
-        item_level: int,
-        key_value_level: int,
-    ) -> List[csharp_unrolling.Node]:
-        """Generate code for the given specific ``type_annotation``."""
-        # We can not descend into a primitive type.
-        return []
-
-    def _unroll_our_type_annotation(
-        self,
-        unrollee_expr: str,
-        type_annotation: intermediate.OurTypeAnnotation,
-        path: List[str],
-        item_level: int,
-        key_value_level: int,
-    ) -> List[csharp_unrolling.Node]:
-        """Generate code for the given specific ``type_annotation``."""
-        our_type = type_annotation.our_type
-
-        if isinstance(our_type, intermediate.Enumeration):
-            return []
-
-        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-            # We can not descend into a primitive type.
-            return []
-
-        elif isinstance(our_type, intermediate.NamedUnion):
-            # NOTE (mristin):
-            # A named union is not itself an ``IClass``, so we descend into
-            # the underlying instance instead of ``unrollee_expr`` directly. We
-            # keep this as its own branch, separate from the class branch below,
-            # so that it can diverge independently, *e.g.* if primitive
-            # alternatives are ever allowed into a named union.
-            result = [
-                csharp_unrolling.Node(
-                    f"yield return {unrollee_expr}.Underlying;", children=[]
-                )
-            ]
-
-            if self._recurse:
-                if self._descendability[type_annotation]:
-                    recurse_var = csharp_unrolling.AbstractUnroller._loop_var_name(
-                        level=item_level, suffix="Item"
-                    )
-
-                    result.append(
-                        csharp_unrolling.Node(
-                            text=f"""\
+def _generate_recurse_snippet(descendee_expr: str, item_var: Identifier) -> Stripped:
+    """Generate the snippet which yields everything beneath ``descendee_expr``."""
+    return Stripped(
+        f"""\
 // Recurse
-foreach (var {recurse_var} in {unrollee_expr}.Underlying.Descend())
+foreach (var {item_var} in {descendee_expr}.Descend())
 {{
-    yield return {recurse_var};
-}}""",
-                            children=[],
-                        )
-                    )
-                else:
-                    result.append(
-                        csharp_unrolling.Node(
-                            text="// Recursive descent ends here.", children=[]
-                        )
-                    )
-
-            return result
-
-        assert isinstance(our_type, intermediate.Class)  # Exhaustively match
-
-        result = [csharp_unrolling.Node(f"yield return {unrollee_expr};", children=[])]
-
-        if self._recurse:
-            if self._descendability[type_annotation]:
-                recurse_var = csharp_unrolling.AbstractUnroller._loop_var_name(
-                    level=item_level, suffix="Item"
-                )
-
-                result.append(
-                    csharp_unrolling.Node(
-                        text=f"""\
-// Recurse
-foreach (var {recurse_var} in {unrollee_expr}.Descend())
-{{
-    yield return {recurse_var};
-}}""",
-                        children=[],
-                    )
-                )
-            else:
-                result.append(
-                    csharp_unrolling.Node(
-                        text="// Recursive descent ends here.", children=[]
-                    )
-                )
-
-        return result
-
-    def _unroll_list_type_annotation(
-        self,
-        unrollee_expr: str,
-        type_annotation: intermediate.ListTypeAnnotation,
-        path: List[str],
-        item_level: int,
-        key_value_level: int,
-    ) -> List[csharp_unrolling.Node]:
-        """Generate code for the given specific ``type_annotation``."""
-        item_var = csharp_unrolling.AbstractUnroller._loop_var_name(
-            level=item_level, suffix="Item"
-        )
-
-        children = self.unroll(
-            unrollee_expr=item_var,
-            type_annotation=type_annotation.items,
-            path=[],  # Path is unused in this context
-            item_level=item_level + 1,
-            key_value_level=key_value_level,
-        )
-
-        if len(children) == 0:
-            return []
-
-        node = csharp_unrolling.Node(
-            text=f"foreach (var {item_var} in {unrollee_expr})",
-            children=children,
-        )
-
-        return [node]
-
-    def _unroll_tuple_type_annotation(
-        self,
-        unrollee_expr: str,
-        type_annotation: intermediate.TupleTypeAnnotation,
-        path: List[str],
-        item_level: int,
-        key_value_level: int,
-    ) -> List[csharp_unrolling.Node]:
-        """Generate code for the given specific ``type_annotation``."""
-        nodes = []  # type: List[csharp_unrolling.Node]
-
-        for i, item_type_annotation in enumerate(type_annotation.items):
-            item_expr = f"{unrollee_expr}.Item{i + 1}"
-
-            nodes.extend(
-                self.unroll(
-                    unrollee_expr=item_expr,
-                    type_annotation=item_type_annotation,
-                    path=[],  # Path is unused in this context
-                    item_level=item_level,
-                    key_value_level=key_value_level,
-                )
-            )
-
-        return nodes
-
-    def _unroll_optional_type_annotation(
-        self,
-        unrollee_expr: str,
-        type_annotation: intermediate.OptionalTypeAnnotation,
-        path: List[str],
-        item_level: int,
-        key_value_level: int,
-    ) -> List[csharp_unrolling.Node]:
-        """Generate code for the given specific ``type_annotation``."""
-        children = self.unroll(
-            unrollee_expr=unrollee_expr,
-            type_annotation=type_annotation.value,
-            path=path,
-            item_level=item_level,
-            key_value_level=key_value_level,
-        )
-
-        if len(children) == 0:
-            return []
-
-        return [
-            csharp_unrolling.Node(
-                text=f"if ({unrollee_expr} != null)", children=children
-            )
-        ]
+{I}yield return {item_var};
+}}"""
+    )
 
 
 def _generate_descend_body(cls: intermediate.ConcreteClass, recurse: bool) -> Stripped:
     """
     Generate the body of the ``Descend`` and ``DescendOnce`` methods.
 
-    With this function, we can unroll the recursion as a simple optimization
-    in the recursive case.
+    In the recursive case, we in-line the descent into the directly referenced
+    instances instead of delegating to ``DescendOnce``, as a simple optimization.
     """
     blocks = []  # type: List[Stripped]
 
     for prop in cls.properties:
-        descendability = intermediate.map_descendability(
-            type_annotation=prop.type_annotation
-        )
+        prop_name = csharp_naming.property_name(prop.name)
 
-        if not descendability[prop.type_annotation]:
+        prop_blocks = []  # type: List[Stripped]
+
+        type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+        if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
             continue
 
-        # region Unroll
+        elif isinstance(type_anno, intermediate.OurTypeAnnotation):
+            if isinstance(type_anno.our_type, intermediate.Enumeration):
+                continue
 
-        unroller = _DescendBodyUnroller(recurse=recurse, descendability=descendability)
+            elif isinstance(type_anno.our_type, intermediate.ConstrainedPrimitive):
+                continue
 
-        roots = unroller.unroll(
-            unrollee_expr=csharp_naming.property_name(prop.name),
-            type_annotation=prop.type_annotation,
-            path=[],  # We do not use path in this context
-            item_level=0,
-            key_value_level=0,
-        )
+            elif isinstance(
+                type_anno.our_type,
+                (intermediate.AbstractClass, intermediate.ConcreteClass),
+            ):
+                prop_blocks.append(Stripped(f"yield return {prop_name};"))
 
-        assert len(roots) > 0, (
-            "Since the type annotation was descendable, we must have obtained "
-            "at least one unrolling node"
-        )
+                if recurse:
+                    prop_blocks.append(
+                        _generate_recurse_snippet(
+                            descendee_expr=prop_name, item_var=_OUTER_ITEM_VAR
+                        )
+                    )
 
-        blocks.extend(Stripped(csharp_unrolling.render(root)) for root in roots)
+            elif isinstance(type_anno.our_type, intermediate.NamedUnion):
+                # NOTE (mristin):
+                # A named union is not itself an ``IClass``, so we descend into
+                # the underlying instance instead of the property directly. We
+                # keep this as its own branch, separate from the class branch
+                # above, so that it can diverge independently, *e.g.*, if
+                # primitive alternatives are ever allowed into a named union.
+                underlying_expr = f"{prop_name}.Underlying"
 
-        # endregion
+                prop_blocks.append(Stripped(f"yield return {underlying_expr};"))
+
+                if recurse:
+                    prop_blocks.append(
+                        _generate_recurse_snippet(
+                            descendee_expr=underlying_expr, item_var=_OUTER_ITEM_VAR
+                        )
+                    )
+
+            else:
+                # noinspection PyTypeChecker
+                assert_never(type_anno.our_type)
+
+        elif isinstance(type_anno, intermediate.ListTypeAnnotation):
+            assert isinstance(
+                type_anno.items, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
+                f"NOTE (mristin): We currently generate only the code to descend into "
+                f"lists of atomic values, but you specified {type_anno}. "
+                f"Please contact the developers if you need this feature."
+            )
+
+            if isinstance(type_anno.items, intermediate.PrimitiveTypeAnnotation):
+                continue
+
+            elif isinstance(type_anno.items, intermediate.OurTypeAnnotation):
+                if isinstance(
+                    type_anno.items.our_type,
+                    (intermediate.Enumeration, intermediate.ConstrainedPrimitive),
+                ):
+                    continue
+
+                elif isinstance(
+                    type_anno.items.our_type,
+                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                ):
+                    item_expr = Stripped(_OUTER_ITEM_VAR)
+                elif isinstance(type_anno.items.our_type, intermediate.NamedUnion):
+                    # NOTE (mristin):
+                    # A named union is not itself an ``IClass``, so we descend
+                    # into the underlying instance instead of the list item
+                    # directly. We keep this as its own branch, separate from
+                    # the class branch above, so that it can diverge
+                    # independently, *e.g.*, if primitive alternatives are
+                    # ever allowed into a named union.
+                    item_expr = Stripped(f"{_OUTER_ITEM_VAR}.Underlying")
+                else:
+                    # noinspection PyTypeChecker
+                    assert_never(type_anno.items.our_type)
+
+                loop_body = Stripped(f"yield return {item_expr};")
+
+                if recurse:
+                    recurse_snippet = _generate_recurse_snippet(
+                        descendee_expr=item_expr, item_var=_INNER_ITEM_VAR
+                    )
+
+                    loop_body = Stripped(f"{loop_body}\n\n{recurse_snippet}")
+
+                prop_blocks.append(
+                    Stripped(
+                        f"""\
+foreach (var {_OUTER_ITEM_VAR} in {prop_name})
+{{
+{I}{indent_but_first_line(loop_body, I)}
+}}"""
+                    )
+                )
+
+            else:
+                # noinspection PyTypeChecker
+                assert_never(type_anno.items)
+
+        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+            for i, item_type_anno in enumerate(type_anno.items):
+                if not isinstance(item_type_anno, intermediate.OurTypeAnnotation):
+                    continue
+
+                if isinstance(
+                    item_type_anno.our_type,
+                    (intermediate.AbstractClass, intermediate.ConcreteClass),
+                ):
+                    item_expr = Stripped(f"{prop_name}.Item{i + 1}")
+                elif isinstance(item_type_anno.our_type, intermediate.NamedUnion):
+                    # NOTE (mristin):
+                    # A named union is not itself an ``IClass``, so we descend
+                    # into the underlying instance instead of the tuple item
+                    # directly. We keep this as its own branch, separate from
+                    # the class branch above, so that it can diverge
+                    # independently, *e.g.*, if primitive alternatives are
+                    # ever allowed into a named union.
+                    item_expr = Stripped(f"{prop_name}.Item{i + 1}.Underlying")
+                else:
+                    continue
+
+                prop_blocks.append(Stripped(f"yield return {item_expr};"))
+
+                if recurse:
+                    prop_blocks.append(
+                        _generate_recurse_snippet(
+                            descendee_expr=item_expr, item_var=_OUTER_ITEM_VAR
+                        )
+                    )
+
+            if len(prop_blocks) == 0:
+                continue
+
+        else:
+            # noinspection PyTypeChecker
+            assert_never(type_anno)
+
+        block = Stripped("\n\n".join(prop_blocks))
+
+        if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
+            block = Stripped(
+                f"""\
+if ({prop_name} != null)
+{{
+{I}{indent_but_first_line(block, I)}
+}}"""
+            )
+
+        blocks.append(block)
 
     if len(blocks) == 0:
         blocks.append(Stripped("// No descendable properties\nyield break;"))

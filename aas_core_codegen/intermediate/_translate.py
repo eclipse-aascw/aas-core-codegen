@@ -4789,12 +4789,15 @@ def _verify_only_simple_type_patterns(symbol_table: SymbolTable) -> List[Error]:
     in the future. At this point, we restrict ourselves to the following patterns:
 
     * Non-nested optional types, *i.e.* optional of optionals, are unexpected;
-    * Lists of optionals are unexpected;
-    * Lists of non-classes are unexpected;
-    * Tuples of optionals are unexpected; and
+    * Lists of optionals are unexpected; and
     * Tuples of non-atomic types (*i.e.* of lists, tuples or optionals) are
       unexpected -- we only support tuples of primitives, constrained primitives,
       classes and enumerations.
+
+    Note that lists themselves may nest: ``List[List[...]]`` is deliberately
+    allowed here, as the JSON Schema and the XSD generator both support it. The
+    code generators, in contrast, handle only lists of atomic values, and assert
+    as much where they would otherwise have to descend into a nested list.
     """
     errors = []  # type: List[Error]
     for cls in symbol_table.classes:
@@ -4820,7 +4823,7 @@ def _verify_only_simple_type_patterns(symbol_table: SymbolTable) -> List[Error]:
                             prop.parsed.node,
                             f"We currently support only a limited set of "
                             f"type annotation patterns. At the moment, we handle "
-                            f"only lists non-optionals, "
+                            f"only lists of non-optionals, "
                             f"but the property {prop.name!r} "
                             f"of the class {cls.name!r} "
                             f"has type: {prop.type_annotation}. "

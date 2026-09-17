@@ -208,8 +208,6 @@ Each generator contains a set of modules shared across its ``lib/`` submodules:
 * ``description.py`` -- renders the documentation from the IR into the language-specific comment syntax (Sphinx docstrings for Python, XML doc-comments for C#, JSDoc for TypeScript, *etc.*).
 * ``transpilation.py`` -- translates ``parse.tree`` constraint expressions from the IR into executable code in the target language.
   This covers the bodies of invariant checks and verification functions.
-* ``unrolling.py`` -- generates nested looping code for recursively typed properties (lists of lists, *etc.*).
-  For example, when verifying or serializing a property typed as ``List[List[str]]``, ``unrolling.py`` produces the corresponding nested iterations.
 
 ``lib/``
 ^^^^^^^^
