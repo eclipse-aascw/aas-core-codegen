@@ -1435,7 +1435,7 @@ def _generate_deserialize_impl_cls_from_sequence(
 /// </remarks>"""
     )
 
-    # NOTE (mristin, 2022-06-21):
+    # NOTE (mristin):
     # Hard-wire for the case when no sequence is read
     if len(cls.constructor.arguments) == 0:
         return (
@@ -1466,7 +1466,7 @@ internal static Aas.{name} {name}FromSequence(
         target_type = csharp_common.generate_type(prop.type_annotation)
         target_var = csharp_naming.variable_name(Identifier(f"the_{prop.name}"))
 
-        # NOTE (mristin, 2022-04-13):
+        # NOTE (mristin):
         # This is a poor man's trick to make all temporary variables optional.
         # The required constructor arguments / properties will be checked just
         # before the constructor as we can not predict in advance which properties
@@ -1635,7 +1635,7 @@ if ({target_var} == null)
     for i, arg in enumerate(cls.constructor.arguments):
         prop = cls.properties_by_name[arg.name]
 
-        # NOTE (mristin, 2022-04-13):
+        # NOTE (mristin):
         # The argument to the constructor may be optional while the property might
         # be required, since we can set the default value in the body of the
         # constructor. However, we can not have an optional property and a required
@@ -1996,11 +1996,11 @@ def _generate_deserialize_impl(
 
     errors = []  # type: List[Error]
 
-    # NOTE (mristin, 2022-04-13):
+    # NOTE (mristin):
     # Enumerations are going to be directly deserialized using
     # ``Stringification``.
 
-    # NOTE (mristin, 2022-04-13):
+    # NOTE (mristin):
     # Constrained primitives are only verified, but do not represent a C# type.
 
     for cls in symbol_table.classes:
@@ -2157,10 +2157,10 @@ def _generate_deserialize(symbol_table: intermediate.SymbolTable) -> Stripped:
     """Generate the public class ``Deserialize``."""
     blocks = []  # type: List[Stripped]
 
-    # NOTE (mristin, 2022-04-13):
+    # NOTE (mristin):
     # We use stringification for de-serialization of enumerations.
 
-    # NOTE (mristin, 2022-04-13):
+    # NOTE (mristin):
     # Constrained primitives are not handled as separate classes, but as
     # primitives, and only verified in the verification.
 

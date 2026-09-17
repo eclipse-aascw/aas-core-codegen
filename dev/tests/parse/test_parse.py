@@ -79,7 +79,7 @@ from typing import List as Lst
         assert error is None, f"{error=}"
         assert atok is not None
 
-        # NOTE (mristin, 2022-01-22):
+        # NOTE (mristin):
         # We need to remove the column number as it changes between Python versions
         # (notably, it is more precise from Python 3.10 on.)
 
@@ -284,7 +284,7 @@ class Test_parse_type_annotation_fail(unittest.TestCase):
         _, error = parse._translate._type_annotation(node=anno, atok=atok)
         assert error is not None
 
-        # NOTE (mristin, 2022-01-22):
+        # NOTE (mristin):
         # We need to remove the type since it differs between Python 3.8 and newer
         # versions.
 

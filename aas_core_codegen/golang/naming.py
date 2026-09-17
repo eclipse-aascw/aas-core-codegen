@@ -522,24 +522,24 @@ def receiver_name(
         argument_name(arg.name) for method in cls.methods for arg in method.arguments
     )
 
-    # NOTE (mristin, 2023-03-31):
+    # NOTE (mristin):
     # The argument ``value`` is used in setters.
     total_arg_name_set.add(Identifier("value"))
 
-    # NOTE (mristin, 2023-03-31):
+    # NOTE (mristin):
     # The argument ``action`` is used in Descend and DescendOnce.
     total_arg_name_set.add(Identifier("action"))
 
-    # NOTE (mristin, 2023-05-12):
+    # NOTE (mristin):
     # The variable ``abort`` is used in Descend and DescendOnce.
     total_arg_name_set.add(Identifier("abort"))
 
-    # NOTE (mristin, 2023-03-31):
+    # NOTE (mristin):
     # The name ``enhancement`` is used as a property of an enhanced instance.
     # We skip it as a receiver to avoid confusion.
     total_arg_name_set.add(Identifier("enhancement"))
 
-    # NOTE (mristin, 2023-03-31):
+    # NOTE (mristin):
     # The name ``instance`` is used as a property of an enhanced instance.
     # We skip it as a receiver to avoid confusion.
     total_arg_name_set.add(Identifier("instance"))

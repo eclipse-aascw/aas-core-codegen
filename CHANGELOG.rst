@@ -1,5 +1,5 @@
 ..
-    NOTE (mristin, 2021-12-27):
+    NOTE (mristin):
     Please keep this file at 72 line width so that we can copy-paste
     the release logs directly into commit messages.
 

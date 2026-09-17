@@ -1819,7 +1819,7 @@ class DeserializationException(Exception):
         ),
         Stripped(
             f"""\
-# NOTE (mristin, 2022-10-03):
+# NOTE (mristin):
 # Recursive definitions are not yet available in mypy
 # (see https://github.com/python/mypy/issues/731). We have to use ``Any``
 # here, instead of recursive type annotations.
@@ -1977,7 +1977,7 @@ _Parser = Callable[
         else:
             assert_never(our_type)
 
-    # NOTE (mristin, 2022-10-03):
+    # NOTE (mristin):
     # We add all the maps at the end as the functions might not have been defined yet
     # otherwise.
     for our_type in symbol_table.our_types:

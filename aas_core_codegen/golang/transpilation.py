@@ -32,7 +32,7 @@ from aas_core_codegen.golang.common import (
 from aas_core_codegen.intermediate import type_inference as intermediate_type_inference
 from aas_core_codegen.parse import tree as parse_tree
 
-# NOTE (mristin, 2023-06-01):
+# NOTE (mristin):
 # We have to implement a very similar function for generating type annotations to
 # aas_core_codegen.golang.common.generate_type since we can not simply pass
 # intermediate_type_inference.TypeAnnotationUnion to
@@ -83,7 +83,7 @@ def generate_type(
         elif isinstance(
             our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
         ):
-            # NOTE (mristin, 2023-03-28):
+            # NOTE (mristin):
             # We always refer to interfaces even in cases of concrete classes without
             # concrete descendants since we want to allow enhancing.
             interface_name = golang_naming.interface_name(our_type.name)
@@ -257,13 +257,13 @@ class Transpiler(
         if error is not None:
             return None, error
 
-        # NOTE (mristin, 2023-04-12):
+        # NOTE (mristin):
         # Ignore optional instance as they need to be checked before in the code
         instance_type = intermediate_type_inference.beneath_optional(
             self.type_map[node.instance]
         )
 
-        # NOTE (mristin, 2023-05-16):
+        # NOTE (mristin):
         # We explicitly do *not* dereference member access. Make sure you use
         # :py:meth:`_transform_and_dereference_if_necessary` where appropriate. Notably,
         # the operators ``is None`` and ``is not None`` have to compare against
@@ -277,7 +277,7 @@ class Transpiler(
         if isinstance(
             instance_type, intermediate_type_inference.OurTypeAnnotation
         ) and isinstance(instance_type.our_type, intermediate.Enumeration):
-            # NOTE (mristin, 2023-01-13):
+            # NOTE (mristin):
             # This member denotes an enumeration literal of an enumeration.
             # In Go, enumeration literals are mere constants. Hence, we can not
             # "de-reference" the enumeration literals from an enumeration, but
@@ -309,7 +309,7 @@ class Transpiler(
             instance_type, intermediate_type_inference.EnumerationAsTypeTypeAnnotation
         ):
             if node.name in instance_type.enumeration.literals_by_name:
-                # NOTE (mristin, 2023-01-13):
+                # NOTE (mristin):
                 # The member denotes an enumeration literal of an enumeration.
                 # In Go, enumeration literals are mere constants. Hence, we can not
                 # "de-reference" the enumeration literals from an enumeration, but
@@ -352,7 +352,7 @@ class Transpiler(
         )
 
         if isinstance(collection_type, intermediate_type_inference.TupleTypeAnnotation):
-            # NOTE (mristin, 2026-09-03):
+            # NOTE (mristin):
             # Tuples are heterogeneous, so the index must be a literal integer which
             # we resolve statically to the corresponding ``ItemN`` field. This has
             # already been verified in
@@ -418,7 +418,7 @@ len(
         if not isinstance(node.collection, no_parentheses_types):
             collection = Stripped(f"({collection})")
 
-        # NOTE (mristin, 2023-05-16):
+        # NOTE (mristin):
         # We explicitly do *not* dereference index access. Make sure you use
         # :py:meth:`_transform_and_dereference_if_necessary` where appropriate. Notably,
         # the operators ``is None`` and ``is not None`` have to compare against
@@ -637,7 +637,7 @@ aascommon.MapContains(
                 node.original_node, "Failed to transpile the function call", errors
             )
 
-        # NOTE (mristin, 2023-03-28):
+        # NOTE (mristin):
         # The validity of the arguments is checked in
         # :py:func:`aas_core_codegen.intermediate._translate.translate`, so we do not
         # have to test for argument arity here.
@@ -771,7 +771,7 @@ len(
     def transform_is_none(
         self, node: parse_tree.IsNone
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        # NOTE (mristin, 2023-05-16):
+        # NOTE (mristin):
         # We explicitly do not call :py:meth:`_transform_and_dereference_if_necessary`
         # here as we have to work on the pointer, not the value.
 
@@ -990,7 +990,7 @@ len(
             text = "".join(node.values)  # type: ignore
             return golang_common.string_literal(text), None
 
-        # NOTE (mristin, 2023-03-28):
+        # NOTE (mristin):
         # We need the interpolation if we got so far.
 
         text_parts = []  # type: List[str]
@@ -1206,7 +1206,7 @@ aascommon.{qualifier_function}(
         if isinstance(node.target, parse_tree.Name):
             type_anno = self._environment.find(identifier=node.target.identifier)
             if type_anno is None:
-                # NOTE (mristin, 2023-06-23):
+                # NOTE (mristin):
                 # This is a variable definition as we did not specify the identifier
                 # in the environment.
 
@@ -1240,7 +1240,7 @@ aascommon.{qualifier_function}(
 
         assignment = "=" if not is_definition else ":="
 
-        # NOTE (mristin, 2022-07-12):
+        # NOTE (mristin):
         # This is a rudimentary heuristic for basic line breaks, but works well in
         # practice.
         if "\n" in value or len(value) > 50:
@@ -1261,7 +1261,7 @@ aascommon.{qualifier_function}(
         if node.value is None:
             return Stripped("return"), None
 
-        # NOTE (mristin, 2023-05-24):
+        # NOTE (mristin):
         # This is a potential source of error. We infer the types based on nullability
         # checks, so the inferred type might be a non-nullable, but Golang pointers
         # remain pointers even after we check for them.
@@ -1278,7 +1278,7 @@ aascommon.{qualifier_function}(
 
         assert value is not None
 
-        # NOTE (mristin, 2023-03-28):
+        # NOTE (mristin):
         # This is a rudimentary heuristic for basic line breaks, but works well in
         # practice.
         if "\n" in value or len(value) > 50:

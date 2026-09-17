@@ -23,7 +23,7 @@ def _generate_enum_to_and_from_string(
 
     # region To-string-map
 
-    # NOTE (mristin, 2022-05-05):
+    # NOTE (mristin):
     # We make the property look "public" by the name since it is a static and read-only.
     to_str_map_name = csharp_naming.property_name(
         Identifier(f"{enumeration.name}_to_string")

@@ -165,7 +165,7 @@ class DocutilsElementTransformer(Generic[T], DBC):
         self, element: docutils.nodes.Element
     ) -> Tuple[Optional[T], Optional[List[str]]]:
         """Dispatch the transformation to the appropriate ``transform_*``."""
-        # NOTE (mristin, 2021-12-26):
+        # NOTE (mristin):
         # Please keep the dispatching order. We have to implement a chain-of-command,
         # not an efficient dispatch as classes inherit from each other.
 

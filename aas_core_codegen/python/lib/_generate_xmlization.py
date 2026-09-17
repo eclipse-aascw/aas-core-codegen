@@ -1481,7 +1481,7 @@ values = _read_properties(
                 prop.type_annotation, types_module=Identifier("aas_types")
             )
 
-            # NOTE (mristin, 2022-07-22):
+            # NOTE (mristin):
             # A property is unset until we read it, so all the variables are optional
             # regardless of whether the property itself is.
             if not isinstance(
@@ -1646,7 +1646,7 @@ def _generate_dispatch_map_for_class(
 
     dispatch_classes = list(cls.concrete_descendants)
 
-    # NOTE (mristin, 2022-10-11):
+    # NOTE (mristin):
     # In case of concrete classes, we have to consider also dispatching to their
     # own read function as ``concrete_descendants`` *exclude* the concrete class
     # itself.
@@ -2416,7 +2416,7 @@ _write_empty_element: Callable[
         ),
         Stripped(
             """\
-# NOTE (mristin, 2022-10-14):
+# NOTE (mristin):
 # The serialization procedure is quite rigid. We leverage the specifics of
 # the serialization procedure to optimize the code a bit.
 #
@@ -2452,7 +2452,7 @@ def _write_first_start_element_with_namespace(
 {I}\"\"\"
 {I}self.stream.write(f'<{{name}} xmlns="{{NAMESPACE}}">')
 
-{I}# NOTE (mristin, 2022-10-14):
+{I}# NOTE (mristin):
 {I}# Any subsequence call to `_write_start_element` or `_write_empty_element`
 {I}# should not specify the namespace of the element as we specified now already
 {I}# specified it.
@@ -2658,7 +2658,7 @@ def write(instance: aas_types.Class, stream: TextIO) -> None:
 
 _READING_PATTERN_NOTE = Stripped(
     """\
-# NOTE (mristin, 2022-10-08):
+# NOTE (mristin):
 # Directly using the iterator turned out to result in very complex function
 # designs. The design became much simpler as soon as we considered one look-ahead
 # element. We came up finally with the following pattern which all the protected
@@ -3350,7 +3350,7 @@ def _read_str_from_element_text(
 {I}:raise: :py:class:`DeserializationException` if unexpected input
 {I}:return: parsed value
 {I}\"\"\"
-{I}# NOTE (mristin, 2022-10-26):
+{I}# NOTE (mristin):
 {I}# We do not use ``_read_text_from_element`` as that function expects
 {I}# the ``element`` to contain *some* text. In contrast, this function
 {I}# can also deal with empty text, in which case it returns an empty string.
@@ -3582,7 +3582,7 @@ def _write_str_as_element(
 {I}try:
 {II}serializer._write_start_element(name)
 
-{II}# NOTE (mristin, 2022-10-14):
+{II}# NOTE (mristin):
 {II}# We ran ``timeit`` on manual code which escaped XML special characters with
 {II}# a dictionary, and on another snippet which called three ``.replace()``.
 {II}# The code with ``.replace()`` was an order of magnitude faster on our
@@ -3951,7 +3951,7 @@ class Element(Protocol):
 class HasIterparse(Protocol):
 {I}\"\"\"Parse an XML document incrementally.\"\"\"
 
-{I}# NOTE (mristin, 2022-10-26):
+{I}# NOTE (mristin):
 {I}# ``self`` is not used in this context, but is necessary for Mypy,
 {I}# see: https://github.com/python/mypy/issues/5018 and
 {I}# https://github.com/python/mypy/commit/3efbc5c5e910296a60ed5b9e0e7eb11dd912c3ed#diff-e165eb7aed9dca0a5ebd93985c8cd263a6462d36ac185f9461348dc5a1396d76R9937
@@ -4085,7 +4085,7 @@ def _with_elements_cleared_after_yield(
 
     errors = []  # type: List[Error]
 
-    # NOTE (mristin, 2022-10-08):
+    # NOTE (mristin):
     # We generate first the public methods so that the reader can jump straight
     # to the most important part of the code.
     for cls in symbol_table.classes:

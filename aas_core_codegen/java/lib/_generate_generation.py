@@ -73,7 +73,7 @@ def _generate_builder(
                 description=prop.description,
                 context=java_description.Context(
                     package=package,
-                    # NOTE (mristin, 2024-03-27):
+                    # NOTE (mristin):
                     # Though the builder is associated with a class, the links in
                     # the description need to reference the original class, so
                     # we do not indicate the class for the context here.

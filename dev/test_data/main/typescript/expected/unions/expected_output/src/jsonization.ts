@@ -561,7 +561,7 @@ export function structuralFirstFromJsonable(
     const setterMethod =
       SETTER_MAP_FOR_STRUCTURAL_FIRST.get(key);
 
-    // NOTE (mristin, 2022-11-30):
+    // NOTE (mristin):
     // Since we conflate here a JavaScript object with a JSON object, we ignore
     // properties which we do not know how to de-serialize and assume they are
     // related to the *JavaScript* properties of the object or `Object` prototype.
@@ -664,7 +664,7 @@ export function structuralSecondFromJsonable(
     const setterMethod =
       SETTER_MAP_FOR_STRUCTURAL_SECOND.get(key);
 
-    // NOTE (mristin, 2022-11-30):
+    // NOTE (mristin):
     // Since we conflate here a JavaScript object with a JSON object, we ignore
     // properties which we do not know how to de-serialize and assume they are
     // related to the *JavaScript* properties of the object or `Object` prototype.
@@ -861,7 +861,7 @@ export function mixedAbstractDescendantOneFromJsonable(
     const setterMethod =
       SETTER_MAP_FOR_MIXED_ABSTRACT_DESCENDANT_ONE.get(key);
 
-    // NOTE (mristin, 2022-11-30):
+    // NOTE (mristin):
     // Since we conflate here a JavaScript object with a JSON object, we ignore
     // properties which we do not know how to de-serialize and assume they are
     // related to the *JavaScript* properties of the object or `Object` prototype.
@@ -964,7 +964,7 @@ export function mixedAbstractDescendantTwoFromJsonable(
     const setterMethod =
       SETTER_MAP_FOR_MIXED_ABSTRACT_DESCENDANT_TWO.get(key);
 
-    // NOTE (mristin, 2022-11-30):
+    // NOTE (mristin):
     // Since we conflate here a JavaScript object with a JSON object, we ignore
     // properties which we do not know how to de-serialize and assume they are
     // related to the *JavaScript* properties of the object or `Object` prototype.
@@ -1147,7 +1147,7 @@ function mixedConcreteWithDescendantsFromJsonableWithoutDispatch(
     const setterMethod =
       SETTER_MAP_FOR_MIXED_CONCRETE_WITH_DESCENDANTS.get(key);
 
-    // NOTE (mristin, 2022-11-30):
+    // NOTE (mristin):
     // Since we conflate here a JavaScript object with a JSON object, we ignore
     // properties which we do not know how to de-serialize and assume they are
     // related to the *JavaScript* properties of the object or `Object` prototype.
@@ -1308,7 +1308,7 @@ export function mixedConcreteWithDescendantsChildFromJsonable(
     const setterMethod =
       SETTER_MAP_FOR_MIXED_CONCRETE_WITH_DESCENDANTS_CHILD.get(key);
 
-    // NOTE (mristin, 2022-11-30):
+    // NOTE (mristin):
     // Since we conflate here a JavaScript object with a JSON object, we ignore
     // properties which we do not know how to de-serialize and assume they are
     // related to the *JavaScript* properties of the object or `Object` prototype.
@@ -1431,7 +1431,7 @@ export function mixedConcreteLeafFromJsonable(
     const setterMethod =
       SETTER_MAP_FOR_MIXED_CONCRETE_LEAF.get(key);
 
-    // NOTE (mristin, 2022-11-30):
+    // NOTE (mristin):
     // Since we conflate here a JavaScript object with a JSON object, we ignore
     // properties which we do not know how to de-serialize and assume they are
     // related to the *JavaScript* properties of the object or `Object` prototype.
@@ -1620,7 +1620,7 @@ export function modelTypedFirstFromJsonable(
     const setterMethod =
       SETTER_MAP_FOR_MODEL_TYPED_FIRST.get(key);
 
-    // NOTE (mristin, 2022-11-30):
+    // NOTE (mristin):
     // Since we conflate here a JavaScript object with a JSON object, we ignore
     // properties which we do not know how to de-serialize and assume they are
     // related to the *JavaScript* properties of the object or `Object` prototype.
@@ -1759,7 +1759,7 @@ export function modelTypedSecondFromJsonable(
     const setterMethod =
       SETTER_MAP_FOR_MODEL_TYPED_SECOND.get(key);
 
-    // NOTE (mristin, 2022-11-30):
+    // NOTE (mristin):
     // Since we conflate here a JavaScript object with a JSON object, we ignore
     // properties which we do not know how to de-serialize and assume they are
     // related to the *JavaScript* properties of the object or `Object` prototype.
@@ -2154,7 +2154,7 @@ export function somethingFromJsonable(
     const setterMethod =
       SETTER_MAP_FOR_SOMETHING.get(key);
 
-    // NOTE (mristin, 2022-11-30):
+    // NOTE (mristin):
     // Since we conflate here a JavaScript object with a JSON object, we ignore
     // properties which we do not know how to de-serialize and assume they are
     // related to the *JavaScript* properties of the object or `Object` prototype.

@@ -208,7 +208,7 @@ def main(prog: str) -> int:
         "--version", help="show the current version and exit", action="store_true"
     )
 
-    # NOTE (mristin, 2022-01-14):
+    # NOTE (mristin):
     # The module ``argparse`` is not flexible enough to understand special options such
     # as ``--version`` so we manually hard-wire.
     if "--version" in sys.argv and "--help" not in sys.argv:

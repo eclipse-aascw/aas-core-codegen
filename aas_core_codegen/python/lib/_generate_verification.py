@@ -100,7 +100,7 @@ class _PatternVerificationTranspiler(
 
         parts = []  # type: List[str]
 
-        # NOTE (mristin, 2022-09-30):
+        # NOTE (mristin):
         # See which quotes occur more often in the non-interpolated parts, so that we
         # pick the escaping scheme which will result in as little escapes as possible.
         double_quotes_count = 0
@@ -164,7 +164,7 @@ class _PatternVerificationTranspiler(
         self, node: parse_tree.Constant
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
         if isinstance(node.value, str):
-            # NOTE (mristin, 2022-06-11):
+            # NOTE (mristin):
             # We assume that all the string constants are valid regular expressions.
 
             regex, parse_error = parse_retree.parse(values=[node.value])
@@ -187,7 +187,7 @@ class _PatternVerificationTranspiler(
 
             assert regex is not None
 
-            # NOTE (mristin, 2022-09-30):
+            # NOTE (mristin):
             # Strictly speaking, this is a joined string with a single value, a string
             # literal.
             return self._transform_joined_str_values(
@@ -247,7 +247,7 @@ def _transpile_pattern_verification(
     qualified_module_name: python_common.QualifiedModuleName,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Generate the verification function that checks the regular expressions."""
-    # NOTE (mristin, 2022-09-30):
+    # NOTE (mristin):
     # We assume that we performed all the checks at the intermediate stage.
 
     construct_name = python_naming.function_name(
@@ -663,7 +663,7 @@ def _transpile_invariant(
 
     writer.write(f"{I}yield Error(\n")
 
-    # NOTE (mristin, 2022-09-30):
+    # NOTE (mristin):
     # We need to wrap the description in multiple literals as a single long
     # string literal is often too much for the readability.
     invariant_description_lines = wrap_text_into_lines(invariant.description)
@@ -703,7 +703,7 @@ def _generate_verify_property_snippet(
 
     Return an empty string if there is nothing to be verified for the given property.
     """
-    # NOTE (mristin, 2022-10-01):
+    # NOTE (mristin):
     # Instead of writing here a complex but general solution with unrolling we choose
     # to provide a simple, but limited, solution. First, the meta-model is quite
     # limited itself at the moment, so the complexity of the general solution is not
@@ -1155,7 +1155,7 @@ def _generate_transform_for_class(
     if len(errors) > 0:
         return None, errors
 
-    # NOTE (mristin, 2022-10-14):
+    # NOTE (mristin):
     # We need to generate unique loop variable for each loop since Python tracks
     # the variables in function scope, not block scope.
     generator_for_loop_variables = python_common.GeneratorForLoopVariables()
@@ -1344,7 +1344,7 @@ yield"""
     writer = io.StringIO()
 
     if no_verification_specified:
-        # NOTE (mristin, 2022-10-02):
+        # NOTE (mristin):
         # We provide a function for evolvability even though it does nothing.
         writer.write("# noinspection PyUnusedLocal\n")
 
@@ -1645,7 +1645,7 @@ def verify(
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
-            # NOTE (mristin, 2022-10-01):
+            # NOTE (mristin):
             # We do not verify the enumerations explicitly in Python as mypy
             # is capable enough to spot invalid enum literals.
             pass
@@ -1669,7 +1669,7 @@ def verify(
         elif isinstance(
             our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
         ):
-            # NOTE (mristin, 2022-10-01):
+            # NOTE (mristin):
             # We provide a general dispatch function for the most abstract
             # class ``Class``.
             pass

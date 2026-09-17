@@ -182,7 +182,7 @@ class TupleTypeAnnotation(TypeAnnotation):
         return f"Tuple[{items_joined}]"
 
 
-# NOTE (mristin, 2021-11-19):
+# NOTE (mristin):
 # We do not support other generic types except for ``List`` and ``Tuple``. In the
 # future we might add support for ``Set``, ``MutableMapping`` *etc.*
 
@@ -309,7 +309,7 @@ def beneath_optional(
 
 # region Descriptions
 
-# NOTE (mristin, 2022-03-18):
+# NOTE (mristin):
 # We take C# documentation comments as an orientation for the structure of the
 # descriptions.
 
@@ -732,7 +732,7 @@ class Snapshot:
 class Contracts:
     """Represent the set of contracts for a method or a function."""
 
-    # NOTE (mristin, 2022-04-07):
+    # NOTE (mristin):
     # Common programming languages which work with contracts usually implement
     # pre-conditions in a disjunctive normal form, *i.e.* as a disjunction of
     # conjunctions, where at least one conjunction needs to hold. The individual
@@ -789,7 +789,7 @@ class SignatureLike(DBC):
     #: ancestors.
     contracts: Final[Contracts]
 
-    # NOTE (mristin, 2021-12-26):
+    # NOTE (mristin):
     # The ``parsed`` must be optional since constructors can be synthesized without
     # being defined in the original meta-model.
 
@@ -858,7 +858,7 @@ class SignatureLike(DBC):
 class Method(SignatureLike):
     """Represent a method of a class."""
 
-    # NOTE (mristin, 2021-12-26):
+    # NOTE (mristin):
     # The ``parsed`` must be optional in the parent class, ``SignatureLike``, since
     # constructors can be synthesized without being defined in the original meta-model.
     #
@@ -942,7 +942,7 @@ class Method(SignatureLike):
         raise NotImplementedError()
 
 
-# NOTE (mristin, 2021-12-19):
+# NOTE (mristin):
 # At the moment, we support only implementation-specific methods. However, we anticipate
 # that we will try to understand the methods in the very near future, so we already
 # prepare the class hierarchy for it.
@@ -951,7 +951,7 @@ class Method(SignatureLike):
 class ImplementationSpecificMethod(Method):
     """Represent an implementation-specific method of a class."""
 
-    # NOTE (mristin, 2021-12-26):
+    # NOTE (mristin):
     # The ``parsed`` must be optional in the parent class, ``SignatureLike``, since
     # constructors can be synthesized without being defined in the original meta-model.
     #
@@ -974,7 +974,7 @@ class UnderstoodMethod(Method):
     #: Understood syntax tree of the method's body
     body: Final[Sequence[parse_tree.Node]]
 
-    # NOTE (mristin, 2021-12-26):
+    # NOTE (mristin):
     # The ``parsed`` must be optional in the parent class, ``SignatureLike``, since
     # constructors can be synthesized without being defined in the original meta-model.
     #
@@ -1129,7 +1129,7 @@ class Enumeration:
     #: Map literals by their identifiers
     literals_by_name: Final[Mapping[str, EnumerationLiteral]]
 
-    # NOTE (mristin, 2022-09-01):
+    # NOTE (mristin):
     # This map is used by the downstream code, *e.g.*, aas-core3.0rc02-testgen.
     #: Map literals by their values
     literals_by_value: Final[Mapping[str, EnumerationLiteral]]
@@ -1200,7 +1200,7 @@ class ConstrainedPrimitive:
 
     # region Inheritances
 
-    # NOTE (mristin, 2021-12-24):
+    # NOTE (mristin):
     # We have to decorate inheritances with ``@property`` so that the client code is
     # forced to use ``_set_inheritances``.
 
@@ -1212,7 +1212,7 @@ class ConstrainedPrimitive:
 
     # region Ancestors
 
-    # NOTE (mristin, 2023-03-17):
+    # NOTE (mristin):
     # We have to decorate ancestors  with ``@property`` so that the translation code
     # is forced to use ``_set_ancestors``.
 
@@ -1224,7 +1224,7 @@ class ConstrainedPrimitive:
 
     # region Descendants
 
-    # NOTE (mristin, 2021-12-24):
+    # NOTE (mristin):
     # We have to decorate ``descendant_id_set`` with
     # ``@property`` so that the translation code is forced to use
     # ``_set_descendants``.
@@ -1244,7 +1244,7 @@ class ConstrainedPrimitive:
 
     # region Invariants
 
-    # NOTE (mristin, 2022-03-19):
+    # NOTE (mristin):
     # We have to decorate invariants with ``@property`` so that the translation code
     # is forced to use ``_set_invariants``.
 
@@ -1422,7 +1422,7 @@ class ConstrainedPrimitive:
 
         Every constrained primitive is a subclass of itself.
         """
-        # NOTE (mristin, 2022-05-13):
+        # NOTE (mristin):
         # This function is not used by the aas-core-codegen, but by downstream clients
         # such as aas-core3.0rc02-testgen.
 
@@ -1505,7 +1505,7 @@ class Class(DBC):
 
     # region Inheritances
 
-    # NOTE (mristin, 2021-12-24):
+    # NOTE (mristin):
     # We have to decorate inheritances with ``@property`` so that the translation code
     # is forced to use ``_set_inheritances``.
 
@@ -1517,7 +1517,7 @@ class Class(DBC):
 
     # region Ancestors
 
-    # NOTE (mristin, 2023-03-17):
+    # NOTE (mristin):
     # We have to decorate ancestors  with ``@property`` so that the translation code
     # is forced to use ``_set_ancestors``.
 
@@ -1537,7 +1537,7 @@ class Class(DBC):
 
     # region Descendants
 
-    # NOTE (mristin, 2023-03-24):
+    # NOTE (mristin):
     # We have to decorate ``descendant_id_set``, ``descendants``,
     # ``concrete_descendant_id_set`` and ``concrete_descendants`` with
     # ``@property`` so that the translation code is forced to use
@@ -1555,7 +1555,7 @@ class Class(DBC):
 
     # region Properties
 
-    # NOTE (mristin, 2022-03-19):
+    # NOTE (mristin):
     # We have to decorate properties with ``@property`` so that the translation code
     # is forced to use ``_set_properties``.
 
@@ -1569,7 +1569,7 @@ class Class(DBC):
 
     # region Methods
 
-    # NOTE (mristin, 2022-03-19):
+    # NOTE (mristin):
     # We have to decorate methods with ``@property`` so that the translation code
     # is forced to use ``_set_methods``.
 
@@ -1586,7 +1586,7 @@ class Class(DBC):
 
     # region Invariants
 
-    # NOTE (mristin, 2022-03-19):
+    # NOTE (mristin):
     # We have to decorate invariants with ``@property`` so that the translation code
     # is forced to use ``_set_invariants``.
 
@@ -1852,7 +1852,7 @@ class Class(DBC):
 
         Every class is a subclass of itself.
         """
-        # NOTE (mristin, 2022-05-13):
+        # NOTE (mristin):
         # This function is not used by the aas-core-codegen, but by downstream clients
         # such as aas-core3.0rc02-testgen.
 
@@ -3451,7 +3451,7 @@ def map_descendability(
             return result
 
         elif isinstance(a_type_annotation, TupleTypeAnnotation):
-            # NOTE (mristin, 2026-09-02):
+            # NOTE (mristin):
             # We deliberately recurse into *all* the items, and not just until
             # the first descendable one, so that the ``mapping`` cache is populated
             # for every item.

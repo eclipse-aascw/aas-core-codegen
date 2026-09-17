@@ -58,7 +58,7 @@ class Context:
         self.cls_or_enum = cls_or_enum
 
 
-# NOTE (mristin, 2024-03-28):
+# NOTE (mristin):
 # The Javadoc markup is a bit peculiar. In many cases, it requires only the opening
 # tag, and tolerates (or even encourages) omission of the closing tag. Consequently,
 # this allows us to model the text flow operations as a list of tokens (instead, say,
@@ -68,7 +68,7 @@ class Context:
 # and beginnings of the paragraphs). To keep it all simple, we ignore all the other
 # Javadoc tags which do not affect the text flow, and capture them in plain text.
 
-# NOTE (mristin, 2024-03-28):
+# NOTE (mristin):
 # We make all token classes as data classes so that the comparisons and
 # string representations are automatically generated.
 
@@ -133,7 +133,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[List[_Token]]
                 f"{{@link {self.context.root_package}.types.enums.{name}}}"
             )
         elif isinstance(element.our_type, intermediate.ConstrainedPrimitive):
-            # NOTE (mristin, 2024-03-27):
+            # NOTE (mristin):
             # We do not generate a class for constrained primitives, but we
             # leave it as class name, as that is what we used for ``verify*`` functions.
             name = java_naming.class_name(element.our_type.name)
@@ -249,7 +249,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[List[_Token]]
     def transform_literal(
         self, element: docutils.nodes.literal
     ) -> Tuple[Optional[List[_Token]], Optional[List[str]]]:
-        # NOTE (mristin, 2024-03-27):
+        # NOTE (mristin):
         # Theoretically, we could escape the backticks properly here, see
         # https://meta.stackexchange.com/questions/82718/how-do-i-escape-a-backtick-within-in-line-code-in-markdown.
         # However, this is not necessary since our meta-model is written in
@@ -274,7 +274,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[List[_Token]]
 
         escaped = (
             text
-            # NOTE (mristin, 2024-03-27):
+            # NOTE (mristin):
             # See: https://stackoverflow.com/questions/2290757/how-can-you-escape-the-character-in-javadoc
             .replace("@", "&#064;")
         )
@@ -563,7 +563,7 @@ def _render_tokens(tokens: Sequence[_Token]) -> str:
             indention_machine.dedent()
             indention_machine.write("\n</ul>")
         elif isinstance(token, _TokenLI):
-            # NOTE (mristin, 2024-03-28):
+            # NOTE (mristin):
             # We add a space after ``<li>`` for better readability of the code in, say,
             # a text editor.
             indention_machine.write("\n<li> ")

@@ -66,7 +66,7 @@ function compareOrRecordTrace(
   for (const descendant of instance.descend()) {
     lines.push(TestCommon.traceMark(descendant));
   }
-  // NOTE (mristin, 2022-12-09):
+  // NOTE (mristin):
   // We add a new line for POSIX systems which prefer a new line
   // at the end of the file.
   lines.push("");

@@ -87,7 +87,7 @@ def _generate_constant_primitive(
         writer.write(f"{constant_name}: int = {literal}")
 
     elif constant.a_type is intermediate.PrimitiveType.FLOAT:
-        # NOTE (mristin, 2022-09-28):
+        # NOTE (mristin):
         # We assume that the float constants are not meant to be all to precise.
         # Therefore, we use a string representation here. However, beware that we
         # might have to use a more precise representation in the future if the spec
@@ -185,7 +185,7 @@ def _generate_constant_set_of_primitives(
         writer.write("}")
 
     elif constant.a_type is intermediate.PrimitiveType.FLOAT:
-        # NOTE (mristin, 2022-07-06):
+        # NOTE (mristin):
         # We assume that the float constants are not meant to be all to precise.
         # Therefore, we use a string representation here. However, beware that we
         # might have to use a more precise representation in the future if the spec

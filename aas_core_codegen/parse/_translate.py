@@ -861,7 +861,7 @@ def _ann_assign_to_property(
         and isinstance(node.annotation.value, ast.Name)
         and node.annotation.value.id == "Annotated"
     ):
-        # NOTE (2026-09-01):
+        # NOTE:
         # We unwrap ``Annotated[...]`` here, at the property level, and nowhere
         # else, since the ``json_name``/``xml_name`` markers only make sense as
         # metadata on a property's type annotation.
@@ -1124,7 +1124,7 @@ def _args_to_arguments(
         # region Default
         default = None  # type: Optional[Default]
 
-        # NOTE (mristin, 2021-12-16):
+        # NOTE (mristin):
         # A simple hypothetical test calculation:
         # 5 args
         # 2 defaults
@@ -1376,7 +1376,7 @@ def _function_def_to_method(
     If ``expect_self`` is set, the first argument is expected to be ``self``. Otherwise,
     no ``self`` argument is expected.
     """
-    # NOTE (mristin, 2021-12-19):
+    # NOTE (mristin):
     # This run-time check is necessary as we already burned our fingers with it.
     assert isinstance(node, ast.FunctionDef)
 
@@ -1719,7 +1719,7 @@ def _function_def_to_method(
             understood_body = []  # type: List[tree.Node]
 
             for body_child in body:
-                # NOTE (mristin, 2021-12-27):
+                # NOTE (mristin):
                 # We deliberately ignore ``pass`` as it makes no sense in our
                 # context of multiple programming languages.
                 if isinstance(body_child, ast.Pass):
@@ -2232,7 +2232,7 @@ def _classdef_to_our_type(
             elif decorator is _ClassMarker.IMPLEMENTATION_SPECIFIC:
                 is_implementation_specific = True
             elif decorator is _ClassMarker.TEMPLATE:
-                # NOTE (mristin, 2021-11-28):
+                # NOTE (mristin):
                 # We ignore the template marker at this moment. However, we will most
                 # probably have to consider them in the future, so we leave them in the
                 # meta-model, but ignore them in the code generation.
@@ -2266,7 +2266,7 @@ def _classdef_to_our_type(
             ),
         )
 
-    # NOTE (mristin, 20222-01-02):
+    # NOTE (mristin):
     # We need to inverse the invariants as we collect them top-down, while
     # the decorators are applied bottom-up.
     invariants = list(reversed(invariants))
@@ -2409,7 +2409,7 @@ def _verify_arity_of_type_annotation_subscript(
     :return: error message, if any
     """
     if type_annotation.identifier == "Tuple":
-        # NOTE (mristin, 2026-09-02):
+        # NOTE (mristin):
         # A tuple denotes a fixed-length sequence of possibly heterogeneous types,
         # so, unlike ``List`` or ``Optional``, it has no single expected arity. We
         # only require that at least one element type is given.
@@ -2506,7 +2506,7 @@ def _verify_symbol_table(
         "union",
     }
 
-    # NOTE (mristin, 2023-06-30):
+    # NOTE (mristin):
     # We check against the lower-case to report even if the case is different, so
     # the type names are lower-cased in this set as well.
     for type_name in reserved_type_names:
@@ -2775,7 +2775,7 @@ def _verify_symbol_table(
             continue
 
         for inheritance in our_type.inheritances:
-            # NOTE (mristin, 2021-12-22):
+            # NOTE (mristin):
             # Inheritance from primitive types allows us to constrain a primitive type.
             if inheritance in PRIMITIVE_TYPES:
                 continue
@@ -2897,7 +2897,7 @@ def _verify_symbol_table(
 
     expected_subscripted_types = GENERIC_TYPES
 
-    # NOTE (mristin, 2021-11-19):
+    # NOTE (mristin):
     # If you expect type qualifiers such as ``Final``, make a copy of
     # the ``GENERIC_TYPES`` and add them to the copy.
 
@@ -3176,12 +3176,12 @@ def _atok_to_symbol_table(
     assert atok.tree is not None
 
     for node in atok.tree.body:
-        # NOTE (mristin, 2021-12-27):
+        # NOTE (mristin):
         # Pass statement makes no sense in our multi-language setting.
         if isinstance(node, ast.Pass):
             continue
 
-        # NOTE (mristin, 2022-07-10):
+        # NOTE (mristin):
         # We currently decided to ignore assertions though we leave them in
         # the meta-model as documentation
         if isinstance(node, ast.Assert):

@@ -573,7 +573,11 @@ We intensively use PyCharms ``# region ...`` and ``# endregion`` to structure co
 
 Comments
 --------
-Mark notes with ``# NOTE ({github username}, {date in ISO 8601}):``.
+Mark notes with ``# NOTE ({github username}):``.
+
+Do not date the notes.
+The notes need to be adapted as the code around them changes, so the date quickly
+becomes misleading.
 
 No ``# TODO`` in the code, please.
 

@@ -633,7 +633,7 @@ def understand_all(
     return ConstructorTable(mapping=mapping), None
 
 
-# NOTE (mristin, 2021-12-26):
+# NOTE (mristin):
 # At this point we need to dump only a subset of this module, so we go for YAGNI
 # principle and do not provide dump functions for everything.
 

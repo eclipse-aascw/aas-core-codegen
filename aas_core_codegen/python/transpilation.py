@@ -58,7 +58,7 @@ class Transpiler(
             parent=environment
         )
 
-        # NOTE (mristin, 2022-09-30):
+        # NOTE (mristin):
         # Keep track whenever we define a variable name, so that we can know how to
         # resolve it as a name in the Python code.
         #
@@ -263,7 +263,7 @@ class Transpiler(
         if isinstance(node.antecedent, no_parentheses_types_in_this_context):
             not_antecedent = f"not {antecedent}"
         else:
-            # NOTE (mristin, 2022-09-30):
+            # NOTE (mristin):
             # This is a very rudimentary heuristic for breaking the lines, and can be
             # greatly improved by rendering into Python code. However, at this point, we
             # lack time for more sophisticated reformatting approaches.
@@ -276,7 +276,7 @@ not (
                 not_antecedent = f"not ({antecedent})"
 
         if not isinstance(node.consequent, no_parentheses_types_in_this_context):
-            # NOTE (mristin, 2022-09-30):
+            # NOTE (mristin):
             # This is a very rudimentary heuristic for breaking the lines, and can be
             # greatly improved by rendering into Python code. However, at this point, we
             # lack time for more sophisticated reformatting approaches.
@@ -374,7 +374,7 @@ not (
                 node.original_node, "Failed to transpile the function call", errors
             )
 
-        # NOTE (mristin, 2022-09-30):
+        # NOTE (mristin):
         # The validity of the arguments is checked in
         # :py:func:`aas_core_codegen.intermediate._translate.translate`, so we do not
         # have to test for argument arity here.
@@ -577,7 +577,7 @@ not (
             )
 
             if not isinstance(value_node, no_parentheses_types_in_this_context):
-                # NOTE (mristin, 2022-09-30):
+                # NOTE (mristin):
                 # This is a very rudimentary heuristic for breaking the lines, and can
                 # be greatly improved by rendering into Python code. However, at this
                 # point, we lack time for more sophisticated reformatting approaches.
@@ -714,7 +714,7 @@ not (
 
         parts = []  # type: List[str]
 
-        # NOTE (mristin, 2022-09-30):
+        # NOTE (mristin):
         # See which quotes occur more often in the non-interpolated parts, so that we
         # pick the escaping scheme which will result in as little escapes as possible.
         double_quotes_count = 0
@@ -911,7 +911,7 @@ range(
         if isinstance(node.target, parse_tree.Name):
             type_anno = self._environment.find(identifier=node.target.identifier)
             if type_anno is None:
-                # NOTE (mristin, 2022-09-30):
+                # NOTE (mristin):
                 # This is a variable definition as we did not specify the identifier
                 # in the environment.
 
@@ -933,7 +933,7 @@ range(
         assert target is not None
         assert value is not None
 
-        # NOTE (mristin, 2022-09-30):
+        # NOTE (mristin):
         # This is a rudimentary heuristic for basic line breaks, but works well in
         # practice.
         if "\n" in value or len(value) > 50:
@@ -960,7 +960,7 @@ range(
 
         assert value is not None
 
-        # NOTE (mristin, 2022-09-30):
+        # NOTE (mristin):
         # This is a rudimentary heuristic for basic line breaks, but works well in
         # practice.
         if "\n" in value or len(value) > 50:

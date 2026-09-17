@@ -451,7 +451,7 @@ class _ParseIndex(_Parse):
         if error is not None:
             return None, error
 
-        # NOTE (mristin, 2022-07-11):
+        # NOTE (mristin):
         # There were breaking changes between Python 3.8 and 3.9 in ``ast`` module.
         # Relevant to this particular piece of parsing logic is the deprecation of
         # ``ast.Index``.
@@ -805,7 +805,7 @@ def ast_node_to_our_node(node: ast.AST) -> Tuple[Optional[tree.Node], Optional[E
     our representation which is later easier for processing.
     """
     for parse_rule in _CHAIN_OF_RULES:
-        # NOTE(mristin, 2021-10-08):
+        # NOTE (mristin):
         # Please leave the variables as they are to facilitate the eventual debugging
         # even though a more succinct code structure lures you.
 

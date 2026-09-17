@@ -72,7 +72,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
         if isinstance(element.our_type, intermediate.ConstrainedPrimitive):
             return f"`{typescript_naming.class_name(element.our_type.name)}`", None
 
-        # NOTE (mristin, 2022-12-07):
+        # NOTE (mristin):
         # We refer to interfaces everywhere where we assume abstract or concrete
         # classes with descendants.
         if (
@@ -95,7 +95,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
         self, element: intermediate_doc.ReferenceToAttribute
     ) -> Tuple[Optional[str], Optional[List[str]]]:
         if isinstance(element.reference, intermediate_doc.ReferenceToProperty):
-            # NOTE (mristin, 2022-12-07):
+            # NOTE (mristin):
             # We refer to interfaces everywhere where we assume abstract or concrete
             # classes with descendants.
             if (
@@ -174,7 +174,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
     def transform_literal(
         self, element: docutils.nodes.literal
     ) -> Tuple[Optional[str], Optional[List[str]]]:
-        # NOTE (mristin, 2022-11-04):
+        # NOTE (mristin):
         # Theoretically, we could escape the backticks properly here, see
         # https://meta.stackexchange.com/questions/82718/how-do-i-escape-a-backtick-within-in-line-code-in-markdown.
         # However, this is not necessary since our meta-model is written in
@@ -289,7 +289,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
 
             writer.write("* ")
 
-            # NOTE (mristin, 2022-11-04):
+            # NOTE (mristin):
             # This has a potentially exponential complexity w.r.t. indention level.
             # However, as the indention level is thus far limited to only a single
             # level, we ignore this pitfall for the moment.

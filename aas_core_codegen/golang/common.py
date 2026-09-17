@@ -111,7 +111,7 @@ def float_literal(value: float) -> Stripped:
         return Stripped(str(value))
 
 
-# NOTE (mristin, 2023-01-13):
+# NOTE (mristin):
 # See: https://stackoverflow.com/questions/19094704/indentation-in-go-tabs-or-spaces
 INDENT = "\t"
 
@@ -239,7 +239,7 @@ def generate_type(
         elif isinstance(
             our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
         ):
-            # NOTE (mristin, 2023-03-28):
+            # NOTE (mristin):
             # We always refer to interfaces even in cases of concrete classes without
             # concrete descendants since we want to allow enhancing.
             interface_name = golang_naming.interface_name(our_type.name)

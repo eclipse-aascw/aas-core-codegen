@@ -174,7 +174,7 @@ def execute(model_path: pathlib.Path, stderr: TextIO) -> int:
 
 def main(prog: str) -> int:
     """Execute the main routine."""
-    # NOTE (mristin, 2022-03-28):
+    # NOTE (mristin):
     # The module ``argparse`` is not flexible enough to understand special options such
     # as ``--version`` so we manually hard-wire.
     if "--version" in sys.argv and "--help" not in sys.argv:

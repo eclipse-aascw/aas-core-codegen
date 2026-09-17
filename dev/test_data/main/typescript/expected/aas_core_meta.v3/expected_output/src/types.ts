@@ -147,7 +147,7 @@ export enum ModelType {
  */
 export function *overModelType (
 ): Iterable<ModelType> {
-  // NOTE (mristin, 2022-12-03):
+  // NOTE (mristin):
   // We yield numbers instead of literals to avoid name lookups on platforms
   // which do not provide JIT compilation of hot paths.
   yield <ModelType>0;  // Extension
@@ -296,7 +296,7 @@ export class Extension
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>0;  // Extension
@@ -638,7 +638,7 @@ export enum ModellingKind {
  */
 export function *overModellingKind(
 ): IterableIterator<ModellingKind> {
-  // NOTE (mristin, 2022-12-03):
+  // NOTE (mristin):
   // We yield numbers instead of literals to avoid name lookups on platforms
   // which do not provide JIT compilation of hot paths.
   yield <ModellingKind>0; // Template
@@ -700,7 +700,7 @@ export class AdministrativeInformation
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>1;  // AdministrativeInformation
@@ -934,7 +934,7 @@ export enum QualifierKind {
  */
 export function *overQualifierKind(
 ): IterableIterator<QualifierKind> {
-  // NOTE (mristin, 2022-12-03):
+  // NOTE (mristin):
   // We yield numbers instead of literals to avoid name lookups on platforms
   // which do not provide JIT compilation of hot paths.
   yield <QualifierKind>0; // ValueQualifier
@@ -963,7 +963,7 @@ export class Qualifier
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>2;  // Qualifier
@@ -1173,7 +1173,7 @@ export class AssetAdministrationShell
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>3;  // AssetAdministrationShell
@@ -1548,7 +1548,7 @@ export class AssetInformation extends Class {
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>4;  // AssetInformation
@@ -1726,7 +1726,7 @@ export class Resource extends Class {
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>5;  // Resource
@@ -1859,7 +1859,7 @@ export enum AssetKind {
  */
 export function *overAssetKind(
 ): IterableIterator<AssetKind> {
-  // NOTE (mristin, 2022-12-03):
+  // NOTE (mristin):
   // We yield numbers instead of literals to avoid name lookups on platforms
   // which do not provide JIT compilation of hot paths.
   yield <AssetKind>0; // Type
@@ -1885,7 +1885,7 @@ export class SpecificAssetId
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>6;  // SpecificAssetId
@@ -2076,7 +2076,7 @@ export class Submodel
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>7;  // Submodel
@@ -2532,7 +2532,7 @@ export class RelationshipElement
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>8;  // RelationshipElement
@@ -2920,7 +2920,7 @@ export enum AasSubmodelElements {
  */
 export function *overAasSubmodelElements(
 ): IterableIterator<AasSubmodelElements> {
-  // NOTE (mristin, 2022-12-03):
+  // NOTE (mristin):
   // We yield numbers instead of literals to avoid name lookups on platforms
   // which do not provide JIT compilation of hot paths.
   yield <AasSubmodelElements>0; // AnnotatedRelationshipElement
@@ -2985,7 +2985,7 @@ export class SubmodelElementList
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>9;  // SubmodelElementList
@@ -3411,7 +3411,7 @@ export class SubmodelElementCollection
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>10;  // SubmodelElementCollection
@@ -3802,7 +3802,7 @@ export class Property
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>11;  // Property
@@ -4189,7 +4189,7 @@ export class MultiLanguageProperty
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>12;  // MultiLanguageProperty
@@ -4586,7 +4586,7 @@ export class Range
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>13;  // Range
@@ -4962,7 +4962,7 @@ export class ReferenceElement
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>14;  // ReferenceElement
@@ -5329,7 +5329,7 @@ export class Blob
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>15;  // Blob
@@ -5706,7 +5706,7 @@ export class File
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>16;  // File
@@ -6074,7 +6074,7 @@ export class AnnotatedRelationshipElement
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>17;  // AnnotatedRelationshipElement
@@ -6473,7 +6473,7 @@ export class Entity
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>18;  // Entity
@@ -6911,7 +6911,7 @@ export enum EntityType {
  */
 export function *overEntityType(
 ): IterableIterator<EntityType> {
-  // NOTE (mristin, 2022-12-03):
+  // NOTE (mristin):
   // We yield numbers instead of literals to avoid name lookups on platforms
   // which do not provide JIT compilation of hot paths.
   yield <EntityType>0; // CoManagedEntity
@@ -6948,7 +6948,7 @@ export enum Direction {
  */
 export function *overDirection(
 ): IterableIterator<Direction> {
-  // NOTE (mristin, 2022-12-03):
+  // NOTE (mristin):
   // We yield numbers instead of literals to avoid name lookups on platforms
   // which do not provide JIT compilation of hot paths.
   yield <Direction>0; // Input
@@ -6985,7 +6985,7 @@ export enum StateOfEvent {
  */
 export function *overStateOfEvent(
 ): IterableIterator<StateOfEvent> {
-  // NOTE (mristin, 2022-12-03):
+  // NOTE (mristin):
   // We yield numbers instead of literals to avoid name lookups on platforms
   // which do not provide JIT compilation of hot paths.
   yield <StateOfEvent>0; // On
@@ -7005,7 +7005,7 @@ export class EventPayload extends Class {
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>19;  // EventPayload
@@ -7232,7 +7232,7 @@ export class BasicEventElement
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>20;  // BasicEventElement
@@ -7685,7 +7685,7 @@ export class Operation
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>21;  // Operation
@@ -8109,7 +8109,7 @@ export class OperationVariable extends Class {
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>22;  // OperationVariable
@@ -8216,7 +8216,7 @@ export class Capability
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>23;  // Capability
@@ -8617,7 +8617,7 @@ export class ConceptDescription
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>24;  // ConceptDescription
@@ -8947,7 +8947,7 @@ export enum ReferenceTypes {
  */
 export function *overReferenceTypes(
 ): IterableIterator<ReferenceTypes> {
-  // NOTE (mristin, 2022-12-03):
+  // NOTE (mristin):
   // We yield numbers instead of literals to avoid name lookups on platforms
   // which do not provide JIT compilation of hot paths.
   yield <ReferenceTypes>0; // ExternalReference
@@ -9034,7 +9034,7 @@ export class Reference extends Class {
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>25;  // Reference
@@ -9171,7 +9171,7 @@ export class Key extends Class {
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>26;  // Key
@@ -9378,7 +9378,7 @@ export enum KeyTypes {
  */
 export function *overKeyTypes(
 ): IterableIterator<KeyTypes> {
-  // NOTE (mristin, 2022-12-03):
+  // NOTE (mristin):
   // We yield numbers instead of literals to avoid name lookups on platforms
   // which do not provide JIT compilation of hot paths.
   yield <KeyTypes>0; // AnnotatedRelationshipElement
@@ -9454,7 +9454,7 @@ export enum DataTypeDefXsd {
  */
 export function *overDataTypeDefXsd(
 ): IterableIterator<DataTypeDefXsd> {
-  // NOTE (mristin, 2022-12-03):
+  // NOTE (mristin):
   // We yield numbers instead of literals to avoid name lookups on platforms
   // which do not provide JIT compilation of hot paths.
   yield <DataTypeDefXsd>0; // AnyUri
@@ -9514,7 +9514,7 @@ export class LangStringNameType
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>27;  // LangStringNameType
@@ -9622,7 +9622,7 @@ export class LangStringTextType
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>28;  // LangStringTextType
@@ -9734,7 +9734,7 @@ export class Environment extends Class {
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>29;  // Environment
@@ -9927,7 +9927,7 @@ export class EmbeddedDataSpecification extends Class {
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>30;  // EmbeddedDataSpecification
@@ -10178,7 +10178,7 @@ export enum DataTypeIec61360 {
  */
 export function *overDataTypeIec61360(
 ): IterableIterator<DataTypeIec61360> {
-  // NOTE (mristin, 2022-12-03):
+  // NOTE (mristin):
   // We yield numbers instead of literals to avoid name lookups on platforms
   // which do not provide JIT compilation of hot paths.
   yield <DataTypeIec61360>0; // Date
@@ -10241,7 +10241,7 @@ export class LevelType extends Class {
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>31;  // LevelType
@@ -10362,7 +10362,7 @@ export class ValueReferencePair extends Class {
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>32;  // ValueReferencePair
@@ -10474,7 +10474,7 @@ export class ValueList extends Class {
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>33;  // ValueList
@@ -10581,7 +10581,7 @@ export class LangStringPreferredNameTypeIec61360
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>34;  // LangStringPreferredNameTypeIec61360
@@ -10689,7 +10689,7 @@ export class LangStringShortNameTypeIec61360
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>35;  // LangStringShortNameTypeIec61360
@@ -10797,7 +10797,7 @@ export class LangStringDefinitionTypeIec61360
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>36;  // LangStringDefinitionTypeIec61360
@@ -10948,7 +10948,7 @@ export class DataSpecificationIec61360
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>37;  // DataSpecificationIec61360

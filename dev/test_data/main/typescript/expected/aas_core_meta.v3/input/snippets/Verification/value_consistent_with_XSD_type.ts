@@ -68,7 +68,7 @@ const DATE_PREFIX_RE = new RegExp("^(-?[0-9]+)-([0-9]{2})-([0-9]{2})");
  * @returns `true` if `value` is a valid `xs:date`
  */
 export function isXsDate(value: string): boolean {
-  // NOTE (mristin, 2022-11-23):
+  // NOTE (mristin):
   // We can not use date functions from the standard library as it does not
   // handle years BCE (*e.g.*, `-0003-01-02`).
 
@@ -76,7 +76,7 @@ export function isXsDate(value: string): boolean {
     return false;
   }
 
-  // NOTE (mristin, 2022-11-23):
+  // NOTE (mristin):
   // We need to match the prefix as zone offsets are allowed in the dates. Optimally,
   // we would re-use the pattern matching from `matchesXsDate`, but this
   // would make the code generation and constraint inference for schemas much more
@@ -121,7 +121,7 @@ export function isXsDate(value: string): boolean {
  * @returns `true` if `value` is a valid `xs:double`
  */
 export function isXsDouble(value: string): boolean {
-  // NOTE (mristin, 2022-11-23):
+  // NOTE (mristin):
   // We need to check explicitly for the regular expression since
   // `parseFloat` expects `Infinity`  instead of `INF`.
   if (!matchesXsDouble(value)) {
@@ -129,7 +129,7 @@ export function isXsDouble(value: string): boolean {
   }
 
   if (value !== "INF" && value !== "-INF" && value !== "NaN") {
-    // NOTE (mristin, 2022-11-23):
+    // NOTE (mristin):
     // Check that the value is not too big to be represented as a double-precision
     // floating point number.
     //
@@ -151,7 +151,7 @@ export function isXsDouble(value: string): boolean {
  * @returns `true` if `value` is a valid `xs:float`
  */
 export function isXsFloat(value: string): boolean {
-  // NOTE (mristin, 2022-11-23):
+  // NOTE (mristin):
   // We need to check explicitly for the regular expression since
   // `parseFloat` expects `Infinity`  instead of `INF`.
   if (!matchesXsFloat(value)) {
@@ -159,7 +159,7 @@ export function isXsFloat(value: string): boolean {
   }
 
   if (value !== "INF" && value !== "-INF" && value !== "NaN") {
-    // NOTE (mristin, 2022-11-23):
+    // NOTE (mristin):
     // Check that the value is not too big to be represented as a double-precision
     // floating point number.
     //
@@ -170,7 +170,7 @@ export function isXsFloat(value: string): boolean {
       return false;
     }
 
-    // NOTE (mristin, 2022-11-23):
+    // NOTE (mristin):
     // TypeScript represents numbers as 64-bit floating point numbers. While there
     // is no easy way to deal with the precision, as precision is silently
     // gutted during the parsing, we can still check if the number is too large
@@ -214,7 +214,7 @@ const LARGEST_LONG_AS_STRING = "9223372036854775807";
  * @returns `true` if `value` is a valid `xs:long`
  */
 export function isXsLong(value: string): boolean {
-  // NOTE (mristin, 2022-11-23):
+  // NOTE (mristin):
   // We need to operate on the value as string since TypeScript represents numbers as
   // 64-bit floating-point numbers which can not capture 64-bit integers.
 
@@ -310,7 +310,7 @@ const LARGEST_UNSIGNED_LONG_AS_STRING = "18446744073709551615";
  * @returns `true` if `value` is a valid `xs:unsignedLong`
  */
 export function isXsUnsignedLong(value: string): boolean {
-  // NOTE (mristin, 2022-11-23):
+  // NOTE (mristin):
   // We need to operate on the value as string since TypeScript represents numbers as
   // 64-bit floating-point numbers which can not capture 64-bit integers.
 

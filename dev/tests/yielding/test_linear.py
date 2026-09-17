@@ -414,7 +414,7 @@ class TestLinearizeToSubroutines(unittest.TestCase):
         self.assertListEqual([], result)
 
     def test_inspired_by_verificator_in_cpp(self) -> None:
-        # NOTE (mristin, 2023-10-21):
+        # NOTE (mristin):
         # We test inspired by a real-world example from C++ code generation so that
         # we can see if it works, estimate how ergonomic it is to write the flows, and
         # check whether the resulting code is readable.

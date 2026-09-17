@@ -123,14 +123,14 @@ def patterns_from_invariants(
     The list of patterns means that *all* the patterns need to be satisfied, *i.e.*
     there is a conjunction of patterns.
     """
-    # NOTE (mristin, 2021-11-30):
+    # NOTE (mristin):
     # We iterate only once through the invariants instead of inferring the constraints
     # for each property individually to be able to keep linear time complexity.
 
     constraints_on_props = []  # type: List[_ConstraintOnProperty]
 
     for invariant in cls.invariants:
-        # NOTE (mristin, 2022-01-02):
+        # NOTE (mristin):
         # We consider only the genuine invariants of the class, and ignore
         # the invariants of its ancestors.
         if invariant.specified_for is not cls:
@@ -276,7 +276,7 @@ def infer_patterns_on_self(
     result = []  # type: List[PatternConstraint]
 
     for invariant in constrained_primitive.invariants:
-        # NOTE (mristin, 2022-01-02):
+        # NOTE (mristin):
         # We consider only the genuine invariants of the constrained primitive, and
         # ignore the invariants of its ancestors.
         if invariant.specified_for is not constrained_primitive:

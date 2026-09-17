@@ -261,7 +261,7 @@ class EnumerationAsTypeTypeAnnotation(TypeAnnotation):
     rather the type-as-a-type. We write``Type[T]`` in Python to describe this.
     """
 
-    # NOTE (mristin, 2022-02-04):
+    # NOTE (mristin):
     # The name of this class is admittedly clumsy. Please feel free to change if you
     # come up with a better idea.
 
@@ -373,7 +373,7 @@ def _assignable(
         if isinstance(value_type, PrimitiveTypeAnnotation):
             return target_type.a_type == value_type.a_type
 
-        # NOTE (mristin, 2021-12-25):
+        # NOTE (mristin):
         # We have to be careful about the constrained primitives,
         # since we can always assign a constrained primitive to a primitive, if they
         # primitive types match.
@@ -390,7 +390,7 @@ def _assignable(
 
     elif isinstance(target_type, OurTypeAnnotation):
         if isinstance(target_type.our_type, _types.Enumeration):
-            # NOTE (mristin, 2021-12-25):
+            # NOTE (mristin):
             # The enumerations are invariant.
             return (
                 isinstance(value_type, OurTypeAnnotation)
@@ -399,7 +399,7 @@ def _assignable(
             )
 
         elif isinstance(target_type.our_type, _types.ConstrainedPrimitive):
-            # NOTE (mristin, 2021-12-25):
+            # NOTE (mristin):
             # If it is a constrained primitive with no constraints, allow the assignment
             # if the target and the value match on the primitive type.
             if len(target_type.our_type.invariants) == 0 and isinstance(
@@ -410,7 +410,7 @@ def _assignable(
                     == value_type.a_type
                 )
             else:
-                # NOTE (mristin, 2021-12-25):
+                # NOTE (mristin):
                 # We assume the assignments of constrained primitives to be co-variant.
                 if (
                     isinstance(value_type, OurTypeAnnotation)
@@ -433,7 +433,7 @@ def _assignable(
             ):
                 return False
 
-            # NOTE (mristin, 2021-12-25):
+            # NOTE (mristin):
             # We assume the assignment to be co-variant. Either the target type and
             # the value type are equal *or* the value type is a descendant of the
             # target type.
@@ -464,7 +464,7 @@ def _assignable(
         if not isinstance(value_type, ListTypeAnnotation):
             return False
         else:
-            # NOTE (mristin, 2021-12-25):
+            # NOTE (mristin):
             # We assume the lists to be invariant. This is necessary for code generation
             # in implementation targets such as C++ and Golang.
             return _type_annotations_equal(target_type.items, value_type.items)
@@ -473,7 +473,7 @@ def _assignable(
         if not isinstance(value_type, SetTypeAnnotation):
             return False
         else:
-            # NOTE (mristin, 2021-12-25):
+            # NOTE (mristin):
             # We assume the sets to be invariant. This is necessary for code generation
             # in implementation targets such as C++ and Golang.
             return _type_annotations_equal(target_type.items, value_type.items)
@@ -482,7 +482,7 @@ def _assignable(
         if not isinstance(value_type, TupleTypeAnnotation):
             return False
         else:
-            # NOTE (mristin, 2026-09-02):
+            # NOTE (mristin):
             # We assume the tuples to be invariant, analogous to the lists and sets
             # above.
             return len(target_type.items) == len(value_type.items) and all(
@@ -491,12 +491,12 @@ def _assignable(
             )
 
     elif isinstance(target_type, OptionalTypeAnnotation):
-        # NOTE (mristin, 2021-12-25):
+        # NOTE (mristin):
         # We can always assign a non-optional to an optional.
         if not isinstance(value_type, OptionalTypeAnnotation):
             return _assignable(target_type=target_type.value, value_type=value_type)
         else:
-            # NOTE (mristin, 2021-12-25):
+            # NOTE (mristin):
             # We assume the optionals to be co-variant.
             return _assignable(
                 target_type=target_type.value, value_type=value_type.value
@@ -940,7 +940,7 @@ class _Canonicalizer(parse_tree.RestrictedTransformer[str]):
         if not _Canonicalizer._needs_no_brackets(node.target):
             target = f"({target})"
 
-        # NOTE (mristin, 2022-06-17):
+        # NOTE (mristin):
         # Nested assignments are not possible in Python, but who knows where our
         # intermediate representation will take us. Therefore, we handle this edge case
         # even though it seems nonsensical at the moment.
@@ -957,7 +957,7 @@ class _Canonicalizer(parse_tree.RestrictedTransformer[str]):
         if node.value is not None:
             value = self.transform(node.value)
 
-            # NOTE (mristin, 2022-06-17):
+            # NOTE (mristin):
             # Nested returns are not possible in Python, but who knows where our
             # intermediate representation will take us. Therefore, we handle
             # this edge case even though it seems nonsensical at the moment.
@@ -1061,7 +1061,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
 
         self._representation_map = representation_map
 
-        # NOTE (mristin, 2022-06-17):
+        # NOTE (mristin):
         # We need to keep track of the expressions that can be assumed to be non-null.
         # This member is stateful! It will constantly change, depending on the position
         # of the iteration through the tree.
@@ -1096,7 +1096,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
 
     @ensure(lambda self, result: not (result is None) or len(self.errors) > 0)
     def transform(self, node: parse_tree.Node) -> Optional["TypeAnnotationUnion"]:
-        # NOTE (mristin, 2022-06-17):
+        # NOTE (mristin):
         # We can not write the following as the pre-condition as it would break
         # behavioral subtyping since the parent class expects no pre-conditions.
         #
@@ -1237,7 +1237,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
             return None
 
         if isinstance(collection_type, TupleTypeAnnotation):
-            # NOTE (mristin, 2026-09-02):
+            # NOTE (mristin):
             # Tuples are heterogeneous, so, unlike lists, we can only infer the type
             # of the individual item if the index is given as a literal integer.
             if not (
@@ -1371,7 +1371,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         if member_type is None or container_type is None:
             return None
 
-        # NOTE (mristin, 2023-06-09):
+        # NOTE (mristin):
         # Check that both the member and the container are non-nullables. We already
         # had bugs related to this, see:
         # https://github.com/aas-core-works/aas-core-meta/pull/272
@@ -1406,7 +1406,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
     def transform_implication(
         self, node: parse_tree.Implication
     ) -> Optional["TypeAnnotationUnion"]:
-        # NOTE (mristin, 2022-06-17):
+        # NOTE (mristin):
         # Just recurse to fill ``type_map`` on ``antecedent`` even though we know the
         # type in advance
 
@@ -1428,7 +1428,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
 
         # region Recurse into consequent while considering any non-nullness
 
-        # NOTE (mristin, 2022-06-17):
+        # NOTE (mristin):
         # We are very lax here and ignore the fact that calls to methods and functions
         # can actually alter the value assumed to be non-null, and actually violate
         # its non-nullness by setting it to null.
@@ -1460,7 +1460,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
                         )
                         # fmt: on
             else:
-                # NOTE (mristin, 2022-06-17):
+                # NOTE (mristin):
                 # We do not know how to infer any non-nullness in this case.
                 pass
 
@@ -1533,7 +1533,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         if func_type is None:
             failed = True
         else:
-            # NOTE (mristin, 2021-12-26):
+            # NOTE (mristin):
             # The verification functions use
             # :py:mod:`aas_core_codegen.intermediate._types` while the built-in
             # functions are a construct of
@@ -1575,7 +1575,7 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
             else:
                 assert_never(func_type)
 
-        # NOTE (mristin, 2021-12-26):
+        # NOTE (mristin):
         # Recurse to track the type of arguments. Even if we failed before, we want to
         # catch the errors in the arguments for better developer experience.
         #
@@ -1712,12 +1712,12 @@ class _Inferrer(parse_tree.RestrictedTransformer[Optional["TypeAnnotationUnion"]
         return result
 
     def transform_and(self, node: parse_tree.And) -> Optional["TypeAnnotationUnion"]:
-        # NOTE (mristin, 2022-06-17):
+        # NOTE (mristin):
         # We need to iterate and recurse into ``values`` to fill the ``type_map``.
         # In the process, we have to consider the non-nullness and how it applies
         # to the remainder of the conjunction.
 
-        # NOTE (mristin, 2022-06-17):
+        # NOTE (mristin):
         # We are very lax here and ignore the fact that calls to methods and functions
         # can actually alter the value assumed to be non-null, and actually violate
         # its non-nullness by setting it to null.
@@ -2412,7 +2412,7 @@ assert_union_of_descendants_exhaustive(
     union=FunctionTypeAnnotationUnion, base_class=FunctionTypeAnnotation
 )
 
-# NOTE (mristin, 2021-12-27):
+# NOTE (mristin):
 # Mypy is not smart enough to work with ``get_args``, so we have to manually write it
 # out.
 FunctionTypeAnnotationUnionAsTuple = (

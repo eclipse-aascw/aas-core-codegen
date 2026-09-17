@@ -254,7 +254,7 @@ def infer_set_constraints_by_property_from_invariants(
     # region Collect
 
     for invariant in cls.invariants:
-        # NOTE (mristin, 2022-07-08):
+        # NOTE (mristin):
         # We consider only the genuine invariants of the class, and ignore
         # the invariants of its ancestors.
 

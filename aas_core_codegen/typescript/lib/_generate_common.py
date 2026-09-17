@@ -88,7 +88,7 @@ export function at<T>(
 export function every<T>(
 {I}iterable: Iterable<T>
 ): boolean {{
-{I}// NOTE (mristin, 2022-11-24):
+{I}// NOTE (mristin):
 {I}// We introduce this function so that we can keep the constraint verification
 {I}// purely functional. Unfortunately, `every` and `some` are only available
 {I}// in arrays and not in `IterableIterator`.
@@ -113,7 +113,7 @@ export function every<T>(
 export function some<T>(
 {I}iterable: Iterable<T>
 ): boolean {{
-{I}// NOTE (mristin, 2022-11-24):
+{I}// NOTE (mristin):
 {I}// We introduce this function so that we can keep the constraint verification
 {I}// purely functional. Unfortunately, `every` and `some` are only available
 {I}// in arrays and not in `IterableIterator`.
@@ -142,7 +142,7 @@ export function *map<S, T>(
 {I}iterable: Iterable<S>,
 {I}mappingFunction: (item: S) => T
 ): IterableIterator<T> {{
-{I}// NOTE (mristin, 2022-11-24):
+{I}// NOTE (mristin):
 {I}// We introduce this function so that we can keep the constraint verification
 {I}// purely functional.
 
@@ -202,13 +202,13 @@ export class Either<ValueT, ErrorT> {{
 const BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const BASE64_LOOKUP = new Uint8Array(256);
 
-// NOTE (mristin, 2022-11-25):
+// NOTE (mristin):
 // Initialize to 255 so that we can detect invalid values in the input during decoding.
 for (let i = 0; i < BASE64_LOOKUP.length; i++) {{
 {I}BASE64_LOOKUP[i] = 255;
 }}
 
-// NOTE (mristin, 2022-11-25):
+// NOTE (mristin):
 // Initialize valid values to the corresponding decoding points.
 for (let i = 0; i < BASE64_CHARS.length; i++) {{
 {I}BASE64_LOOKUP[BASE64_CHARS.charCodeAt(i)] = i;
@@ -227,13 +227,13 @@ for (let i = 0; i < BASE64_CHARS.length; i++) {{
  * @returns `bytes` encoded as base64 text
  */
 export function base64Encode(bytes: Uint8Array): string {{
-{I}// NOTE (mristin, 2022-11-25):
+{I}// NOTE (mristin):
 {I}// This implementation is vaguely based on:
 {I}// https://github.com/danguer/blog-examples/blob/master/js/base64-binary.js,
 {I}// https://github.com/niklasvh/base64-arraybuffer/blob/master/src/index.ts and
 {I}// https://github.com/beatgammit/base64-js/blob/master/index.js.
 
-{I}// NOTE (mristin, 2022-11-25):
+{I}// NOTE (mristin):
 {I}// We assume that string concatenation is actually *faster* than joining an array
 {I}// of strings, see:
 {I}// https://stackoverflow.com/questions/51185/are-javascript-strings-immutable-do-i-need-a-string-builder-in-javascript
@@ -252,7 +252,7 @@ export function base64Encode(bytes: Uint8Array): string {{
 {II}encoded += BASE64_CHARS[bytes[i + 2] & 63];
 {I}}}
 
-{II}// NOTE (mristin, 2022-11-25):
+{II}// NOTE (mristin):
 {II}// We assume here that `substring` will be optimized for cases where we do not keep
 {II}// the original reference to the string. We tested a bit with
 {II}// https://www.measurethat.net/.
@@ -284,7 +284,7 @@ export function base64Encode(bytes: Uint8Array): string {{
  * @returns either the array or an error, if `text` is not a valid base64 encoding
  */
 export function base64Decode(text: string): Either<Uint8Array, string> {{
-{I}// NOTE (mristin, 2022-11-25):
+{I}// NOTE (mristin):
 {I}// This implementation is vaguely based on:
 {I}// https://github.com/danguer/blog-examples/blob/master/js/base64-binary.js,
 {I}// https://github.com/niklasvh/base64-arraybuffer/blob/master/src/index.ts and
@@ -293,7 +293,7 @@ export function base64Decode(text: string): Either<Uint8Array, string> {{
 {I}const len = text.length;
 {I}let lenWoPad = len;
 
-{I}// NOTE (mristin, 2022-11-25):
+{I}// NOTE (mristin):
 {I}// Some implementations forget the padding, so we try to be robust and check
 {I}// for the padding manually.
 {I}let bytesLength = text.length * 0.75;
@@ -313,7 +313,7 @@ export function base64Decode(text: string): Either<Uint8Array, string> {{
 {I}let pointer = 0;
 
 {I}for (let i = 0; i < len; i += 4) {{
-{II}// NOTE (mristin, 2022-11-25):
+{II}// NOTE (mristin):
 {II}// Admittedly, this is very verbose code, but we want to be efficient, so we
 {II}// opted for performance over readability here.
 
@@ -397,7 +397,7 @@ export function base64Decode(text: string): Either<Uint8Array, string> {{
 {II}pointer++;
 {I}}}
 
-// NOTE (mristin, 2022-12-02):
+// NOTE (mristin):
 // We expect Uint8Array to silently ignore writes outside of the buffer,
 // but we still want to check here in case the underlying platform was flaky about it.
 {I}if (bytes.length !== bytesLength) {{

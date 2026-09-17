@@ -151,7 +151,7 @@ class _PatternVerificationTranspiler(
         self, node: parse_tree.Constant
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
         if isinstance(node.value, str):
-            # NOTE (mristin, 2022-06-11):
+            # NOTE (mristin):
             # We assume that all the string constants are valid regular expressions.
 
             regex, parse_error = parse_retree.parse(values=[node.value])
@@ -175,7 +175,7 @@ class _PatternVerificationTranspiler(
             assert regex is not None
             parse_retree.fix_for_utf16_regex_in_place(regex)
 
-            # NOTE (mristin, 2022-06-11):
+            # NOTE (mristin):
             # Strictly speaking, this is a joined string with a single value, a string
             # literal.
             return self._transform_joined_str_values(
@@ -240,7 +240,7 @@ def _transpile_pattern_verification(
     verification: intermediate.PatternVerification,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Generate the verification function that checks the regular expressions."""
-    # NOTE (mristin, 2021-12-19):
+    # NOTE (mristin):
     # We assume that we performed all the checks at the intermediate stage.
 
     construct_name = csharp_naming.private_method_name(
@@ -299,7 +299,7 @@ private static Regex {construct_name}()
 
     # region Initialize the regex
 
-    # NOTE (mristin, 2022-05-05):
+    # NOTE (mristin):
     # We make this property look "public" since it is static and read-only.
     regex_name = csharp_naming.property_name(Identifier(f"regex_{verification.name}"))
 
@@ -636,7 +636,7 @@ yield return new Reporting.Error(
         )
     )
 
-    # NOTE (mristin, 2022-04-08):
+    # NOTE (mristin):
     # We need to wrap the description in multiple literals as a single long
     # string literal is often too much for the readability.
     invariant_description_lines = wrap_text_into_lines(invariant.description)
@@ -741,7 +741,7 @@ def _generate_transform_property(
     prop: intermediate.Property,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Generate the snippet to transform a property to errors."""
-    # NOTE (mristin, 2022-03-10):
+    # NOTE (mristin):
     # Instead of writing here a complex but general solution with unrolling we choose
     # to provide a simple, but limited, solution. First, the meta-model is quite
     # limited itself at the moment, so the complexity of the general solution is not
@@ -794,7 +794,7 @@ def _generate_transform_property(
     prop_name = csharp_naming.property_name(prop.name)
     prop_literal = csharp_common.string_literal(prop.json_name)
 
-    # NOTE (mristin, 2022-03-12):
+    # NOTE (mristin):
     # For some unexplainable reason, C# compiler can not infer that properties which
     # are enumerations are not null after an ``if (that.someProperty != null)``.
     # Hence, we need to add a null-coalescing for these particular cases.
@@ -845,7 +845,7 @@ foreach (
             "see the note above in the code."
         )
 
-        # NOTE (mristin, 2022-03-16):
+        # NOTE (mristin):
         # We only descend into our classes here.
         if not isinstance(type_anno.items, intermediate.OurTypeAnnotation):
             return Stripped(""), None
@@ -1219,7 +1219,7 @@ yield break;"""
             )
         )
 
-    # NOTE (mristin, 2022-03-16):
+    # NOTE (mristin):
     # Constrained primitives are not really classes, but we simply use the naming
     # for classes here since we need to pick *something*.
     name = csharp_naming.class_name(constrained_primitive.name)

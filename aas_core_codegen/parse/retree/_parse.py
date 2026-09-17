@@ -93,7 +93,7 @@ class Cursor:
         "No consecutive strings expected in the parsed sequence of an AST expression "
         "representing a string interpolation"
     )
-    # NOTE (mristin, 2024-05-08):
+    # NOTE (mristin):
     # We add a runtime test here since it already happened that we supplied ``values``
     # as a string during development, causing an unnecessary long debugging session.
     @require(
@@ -376,14 +376,14 @@ class Cursor:
                 return False
             else:
                 if self.minor_cursor is None and other.minor_cursor is None:
-                    # NOTE (mristin, 2022-06-02):
+                    # NOTE (mristin):
                     # Both major cursors point to the formatted value, so they
                     # point to the same position.
                     assert isinstance(self.pointed_value(), FormattedValue)
                     assert isinstance(other.pointed_value(), FormattedValue)
                     return False
                 else:
-                    # NOTE (mristin, 2022-06-02):
+                    # NOTE (mristin):
                     # If one minor cursor is not None, it means the major cursors
                     # point to a string.
                     assert isinstance(self.pointed_value(), str)
@@ -447,7 +447,7 @@ def render_pointer(cursor: Cursor) -> Tuple[str, str]:
 
         formatted_value = a_cursor.try_formatted_value()
         if formatted_value:
-            # NOTE (mristin, 2022-06-09):
+            # NOTE (mristin):
             # The asttokens can not get the text of the formatted values,
             # see: https://github.com/gristlabs/asttokens/issues/6.
             write_text(text="<formatted value>", draw_pointer=has_same_position)
@@ -464,12 +464,12 @@ def render_pointer(cursor: Cursor) -> Tuple[str, str]:
         if has_same_position:
             break
 
-    # NOTE (mristin, 2022-06-09):
+    # NOTE (mristin):
     # Write the remainder of the regular expression
     while not a_cursor.done():
         formatted_value = a_cursor.try_formatted_value()
         if formatted_value:
-            # NOTE (mristin, 2022-06-09):
+            # NOTE (mristin):
             # The asttokens can not get the text of the formatted values,
             # see: https://github.com/gristlabs/asttokens/issues/6.
             regex_writer.write("<formatted value>")
@@ -634,7 +634,7 @@ def _parse_ranges_and_closing(
 
         cursor_at_start = cursor.copy()
 
-        # NOTE (mristin, 2022-06-08):
+        # NOTE (mristin):
         # A suffix dash is also allowed and should be considered a single character.
         if cursor.try_literal("-]"):
             the_range = Range(start=Char("-"), end=None)
@@ -870,7 +870,7 @@ def _parse_char_literal(cursor: Cursor) -> Tuple[Optional[Char], Optional[Error]
         )
 
     elif cursor.peek_literal(")") or cursor.peek_literal("|"):
-        # NOTE (mristin, 2022-06-08):
+        # NOTE (mristin):
         # We encountered a closing bracket or a delimiter in a union,
         # so no concatenation is possible anymore, and we need to match an "empty"
         # character literal.
@@ -1001,7 +1001,7 @@ def _parse_concatenation(
             if error is not None:
                 return None, error
 
-            # NOTE (mristin, 2022-06-08):
+            # NOTE (mristin):
             # The ``value`` can be None here. For example, if we peeked a closing
             # ``)`` or a delimiting ``|``.
 
@@ -1075,7 +1075,7 @@ def _parse_concatenation(
             old_cursor_position < cursor_position
         ), f"Loop invariant: {old_cursor_position=}, {cursor_position=}"
 
-    # NOTE (mristin, 2022-06-03):
+    # NOTE (mristin):
     # Empty terms are possible! For example, parsing ``(())`` needs to allow for an
     # empty union expression in the inner group.
 
@@ -1097,7 +1097,7 @@ def _parse_union(cursor: Cursor) -> Tuple[Optional[UnionExpr], Optional[Error]]:
 
     while cursor.try_literal(literal="|"):
         if cursor.done():
-            # NOTE (mristin, 2022-06-09):
+            # NOTE (mristin):
             # An empty term at the end of input is allowed.
             # For example, consider ``"|"``.
             uniates.append(Concatenation(concatenants=[]))

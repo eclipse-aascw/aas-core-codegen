@@ -350,7 +350,7 @@ def fix_pattern_for_utf16(pattern: str) -> str:
         isinstance(part, str) for part in parts
     ), "Only string parts expected, no formatted values"
 
-    # NOTE (mristin, 2023-03-15):
+    # NOTE (mristin):
     # We have to make this transformation for mypy.
     parts_str = []  # type: List[str]
     for part in parts:
@@ -505,7 +505,7 @@ def _list_required_properties(cls: intermediate.ClassUnion) -> List[NonEmptyStri
     """
     required = []  # type: List[NonEmptyString]
     for prop in cls.properties:
-        # NOTE (mristin, 2023-02-06):
+        # NOTE (mristin):
         # We stack the inheritance as ``allOf``. This will impose the stacking
         # of the required fields as well, so whenever you add a field to
         # a child ``required`` constraint, it will *extend* the list of
@@ -531,7 +531,7 @@ def _define_all_of_for_inheritance(
                 {"$ref": f"#/definitions/{naming.json_model_type(inheritance.name)}"}
             )
         elif isinstance(inheritance, intermediate.ConcreteClass):
-            # NOTE (mristin, 2023-03-13):
+            # NOTE (mristin):
             # We distinguish between two definitions corresponding to the same concrete
             # class:
             #
@@ -594,7 +594,7 @@ def _generate_inheritable_definition(
     if cls.serialization.with_model_type and not any(
         inheritance.serialization.with_model_type for inheritance in cls.inheritances
     ):
-        # NOTE (mristin, 2023-03-13):
+        # NOTE (mristin):
         # This is going to be an abstract definition for inheritance, so we can not pin
         # the ``modelType`` to a fixed, constant value.
         assert "modelType" not in properties
@@ -866,7 +866,7 @@ def generate(
             )
         ]
 
-    # NOTE (mristin, 2022-08-25):
+    # NOTE (mristin):
     # We use the same namespace in all the schemas for the consistency.
     schema["$id"] = symbol_table.meta_model.xml_namespace
 

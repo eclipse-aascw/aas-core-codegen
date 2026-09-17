@@ -196,7 +196,7 @@ class Renderer(Transformer[List[Union[str, FormattedValue]]]):
             output.append("^")
 
         for i, a_range in enumerate(node.ranges):
-            # NOTE (mristin, 2022-06-10):
+            # NOTE (mristin):
             # The first and the last dash need no escaping.
             if (
                 i in (0, len(node.ranges) - 1)
@@ -206,7 +206,7 @@ class Renderer(Transformer[List[Union[str, FormattedValue]]]):
             ):
                 output.append("-")
 
-            # NOTE (mristin, 2022-06-10):
+            # NOTE (mristin):
             # The caret needs to be escaped only if it is the very first character
             # in the character set.
             elif (
@@ -272,7 +272,7 @@ def render(
 
     values = renderer.transform(regex)
 
-    # NOTE (mristin, 2022-06-10):
+    # NOTE (mristin):
     # Compress the consecutive strings into a single string to have a shorter
     # representation
 

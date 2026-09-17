@@ -3,7 +3,7 @@
 // Year 1 BCE is the last leap BCE year.
 // See https://www.w3.org/TR/xmlschema-2/#dateTime.
 func IsXsDateTime(value string) bool {
-	// NOTE (mristin, 2023-05-09):
+	// NOTE (mristin):
   	// We can not use date functions from the standard library as it does not
 	// handle years BCE (*e.g.*, `-0003-01-02`).
 

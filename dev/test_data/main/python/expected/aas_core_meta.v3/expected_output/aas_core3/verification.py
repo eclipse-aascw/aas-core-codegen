@@ -1263,11 +1263,11 @@ def is_xs_date(value: str) -> bool:
     if not matches_xs_date(value):
         return False
 
-    # NOTE (mristin, 2022-11-23):
+    # NOTE (mristin):
     # We can not use :py:func:`datetime.datetime.strptime` as it does not
     # handle years below 1000 correctly on Windows (*e.g.*, ``-999-01-01``).
 
-    # NOTE (mristin, 2022-10-30):
+    # NOTE (mristin):
     # We need to match the prefix as zone offsets are allowed in the dates. Optimally,
     # we would re-use the pattern matching from :py:func`matches_xs_date`, but this
     # would make the code generation and constraint inference for schemas much more

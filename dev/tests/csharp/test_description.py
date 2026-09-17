@@ -270,7 +270,7 @@ __xml_namespace__ = "https://dummy.com"
 
     def test_summary_remarks_and_constraints(self) -> None:
         comment_code = Test_to_render_description_of_our_types.render(
-            # NOTE (mristin, 2022-07-21):
+            # NOTE (mristin):
             # We explicitly test here for three cases:
             # 1) a single-paragraph constraint,
             # 2) a two-paragraph constraint, and
@@ -347,7 +347,7 @@ __xml_namespace__ = "https://dummy.com"
         )
 
     def test_summary_and_note_in_the_remarks(self) -> None:
-        # NOTE (mristin, 2022-07-21):
+        # NOTE (mristin):
         # This is a real-world example from aas-core-meta which is kept here as
         # a regression test as we did not render it correctly at first. There was
         # a ``<para>`` nested in the ``<remarks>`` element.
@@ -452,7 +452,7 @@ __xml_namespace__ = "https://dummy.com"
         )
 
     def test_params_and_returns(self) -> None:
-        # NOTE (mristin, 2022-07-21):
+        # NOTE (mristin):
         # We explicitly check here for multiple paragraphs in the param and returns.
         source = '''\
 @verification

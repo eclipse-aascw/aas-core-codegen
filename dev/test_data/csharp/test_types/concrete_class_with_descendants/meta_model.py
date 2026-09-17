@@ -1,4 +1,4 @@
-# NOTE (mristin, 2022-06-19):
+# NOTE (mristin):
 # We originally wrote this test to check that the concrete class with descendants
 # also implements the interface.
 

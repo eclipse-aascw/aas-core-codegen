@@ -578,7 +578,7 @@ that->{setter_name}(
 
         elif isinstance(type_anno.items, intermediate.OptionalTypeAnnotation):
             raise NotImplementedError(
-                f"NOTE (mristin, 2026-05-09): We do not currently support "
+                f"NOTE (mristin): We do not currently support "
                 f"the generation of enhancing code for lists of optionals, "
                 f"but you specified {type_anno}. Please contact the developers if "
                 f"you need this feature."
@@ -586,7 +586,7 @@ that->{setter_name}(
 
         elif isinstance(type_anno.items, intermediate.ListTypeAnnotation):
             raise NotImplementedError(
-                f"NOTE (mristin, 2026-05-09): We do not currently support "
+                f"NOTE (mristin): We do not currently support "
                 f"the generation of enhancing code for lists of lists, "
                 f"but you specified {type_anno}. Please contact the developers if "
                 f"you need this feature."

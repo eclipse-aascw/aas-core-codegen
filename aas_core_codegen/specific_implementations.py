@@ -36,7 +36,7 @@ def read_from_directory(
 
     errors = []  # type: List[str]
     for pth in snippets_dir.glob("**/*"):
-        # NOTE (mristin, 2022-08-25):
+        # NOTE (mristin):
         # Ignore hidden or special files. In particular, we do not want Git-related
         # files such as ``.gitignore`` to be included as snippets.
         if pth.name.startswith("."):

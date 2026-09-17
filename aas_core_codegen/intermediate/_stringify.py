@@ -613,7 +613,7 @@ def _stringify_constrained_primitive(
 
 
 def _stringify_a_class(that: Class) -> stringify_mod.Entity:
-    # NOTE (mristin, 2021-12-26):
+    # NOTE (mristin):
     # Concrete and abstract class share all the attributes, so we provide a single
     # stringification function.
 

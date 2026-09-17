@@ -1884,7 +1884,7 @@ TypeAnnotationExceptList = Union[
 assert_union_without_excluded(
     original_union=intermediate.TypeAnnotationUnion,
     subset_union=TypeAnnotationExceptList,
-    # NOTE (mristin, 2026-09-03):
+    # NOTE (mristin):
     # ``ListTypeAnnotation`` and ``TupleTypeAnnotation`` are handled directly in
     # the calling code (see ``_generate_cls_to_map``), which unrolls them into
     # calls of this function on the atomic items.
@@ -1917,7 +1917,7 @@ def _determine_serialization_of_atomic_value(
 
     optional = isinstance(type_annotation, intermediate.OptionalTypeAnnotation)
 
-    # NOTE (mristin, 2023-04-12):
+    # NOTE (mristin):
     # The following types are handled as primitive values in Golang, so we have
     # to handle them as such. They are primitive values if non-nullable, and referenced
     # if nullable, since we model optional primitive properties as pointers in
