@@ -8,9 +8,69 @@ import (
 	"path/filepath"
 	"sort"
 	"testing"
+	"math"
+	aastypes "github.com/dummy-works/dummy/types"
 	aasjsonization "github.com/dummy-works/dummy/jsonization"
 	aastesting "github.com/dummy-works/dummy/aastesting"
 )
+
+// Determine the path to the first recorded example of `modelType`.
+func mustFirstExpectedPath(t *testing.T, modelType string) string {
+	pths := aastesting.FindFilesBySuffixRecursively(
+		filepath.Join(
+			aastesting.TestDataDir,
+			"Json",
+			"Expected",
+			modelType,
+		),
+		".json",
+	)
+	sort.Strings(pths)
+
+	if len(pths) == 0 {
+		t.Fatalf(
+			"Expected at least one recorded example of %s, but got none",
+			modelType,
+		)
+	}
+
+	return pths[0]
+}
+
+// Assert that `that` can not be serialized to JSON, and that the failure
+// is reported at `expectedPath`.
+func assertSerializationFailsAt(
+	t *testing.T,
+	that aastypes.IClass,
+	expectedPath string,
+) {
+	_, err := aasjsonization.ToJsonable(that)
+
+	if err == nil {
+		t.Fatalf(
+			"Expected the serialization to fail at %s, but it succeeded",
+			expectedPath,
+		)
+		return
+	}
+
+	seriaErr, ok := err.(*aasjsonization.SerializationError)
+	if !ok {
+		t.Fatalf(
+			"Expected a *SerializationError, but got %T: %v",
+			err, err,
+		)
+		return
+	}
+
+	if seriaErr.PathString() != expectedPath {
+		t.Fatalf(
+			"Expected the serialization to fail at %s, "+
+				"but it failed at %s: %s",
+			expectedPath, seriaErr.PathString(), seriaErr.Message,
+		)
+	}
+}
 
 func TestSomeItemRoundTripOK(t *testing.T) {
 	pths := aastesting.FindFilesBySuffixRecursively(
@@ -324,6 +384,88 @@ func TestSomethingDeserializationFail(t *testing.T) {
 				return
 			}
 		}
+	}
+}
+
+func TestAnotherItemSerializationFailOnOutOfRangeSerialNumber(t *testing.T) {
+	pth := mustFirstExpectedPath(t, "AnotherItem")
+
+	for _, value := range []int64{
+		9007199254740992,
+		-9007199254740992,
+	} {
+		jsonable := aastesting.MustReadJsonable(pth)
+
+		instance, deseriaErr := aasjsonization.AnotherItemFromJsonable(
+			jsonable,
+		)
+		if !assertNoDeserializationError(t, deseriaErr, pth) {
+			return
+		}
+
+		instance.SetSerialNumber(value)
+
+		assertSerializationFailsAt(
+			t,
+			instance,
+			"SerialNumber()",
+		)
+	}
+}
+
+func TestSomethingSerializationFailOnOutOfRangePair(t *testing.T) {
+	pth := mustFirstExpectedPath(t, "Something")
+
+	for _, value := range []int64{
+		9007199254740992,
+		-9007199254740992,
+	} {
+		jsonable := aastesting.MustReadJsonable(pth)
+
+		instance, deseriaErr := aasjsonization.SomethingFromJsonable(
+			jsonable,
+		)
+		if !assertNoDeserializationError(t, deseriaErr, pth) {
+			return
+		}
+
+		tuple := instance.Pair()
+		tuple.Item2 = value
+		instance.SetPair(tuple)
+
+		assertSerializationFailsAt(
+			t,
+			instance,
+			"Pair()[1]",
+		)
+	}
+}
+
+func TestSomethingSerializationFailOnOutOfRangeTricky(t *testing.T) {
+	pth := mustFirstExpectedPath(t, "Something")
+
+	for _, value := range []int64{
+		9007199254740992,
+		-9007199254740992,
+	} {
+		jsonable := aastesting.MustReadJsonable(pth)
+
+		instance, deseriaErr := aasjsonization.SomethingFromJsonable(
+			jsonable,
+		)
+		if !assertNoDeserializationError(t, deseriaErr, pth) {
+			return
+		}
+
+		tuple := instance.Tricky()
+		tuple.Item1 = value
+		instance.SetTricky(tuple)
+
+		assertSerializationFailsAt(
+			t,
+			instance,
+			"Tricky()[0]",
+		)
 	}
 }
 
