@@ -11,7 +11,6 @@ properties do not have fixed order, and hence we can not read
 # Do NOT edit or append.
 
 
-import base64
 import collections.abc
 import sys
 from typing import (
@@ -629,83 +628,107 @@ _ABSTRACT_ITEM_FROM_JSONABLE_DISPATCH: Mapping[
 # region Serialization
 
 
-def _bytes_to_base64_str(
-    value: bytes
-) -> str:
+def _list_of__abstract_item_to_jsonable(
+    that: List[aas_types.AbstractItem]
+) -> List[MutableJsonable]:
     """
-    Encode :paramref:`value` as a base64 string.
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.AbstractItem`.
 
-    :param value: to be encoded
-    :return: encoded :paramref:`value` in base64
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
     """
-    # We need to decode as ascii as ``base64.b64encode`` returns bytes,
-    # not a string!
-    return base64.b64encode(value).decode('ascii')
+    return [
+        item.transform(_SERIALIZER)
+        for item in that
+    ]
+
+
+def _list_of__simple_to_jsonable(
+    that: List[aas_types.Simple]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.Simple`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        _simple_to_jsonable(
+    item
+)
+        for item in that
+    ]
+
+
+def _some_item_to_jsonable(
+    that: aas_types.SomeItem
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['name'] = that.name
+    jsonable['modelType'] = 'SomeItem'
+    return jsonable
+
+
+def _another_item_to_jsonable(
+    that: aas_types.AnotherItem
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['serialNumber'] = that.serial_number
+    jsonable['modelType'] = 'AnotherItem'
+    return jsonable
+
+
+def _simple_to_jsonable(
+    that: aas_types.Simple
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['name'] = that.name
+    return jsonable
+
+
+def _something_to_jsonable(
+    that: aas_types.Something
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['someItems'] = _list_of__abstract_item_to_jsonable(
+        that.some_items
+    )
+    jsonable['someSimples'] = _list_of__simple_to_jsonable(
+        that.some_simples
+    )
+    return jsonable
 
 
 class _Serializer(
         aas_types.AbstractTransformer[MutableJsonable]
 ):
-    """Transform the instance to its JSON-able representation."""
+    """
+    Dispatch on the class of an instance to serialize it.
 
-    # noinspection PyMethodMayBeStatic
-    def transform_some_item(
-        self,
-        that: aas_types.SomeItem
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
+    The methods *are* the serializers, instead of forwarding to them, so that
+    a dispatch costs a single call. Wherever the class of a value is already
+    known -- which is every class without concrete descendants -- the serializer
+    is called directly and this transformer is not involved at all.
+    """
 
-        jsonable['name'] = that.name
-
-        jsonable["modelType"] = 'SomeItem'
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_another_item(
-        self,
-        that: aas_types.AnotherItem
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['serialNumber'] = that.serial_number
-
-        jsonable["modelType"] = 'AnotherItem'
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_simple(
-        self,
-        that: aas_types.Simple
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['name'] = that.name
-
-        return jsonable
-
-    def transform_something(
-        self,
-        that: aas_types.Something
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['someItems'] = [
-            self.transform(item)
-            for item in that.some_items
-        ]
-
-        jsonable['someSimples'] = [
-            self.transform(item)
-            for item in that.some_simples
-        ]
-
-        return jsonable
+    transform_some_item = staticmethod(
+        _some_item_to_jsonable
+    )
+    transform_another_item = staticmethod(
+        _another_item_to_jsonable
+    )
+    transform_simple = staticmethod(
+        _simple_to_jsonable
+    )
+    transform_something = staticmethod(
+        _something_to_jsonable
+    )
 
 
 _SERIALIZER = _Serializer()
@@ -720,7 +743,7 @@ def to_jsonable(that: aas_types.Class) -> MutableJsonable:
     :return:
         JSON-able structure which can be further encoded with, *e.g.*, :py:mod:`json`
     """
-    return _SERIALIZER.transform(that)
+    return that.transform(_SERIALIZER)
 
 
 # endregion

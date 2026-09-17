@@ -4390,1558 +4390,1622 @@ def _bytes_to_base64_str(
     return base64.b64encode(value).decode('ascii')
 
 
+def _list_of__asset_administration_shell_to_jsonable(
+    that: List[aas_types.AssetAdministrationShell]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.AssetAdministrationShell`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        _asset_administration_shell_to_jsonable(
+    item
+)
+        for item in that
+    ]
+
+
+def _list_of__concept_description_to_jsonable(
+    that: List[aas_types.ConceptDescription]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.ConceptDescription`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        _concept_description_to_jsonable(
+    item
+)
+        for item in that
+    ]
+
+
+def _list_of__data_element_to_jsonable(
+    that: List[aas_types.DataElement]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.DataElement`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        item.transform(_SERIALIZER)
+        for item in that
+    ]
+
+
+def _list_of__embedded_data_specification_to_jsonable(
+    that: List[aas_types.EmbeddedDataSpecification]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.EmbeddedDataSpecification`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        _embedded_data_specification_to_jsonable(
+    item
+)
+        for item in that
+    ]
+
+
+def _list_of__extension_to_jsonable(
+    that: List[aas_types.Extension]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.Extension`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        _extension_to_jsonable(
+    item
+)
+        for item in that
+    ]
+
+
+def _list_of__key_to_jsonable(
+    that: List[aas_types.Key]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.Key`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        _key_to_jsonable(
+    item
+)
+        for item in that
+    ]
+
+
+def _list_of__lang_string_definition_type_iec_61360_to_jsonable(
+    that: List[aas_types.LangStringDefinitionTypeIEC61360]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.LangStringDefinitionTypeIEC61360`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        _lang_string_definition_type_iec_61360_to_jsonable(
+    item
+)
+        for item in that
+    ]
+
+
+def _list_of__lang_string_name_type_to_jsonable(
+    that: List[aas_types.LangStringNameType]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.LangStringNameType`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        _lang_string_name_type_to_jsonable(
+    item
+)
+        for item in that
+    ]
+
+
+def _list_of__lang_string_preferred_name_type_iec_61360_to_jsonable(
+    that: List[aas_types.LangStringPreferredNameTypeIEC61360]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.LangStringPreferredNameTypeIEC61360`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        _lang_string_preferred_name_type_iec_61360_to_jsonable(
+    item
+)
+        for item in that
+    ]
+
+
+def _list_of__lang_string_short_name_type_iec_61360_to_jsonable(
+    that: List[aas_types.LangStringShortNameTypeIEC61360]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.LangStringShortNameTypeIEC61360`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        _lang_string_short_name_type_iec_61360_to_jsonable(
+    item
+)
+        for item in that
+    ]
+
+
+def _list_of__lang_string_text_type_to_jsonable(
+    that: List[aas_types.LangStringTextType]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.LangStringTextType`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        _lang_string_text_type_to_jsonable(
+    item
+)
+        for item in that
+    ]
+
+
+def _list_of__operation_variable_to_jsonable(
+    that: List[aas_types.OperationVariable]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.OperationVariable`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        _operation_variable_to_jsonable(
+    item
+)
+        for item in that
+    ]
+
+
+def _list_of__qualifier_to_jsonable(
+    that: List[aas_types.Qualifier]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.Qualifier`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        _qualifier_to_jsonable(
+    item
+)
+        for item in that
+    ]
+
+
+def _list_of__reference_to_jsonable(
+    that: List[aas_types.Reference]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.Reference`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        _reference_to_jsonable(
+    item
+)
+        for item in that
+    ]
+
+
+def _list_of__specific_asset_id_to_jsonable(
+    that: List[aas_types.SpecificAssetID]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.SpecificAssetID`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        _specific_asset_id_to_jsonable(
+    item
+)
+        for item in that
+    ]
+
+
+def _list_of__submodel_element_to_jsonable(
+    that: List[aas_types.SubmodelElement]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.SubmodelElement`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        item.transform(_SERIALIZER)
+        for item in that
+    ]
+
+
+def _list_of__submodel_to_jsonable(
+    that: List[aas_types.Submodel]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.Submodel`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        _submodel_to_jsonable(
+    item
+)
+        for item in that
+    ]
+
+
+def _list_of__value_reference_pair_to_jsonable(
+    that: List[aas_types.ValueReferencePair]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.ValueReferencePair`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        _value_reference_pair_to_jsonable(
+    item
+)
+        for item in that
+    ]
+
+
+def _extension_to_jsonable(
+    that: aas_types.Extension
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.semantic_id is not None:
+        jsonable['semanticId'] = _reference_to_jsonable(
+            that.semantic_id
+        )
+    if that.supplemental_semantic_ids is not None:
+        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+            that.supplemental_semantic_ids
+        )
+    jsonable['name'] = that.name
+    if that.value_type is not None:
+        jsonable['valueType'] = that.value_type.value
+    if that.value is not None:
+        jsonable['value'] = that.value
+    if that.refers_to is not None:
+        jsonable['refersTo'] = _list_of__reference_to_jsonable(
+            that.refers_to
+        )
+    return jsonable
+
+
+def _administrative_information_to_jsonable(
+    that: aas_types.AdministrativeInformation
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.embedded_data_specifications is not None:
+        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+            that.embedded_data_specifications
+        )
+    if that.version is not None:
+        jsonable['version'] = that.version
+    if that.revision is not None:
+        jsonable['revision'] = that.revision
+    if that.creator is not None:
+        jsonable['creator'] = _reference_to_jsonable(
+            that.creator
+        )
+    if that.template_id is not None:
+        jsonable['templateId'] = that.template_id
+    return jsonable
+
+
+def _qualifier_to_jsonable(
+    that: aas_types.Qualifier
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.semantic_id is not None:
+        jsonable['semanticId'] = _reference_to_jsonable(
+            that.semantic_id
+        )
+    if that.supplemental_semantic_ids is not None:
+        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+            that.supplemental_semantic_ids
+        )
+    if that.kind is not None:
+        jsonable['kind'] = that.kind.value
+    jsonable['type'] = that.type
+    jsonable['valueType'] = that.value_type.value
+    if that.value is not None:
+        jsonable['value'] = that.value
+    if that.value_id is not None:
+        jsonable['valueId'] = _reference_to_jsonable(
+            that.value_id
+        )
+    return jsonable
+
+
+def _asset_administration_shell_to_jsonable(
+    that: aas_types.AssetAdministrationShell
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.extensions is not None:
+        jsonable['extensions'] = _list_of__extension_to_jsonable(
+            that.extensions
+        )
+    if that.category is not None:
+        jsonable['category'] = that.category
+    if that.id_short is not None:
+        jsonable['idShort'] = that.id_short
+    if that.display_name is not None:
+        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+            that.display_name
+        )
+    if that.description is not None:
+        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+            that.description
+        )
+    if that.administration is not None:
+        jsonable['administration'] = _administrative_information_to_jsonable(
+            that.administration
+        )
+    jsonable['id'] = that.id
+    if that.embedded_data_specifications is not None:
+        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+            that.embedded_data_specifications
+        )
+    if that.derived_from is not None:
+        jsonable['derivedFrom'] = _reference_to_jsonable(
+            that.derived_from
+        )
+    jsonable['assetInformation'] = _asset_information_to_jsonable(
+        that.asset_information
+    )
+    if that.submodels is not None:
+        jsonable['submodels'] = _list_of__reference_to_jsonable(
+            that.submodels
+        )
+    jsonable['modelType'] = 'AssetAdministrationShell'
+    return jsonable
+
+
+def _asset_information_to_jsonable(
+    that: aas_types.AssetInformation
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['assetKind'] = that.asset_kind.value
+    if that.global_asset_id is not None:
+        jsonable['globalAssetId'] = that.global_asset_id
+    if that.specific_asset_ids is not None:
+        jsonable['specificAssetIds'] = _list_of__specific_asset_id_to_jsonable(
+            that.specific_asset_ids
+        )
+    if that.asset_type is not None:
+        jsonable['assetType'] = that.asset_type
+    if that.default_thumbnail is not None:
+        jsonable['defaultThumbnail'] = _resource_to_jsonable(
+            that.default_thumbnail
+        )
+    return jsonable
+
+
+def _resource_to_jsonable(
+    that: aas_types.Resource
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['path'] = that.path
+    if that.content_type is not None:
+        jsonable['contentType'] = that.content_type
+    return jsonable
+
+
+def _specific_asset_id_to_jsonable(
+    that: aas_types.SpecificAssetID
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.semantic_id is not None:
+        jsonable['semanticId'] = _reference_to_jsonable(
+            that.semantic_id
+        )
+    if that.supplemental_semantic_ids is not None:
+        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+            that.supplemental_semantic_ids
+        )
+    jsonable['name'] = that.name
+    jsonable['value'] = that.value
+    if that.external_subject_id is not None:
+        jsonable['externalSubjectId'] = _reference_to_jsonable(
+            that.external_subject_id
+        )
+    return jsonable
+
+
+def _submodel_to_jsonable(
+    that: aas_types.Submodel
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.extensions is not None:
+        jsonable['extensions'] = _list_of__extension_to_jsonable(
+            that.extensions
+        )
+    if that.category is not None:
+        jsonable['category'] = that.category
+    if that.id_short is not None:
+        jsonable['idShort'] = that.id_short
+    if that.display_name is not None:
+        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+            that.display_name
+        )
+    if that.description is not None:
+        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+            that.description
+        )
+    if that.administration is not None:
+        jsonable['administration'] = _administrative_information_to_jsonable(
+            that.administration
+        )
+    jsonable['id'] = that.id
+    if that.kind is not None:
+        jsonable['kind'] = that.kind.value
+    if that.semantic_id is not None:
+        jsonable['semanticId'] = _reference_to_jsonable(
+            that.semantic_id
+        )
+    if that.supplemental_semantic_ids is not None:
+        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+            that.supplemental_semantic_ids
+        )
+    if that.qualifiers is not None:
+        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+            that.qualifiers
+        )
+    if that.embedded_data_specifications is not None:
+        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+            that.embedded_data_specifications
+        )
+    if that.submodel_elements is not None:
+        jsonable['submodelElements'] = _list_of__submodel_element_to_jsonable(
+            that.submodel_elements
+        )
+    jsonable['modelType'] = 'Submodel'
+    return jsonable
+
+
+def _relationship_element_to_jsonable(
+    that: aas_types.RelationshipElement
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.extensions is not None:
+        jsonable['extensions'] = _list_of__extension_to_jsonable(
+            that.extensions
+        )
+    if that.category is not None:
+        jsonable['category'] = that.category
+    if that.id_short is not None:
+        jsonable['idShort'] = that.id_short
+    if that.display_name is not None:
+        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+            that.display_name
+        )
+    if that.description is not None:
+        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+            that.description
+        )
+    if that.semantic_id is not None:
+        jsonable['semanticId'] = _reference_to_jsonable(
+            that.semantic_id
+        )
+    if that.supplemental_semantic_ids is not None:
+        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+            that.supplemental_semantic_ids
+        )
+    if that.qualifiers is not None:
+        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+            that.qualifiers
+        )
+    if that.embedded_data_specifications is not None:
+        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+            that.embedded_data_specifications
+        )
+    jsonable['first'] = _reference_to_jsonable(
+        that.first
+    )
+    jsonable['second'] = _reference_to_jsonable(
+        that.second
+    )
+    jsonable['modelType'] = 'RelationshipElement'
+    return jsonable
+
+
+def _submodel_element_list_to_jsonable(
+    that: aas_types.SubmodelElementList
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.extensions is not None:
+        jsonable['extensions'] = _list_of__extension_to_jsonable(
+            that.extensions
+        )
+    if that.category is not None:
+        jsonable['category'] = that.category
+    if that.id_short is not None:
+        jsonable['idShort'] = that.id_short
+    if that.display_name is not None:
+        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+            that.display_name
+        )
+    if that.description is not None:
+        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+            that.description
+        )
+    if that.semantic_id is not None:
+        jsonable['semanticId'] = _reference_to_jsonable(
+            that.semantic_id
+        )
+    if that.supplemental_semantic_ids is not None:
+        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+            that.supplemental_semantic_ids
+        )
+    if that.qualifiers is not None:
+        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+            that.qualifiers
+        )
+    if that.embedded_data_specifications is not None:
+        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+            that.embedded_data_specifications
+        )
+    if that.order_relevant is not None:
+        jsonable['orderRelevant'] = that.order_relevant
+    if that.semantic_id_list_element is not None:
+        jsonable['semanticIdListElement'] = _reference_to_jsonable(
+            that.semantic_id_list_element
+        )
+    jsonable['typeValueListElement'] = that.type_value_list_element.value
+    if that.value_type_list_element is not None:
+        jsonable['valueTypeListElement'] = that.value_type_list_element.value
+    if that.value is not None:
+        jsonable['value'] = _list_of__submodel_element_to_jsonable(
+            that.value
+        )
+    jsonable['modelType'] = 'SubmodelElementList'
+    return jsonable
+
+
+def _submodel_element_collection_to_jsonable(
+    that: aas_types.SubmodelElementCollection
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.extensions is not None:
+        jsonable['extensions'] = _list_of__extension_to_jsonable(
+            that.extensions
+        )
+    if that.category is not None:
+        jsonable['category'] = that.category
+    if that.id_short is not None:
+        jsonable['idShort'] = that.id_short
+    if that.display_name is not None:
+        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+            that.display_name
+        )
+    if that.description is not None:
+        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+            that.description
+        )
+    if that.semantic_id is not None:
+        jsonable['semanticId'] = _reference_to_jsonable(
+            that.semantic_id
+        )
+    if that.supplemental_semantic_ids is not None:
+        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+            that.supplemental_semantic_ids
+        )
+    if that.qualifiers is not None:
+        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+            that.qualifiers
+        )
+    if that.embedded_data_specifications is not None:
+        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+            that.embedded_data_specifications
+        )
+    if that.value is not None:
+        jsonable['value'] = _list_of__submodel_element_to_jsonable(
+            that.value
+        )
+    jsonable['modelType'] = 'SubmodelElementCollection'
+    return jsonable
+
+
+def _property_to_jsonable(
+    that: aas_types.Property
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.extensions is not None:
+        jsonable['extensions'] = _list_of__extension_to_jsonable(
+            that.extensions
+        )
+    if that.category is not None:
+        jsonable['category'] = that.category
+    if that.id_short is not None:
+        jsonable['idShort'] = that.id_short
+    if that.display_name is not None:
+        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+            that.display_name
+        )
+    if that.description is not None:
+        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+            that.description
+        )
+    if that.semantic_id is not None:
+        jsonable['semanticId'] = _reference_to_jsonable(
+            that.semantic_id
+        )
+    if that.supplemental_semantic_ids is not None:
+        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+            that.supplemental_semantic_ids
+        )
+    if that.qualifiers is not None:
+        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+            that.qualifiers
+        )
+    if that.embedded_data_specifications is not None:
+        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+            that.embedded_data_specifications
+        )
+    jsonable['valueType'] = that.value_type.value
+    if that.value is not None:
+        jsonable['value'] = that.value
+    if that.value_id is not None:
+        jsonable['valueId'] = _reference_to_jsonable(
+            that.value_id
+        )
+    jsonable['modelType'] = 'Property'
+    return jsonable
+
+
+def _multi_language_property_to_jsonable(
+    that: aas_types.MultiLanguageProperty
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.extensions is not None:
+        jsonable['extensions'] = _list_of__extension_to_jsonable(
+            that.extensions
+        )
+    if that.category is not None:
+        jsonable['category'] = that.category
+    if that.id_short is not None:
+        jsonable['idShort'] = that.id_short
+    if that.display_name is not None:
+        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+            that.display_name
+        )
+    if that.description is not None:
+        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+            that.description
+        )
+    if that.semantic_id is not None:
+        jsonable['semanticId'] = _reference_to_jsonable(
+            that.semantic_id
+        )
+    if that.supplemental_semantic_ids is not None:
+        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+            that.supplemental_semantic_ids
+        )
+    if that.qualifiers is not None:
+        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+            that.qualifiers
+        )
+    if that.embedded_data_specifications is not None:
+        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+            that.embedded_data_specifications
+        )
+    if that.value is not None:
+        jsonable['value'] = _list_of__lang_string_text_type_to_jsonable(
+            that.value
+        )
+    if that.value_id is not None:
+        jsonable['valueId'] = _reference_to_jsonable(
+            that.value_id
+        )
+    jsonable['modelType'] = 'MultiLanguageProperty'
+    return jsonable
+
+
+def _range_to_jsonable(
+    that: aas_types.Range
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.extensions is not None:
+        jsonable['extensions'] = _list_of__extension_to_jsonable(
+            that.extensions
+        )
+    if that.category is not None:
+        jsonable['category'] = that.category
+    if that.id_short is not None:
+        jsonable['idShort'] = that.id_short
+    if that.display_name is not None:
+        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+            that.display_name
+        )
+    if that.description is not None:
+        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+            that.description
+        )
+    if that.semantic_id is not None:
+        jsonable['semanticId'] = _reference_to_jsonable(
+            that.semantic_id
+        )
+    if that.supplemental_semantic_ids is not None:
+        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+            that.supplemental_semantic_ids
+        )
+    if that.qualifiers is not None:
+        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+            that.qualifiers
+        )
+    if that.embedded_data_specifications is not None:
+        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+            that.embedded_data_specifications
+        )
+    jsonable['valueType'] = that.value_type.value
+    if that.min is not None:
+        jsonable['min'] = that.min
+    if that.max is not None:
+        jsonable['max'] = that.max
+    jsonable['modelType'] = 'Range'
+    return jsonable
+
+
+def _reference_element_to_jsonable(
+    that: aas_types.ReferenceElement
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.extensions is not None:
+        jsonable['extensions'] = _list_of__extension_to_jsonable(
+            that.extensions
+        )
+    if that.category is not None:
+        jsonable['category'] = that.category
+    if that.id_short is not None:
+        jsonable['idShort'] = that.id_short
+    if that.display_name is not None:
+        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+            that.display_name
+        )
+    if that.description is not None:
+        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+            that.description
+        )
+    if that.semantic_id is not None:
+        jsonable['semanticId'] = _reference_to_jsonable(
+            that.semantic_id
+        )
+    if that.supplemental_semantic_ids is not None:
+        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+            that.supplemental_semantic_ids
+        )
+    if that.qualifiers is not None:
+        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+            that.qualifiers
+        )
+    if that.embedded_data_specifications is not None:
+        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+            that.embedded_data_specifications
+        )
+    if that.value is not None:
+        jsonable['value'] = _reference_to_jsonable(
+            that.value
+        )
+    jsonable['modelType'] = 'ReferenceElement'
+    return jsonable
+
+
+def _blob_to_jsonable(
+    that: aas_types.Blob
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.extensions is not None:
+        jsonable['extensions'] = _list_of__extension_to_jsonable(
+            that.extensions
+        )
+    if that.category is not None:
+        jsonable['category'] = that.category
+    if that.id_short is not None:
+        jsonable['idShort'] = that.id_short
+    if that.display_name is not None:
+        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+            that.display_name
+        )
+    if that.description is not None:
+        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+            that.description
+        )
+    if that.semantic_id is not None:
+        jsonable['semanticId'] = _reference_to_jsonable(
+            that.semantic_id
+        )
+    if that.supplemental_semantic_ids is not None:
+        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+            that.supplemental_semantic_ids
+        )
+    if that.qualifiers is not None:
+        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+            that.qualifiers
+        )
+    if that.embedded_data_specifications is not None:
+        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+            that.embedded_data_specifications
+        )
+    if that.value is not None:
+        jsonable['value'] = _bytes_to_base64_str(
+            that.value
+        )
+    jsonable['contentType'] = that.content_type
+    jsonable['modelType'] = 'Blob'
+    return jsonable
+
+
+def _file_to_jsonable(
+    that: aas_types.File
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.extensions is not None:
+        jsonable['extensions'] = _list_of__extension_to_jsonable(
+            that.extensions
+        )
+    if that.category is not None:
+        jsonable['category'] = that.category
+    if that.id_short is not None:
+        jsonable['idShort'] = that.id_short
+    if that.display_name is not None:
+        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+            that.display_name
+        )
+    if that.description is not None:
+        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+            that.description
+        )
+    if that.semantic_id is not None:
+        jsonable['semanticId'] = _reference_to_jsonable(
+            that.semantic_id
+        )
+    if that.supplemental_semantic_ids is not None:
+        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+            that.supplemental_semantic_ids
+        )
+    if that.qualifiers is not None:
+        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+            that.qualifiers
+        )
+    if that.embedded_data_specifications is not None:
+        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+            that.embedded_data_specifications
+        )
+    if that.value is not None:
+        jsonable['value'] = that.value
+    jsonable['contentType'] = that.content_type
+    jsonable['modelType'] = 'File'
+    return jsonable
+
+
+def _annotated_relationship_element_to_jsonable(
+    that: aas_types.AnnotatedRelationshipElement
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.extensions is not None:
+        jsonable['extensions'] = _list_of__extension_to_jsonable(
+            that.extensions
+        )
+    if that.category is not None:
+        jsonable['category'] = that.category
+    if that.id_short is not None:
+        jsonable['idShort'] = that.id_short
+    if that.display_name is not None:
+        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+            that.display_name
+        )
+    if that.description is not None:
+        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+            that.description
+        )
+    if that.semantic_id is not None:
+        jsonable['semanticId'] = _reference_to_jsonable(
+            that.semantic_id
+        )
+    if that.supplemental_semantic_ids is not None:
+        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+            that.supplemental_semantic_ids
+        )
+    if that.qualifiers is not None:
+        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+            that.qualifiers
+        )
+    if that.embedded_data_specifications is not None:
+        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+            that.embedded_data_specifications
+        )
+    jsonable['first'] = _reference_to_jsonable(
+        that.first
+    )
+    jsonable['second'] = _reference_to_jsonable(
+        that.second
+    )
+    if that.annotations is not None:
+        jsonable['annotations'] = _list_of__data_element_to_jsonable(
+            that.annotations
+        )
+    jsonable['modelType'] = 'AnnotatedRelationshipElement'
+    return jsonable
+
+
+def _entity_to_jsonable(
+    that: aas_types.Entity
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.extensions is not None:
+        jsonable['extensions'] = _list_of__extension_to_jsonable(
+            that.extensions
+        )
+    if that.category is not None:
+        jsonable['category'] = that.category
+    if that.id_short is not None:
+        jsonable['idShort'] = that.id_short
+    if that.display_name is not None:
+        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+            that.display_name
+        )
+    if that.description is not None:
+        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+            that.description
+        )
+    if that.semantic_id is not None:
+        jsonable['semanticId'] = _reference_to_jsonable(
+            that.semantic_id
+        )
+    if that.supplemental_semantic_ids is not None:
+        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+            that.supplemental_semantic_ids
+        )
+    if that.qualifiers is not None:
+        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+            that.qualifiers
+        )
+    if that.embedded_data_specifications is not None:
+        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+            that.embedded_data_specifications
+        )
+    if that.statements is not None:
+        jsonable['statements'] = _list_of__submodel_element_to_jsonable(
+            that.statements
+        )
+    jsonable['entityType'] = that.entity_type.value
+    if that.global_asset_id is not None:
+        jsonable['globalAssetId'] = that.global_asset_id
+    if that.specific_asset_ids is not None:
+        jsonable['specificAssetIds'] = _list_of__specific_asset_id_to_jsonable(
+            that.specific_asset_ids
+        )
+    jsonable['modelType'] = 'Entity'
+    return jsonable
+
+
+def _event_payload_to_jsonable(
+    that: aas_types.EventPayload
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['source'] = _reference_to_jsonable(
+        that.source
+    )
+    if that.source_semantic_id is not None:
+        jsonable['sourceSemanticId'] = _reference_to_jsonable(
+            that.source_semantic_id
+        )
+    jsonable['observableReference'] = _reference_to_jsonable(
+        that.observable_reference
+    )
+    if that.observable_semantic_id is not None:
+        jsonable['observableSemanticId'] = _reference_to_jsonable(
+            that.observable_semantic_id
+        )
+    if that.topic is not None:
+        jsonable['topic'] = that.topic
+    if that.subject_id is not None:
+        jsonable['subjectId'] = _reference_to_jsonable(
+            that.subject_id
+        )
+    jsonable['timeStamp'] = that.time_stamp
+    if that.payload is not None:
+        jsonable['payload'] = _bytes_to_base64_str(
+            that.payload
+        )
+    return jsonable
+
+
+def _basic_event_element_to_jsonable(
+    that: aas_types.BasicEventElement
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.extensions is not None:
+        jsonable['extensions'] = _list_of__extension_to_jsonable(
+            that.extensions
+        )
+    if that.category is not None:
+        jsonable['category'] = that.category
+    if that.id_short is not None:
+        jsonable['idShort'] = that.id_short
+    if that.display_name is not None:
+        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+            that.display_name
+        )
+    if that.description is not None:
+        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+            that.description
+        )
+    if that.semantic_id is not None:
+        jsonable['semanticId'] = _reference_to_jsonable(
+            that.semantic_id
+        )
+    if that.supplemental_semantic_ids is not None:
+        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+            that.supplemental_semantic_ids
+        )
+    if that.qualifiers is not None:
+        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+            that.qualifiers
+        )
+    if that.embedded_data_specifications is not None:
+        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+            that.embedded_data_specifications
+        )
+    jsonable['observed'] = _reference_to_jsonable(
+        that.observed
+    )
+    jsonable['direction'] = that.direction.value
+    jsonable['state'] = that.state.value
+    if that.message_topic is not None:
+        jsonable['messageTopic'] = that.message_topic
+    if that.message_broker is not None:
+        jsonable['messageBroker'] = _reference_to_jsonable(
+            that.message_broker
+        )
+    if that.last_update is not None:
+        jsonable['lastUpdate'] = that.last_update
+    if that.min_interval is not None:
+        jsonable['minInterval'] = that.min_interval
+    if that.max_interval is not None:
+        jsonable['maxInterval'] = that.max_interval
+    jsonable['modelType'] = 'BasicEventElement'
+    return jsonable
+
+
+def _operation_to_jsonable(
+    that: aas_types.Operation
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.extensions is not None:
+        jsonable['extensions'] = _list_of__extension_to_jsonable(
+            that.extensions
+        )
+    if that.category is not None:
+        jsonable['category'] = that.category
+    if that.id_short is not None:
+        jsonable['idShort'] = that.id_short
+    if that.display_name is not None:
+        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+            that.display_name
+        )
+    if that.description is not None:
+        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+            that.description
+        )
+    if that.semantic_id is not None:
+        jsonable['semanticId'] = _reference_to_jsonable(
+            that.semantic_id
+        )
+    if that.supplemental_semantic_ids is not None:
+        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+            that.supplemental_semantic_ids
+        )
+    if that.qualifiers is not None:
+        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+            that.qualifiers
+        )
+    if that.embedded_data_specifications is not None:
+        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+            that.embedded_data_specifications
+        )
+    if that.input_variables is not None:
+        jsonable['inputVariables'] = _list_of__operation_variable_to_jsonable(
+            that.input_variables
+        )
+    if that.output_variables is not None:
+        jsonable['outputVariables'] = _list_of__operation_variable_to_jsonable(
+            that.output_variables
+        )
+    if that.inoutput_variables is not None:
+        jsonable['inoutputVariables'] = _list_of__operation_variable_to_jsonable(
+            that.inoutput_variables
+        )
+    jsonable['modelType'] = 'Operation'
+    return jsonable
+
+
+def _operation_variable_to_jsonable(
+    that: aas_types.OperationVariable
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['value'] = that.value.transform(_SERIALIZER)
+    return jsonable
+
+
+def _capability_to_jsonable(
+    that: aas_types.Capability
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.extensions is not None:
+        jsonable['extensions'] = _list_of__extension_to_jsonable(
+            that.extensions
+        )
+    if that.category is not None:
+        jsonable['category'] = that.category
+    if that.id_short is not None:
+        jsonable['idShort'] = that.id_short
+    if that.display_name is not None:
+        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+            that.display_name
+        )
+    if that.description is not None:
+        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+            that.description
+        )
+    if that.semantic_id is not None:
+        jsonable['semanticId'] = _reference_to_jsonable(
+            that.semantic_id
+        )
+    if that.supplemental_semantic_ids is not None:
+        jsonable['supplementalSemanticIds'] = _list_of__reference_to_jsonable(
+            that.supplemental_semantic_ids
+        )
+    if that.qualifiers is not None:
+        jsonable['qualifiers'] = _list_of__qualifier_to_jsonable(
+            that.qualifiers
+        )
+    if that.embedded_data_specifications is not None:
+        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+            that.embedded_data_specifications
+        )
+    jsonable['modelType'] = 'Capability'
+    return jsonable
+
+
+def _concept_description_to_jsonable(
+    that: aas_types.ConceptDescription
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.extensions is not None:
+        jsonable['extensions'] = _list_of__extension_to_jsonable(
+            that.extensions
+        )
+    if that.category is not None:
+        jsonable['category'] = that.category
+    if that.id_short is not None:
+        jsonable['idShort'] = that.id_short
+    if that.display_name is not None:
+        jsonable['displayName'] = _list_of__lang_string_name_type_to_jsonable(
+            that.display_name
+        )
+    if that.description is not None:
+        jsonable['description'] = _list_of__lang_string_text_type_to_jsonable(
+            that.description
+        )
+    if that.administration is not None:
+        jsonable['administration'] = _administrative_information_to_jsonable(
+            that.administration
+        )
+    jsonable['id'] = that.id
+    if that.embedded_data_specifications is not None:
+        jsonable['embeddedDataSpecifications'] = _list_of__embedded_data_specification_to_jsonable(
+            that.embedded_data_specifications
+        )
+    if that.is_case_of is not None:
+        jsonable['isCaseOf'] = _list_of__reference_to_jsonable(
+            that.is_case_of
+        )
+    jsonable['modelType'] = 'ConceptDescription'
+    return jsonable
+
+
+def _reference_to_jsonable(
+    that: aas_types.Reference
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['type'] = that.type.value
+    if that.referred_semantic_id is not None:
+        jsonable['referredSemanticId'] = _reference_to_jsonable(
+            that.referred_semantic_id
+        )
+    jsonable['keys'] = _list_of__key_to_jsonable(
+        that.keys
+    )
+    return jsonable
+
+
+def _key_to_jsonable(
+    that: aas_types.Key
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['type'] = that.type.value
+    jsonable['value'] = that.value
+    return jsonable
+
+
+def _lang_string_name_type_to_jsonable(
+    that: aas_types.LangStringNameType
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['language'] = that.language
+    jsonable['text'] = that.text
+    return jsonable
+
+
+def _lang_string_text_type_to_jsonable(
+    that: aas_types.LangStringTextType
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['language'] = that.language
+    jsonable['text'] = that.text
+    return jsonable
+
+
+def _environment_to_jsonable(
+    that: aas_types.Environment
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    if that.asset_administration_shells is not None:
+        jsonable['assetAdministrationShells'] = _list_of__asset_administration_shell_to_jsonable(
+            that.asset_administration_shells
+        )
+    if that.submodels is not None:
+        jsonable['submodels'] = _list_of__submodel_to_jsonable(
+            that.submodels
+        )
+    if that.concept_descriptions is not None:
+        jsonable['conceptDescriptions'] = _list_of__concept_description_to_jsonable(
+            that.concept_descriptions
+        )
+    return jsonable
+
+
+def _embedded_data_specification_to_jsonable(
+    that: aas_types.EmbeddedDataSpecification
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['dataSpecification'] = _reference_to_jsonable(
+        that.data_specification
+    )
+    jsonable['dataSpecificationContent'] = that.data_specification_content.transform(_SERIALIZER)
+    return jsonable
+
+
+def _level_type_to_jsonable(
+    that: aas_types.LevelType
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['min'] = that.min
+    jsonable['nom'] = that.nom
+    jsonable['typ'] = that.typ
+    jsonable['max'] = that.max
+    return jsonable
+
+
+def _value_reference_pair_to_jsonable(
+    that: aas_types.ValueReferencePair
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['value'] = that.value
+    jsonable['valueId'] = _reference_to_jsonable(
+        that.value_id
+    )
+    return jsonable
+
+
+def _value_list_to_jsonable(
+    that: aas_types.ValueList
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['valueReferencePairs'] = _list_of__value_reference_pair_to_jsonable(
+        that.value_reference_pairs
+    )
+    return jsonable
+
+
+def _lang_string_preferred_name_type_iec_61360_to_jsonable(
+    that: aas_types.LangStringPreferredNameTypeIEC61360
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['language'] = that.language
+    jsonable['text'] = that.text
+    return jsonable
+
+
+def _lang_string_short_name_type_iec_61360_to_jsonable(
+    that: aas_types.LangStringShortNameTypeIEC61360
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['language'] = that.language
+    jsonable['text'] = that.text
+    return jsonable
+
+
+def _lang_string_definition_type_iec_61360_to_jsonable(
+    that: aas_types.LangStringDefinitionTypeIEC61360
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['language'] = that.language
+    jsonable['text'] = that.text
+    return jsonable
+
+
+def _data_specification_iec_61360_to_jsonable(
+    that: aas_types.DataSpecificationIEC61360
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['preferredName'] = _list_of__lang_string_preferred_name_type_iec_61360_to_jsonable(
+        that.preferred_name
+    )
+    if that.short_name is not None:
+        jsonable['shortName'] = _list_of__lang_string_short_name_type_iec_61360_to_jsonable(
+            that.short_name
+        )
+    if that.unit is not None:
+        jsonable['unit'] = that.unit
+    if that.unit_id is not None:
+        jsonable['unitId'] = _reference_to_jsonable(
+            that.unit_id
+        )
+    if that.source_of_definition is not None:
+        jsonable['sourceOfDefinition'] = that.source_of_definition
+    if that.symbol is not None:
+        jsonable['symbol'] = that.symbol
+    if that.data_type is not None:
+        jsonable['dataType'] = that.data_type.value
+    if that.definition is not None:
+        jsonable['definition'] = _list_of__lang_string_definition_type_iec_61360_to_jsonable(
+            that.definition
+        )
+    if that.value_format is not None:
+        jsonable['valueFormat'] = that.value_format
+    if that.value_list is not None:
+        jsonable['valueList'] = _value_list_to_jsonable(
+            that.value_list
+        )
+    if that.value is not None:
+        jsonable['value'] = that.value
+    if that.level_type is not None:
+        jsonable['levelType'] = _level_type_to_jsonable(
+            that.level_type
+        )
+    jsonable['modelType'] = 'DataSpecificationIec61360'
+    return jsonable
+
+
 class _Serializer(
         aas_types.AbstractTransformer[MutableJsonable]
 ):
-    """Transform the instance to its JSON-able representation."""
-
-    def transform_extension(
-        self,
-        that: aas_types.Extension
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.semantic_id is not None:
-            jsonable['semanticId'] = self.transform(that.semantic_id)
-
-        if that.supplemental_semantic_ids is not None:
-            jsonable['supplementalSemanticIds'] = [
-                self.transform(item)
-                for item in that.supplemental_semantic_ids
-            ]
-
-        jsonable['name'] = that.name
-
-        if that.value_type is not None:
-            jsonable['valueType'] = that.value_type.value
-
-        if that.value is not None:
-            jsonable['value'] = that.value
-
-        if that.refers_to is not None:
-            jsonable['refersTo'] = [
-                self.transform(item)
-                for item in that.refers_to
-            ]
-
-        return jsonable
-
-    def transform_administrative_information(
-        self,
-        that: aas_types.AdministrativeInformation
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.embedded_data_specifications is not None:
-            jsonable['embeddedDataSpecifications'] = [
-                self.transform(item)
-                for item in that.embedded_data_specifications
-            ]
-
-        if that.version is not None:
-            jsonable['version'] = that.version
-
-        if that.revision is not None:
-            jsonable['revision'] = that.revision
-
-        if that.creator is not None:
-            jsonable['creator'] = self.transform(that.creator)
-
-        if that.template_id is not None:
-            jsonable['templateId'] = that.template_id
-
-        return jsonable
-
-    def transform_qualifier(
-        self,
-        that: aas_types.Qualifier
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.semantic_id is not None:
-            jsonable['semanticId'] = self.transform(that.semantic_id)
-
-        if that.supplemental_semantic_ids is not None:
-            jsonable['supplementalSemanticIds'] = [
-                self.transform(item)
-                for item in that.supplemental_semantic_ids
-            ]
-
-        if that.kind is not None:
-            jsonable['kind'] = that.kind.value
-
-        jsonable['type'] = that.type
-
-        jsonable['valueType'] = that.value_type.value
-
-        if that.value is not None:
-            jsonable['value'] = that.value
-
-        if that.value_id is not None:
-            jsonable['valueId'] = self.transform(that.value_id)
-
-        return jsonable
-
-    def transform_asset_administration_shell(
-        self,
-        that: aas_types.AssetAdministrationShell
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.extensions is not None:
-            jsonable['extensions'] = [
-                self.transform(item)
-                for item in that.extensions
-            ]
-
-        if that.category is not None:
-            jsonable['category'] = that.category
-
-        if that.id_short is not None:
-            jsonable['idShort'] = that.id_short
-
-        if that.display_name is not None:
-            jsonable['displayName'] = [
-                self.transform(item)
-                for item in that.display_name
-            ]
-
-        if that.description is not None:
-            jsonable['description'] = [
-                self.transform(item)
-                for item in that.description
-            ]
-
-        if that.administration is not None:
-            jsonable['administration'] = self.transform(that.administration)
-
-        jsonable['id'] = that.id
-
-        if that.embedded_data_specifications is not None:
-            jsonable['embeddedDataSpecifications'] = [
-                self.transform(item)
-                for item in that.embedded_data_specifications
-            ]
-
-        if that.derived_from is not None:
-            jsonable['derivedFrom'] = self.transform(that.derived_from)
-
-        jsonable['assetInformation'] = self.transform(that.asset_information)
-
-        if that.submodels is not None:
-            jsonable['submodels'] = [
-                self.transform(item)
-                for item in that.submodels
-            ]
-
-        jsonable["modelType"] = 'AssetAdministrationShell'
-
-        return jsonable
-
-    def transform_asset_information(
-        self,
-        that: aas_types.AssetInformation
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['assetKind'] = that.asset_kind.value
-
-        if that.global_asset_id is not None:
-            jsonable['globalAssetId'] = that.global_asset_id
-
-        if that.specific_asset_ids is not None:
-            jsonable['specificAssetIds'] = [
-                self.transform(item)
-                for item in that.specific_asset_ids
-            ]
-
-        if that.asset_type is not None:
-            jsonable['assetType'] = that.asset_type
-
-        if that.default_thumbnail is not None:
-            jsonable['defaultThumbnail'] = self.transform(that.default_thumbnail)
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_resource(
-        self,
-        that: aas_types.Resource
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['path'] = that.path
-
-        if that.content_type is not None:
-            jsonable['contentType'] = that.content_type
-
-        return jsonable
-
-    def transform_specific_asset_id(
-        self,
-        that: aas_types.SpecificAssetID
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.semantic_id is not None:
-            jsonable['semanticId'] = self.transform(that.semantic_id)
-
-        if that.supplemental_semantic_ids is not None:
-            jsonable['supplementalSemanticIds'] = [
-                self.transform(item)
-                for item in that.supplemental_semantic_ids
-            ]
-
-        jsonable['name'] = that.name
-
-        jsonable['value'] = that.value
-
-        if that.external_subject_id is not None:
-            jsonable['externalSubjectId'] = (
-                self.transform(that.external_subject_id)
-            )
-
-        return jsonable
-
-    def transform_submodel(
-        self,
-        that: aas_types.Submodel
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.extensions is not None:
-            jsonable['extensions'] = [
-                self.transform(item)
-                for item in that.extensions
-            ]
-
-        if that.category is not None:
-            jsonable['category'] = that.category
-
-        if that.id_short is not None:
-            jsonable['idShort'] = that.id_short
-
-        if that.display_name is not None:
-            jsonable['displayName'] = [
-                self.transform(item)
-                for item in that.display_name
-            ]
-
-        if that.description is not None:
-            jsonable['description'] = [
-                self.transform(item)
-                for item in that.description
-            ]
-
-        if that.administration is not None:
-            jsonable['administration'] = self.transform(that.administration)
-
-        jsonable['id'] = that.id
-
-        if that.kind is not None:
-            jsonable['kind'] = that.kind.value
-
-        if that.semantic_id is not None:
-            jsonable['semanticId'] = self.transform(that.semantic_id)
-
-        if that.supplemental_semantic_ids is not None:
-            jsonable['supplementalSemanticIds'] = [
-                self.transform(item)
-                for item in that.supplemental_semantic_ids
-            ]
-
-        if that.qualifiers is not None:
-            jsonable['qualifiers'] = [
-                self.transform(item)
-                for item in that.qualifiers
-            ]
-
-        if that.embedded_data_specifications is not None:
-            jsonable['embeddedDataSpecifications'] = [
-                self.transform(item)
-                for item in that.embedded_data_specifications
-            ]
-
-        if that.submodel_elements is not None:
-            jsonable['submodelElements'] = [
-                self.transform(item)
-                for item in that.submodel_elements
-            ]
-
-        jsonable["modelType"] = 'Submodel'
-
-        return jsonable
-
-    def transform_relationship_element(
-        self,
-        that: aas_types.RelationshipElement
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.extensions is not None:
-            jsonable['extensions'] = [
-                self.transform(item)
-                for item in that.extensions
-            ]
-
-        if that.category is not None:
-            jsonable['category'] = that.category
-
-        if that.id_short is not None:
-            jsonable['idShort'] = that.id_short
-
-        if that.display_name is not None:
-            jsonable['displayName'] = [
-                self.transform(item)
-                for item in that.display_name
-            ]
-
-        if that.description is not None:
-            jsonable['description'] = [
-                self.transform(item)
-                for item in that.description
-            ]
-
-        if that.semantic_id is not None:
-            jsonable['semanticId'] = self.transform(that.semantic_id)
-
-        if that.supplemental_semantic_ids is not None:
-            jsonable['supplementalSemanticIds'] = [
-                self.transform(item)
-                for item in that.supplemental_semantic_ids
-            ]
-
-        if that.qualifiers is not None:
-            jsonable['qualifiers'] = [
-                self.transform(item)
-                for item in that.qualifiers
-            ]
-
-        if that.embedded_data_specifications is not None:
-            jsonable['embeddedDataSpecifications'] = [
-                self.transform(item)
-                for item in that.embedded_data_specifications
-            ]
-
-        jsonable['first'] = self.transform(that.first)
-
-        jsonable['second'] = self.transform(that.second)
-
-        jsonable["modelType"] = 'RelationshipElement'
-
-        return jsonable
-
-    def transform_submodel_element_list(
-        self,
-        that: aas_types.SubmodelElementList
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.extensions is not None:
-            jsonable['extensions'] = [
-                self.transform(item)
-                for item in that.extensions
-            ]
-
-        if that.category is not None:
-            jsonable['category'] = that.category
-
-        if that.id_short is not None:
-            jsonable['idShort'] = that.id_short
-
-        if that.display_name is not None:
-            jsonable['displayName'] = [
-                self.transform(item)
-                for item in that.display_name
-            ]
-
-        if that.description is not None:
-            jsonable['description'] = [
-                self.transform(item)
-                for item in that.description
-            ]
-
-        if that.semantic_id is not None:
-            jsonable['semanticId'] = self.transform(that.semantic_id)
-
-        if that.supplemental_semantic_ids is not None:
-            jsonable['supplementalSemanticIds'] = [
-                self.transform(item)
-                for item in that.supplemental_semantic_ids
-            ]
-
-        if that.qualifiers is not None:
-            jsonable['qualifiers'] = [
-                self.transform(item)
-                for item in that.qualifiers
-            ]
-
-        if that.embedded_data_specifications is not None:
-            jsonable['embeddedDataSpecifications'] = [
-                self.transform(item)
-                for item in that.embedded_data_specifications
-            ]
-
-        if that.order_relevant is not None:
-            jsonable['orderRelevant'] = that.order_relevant
-
-        if that.semantic_id_list_element is not None:
-            jsonable['semanticIdListElement'] = (
-                self.transform(that.semantic_id_list_element)
-            )
-
-        jsonable['typeValueListElement'] = that.type_value_list_element.value
-
-        if that.value_type_list_element is not None:
-            jsonable['valueTypeListElement'] = that.value_type_list_element.value
-
-        if that.value is not None:
-            jsonable['value'] = [
-                self.transform(item)
-                for item in that.value
-            ]
-
-        jsonable["modelType"] = 'SubmodelElementList'
-
-        return jsonable
-
-    def transform_submodel_element_collection(
-        self,
-        that: aas_types.SubmodelElementCollection
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.extensions is not None:
-            jsonable['extensions'] = [
-                self.transform(item)
-                for item in that.extensions
-            ]
-
-        if that.category is not None:
-            jsonable['category'] = that.category
-
-        if that.id_short is not None:
-            jsonable['idShort'] = that.id_short
-
-        if that.display_name is not None:
-            jsonable['displayName'] = [
-                self.transform(item)
-                for item in that.display_name
-            ]
-
-        if that.description is not None:
-            jsonable['description'] = [
-                self.transform(item)
-                for item in that.description
-            ]
-
-        if that.semantic_id is not None:
-            jsonable['semanticId'] = self.transform(that.semantic_id)
-
-        if that.supplemental_semantic_ids is not None:
-            jsonable['supplementalSemanticIds'] = [
-                self.transform(item)
-                for item in that.supplemental_semantic_ids
-            ]
-
-        if that.qualifiers is not None:
-            jsonable['qualifiers'] = [
-                self.transform(item)
-                for item in that.qualifiers
-            ]
-
-        if that.embedded_data_specifications is not None:
-            jsonable['embeddedDataSpecifications'] = [
-                self.transform(item)
-                for item in that.embedded_data_specifications
-            ]
-
-        if that.value is not None:
-            jsonable['value'] = [
-                self.transform(item)
-                for item in that.value
-            ]
-
-        jsonable["modelType"] = 'SubmodelElementCollection'
-
-        return jsonable
-
-    def transform_property(
-        self,
-        that: aas_types.Property
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.extensions is not None:
-            jsonable['extensions'] = [
-                self.transform(item)
-                for item in that.extensions
-            ]
-
-        if that.category is not None:
-            jsonable['category'] = that.category
-
-        if that.id_short is not None:
-            jsonable['idShort'] = that.id_short
-
-        if that.display_name is not None:
-            jsonable['displayName'] = [
-                self.transform(item)
-                for item in that.display_name
-            ]
-
-        if that.description is not None:
-            jsonable['description'] = [
-                self.transform(item)
-                for item in that.description
-            ]
-
-        if that.semantic_id is not None:
-            jsonable['semanticId'] = self.transform(that.semantic_id)
-
-        if that.supplemental_semantic_ids is not None:
-            jsonable['supplementalSemanticIds'] = [
-                self.transform(item)
-                for item in that.supplemental_semantic_ids
-            ]
-
-        if that.qualifiers is not None:
-            jsonable['qualifiers'] = [
-                self.transform(item)
-                for item in that.qualifiers
-            ]
-
-        if that.embedded_data_specifications is not None:
-            jsonable['embeddedDataSpecifications'] = [
-                self.transform(item)
-                for item in that.embedded_data_specifications
-            ]
-
-        jsonable['valueType'] = that.value_type.value
-
-        if that.value is not None:
-            jsonable['value'] = that.value
-
-        if that.value_id is not None:
-            jsonable['valueId'] = self.transform(that.value_id)
-
-        jsonable["modelType"] = 'Property'
-
-        return jsonable
-
-    def transform_multi_language_property(
-        self,
-        that: aas_types.MultiLanguageProperty
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.extensions is not None:
-            jsonable['extensions'] = [
-                self.transform(item)
-                for item in that.extensions
-            ]
-
-        if that.category is not None:
-            jsonable['category'] = that.category
-
-        if that.id_short is not None:
-            jsonable['idShort'] = that.id_short
-
-        if that.display_name is not None:
-            jsonable['displayName'] = [
-                self.transform(item)
-                for item in that.display_name
-            ]
-
-        if that.description is not None:
-            jsonable['description'] = [
-                self.transform(item)
-                for item in that.description
-            ]
-
-        if that.semantic_id is not None:
-            jsonable['semanticId'] = self.transform(that.semantic_id)
-
-        if that.supplemental_semantic_ids is not None:
-            jsonable['supplementalSemanticIds'] = [
-                self.transform(item)
-                for item in that.supplemental_semantic_ids
-            ]
-
-        if that.qualifiers is not None:
-            jsonable['qualifiers'] = [
-                self.transform(item)
-                for item in that.qualifiers
-            ]
-
-        if that.embedded_data_specifications is not None:
-            jsonable['embeddedDataSpecifications'] = [
-                self.transform(item)
-                for item in that.embedded_data_specifications
-            ]
-
-        if that.value is not None:
-            jsonable['value'] = [
-                self.transform(item)
-                for item in that.value
-            ]
-
-        if that.value_id is not None:
-            jsonable['valueId'] = self.transform(that.value_id)
-
-        jsonable["modelType"] = 'MultiLanguageProperty'
-
-        return jsonable
-
-    def transform_range(
-        self,
-        that: aas_types.Range
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.extensions is not None:
-            jsonable['extensions'] = [
-                self.transform(item)
-                for item in that.extensions
-            ]
-
-        if that.category is not None:
-            jsonable['category'] = that.category
-
-        if that.id_short is not None:
-            jsonable['idShort'] = that.id_short
-
-        if that.display_name is not None:
-            jsonable['displayName'] = [
-                self.transform(item)
-                for item in that.display_name
-            ]
-
-        if that.description is not None:
-            jsonable['description'] = [
-                self.transform(item)
-                for item in that.description
-            ]
-
-        if that.semantic_id is not None:
-            jsonable['semanticId'] = self.transform(that.semantic_id)
-
-        if that.supplemental_semantic_ids is not None:
-            jsonable['supplementalSemanticIds'] = [
-                self.transform(item)
-                for item in that.supplemental_semantic_ids
-            ]
-
-        if that.qualifiers is not None:
-            jsonable['qualifiers'] = [
-                self.transform(item)
-                for item in that.qualifiers
-            ]
-
-        if that.embedded_data_specifications is not None:
-            jsonable['embeddedDataSpecifications'] = [
-                self.transform(item)
-                for item in that.embedded_data_specifications
-            ]
-
-        jsonable['valueType'] = that.value_type.value
-
-        if that.min is not None:
-            jsonable['min'] = that.min
-
-        if that.max is not None:
-            jsonable['max'] = that.max
-
-        jsonable["modelType"] = 'Range'
-
-        return jsonable
-
-    def transform_reference_element(
-        self,
-        that: aas_types.ReferenceElement
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.extensions is not None:
-            jsonable['extensions'] = [
-                self.transform(item)
-                for item in that.extensions
-            ]
-
-        if that.category is not None:
-            jsonable['category'] = that.category
-
-        if that.id_short is not None:
-            jsonable['idShort'] = that.id_short
-
-        if that.display_name is not None:
-            jsonable['displayName'] = [
-                self.transform(item)
-                for item in that.display_name
-            ]
-
-        if that.description is not None:
-            jsonable['description'] = [
-                self.transform(item)
-                for item in that.description
-            ]
-
-        if that.semantic_id is not None:
-            jsonable['semanticId'] = self.transform(that.semantic_id)
-
-        if that.supplemental_semantic_ids is not None:
-            jsonable['supplementalSemanticIds'] = [
-                self.transform(item)
-                for item in that.supplemental_semantic_ids
-            ]
-
-        if that.qualifiers is not None:
-            jsonable['qualifiers'] = [
-                self.transform(item)
-                for item in that.qualifiers
-            ]
-
-        if that.embedded_data_specifications is not None:
-            jsonable['embeddedDataSpecifications'] = [
-                self.transform(item)
-                for item in that.embedded_data_specifications
-            ]
-
-        if that.value is not None:
-            jsonable['value'] = self.transform(that.value)
-
-        jsonable["modelType"] = 'ReferenceElement'
-
-        return jsonable
-
-    def transform_blob(
-        self,
-        that: aas_types.Blob
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.extensions is not None:
-            jsonable['extensions'] = [
-                self.transform(item)
-                for item in that.extensions
-            ]
-
-        if that.category is not None:
-            jsonable['category'] = that.category
-
-        if that.id_short is not None:
-            jsonable['idShort'] = that.id_short
-
-        if that.display_name is not None:
-            jsonable['displayName'] = [
-                self.transform(item)
-                for item in that.display_name
-            ]
-
-        if that.description is not None:
-            jsonable['description'] = [
-                self.transform(item)
-                for item in that.description
-            ]
-
-        if that.semantic_id is not None:
-            jsonable['semanticId'] = self.transform(that.semantic_id)
-
-        if that.supplemental_semantic_ids is not None:
-            jsonable['supplementalSemanticIds'] = [
-                self.transform(item)
-                for item in that.supplemental_semantic_ids
-            ]
-
-        if that.qualifiers is not None:
-            jsonable['qualifiers'] = [
-                self.transform(item)
-                for item in that.qualifiers
-            ]
-
-        if that.embedded_data_specifications is not None:
-            jsonable['embeddedDataSpecifications'] = [
-                self.transform(item)
-                for item in that.embedded_data_specifications
-            ]
-
-        if that.value is not None:
-            jsonable['value'] = _bytes_to_base64_str(that.value)
-
-        jsonable['contentType'] = that.content_type
-
-        jsonable["modelType"] = 'Blob'
-
-        return jsonable
-
-    def transform_file(
-        self,
-        that: aas_types.File
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.extensions is not None:
-            jsonable['extensions'] = [
-                self.transform(item)
-                for item in that.extensions
-            ]
-
-        if that.category is not None:
-            jsonable['category'] = that.category
-
-        if that.id_short is not None:
-            jsonable['idShort'] = that.id_short
-
-        if that.display_name is not None:
-            jsonable['displayName'] = [
-                self.transform(item)
-                for item in that.display_name
-            ]
-
-        if that.description is not None:
-            jsonable['description'] = [
-                self.transform(item)
-                for item in that.description
-            ]
-
-        if that.semantic_id is not None:
-            jsonable['semanticId'] = self.transform(that.semantic_id)
-
-        if that.supplemental_semantic_ids is not None:
-            jsonable['supplementalSemanticIds'] = [
-                self.transform(item)
-                for item in that.supplemental_semantic_ids
-            ]
-
-        if that.qualifiers is not None:
-            jsonable['qualifiers'] = [
-                self.transform(item)
-                for item in that.qualifiers
-            ]
-
-        if that.embedded_data_specifications is not None:
-            jsonable['embeddedDataSpecifications'] = [
-                self.transform(item)
-                for item in that.embedded_data_specifications
-            ]
-
-        if that.value is not None:
-            jsonable['value'] = that.value
-
-        jsonable['contentType'] = that.content_type
-
-        jsonable["modelType"] = 'File'
-
-        return jsonable
-
-    def transform_annotated_relationship_element(
-        self,
-        that: aas_types.AnnotatedRelationshipElement
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.extensions is not None:
-            jsonable['extensions'] = [
-                self.transform(item)
-                for item in that.extensions
-            ]
-
-        if that.category is not None:
-            jsonable['category'] = that.category
-
-        if that.id_short is not None:
-            jsonable['idShort'] = that.id_short
-
-        if that.display_name is not None:
-            jsonable['displayName'] = [
-                self.transform(item)
-                for item in that.display_name
-            ]
-
-        if that.description is not None:
-            jsonable['description'] = [
-                self.transform(item)
-                for item in that.description
-            ]
-
-        if that.semantic_id is not None:
-            jsonable['semanticId'] = self.transform(that.semantic_id)
-
-        if that.supplemental_semantic_ids is not None:
-            jsonable['supplementalSemanticIds'] = [
-                self.transform(item)
-                for item in that.supplemental_semantic_ids
-            ]
-
-        if that.qualifiers is not None:
-            jsonable['qualifiers'] = [
-                self.transform(item)
-                for item in that.qualifiers
-            ]
-
-        if that.embedded_data_specifications is not None:
-            jsonable['embeddedDataSpecifications'] = [
-                self.transform(item)
-                for item in that.embedded_data_specifications
-            ]
-
-        jsonable['first'] = self.transform(that.first)
-
-        jsonable['second'] = self.transform(that.second)
-
-        if that.annotations is not None:
-            jsonable['annotations'] = [
-                self.transform(item)
-                for item in that.annotations
-            ]
-
-        jsonable["modelType"] = 'AnnotatedRelationshipElement'
-
-        return jsonable
-
-    def transform_entity(
-        self,
-        that: aas_types.Entity
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.extensions is not None:
-            jsonable['extensions'] = [
-                self.transform(item)
-                for item in that.extensions
-            ]
-
-        if that.category is not None:
-            jsonable['category'] = that.category
-
-        if that.id_short is not None:
-            jsonable['idShort'] = that.id_short
-
-        if that.display_name is not None:
-            jsonable['displayName'] = [
-                self.transform(item)
-                for item in that.display_name
-            ]
-
-        if that.description is not None:
-            jsonable['description'] = [
-                self.transform(item)
-                for item in that.description
-            ]
-
-        if that.semantic_id is not None:
-            jsonable['semanticId'] = self.transform(that.semantic_id)
-
-        if that.supplemental_semantic_ids is not None:
-            jsonable['supplementalSemanticIds'] = [
-                self.transform(item)
-                for item in that.supplemental_semantic_ids
-            ]
-
-        if that.qualifiers is not None:
-            jsonable['qualifiers'] = [
-                self.transform(item)
-                for item in that.qualifiers
-            ]
-
-        if that.embedded_data_specifications is not None:
-            jsonable['embeddedDataSpecifications'] = [
-                self.transform(item)
-                for item in that.embedded_data_specifications
-            ]
-
-        if that.statements is not None:
-            jsonable['statements'] = [
-                self.transform(item)
-                for item in that.statements
-            ]
-
-        jsonable['entityType'] = that.entity_type.value
-
-        if that.global_asset_id is not None:
-            jsonable['globalAssetId'] = that.global_asset_id
-
-        if that.specific_asset_ids is not None:
-            jsonable['specificAssetIds'] = [
-                self.transform(item)
-                for item in that.specific_asset_ids
-            ]
-
-        jsonable["modelType"] = 'Entity'
-
-        return jsonable
-
-    def transform_event_payload(
-        self,
-        that: aas_types.EventPayload
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['source'] = self.transform(that.source)
-
-        if that.source_semantic_id is not None:
-            jsonable['sourceSemanticId'] = self.transform(that.source_semantic_id)
-
-        jsonable['observableReference'] = (
-            self.transform(that.observable_reference)
-        )
-
-        if that.observable_semantic_id is not None:
-            jsonable['observableSemanticId'] = (
-                self.transform(that.observable_semantic_id)
-            )
-
-        if that.topic is not None:
-            jsonable['topic'] = that.topic
-
-        if that.subject_id is not None:
-            jsonable['subjectId'] = self.transform(that.subject_id)
-
-        jsonable['timeStamp'] = that.time_stamp
-
-        if that.payload is not None:
-            jsonable['payload'] = _bytes_to_base64_str(that.payload)
-
-        return jsonable
-
-    def transform_basic_event_element(
-        self,
-        that: aas_types.BasicEventElement
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.extensions is not None:
-            jsonable['extensions'] = [
-                self.transform(item)
-                for item in that.extensions
-            ]
-
-        if that.category is not None:
-            jsonable['category'] = that.category
-
-        if that.id_short is not None:
-            jsonable['idShort'] = that.id_short
-
-        if that.display_name is not None:
-            jsonable['displayName'] = [
-                self.transform(item)
-                for item in that.display_name
-            ]
-
-        if that.description is not None:
-            jsonable['description'] = [
-                self.transform(item)
-                for item in that.description
-            ]
-
-        if that.semantic_id is not None:
-            jsonable['semanticId'] = self.transform(that.semantic_id)
-
-        if that.supplemental_semantic_ids is not None:
-            jsonable['supplementalSemanticIds'] = [
-                self.transform(item)
-                for item in that.supplemental_semantic_ids
-            ]
-
-        if that.qualifiers is not None:
-            jsonable['qualifiers'] = [
-                self.transform(item)
-                for item in that.qualifiers
-            ]
-
-        if that.embedded_data_specifications is not None:
-            jsonable['embeddedDataSpecifications'] = [
-                self.transform(item)
-                for item in that.embedded_data_specifications
-            ]
-
-        jsonable['observed'] = self.transform(that.observed)
-
-        jsonable['direction'] = that.direction.value
-
-        jsonable['state'] = that.state.value
-
-        if that.message_topic is not None:
-            jsonable['messageTopic'] = that.message_topic
-
-        if that.message_broker is not None:
-            jsonable['messageBroker'] = self.transform(that.message_broker)
-
-        if that.last_update is not None:
-            jsonable['lastUpdate'] = that.last_update
-
-        if that.min_interval is not None:
-            jsonable['minInterval'] = that.min_interval
-
-        if that.max_interval is not None:
-            jsonable['maxInterval'] = that.max_interval
-
-        jsonable["modelType"] = 'BasicEventElement'
-
-        return jsonable
-
-    def transform_operation(
-        self,
-        that: aas_types.Operation
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.extensions is not None:
-            jsonable['extensions'] = [
-                self.transform(item)
-                for item in that.extensions
-            ]
-
-        if that.category is not None:
-            jsonable['category'] = that.category
-
-        if that.id_short is not None:
-            jsonable['idShort'] = that.id_short
-
-        if that.display_name is not None:
-            jsonable['displayName'] = [
-                self.transform(item)
-                for item in that.display_name
-            ]
-
-        if that.description is not None:
-            jsonable['description'] = [
-                self.transform(item)
-                for item in that.description
-            ]
-
-        if that.semantic_id is not None:
-            jsonable['semanticId'] = self.transform(that.semantic_id)
-
-        if that.supplemental_semantic_ids is not None:
-            jsonable['supplementalSemanticIds'] = [
-                self.transform(item)
-                for item in that.supplemental_semantic_ids
-            ]
-
-        if that.qualifiers is not None:
-            jsonable['qualifiers'] = [
-                self.transform(item)
-                for item in that.qualifiers
-            ]
-
-        if that.embedded_data_specifications is not None:
-            jsonable['embeddedDataSpecifications'] = [
-                self.transform(item)
-                for item in that.embedded_data_specifications
-            ]
-
-        if that.input_variables is not None:
-            jsonable['inputVariables'] = [
-                self.transform(item)
-                for item in that.input_variables
-            ]
-
-        if that.output_variables is not None:
-            jsonable['outputVariables'] = [
-                self.transform(item)
-                for item in that.output_variables
-            ]
-
-        if that.inoutput_variables is not None:
-            jsonable['inoutputVariables'] = [
-                self.transform(item)
-                for item in that.inoutput_variables
-            ]
-
-        jsonable["modelType"] = 'Operation'
-
-        return jsonable
-
-    def transform_operation_variable(
-        self,
-        that: aas_types.OperationVariable
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['value'] = self.transform(that.value)
-
-        return jsonable
-
-    def transform_capability(
-        self,
-        that: aas_types.Capability
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.extensions is not None:
-            jsonable['extensions'] = [
-                self.transform(item)
-                for item in that.extensions
-            ]
-
-        if that.category is not None:
-            jsonable['category'] = that.category
-
-        if that.id_short is not None:
-            jsonable['idShort'] = that.id_short
-
-        if that.display_name is not None:
-            jsonable['displayName'] = [
-                self.transform(item)
-                for item in that.display_name
-            ]
-
-        if that.description is not None:
-            jsonable['description'] = [
-                self.transform(item)
-                for item in that.description
-            ]
-
-        if that.semantic_id is not None:
-            jsonable['semanticId'] = self.transform(that.semantic_id)
-
-        if that.supplemental_semantic_ids is not None:
-            jsonable['supplementalSemanticIds'] = [
-                self.transform(item)
-                for item in that.supplemental_semantic_ids
-            ]
-
-        if that.qualifiers is not None:
-            jsonable['qualifiers'] = [
-                self.transform(item)
-                for item in that.qualifiers
-            ]
-
-        if that.embedded_data_specifications is not None:
-            jsonable['embeddedDataSpecifications'] = [
-                self.transform(item)
-                for item in that.embedded_data_specifications
-            ]
-
-        jsonable["modelType"] = 'Capability'
-
-        return jsonable
-
-    def transform_concept_description(
-        self,
-        that: aas_types.ConceptDescription
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.extensions is not None:
-            jsonable['extensions'] = [
-                self.transform(item)
-                for item in that.extensions
-            ]
-
-        if that.category is not None:
-            jsonable['category'] = that.category
-
-        if that.id_short is not None:
-            jsonable['idShort'] = that.id_short
-
-        if that.display_name is not None:
-            jsonable['displayName'] = [
-                self.transform(item)
-                for item in that.display_name
-            ]
-
-        if that.description is not None:
-            jsonable['description'] = [
-                self.transform(item)
-                for item in that.description
-            ]
-
-        if that.administration is not None:
-            jsonable['administration'] = self.transform(that.administration)
-
-        jsonable['id'] = that.id
-
-        if that.embedded_data_specifications is not None:
-            jsonable['embeddedDataSpecifications'] = [
-                self.transform(item)
-                for item in that.embedded_data_specifications
-            ]
-
-        if that.is_case_of is not None:
-            jsonable['isCaseOf'] = [
-                self.transform(item)
-                for item in that.is_case_of
-            ]
-
-        jsonable["modelType"] = 'ConceptDescription'
-
-        return jsonable
-
-    def transform_reference(
-        self,
-        that: aas_types.Reference
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['type'] = that.type.value
-
-        if that.referred_semantic_id is not None:
-            jsonable['referredSemanticId'] = (
-                self.transform(that.referred_semantic_id)
-            )
-
-        jsonable['keys'] = [
-            self.transform(item)
-            for item in that.keys
-        ]
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_key(
-        self,
-        that: aas_types.Key
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['type'] = that.type.value
-
-        jsonable['value'] = that.value
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_lang_string_name_type(
-        self,
-        that: aas_types.LangStringNameType
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['language'] = that.language
-
-        jsonable['text'] = that.text
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_lang_string_text_type(
-        self,
-        that: aas_types.LangStringTextType
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['language'] = that.language
-
-        jsonable['text'] = that.text
-
-        return jsonable
-
-    def transform_environment(
-        self,
-        that: aas_types.Environment
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        if that.asset_administration_shells is not None:
-            jsonable['assetAdministrationShells'] = [
-                self.transform(item)
-                for item in that.asset_administration_shells
-            ]
-
-        if that.submodels is not None:
-            jsonable['submodels'] = [
-                self.transform(item)
-                for item in that.submodels
-            ]
-
-        if that.concept_descriptions is not None:
-            jsonable['conceptDescriptions'] = [
-                self.transform(item)
-                for item in that.concept_descriptions
-            ]
-
-        return jsonable
-
-    def transform_embedded_data_specification(
-        self,
-        that: aas_types.EmbeddedDataSpecification
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['dataSpecification'] = (
-            self.transform(that.data_specification)
-        )
-
-        jsonable['dataSpecificationContent'] = (
-            self.transform(that.data_specification_content)
-        )
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_level_type(
-        self,
-        that: aas_types.LevelType
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['min'] = that.min
-
-        jsonable['nom'] = that.nom
-
-        jsonable['typ'] = that.typ
-
-        jsonable['max'] = that.max
-
-        return jsonable
-
-    def transform_value_reference_pair(
-        self,
-        that: aas_types.ValueReferencePair
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['value'] = that.value
-
-        jsonable['valueId'] = self.transform(that.value_id)
-
-        return jsonable
-
-    def transform_value_list(
-        self,
-        that: aas_types.ValueList
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['valueReferencePairs'] = [
-            self.transform(item)
-            for item in that.value_reference_pairs
-        ]
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_lang_string_preferred_name_type_iec_61360(
-        self,
-        that: aas_types.LangStringPreferredNameTypeIEC61360
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['language'] = that.language
-
-        jsonable['text'] = that.text
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_lang_string_short_name_type_iec_61360(
-        self,
-        that: aas_types.LangStringShortNameTypeIEC61360
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['language'] = that.language
-
-        jsonable['text'] = that.text
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_lang_string_definition_type_iec_61360(
-        self,
-        that: aas_types.LangStringDefinitionTypeIEC61360
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['language'] = that.language
-
-        jsonable['text'] = that.text
-
-        return jsonable
-
-    def transform_data_specification_iec_61360(
-        self,
-        that: aas_types.DataSpecificationIEC61360
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['preferredName'] = [
-            self.transform(item)
-            for item in that.preferred_name
-        ]
-
-        if that.short_name is not None:
-            jsonable['shortName'] = [
-                self.transform(item)
-                for item in that.short_name
-            ]
-
-        if that.unit is not None:
-            jsonable['unit'] = that.unit
-
-        if that.unit_id is not None:
-            jsonable['unitId'] = self.transform(that.unit_id)
-
-        if that.source_of_definition is not None:
-            jsonable['sourceOfDefinition'] = that.source_of_definition
-
-        if that.symbol is not None:
-            jsonable['symbol'] = that.symbol
-
-        if that.data_type is not None:
-            jsonable['dataType'] = that.data_type.value
-
-        if that.definition is not None:
-            jsonable['definition'] = [
-                self.transform(item)
-                for item in that.definition
-            ]
-
-        if that.value_format is not None:
-            jsonable['valueFormat'] = that.value_format
-
-        if that.value_list is not None:
-            jsonable['valueList'] = self.transform(that.value_list)
-
-        if that.value is not None:
-            jsonable['value'] = that.value
-
-        if that.level_type is not None:
-            jsonable['levelType'] = self.transform(that.level_type)
-
-        jsonable["modelType"] = 'DataSpecificationIec61360'
-
-        return jsonable
+    """
+    Dispatch on the class of an instance to serialize it.
+
+    The methods *are* the serializers, instead of forwarding to them, so that
+    a dispatch costs a single call. Wherever the class of a value is already
+    known -- which is every class without concrete descendants -- the serializer
+    is called directly and this transformer is not involved at all.
+    """
+
+    transform_extension = staticmethod(
+        _extension_to_jsonable
+    )
+    transform_administrative_information = staticmethod(
+        _administrative_information_to_jsonable
+    )
+    transform_qualifier = staticmethod(
+        _qualifier_to_jsonable
+    )
+    transform_asset_administration_shell = staticmethod(
+        _asset_administration_shell_to_jsonable
+    )
+    transform_asset_information = staticmethod(
+        _asset_information_to_jsonable
+    )
+    transform_resource = staticmethod(
+        _resource_to_jsonable
+    )
+    transform_specific_asset_id = staticmethod(
+        _specific_asset_id_to_jsonable
+    )
+    transform_submodel = staticmethod(
+        _submodel_to_jsonable
+    )
+    transform_relationship_element = staticmethod(
+        _relationship_element_to_jsonable
+    )
+    transform_submodel_element_list = staticmethod(
+        _submodel_element_list_to_jsonable
+    )
+    transform_submodel_element_collection = staticmethod(
+        _submodel_element_collection_to_jsonable
+    )
+    transform_property = staticmethod(
+        _property_to_jsonable
+    )
+    transform_multi_language_property = staticmethod(
+        _multi_language_property_to_jsonable
+    )
+    transform_range = staticmethod(
+        _range_to_jsonable
+    )
+    transform_reference_element = staticmethod(
+        _reference_element_to_jsonable
+    )
+    transform_blob = staticmethod(
+        _blob_to_jsonable
+    )
+    transform_file = staticmethod(
+        _file_to_jsonable
+    )
+    transform_annotated_relationship_element = staticmethod(
+        _annotated_relationship_element_to_jsonable
+    )
+    transform_entity = staticmethod(
+        _entity_to_jsonable
+    )
+    transform_event_payload = staticmethod(
+        _event_payload_to_jsonable
+    )
+    transform_basic_event_element = staticmethod(
+        _basic_event_element_to_jsonable
+    )
+    transform_operation = staticmethod(
+        _operation_to_jsonable
+    )
+    transform_operation_variable = staticmethod(
+        _operation_variable_to_jsonable
+    )
+    transform_capability = staticmethod(
+        _capability_to_jsonable
+    )
+    transform_concept_description = staticmethod(
+        _concept_description_to_jsonable
+    )
+    transform_reference = staticmethod(
+        _reference_to_jsonable
+    )
+    transform_key = staticmethod(
+        _key_to_jsonable
+    )
+    transform_lang_string_name_type = staticmethod(
+        _lang_string_name_type_to_jsonable
+    )
+    transform_lang_string_text_type = staticmethod(
+        _lang_string_text_type_to_jsonable
+    )
+    transform_environment = staticmethod(
+        _environment_to_jsonable
+    )
+    transform_embedded_data_specification = staticmethod(
+        _embedded_data_specification_to_jsonable
+    )
+    transform_level_type = staticmethod(
+        _level_type_to_jsonable
+    )
+    transform_value_reference_pair = staticmethod(
+        _value_reference_pair_to_jsonable
+    )
+    transform_value_list = staticmethod(
+        _value_list_to_jsonable
+    )
+    transform_lang_string_preferred_name_type_iec_61360 = staticmethod(
+        _lang_string_preferred_name_type_iec_61360_to_jsonable
+    )
+    transform_lang_string_short_name_type_iec_61360 = staticmethod(
+        _lang_string_short_name_type_iec_61360_to_jsonable
+    )
+    transform_lang_string_definition_type_iec_61360 = staticmethod(
+        _lang_string_definition_type_iec_61360_to_jsonable
+    )
+    transform_data_specification_iec_61360 = staticmethod(
+        _data_specification_iec_61360_to_jsonable
+    )
 
 
 _SERIALIZER = _Serializer()
@@ -5956,7 +6020,7 @@ def to_jsonable(that: aas_types.Class) -> MutableJsonable:
     :return:
         JSON-able structure which can be further encoded with, *e.g.*, :py:mod:`json`
     """
-    return _SERIALIZER.transform(that)
+    return that.transform(_SERIALIZER)
 
 
 # endregion

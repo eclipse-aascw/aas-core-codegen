@@ -1414,239 +1414,462 @@ def _bytes_to_base64_str(
     )
 
 
-def _generate_transform_atomic_value(
-    access_expression: str, type_anno: intermediate.AtomicTypeAnnotation
+#: Primitive types whose values are already JSON-able as they come
+_PRIMITIVE_TYPES_SERIALIZED_AS_THEY_ARE = frozenset(
+    [
+        intermediate.PrimitiveType.BOOL,
+        intermediate.PrimitiveType.INT,
+        intermediate.PrimitiveType.FLOAT,
+        intermediate.PrimitiveType.STR,
+    ]
+)
+
+
+def _serialized_as_it_is(type_annotation: intermediate.TypeAnnotationUnion) -> bool:
+    """
+    Check whether a value of the ``type_annotation`` is JSON-able as it comes.
+
+    Such a value is put into the mapping unchanged, so it needs no serializer at all.
+    A byte array is the only primitive which has to be encoded, and a constrained
+    primitive is the primitive which it constrains.
+    """
+    primitive_type = intermediate.try_primitive_type(type_annotation)
+    return (
+        primitive_type is not None
+        and primitive_type in _PRIMITIVE_TYPES_SERIALIZED_AS_THEY_ARE
+    )
+
+
+def _cls_serializer_name(cls: intermediate.ConcreteClass) -> Identifier:
+    """Give out the name of the serializer of an instance of the ``cls``."""
+    return python_naming.private_function_name(Identifier(f"{cls.name}_to_jsonable"))
+
+
+def _list_serializer_name(
+    type_annotation: intermediate.ListTypeAnnotation,
+) -> Identifier:
+    """Give out the name of the serializer of a list of the ``type_annotation``."""
+    items_type_anno = intermediate.beneath_optional(type_annotation.items)
+
+    return Identifier(
+        f"_list_of__{python_common.atomic_moniker(items_type_anno)}_to_jsonable"
+    )
+
+
+def _tuple_serializer_name(
+    type_annotation: intermediate.TupleTypeAnnotation,
+) -> Identifier:
+    """Give out the name of the serializer of a tuple of the ``type_annotation``."""
+    monikers = [python_common.atomic_moniker(item) for item in type_annotation.items]
+
+    return Identifier(
+        f"_tuple{len(type_annotation.items)}_of__"
+        + "__".join(monikers)
+        + "_to_jsonable"
+    )
+
+
+def _generate_atomic_serialization(
+    access_expression: Stripped, type_anno: intermediate.AtomicTypeAnnotation
 ) -> Stripped:
     """
-    Generate the snippet to transform the ``access_expression``.
+    Generate the serialization of the atomic value at the ``access_expression``.
 
-    The ``access_expression`` should either be a name or a member access.
+    The ``access_expression`` should be a name, a member access or an index access,
+    so that it can be suffixed without any parentheses.
+
+    An instance is serialized by the function of its class, and the dispatch is left
+    out wherever that class is already known, which it is for every class without
+    concrete descendants. Only an abstract class, a concrete class with concrete
+    descendants and a named union have to be dispatched on.
+
+    A call is always broken at its argument, here and in
+    :py:func:`_generate_serialization`, so that the generator needs no notion of
+    columns. The name of a composed serializer is long enough that most of
+    the calls have to be broken anyhow.
     """
-    if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation) or (
-        isinstance(type_anno, intermediate.OurTypeAnnotation)
-        and isinstance(type_anno.our_type, intermediate.ConstrainedPrimitive)
-    ):
-        a_type = intermediate.try_primitive_type(type_anno)
-        assert a_type is not None
+    if _serialized_as_it_is(type_anno):
+        return access_expression
 
-        if (
-            a_type is intermediate.PrimitiveType.BOOL
-            or a_type is intermediate.PrimitiveType.INT
-            or a_type is intermediate.PrimitiveType.FLOAT
-            or a_type is intermediate.PrimitiveType.STR
-        ):
-            return Stripped(f"{access_expression}")
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        assert primitive_type is intermediate.PrimitiveType.BYTEARRAY, (
+            f"Expected all the other primitive types to be handled before, "
+            f"but got: {primitive_type}"
+        )
 
-        elif a_type is intermediate.PrimitiveType.BYTEARRAY:
-            return Stripped(f"_bytes_to_base64_str({access_expression})")
+        return Stripped(
+            f"""\
+_bytes_to_base64_str(
+{I}{access_expression}
+)"""
+        )
 
-        else:
-            assert_never(a_type)
+    if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
+        raise AssertionError("Expected to handle this case before")
 
     elif isinstance(type_anno, intermediate.OurTypeAnnotation):
-        if isinstance(type_anno.our_type, intermediate.Enumeration):
+        our_type = type_anno.our_type
+
+        if isinstance(our_type, intermediate.Enumeration):
             return Stripped(f"{access_expression}.value")
 
-        elif isinstance(type_anno.our_type, intermediate.ConstrainedPrimitive):
-            raise AssertionError("This case should have been handled before.")
+        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
+            raise AssertionError("Expected to handle this case before")
 
-        elif isinstance(
-            type_anno.our_type,
-            (intermediate.AbstractClass, intermediate.ConcreteClass),
-        ):
-            return Stripped(f"self.transform({access_expression})")
+        elif isinstance(our_type, intermediate.ConcreteClass):
+            if len(our_type.concrete_descendants) == 0:
+                serializer_name = _cls_serializer_name(our_type)
 
-        elif isinstance(type_anno.our_type, intermediate.NamedUnion):
-            # NOTE (mristin):
-            # We keep this as its own branch, separate from the class case
-            # above, even though the code is identical at the moment. We
-            # might want to support unions of primitives in the future, at
-            # which point this branch would need to diverge.
-            return Stripped(f"self.transform({access_expression})")
-
-        else:
-            assert_never(type_anno.our_type)
-
-    else:
-        assert_never(type_anno.our_type)
-
-
-def _generate_transform(cls: intermediate.ConcreteClass) -> Stripped:
-    """Generate the ``transform_X`` method to serialize an instance into a JSON-able."""
-    blocks = [
-        Stripped("jsonable: MutableMapping[str, MutableJsonable] = dict()")
-    ]  # type: List[Stripped]
-
-    for prop in cls.properties:
-        key_literal = python_common.string_literal(prop.json_name)
-        prop_name = python_naming.property_name(prop.name)
-
-        type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-        block: Stripped
-
-        if isinstance(
-            type_anno,
-            (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
-        ):
-            transformation_expression = _generate_transform_atomic_value(
-                access_expression=Stripped(f"that.{prop_name}"), type_anno=type_anno
-            )
-
-            block = Stripped(f"jsonable[{key_literal}] = {transformation_expression}")
-
-            # Rudimentary formatting heuristics
-            if len(block) > 70:
-                block = Stripped(
+                return Stripped(
                     f"""\
-jsonable[{key_literal}] = (
-{I}{transformation_expression}
+{serializer_name}(
+{I}{access_expression}
 )"""
                 )
 
-        elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-            assert isinstance(
-                type_anno.items,
-                (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
-            ), (
-                "We expect only lists of primitive and our types. Lists of optionals "
-                "and nested lists are not handled yet. Please contact the developers."
-            )
+            return Stripped(f"{access_expression}.transform(_SERIALIZER)")
 
-            transformation_expression = _generate_transform_atomic_value(
-                access_expression=Stripped("item"), type_anno=type_anno.items
-            )
-
+        elif isinstance(
+            our_type, (intermediate.AbstractClass, intermediate.NamedUnion)
+        ):
             # NOTE (mristin):
-            # We optimize here to avoid unnecessary comprehension.
-            if transformation_expression == "item":
-                block = Stripped(
-                    f"""\
-jsonable[{key_literal}] = list(that.{prop_name})"""
-                )
-            else:
-                block = Stripped(
-                    f"""\
-jsonable[{key_literal}] = [
-{I}{transformation_expression}
-{I}for item in that.{prop_name}
-]"""
-                )
+            # A named union is dispatched on just like an abstract class. We keep it
+            # as its own branch as we might want to support unions of primitives in
+            # the future, at which point this branch would need to diverge.
+            return Stripped(f"{access_expression}.transform(_SERIALIZER)")
+
+        else:
+            assert_never(our_type)
+
+    else:
+        assert_never(type_anno)
+
+
+def _generate_serialization(
+    access_expression: Stripped,
+    type_anno: intermediate.TypeAnnotationExceptOptional,
+) -> Stripped:
+    """
+    Generate the serialization of the value at the ``access_expression``.
+
+    The ``type_anno`` is expected to be stripped of its optionality; the guard
+    around the serialization is generated by the caller.
+
+    Every serializer has the same shape, ``value 🠒 JSON-able value``. Unlike on
+    the XML side, a JSON value is not framed by anything which encloses it, so
+    the value at a key already is the whole value, and the serializers need no
+    combinator tower: only a list and a tuple have to be composed at all.
+    """
+    if isinstance(type_anno, intermediate.AtomicTypeAnnotationAsTuple):
+        return _generate_atomic_serialization(access_expression, type_anno)
+
+    serializer_name: Identifier
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        items_type_anno = intermediate.beneath_optional(type_anno.items)
+
+        # NOTE (mristin):
+        # A list of the values which JSON carries as they come needs no serializer
+        # of its own: ``list`` already is the whole conversion, and it copies at
+        # the speed of C, whereas a composed serializer would cost a call and
+        # a comprehension.
+        if _serialized_as_it_is(items_type_anno):
+            serializer_name = Identifier("list")
+        else:
+            serializer_name = _list_serializer_name(type_anno)
+
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        serializer_name = _tuple_serializer_name(type_anno)
+
+    else:
+        assert_never(type_anno)
+
+    return Stripped(
+        f"""\
+{serializer_name}(
+{I}{access_expression}
+)"""
+    )
+
+
+class _SerializerRegistry:
+    """
+    Generate the code of the serializers which a meta-model needs to be composed.
+
+    The composed serializers are de-duplicated by the type which they serialize, so
+    that all the classes share them, and they are named by
+    :py:func:`_list_serializer_name` and :py:func:`_tuple_serializer_name`. Nothing
+    whatsoever is composed at the time of the serialization: a serializer is
+    a module-level function, so the region contains no lambda at all.
+
+    This is the mirror image of :py:class:`_ParserRegistry` of the reading side.
+
+    The methods come grouped: first the queries, which give out what has been
+    registered so far and change nothing, and then the commands, which register and
+    give out nothing.
+    """
+
+    def __init__(self) -> None:
+        """Initialize with nothing registered."""
+        self._blocks_by_name = dict()  # type: MutableMapping[Identifier, Stripped]
+        self._bytes_are_encoded = False
+
+    @property
+    def blocks(self) -> List[Stripped]:
+        """Give out the code of the registered serializers, ordered by their name."""
+        return [self._blocks_by_name[name] for name in sorted(self._blocks_by_name)]
+
+    @property
+    def bytes_are_encoded(self) -> bool:
+        """Check whether a byte array is encoded anywhere in the meta-model."""
+        return self._bytes_are_encoded
+
+    def note_bytes_are_encoded(self) -> None:
+        """Note that a byte array is encoded somewhere in the meta-model."""
+        self._bytes_are_encoded = True
+
+    def _add(self, name: Identifier, block: Stripped) -> None:
+        """Register the ``block`` which defines the serializer ``name``."""
+        self._blocks_by_name[name] = block
+
+    def _register_list_serializer(
+        self, type_annotation: intermediate.ListTypeAnnotation
+    ) -> None:
+        """Register the serializer of a list with items of the ``type_annotation``."""
+        items_type_anno = intermediate.beneath_optional(type_annotation.items)
+
+        assert not isinstance(
+            items_type_anno,
+            (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
+        ), (
+            "We chose to implement only a very limited pattern matching; "
+            "see intermediate._translate._verify_only_simple_type_patterns"
+        )
+
+        # NOTE (mristin):
+        # See the note in :py:func:`_generate_serialize_statement` on why such a list
+        # is served by ``list`` instead of by a serializer of its own.
+        if _serialized_as_it_is(items_type_anno):
+            return
+
+        self.register_serializer(items_type_anno)
+
+        name = _list_serializer_name(type_annotation)
+
+        list_type = python_common.generate_type(
+            type_annotation, types_module=Identifier("aas_types")
+        )
+
+        item_serialization = _generate_atomic_serialization(
+            Stripped("item"), items_type_anno
+        )
+
+        self._add(
+            name,
+            Stripped(
+                f'''\
+def {name}(
+{I}that: {list_type}
+) -> List[MutableJsonable]:
+{I}"""
+{I}Serialize :paramref:`that` as a list of
+{I}{python_common.describe_atomic_type(items_type_anno)}.
+
+{I}:param that: list to be serialized
+{I}:return: JSON-able representation of :paramref:`that`
+{I}"""
+{I}return [
+{II}{item_serialization}
+{II}for item in that
+{I}]'''
+            ),
+        )
+
+    def _register_tuple_serializer(
+        self, type_annotation: intermediate.TupleTypeAnnotation
+    ) -> None:
+        """Register the serializer of a tuple with items of the ``type_annotation``."""
+        item_expressions = []  # type: List[Stripped]
+
+        for i, item_type_anno in enumerate(type_annotation.items):
+            assert isinstance(
+                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
+            ), (
+                "Tuple items are restricted to atomic types (primitives, constrained "
+                "primitives, classes and enumerations) by "
+                "intermediate._translate._verify_only_simple_type_patterns, so "
+                "no nested optionals, lists or tuples are expected here."
+            )
+
+            self.register_serializer(item_type_anno)
+
+            item_expressions.append(
+                _generate_atomic_serialization(Stripped(f"that[{i}]"), item_type_anno)
+            )
+
+        name = _tuple_serializer_name(type_annotation)
+
+        tuple_type = python_common.generate_type(
+            type_annotation, types_module=Identifier("aas_types")
+        )
+
+        joined_item_expressions = ",\n".join(item_expressions)
+
+        self._add(
+            name,
+            Stripped(
+                f'''\
+def {name}(
+{I}that: {indent_but_first_line(tuple_type, I)}
+) -> List[MutableJsonable]:
+{I}"""
+{I}Serialize :paramref:`that` as a tuple of {len(type_annotation.items)} item(s).
+
+{I}:param that: tuple to be serialized
+{I}:return: JSON-able representation of :paramref:`that`
+{I}"""
+{I}return [
+{II}{indent_but_first_line(joined_item_expressions, II)}
+{I}]'''
+            ),
+        )
+
+    def register_serializer(
+        self, type_annotation: intermediate.TypeAnnotationUnion
+    ) -> None:
+        """
+        Register the serializers needed to serialize a value of the ``type_annotation``.
+        """
+        type_anno = intermediate.beneath_optional(type_annotation)
+
+        if _serialized_as_it_is(type_anno):
+            return
+
+        primitive_type = intermediate.try_primitive_type(type_anno)
+        if primitive_type is not None:
+            assert primitive_type is intermediate.PrimitiveType.BYTEARRAY, (
+                f"Expected all the other primitive types to be handled before, "
+                f"but got: {primitive_type}"
+            )
+
+            self.note_bytes_are_encoded()
+            return
+
+        if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
+            raise AssertionError("Expected to handle this case before")
+
+        elif isinstance(type_anno, intermediate.OurTypeAnnotation):
+            # NOTE (mristin):
+            # An enumeration is serialized by reading its ``value``, and an instance
+            # by the function which is generated together with its class, so there is
+            # nothing to register here.
+            pass
+
+        elif isinstance(type_anno, intermediate.ListTypeAnnotation):
+            self._register_list_serializer(type_anno)
 
         elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-            item_expressions = []  # type: List[Stripped]
-            for i, item_type_anno in enumerate(type_anno.items):
-                assert isinstance(
-                    item_type_anno,
-                    (
-                        intermediate.PrimitiveTypeAnnotation,
-                        intermediate.OurTypeAnnotation,
-                    ),
-                ), (
-                    "Tuple items are restricted to atomic types (primitives, "
-                    "constrained primitives, classes and enumerations) by "
-                    "intermediate._translate._verify_only_simple_type_patterns, so no "
-                    "nested optionals, lists or tuples are expected here."
-                )
-
-                item_expressions.append(
-                    _generate_transform_atomic_value(
-                        access_expression=Stripped(f"that.{prop_name}[{i}]"),
-                        type_anno=item_type_anno,
-                    )
-                )
-
-            item_expressions_joined = ",\n".join(item_expressions)
-
-            block = Stripped(
-                f"""\
-jsonable[{key_literal}] = [
-{I}{indent_but_first_line(item_expressions_joined, I)}
-]"""
-            )
+            self._register_tuple_serializer(type_anno)
 
         else:
             assert_never(type_anno)
 
+
+def _generate_cls_to_jsonable(cls: intermediate.ConcreteClass) -> Stripped:
+    """Generate the function to serialize an instance of the ``cls``."""
+    cls_name = python_naming.class_name(cls.name)
+    function_name = _cls_serializer_name(cls)
+
+    body_blocks = [
+        Stripped("jsonable: MutableMapping[str, MutableJsonable] = dict()")
+    ]  # type: List[Stripped]
+
+    for prop in cls.properties:
+        prop_name = python_naming.property_name(prop.name)
+
+        key_literal = python_common.string_literal(prop.json_name)
+
+        serialization = _generate_serialization(
+            access_expression=Stripped(f"that.{prop_name}"),
+            type_anno=intermediate.beneath_optional(prop.type_annotation),
+        )
+
+        statement = Stripped(f"jsonable[{key_literal}] = {serialization}")
+
         if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-            block = Stripped(
+            statement = Stripped(
                 f"""\
 if that.{prop_name} is not None:
-{I}{indent_but_first_line(block, I)}"""
+{I}{indent_but_first_line(statement, I)}"""
             )
 
-        blocks.append(block)
+        body_blocks.append(statement)
 
     if cls.serialization.with_model_type:
         model_type_literal = python_common.string_literal(
             naming.json_model_type(cls.name)
         )
-        blocks.append(Stripped(f"""jsonable["modelType"] = {model_type_literal}"""))
+        body_blocks.append(Stripped(f"jsonable['modelType'] = {model_type_literal}"))
 
-    blocks.append(Stripped("return jsonable"))
+    body_blocks.append(Stripped("return jsonable"))
 
-    method_name = python_naming.method_name(Identifier(f"transform_{cls.name}"))
+    # NOTE (mristin):
+    # The statements follow each other without a blank line in between, as they do in
+    # the XML writers. The blank lines which used to separate them made up a quarter
+    # of the region.
+    body = "\n".join(body_blocks)
 
-    cls_name = python_naming.class_name(cls.name)
-
-    writer = io.StringIO()
-
-    no_self_use = all(
-        (
-            some_type_anno := intermediate.beneath_optional(prop.type_annotation),
-            intermediate.try_primitive_type(some_type_anno) is not None
-            or (
-                isinstance(some_type_anno, intermediate.OurTypeAnnotation)
-                and isinstance(some_type_anno.our_type, intermediate.Enumeration)
-            ),
-        )[1]
-        for prop in cls.properties
-    )
-
-    if no_self_use:
-        writer.write("# noinspection PyMethodMayBeStatic\n")
-
-    writer.write(
-        f"""\
-def {method_name}(
-{I}self,
+    return Stripped(
+        f'''\
+def {function_name}(
 {I}that: aas_types.{cls_name}
-) -> MutableJsonable:
-{I}\"\"\"Serialize :paramref:`that` to a JSON-able representation.\"\"\""""
+) -> MutableMapping[str, MutableJsonable]:
+{I}"""Serialize :paramref:`that` to a JSON-able representation."""
+{I}{indent_but_first_line(body, I)}'''
     )
 
-    if len(blocks) > 0:
-        writer.write("\n")
 
-    for i, block in enumerate(blocks):
-        if i > 0:
-            writer.write("\n\n")
-        writer.write(textwrap.indent(block, I))
-
-    return Stripped(writer.getvalue())
-
-
-def _generate_transformer(symbol_table: intermediate.SymbolTable) -> Stripped:
-    methods = []  # type: List[Stripped]
+def _generate_serializer(symbol_table: intermediate.SymbolTable) -> Stripped:
+    """Generate the transformer which dispatches on the class of an instance."""
+    assignments = []  # type: List[Stripped]
 
     for our_type in symbol_table.our_types:
-        if isinstance(our_type, intermediate.ConcreteClass):
-            methods.append(_generate_transform(our_type))
+        if not isinstance(our_type, intermediate.ConcreteClass):
+            continue
 
-    writer = io.StringIO()
-    writer.write(
-        f"""\
+        method_name = python_naming.method_name(
+            Identifier(f"transform_{our_type.name}")
+        )
+        serializer_name = _cls_serializer_name(our_type)
+
+        assignments.append(
+            Stripped(
+                f"""\
+{method_name} = staticmethod(
+{I}{serializer_name}
+)"""
+            )
+        )
+
+    joined_assignments = "\n".join(assignments)
+
+    return Stripped(
+        f'''\
 class _Serializer(
 {II}aas_types.AbstractTransformer[MutableJsonable]
 ):
-{I}\"\"\"Transform the instance to its JSON-able representation.\"\"\""""
+{I}"""
+{I}Dispatch on the class of an instance to serialize it.
+
+{I}The methods *are* the serializers, instead of forwarding to them, so that
+{I}a dispatch costs a single call. Wherever the class of a value is already
+{I}known -- which is every class without concrete descendants -- the serializer
+{I}is called directly and this transformer is not involved at all.
+{I}"""
+
+{I}{indent_but_first_line(joined_assignments, I)}'''
     )
-
-    for method in methods:
-        writer.write("\n\n")
-        writer.write(textwrap.indent(method, I))
-
-    return Stripped(writer.getvalue())
 
 
 # endregion
@@ -1669,6 +1892,84 @@ def generate(
 
     The ``qualified_module_name`` indicates the fully-qualified name of the base module.
     """
+    errors = python_common.errors_in_monikers(symbol_table)
+    if len(errors) > 0:
+        return None, errors
+
+    # region Compose the de/serializers
+
+    # NOTE (mristin):
+    # We compose the de/serializers first so that we know which of them, and which of
+    # the shared helpers, a meta-model actually reaches. Only those are finally
+    # generated, gated along the call graph.
+
+    registry = _ParserRegistry()
+    serializer_registry = _SerializerRegistry()
+
+    for concrete_cls in symbol_table.concrete_classes:
+        # NOTE (mristin):
+        # An implementation-specific class is de/serialized by a snippet, so
+        # the de/serializers which its properties would need are never called.
+        if concrete_cls.is_implementation_specific:
+            continue
+
+        for prop in concrete_cls.properties:
+            registry.register_parser(prop.type_annotation)
+            serializer_registry.register_serializer(prop.type_annotation)
+
+    if (
+        any(
+            not concrete_cls.is_implementation_specific
+            for concrete_cls in symbol_table.concrete_classes
+        )
+        or len(symbol_table.named_unions) > 0
+    ):
+        registry.note_needed_helper("_as_mapping")
+
+    if any(len(cls.concrete_descendants) > 0 for cls in symbol_table.classes) or any(
+        any(
+            implementer.serialization.with_model_type
+            for implementer in named_union.implementers
+        )
+        for named_union in symbol_table.named_unions
+    ):
+        registry.note_needed_helper("_dispatch_from_jsonable")
+
+    helper_blocks = _generate_deserialization_helpers()
+
+    # NOTE (mristin):
+    # We can not see inside a snippet, so we do not know which of the shared helpers
+    # it calls. As soon as a meta-model has an implementation-specific class, we
+    # therefore generate all of them, instead of letting the snippet fail with
+    # a ``NameError`` at the time of the de/serialization.
+    if any(
+        concrete_cls.is_implementation_specific
+        for concrete_cls in symbol_table.concrete_classes
+    ):
+        for helper_name in helper_blocks:
+            registry.note_needed_helper(helper_name)
+
+        for arity in intermediate.tuple_arities(symbol_table):
+            registry.note_tuple_arity(arity)
+
+        serializer_registry.note_bytes_are_encoded()
+
+    needed_helpers = _collect_needed_helpers(registry.needed_helpers)
+
+    # NOTE (mristin):
+    # The :py:mod:`base64` module is imported only for the byte arrays, which are
+    # the only values that JSON can not represent as they come.
+    base64_import = (
+        "import base64\n"
+        if (
+            "_bytes_from_jsonable" in needed_helpers
+            or serializer_registry.bytes_are_encoded
+        )
+        else ""
+    )
+
+    # endregion
+
     blocks = [
         Stripped(
             """\
@@ -1683,7 +1984,7 @@ properties do not have fixed order, and hence we can not read
         python_common.WARNING,
         Stripped(
             f"""\
-import base64
+{base64_import}\
 import collections.abc
 import sys
 from typing import (
@@ -1845,68 +2146,6 @@ MutableJsonable = Union[
         ),
     ]  # type: List[Stripped]
 
-    errors = python_common.errors_in_monikers(symbol_table)
-    if len(errors) > 0:
-        return None, errors
-
-    # region Compose the parsers
-
-    # NOTE (mristin):
-    # We compose the parsers first so that we know which of them, and which of
-    # the shared helpers, a meta-model actually reaches. Only those are finally
-    # generated, gated along the call graph.
-
-    registry = _ParserRegistry()
-
-    for concrete_cls in symbol_table.concrete_classes:
-        # NOTE (mristin):
-        # An implementation-specific class is de-serialized by a snippet, so
-        # the parsers which its properties would need are never called.
-        if concrete_cls.is_implementation_specific:
-            continue
-
-        for prop in concrete_cls.properties:
-            registry.register_parser(prop.type_annotation)
-
-    if (
-        any(
-            not concrete_cls.is_implementation_specific
-            for concrete_cls in symbol_table.concrete_classes
-        )
-        or len(symbol_table.named_unions) > 0
-    ):
-        registry.note_needed_helper("_as_mapping")
-
-    if any(len(cls.concrete_descendants) > 0 for cls in symbol_table.classes) or any(
-        any(
-            implementer.serialization.with_model_type
-            for implementer in named_union.implementers
-        )
-        for named_union in symbol_table.named_unions
-    ):
-        registry.note_needed_helper("_dispatch_from_jsonable")
-
-    helper_blocks = _generate_deserialization_helpers()
-
-    # NOTE (mristin):
-    # We can not see inside a snippet, so we do not know which of the shared helpers
-    # it calls. As soon as a meta-model has an implementation-specific class, we
-    # therefore generate all of them, instead of letting the snippet fail with
-    # a ``NameError`` at the time of the parsing.
-    if any(
-        concrete_cls.is_implementation_specific
-        for concrete_cls in symbol_table.concrete_classes
-    ):
-        for helper_name in helper_blocks:
-            registry.note_needed_helper(helper_name)
-
-        for arity in intermediate.tuple_arities(symbol_table):
-            registry.note_tuple_arity(arity)
-
-    needed_helpers = _collect_needed_helpers(registry.needed_helpers)
-
-    # endregion
-
     blocks.append(Stripped("# region De-serialization"))
 
     blocks.append(
@@ -2002,9 +2241,42 @@ _Parser = Callable[
 
     blocks.append(Stripped("# region Serialization"))
 
-    blocks.append(_generate_bytes_to_base64_str())
+    if serializer_registry.bytes_are_encoded:
+        blocks.append(_generate_bytes_to_base64_str())
 
-    blocks.append(_generate_transformer(symbol_table=symbol_table))
+    blocks.extend(serializer_registry.blocks)
+
+    for our_type in symbol_table.our_types:
+        if not isinstance(our_type, intermediate.ConcreteClass):
+            continue
+
+        if our_type.is_implementation_specific:
+            implementation_key = specific_implementations.ImplementationKey(
+                f"Jsonization/{our_type.name}_to_jsonable.py"
+            )
+
+            implementation = spec_impls.get(implementation_key, None)
+            if implementation is None:
+                errors.append(
+                    Error(
+                        our_type.parsed.node,
+                        f"The jsonization snippet is missing "
+                        f"for the implementation-specific "
+                        f"class {our_type.name}: {implementation_key}",
+                    )
+                )
+                continue
+
+            # NOTE (mristin):
+            # The snippet is expected to define the serializer of the class, named
+            # by :py:func:`_cls_serializer_name`, and to be the whole of it: what
+            # an instance of such a class puts on the wire does not follow from its
+            # properties, and the model type is part of that.
+            blocks.append(implementation)
+        else:
+            blocks.append(_generate_cls_to_jsonable(cls=our_type))
+
+    blocks.append(_generate_serializer(symbol_table=symbol_table))
 
     blocks.append(Stripped("_SERIALIZER = _Serializer()"))
 
@@ -2020,7 +2292,7 @@ def to_jsonable(that: aas_types.Class) -> MutableJsonable:
 {I}:return:
 {II}JSON-able structure which can be further encoded with, *e.g.*, :py:mod:`json`
 {I}\"\"\"
-{I}return _SERIALIZER.transform(that)"""
+{I}return that.transform(_SERIALIZER)"""
         )
     )
 

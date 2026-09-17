@@ -11,7 +11,6 @@ properties do not have fixed order, and hence we can not read
 # Do NOT edit or append.
 
 
-import base64
 import collections.abc
 import sys
 from typing import (
@@ -677,106 +676,91 @@ _LEAF_FROM_JSONABLE_DISPATCH: Mapping[
 # region Serialization
 
 
-def _bytes_to_base64_str(
-    value: bytes
-) -> str:
-    """
-    Encode :paramref:`value` as a base64 string.
+def _branch_to_jsonable(
+    that: aas_types.Branch
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['identifier'] = that.identifier
+    jsonable['description'] = that.description
+    jsonable['modelType'] = 'Branch'
+    return jsonable
 
-    :param value: to be encoded
-    :return: encoded :paramref:`value` in base64
-    """
-    # We need to decode as ascii as ``base64.b64encode`` returns bytes,
-    # not a string!
-    return base64.b64encode(value).decode('ascii')
+
+def _leaf_to_jsonable(
+    that: aas_types.Leaf
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['identifier'] = that.identifier
+    jsonable['description'] = that.description
+    jsonable['value'] = that.value
+    jsonable['modelType'] = 'Leaf'
+    return jsonable
+
+
+def _blossom_to_jsonable(
+    that: aas_types.Blossom
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['identifier'] = that.identifier
+    jsonable['description'] = that.description
+    jsonable['value'] = that.value
+    jsonable['details'] = that.details
+    jsonable['modelType'] = 'Blossom'
+    return jsonable
+
+
+def _something_to_jsonable(
+    that: aas_types.Something
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['someChoice'] = that.some_choice.transform(_SERIALIZER)
+    jsonable['somethingWithoutChoice'] = that.something_without_choice.transform(_SERIALIZER)
+    return jsonable
+
+
+def _container_to_jsonable(
+    that: aas_types.Container
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['node'] = that.node.transform(_SERIALIZER)
+    jsonable['something'] = _something_to_jsonable(
+        that.something
+    )
+    return jsonable
 
 
 class _Serializer(
         aas_types.AbstractTransformer[MutableJsonable]
 ):
-    """Transform the instance to its JSON-able representation."""
+    """
+    Dispatch on the class of an instance to serialize it.
 
-    # noinspection PyMethodMayBeStatic
-    def transform_branch(
-        self,
-        that: aas_types.Branch
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
+    The methods *are* the serializers, instead of forwarding to them, so that
+    a dispatch costs a single call. Wherever the class of a value is already
+    known -- which is every class without concrete descendants -- the serializer
+    is called directly and this transformer is not involved at all.
+    """
 
-        jsonable['identifier'] = that.identifier
-
-        jsonable['description'] = that.description
-
-        jsonable["modelType"] = 'Branch'
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_leaf(
-        self,
-        that: aas_types.Leaf
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['identifier'] = that.identifier
-
-        jsonable['description'] = that.description
-
-        jsonable['value'] = that.value
-
-        jsonable["modelType"] = 'Leaf'
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_blossom(
-        self,
-        that: aas_types.Blossom
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['identifier'] = that.identifier
-
-        jsonable['description'] = that.description
-
-        jsonable['value'] = that.value
-
-        jsonable['details'] = that.details
-
-        jsonable["modelType"] = 'Blossom'
-
-        return jsonable
-
-    def transform_something(
-        self,
-        that: aas_types.Something
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['someChoice'] = self.transform(that.some_choice)
-
-        jsonable['somethingWithoutChoice'] = (
-            self.transform(that.something_without_choice)
-        )
-
-        return jsonable
-
-    def transform_container(
-        self,
-        that: aas_types.Container
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['node'] = self.transform(that.node)
-
-        jsonable['something'] = self.transform(that.something)
-
-        return jsonable
+    transform_branch = staticmethod(
+        _branch_to_jsonable
+    )
+    transform_leaf = staticmethod(
+        _leaf_to_jsonable
+    )
+    transform_blossom = staticmethod(
+        _blossom_to_jsonable
+    )
+    transform_something = staticmethod(
+        _something_to_jsonable
+    )
+    transform_container = staticmethod(
+        _container_to_jsonable
+    )
 
 
 _SERIALIZER = _Serializer()
@@ -791,7 +775,7 @@ def to_jsonable(that: aas_types.Class) -> MutableJsonable:
     :return:
         JSON-able structure which can be further encoded with, *e.g.*, :py:mod:`json`
     """
-    return _SERIALIZER.transform(that)
+    return that.transform(_SERIALIZER)
 
 
 # endregion
