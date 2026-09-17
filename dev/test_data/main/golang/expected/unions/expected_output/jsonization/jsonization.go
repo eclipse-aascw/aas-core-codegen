@@ -52,6 +52,28 @@ func (de *DeserializationError) PathString() string {
 	return aasreporting.ToJSONPath(de.Path)
 }
 
+// Prepend the `name` segment to the path of the `err`, if it is
+// a de-serialization error, and return the `err` back for chaining.
+func prependName(err error, name string) error {
+	if deseriaErr, ok := err.(*DeserializationError); ok {
+		deseriaErr.Path.PrependName(
+			&aasreporting.NameSegment{Name: name},
+		)
+	}
+	return err
+}
+
+// Prepend the `index` segment to the path of the `err`, if it is
+// a de-serialization error, and return the `err` back for chaining.
+func prependIndex(err error, index int) error {
+	if deseriaErr, ok := err.(*DeserializationError); ok {
+		deseriaErr.Path.PrependIndex(
+			&aasreporting.IndexSegment{Index: index},
+		)
+	}
+	return err
+}
+
 // Parse `jsonable` as a boolean, or return an error.
 func boolFromJsonable(
 	jsonable interface{},
@@ -222,22 +244,109 @@ func bytesFromJsonable(
 	return
 }
 
-// Parse `jsonableArray` into a slice of `T` by calling `parseItem` on every
-// item, or return an error.
+// Return a pointer to the `value`, or the `err`, if any.
+//
+// This function takes the *results* of a parse function instead of the parse
+// function itself. Go binds all the results of a call to the whole parameter
+// list of the enclosing call, so this single helper composes with every parse
+// function, however many arguments that function takes -- including
+// `parseOptional(parseTuple2(v, ...))`, which a parser-taking signature could
+// not express, as the item parsers of a tuple vary both in number and in type.
+func parseOptional[T any](value T, err error) (*T, error) {
+	if err != nil {
+		return nil, err
+	}
+	return &value, nil
+}
+
+// Report that `jsonable` is no JSON object.
+func notAMapError(jsonable interface{}) error {
+	if jsonable == nil {
+		return newDeserializationError(
+			"Expected a JSON object, but got null",
+		)
+	}
+
+	return newDeserializationError(
+		fmt.Sprintf(
+			"Expected a JSON object, but got %T",
+			jsonable,
+		),
+	)
+}
+
+// Extract the `modelType` property of `m` as a string, or return an error.
+//
+// This is the only place which knows how the model type is spelled on the wire.
+// Both the dispatch on the model type and its check in a concrete class go
+// through it.
+func modelTypeFromMap(
+	m map[string]interface{},
+) (modelType string, err error) {
+	jsonable, ok := m["modelType"]
+	if !ok {
+		err = newDeserializationError(
+			"The required property modelType is missing",
+		)
+		return
+	}
+
+	modelType, err = stringFromJsonable(jsonable)
+	if err != nil {
+		err = prependName(err, "modelType")
+	}
+	return
+}
+
+// Check that `m` specifies the `expected` model type, or return an error.
+func checkModelType(
+	m map[string]interface{},
+	expected string,
+) (err error) {
+	var modelType string
+	modelType, err = modelTypeFromMap(m)
+	if err != nil {
+		return
+	}
+
+	if modelType != expected {
+		err = prependName(
+			newDeserializationError(
+				fmt.Sprintf(
+					"Expected the model type '%s', but got %s",
+					expected,
+					modelType,
+				),
+			),
+			"modelType",
+		)
+	}
+	return
+}
+
+// Parse `jsonable` as an array and parse every item with `parseItem`,
+// or return an error.
 func parseArray[T any](
-	jsonableArray []interface{},
+	jsonable interface{},
 	parseItem func(jsonable interface{}) (T, error),
 ) (result []T, err error) {
+	jsonableArray, ok := jsonable.([]interface{})
+	if !ok {
+		err = newDeserializationError(
+			fmt.Sprintf(
+				"Expected an array, but got %T",
+				jsonable,
+			),
+		)
+		return
+	}
+
 	result = make([]T, len(jsonableArray))
 	for i, itemJsonable := range jsonableArray {
 		var item T
 		item, err = parseItem(itemJsonable)
 		if err != nil {
-			if deseriaErr, ok := err.(*DeserializationError); ok {
-				deseriaErr.Path.PrependIndex(
-					&aasreporting.IndexSegment{Index: i},
-				)
-			}
+			err = prependIndex(err, i)
 			return
 		}
 		result[i] = item
@@ -245,15 +354,60 @@ func parseArray[T any](
 	return
 }
 
-// Parse `jsonableArray` into a aascommon.Tuple3[T0, T1, T2] by calling `parseItem0`,
-// `parseItem1`, *etc.* on the correspondingly positioned item, or return
-// an error.
+// Check that `m` contains all the properties with the given `names`.
+//
+// The named unions are verified at the code generation time such that
+// the required properties of the structurally dispatched implementers are
+// pairwise disjoint. The presence of the properties thus suffices to tell
+// the implementers apart, and their values need not be inspected.
+func hasAllProperties(
+	m map[string]interface{},
+	names ...string,
+) bool {
+	for _, name := range names {
+		if _, ok := m[name]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// Parse `m` with `fromMap` and wrap the instance into a union with `newUnion`,
+// or return an error.
+func unionFromMap[I any, U any](
+	m map[string]interface{},
+	fromMap func(m map[string]interface{}) (I, error),
+	newUnion func(that I) U,
+) (result U, err error) {
+	var instance I
+	instance, err = fromMap(m)
+	if err != nil {
+		return
+	}
+	result = newUnion(instance)
+	return
+}
+
+// Parse `jsonable` as an array of exactly 3 item(s) and parse them into
+// a aascommon.Tuple3[T0, T1, T2] with `parseItem0`, `parseItem1`, *etc.*,
+// or return an error.
 func parseTuple3[T0 any, T1 any, T2 any](
-	jsonableArray []interface{},
+	jsonable interface{},
 	parseItem0 func(jsonable interface{}) (T0, error),
 	parseItem1 func(jsonable interface{}) (T1, error),
 	parseItem2 func(jsonable interface{}) (T2, error),
 ) (result aascommon.Tuple3[T0, T1, T2], err error) {
+	jsonableArray, ok := jsonable.([]interface{})
+	if !ok {
+		err = newDeserializationError(
+			fmt.Sprintf(
+				"Expected an array, but got %T",
+				jsonable,
+			),
+		)
+		return
+	}
+
 	if len(jsonableArray) != 3 {
 		err = newDeserializationError(
 			fmt.Sprintf(
@@ -267,33 +421,21 @@ func parseTuple3[T0 any, T1 any, T2 any](
 	var item0 T0
 	item0, err = parseItem0(jsonableArray[0])
 	if err != nil {
-		if deseriaErr, ok := err.(*DeserializationError); ok {
-			deseriaErr.Path.PrependIndex(
-				&aasreporting.IndexSegment{Index: 0},
-			)
-		}
+		err = prependIndex(err, 0)
 		return
 	}
 
 	var item1 T1
 	item1, err = parseItem1(jsonableArray[1])
 	if err != nil {
-		if deseriaErr, ok := err.(*DeserializationError); ok {
-			deseriaErr.Path.PrependIndex(
-				&aasreporting.IndexSegment{Index: 1},
-			)
-		}
+		err = prependIndex(err, 1)
 		return
 	}
 
 	var item2 T2
 	item2, err = parseItem2(jsonableArray[2])
 	if err != nil {
-		if deseriaErr, ok := err.(*DeserializationError); ok {
-			deseriaErr.Path.PrependIndex(
-				&aasreporting.IndexSegment{Index: 2},
-			)
-		}
+		err = prependIndex(err, 2)
 		return
 	}
 
@@ -313,27 +455,13 @@ func StructuralFirstFromJsonable(
 	result aastypes.IStructuralFirst,
 	err error,
 ) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected a JSON object, but got null",
-		)
-		return
-	}
-
 	m, ok := jsonable.(map[string]interface{})
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a JSON object, but got %T",
-				jsonable,
-			),
-		)
+		err = notAMapError(jsonable)
 		return
 	}
 
-	result, err = structuralFirstFromMapWithoutDispatch(m)
-
-	return
+	return structuralFirstFromMapWithoutDispatch(m)
 }
 
 // Parse [aastypes.IStructuralFirst] from a map,
@@ -351,19 +479,7 @@ func structuralFirstFromMapWithoutDispatch(
 	for k, v := range m {
 		switch k {
 		case "uniqueToFirst":
-			theUniqueToFirst, err = stringFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "uniqueToFirst",
-						},
-					)
-				}
-				return
-			}
+			theUniqueToFirst, err = stringFromJsonable(v)
 			foundUniqueToFirst = true
 
 		default:
@@ -373,6 +489,11 @@ func structuralFirstFromMapWithoutDispatch(
 					k,
 				),
 			)
+			return
+		}
+
+		if err != nil {
+			err = prependName(err, k)
 			return
 		}
 	}
@@ -399,27 +520,13 @@ func StructuralSecondFromJsonable(
 	result aastypes.IStructuralSecond,
 	err error,
 ) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected a JSON object, but got null",
-		)
-		return
-	}
-
 	m, ok := jsonable.(map[string]interface{})
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a JSON object, but got %T",
-				jsonable,
-			),
-		)
+		err = notAMapError(jsonable)
 		return
 	}
 
-	result, err = structuralSecondFromMapWithoutDispatch(m)
-
-	return
+	return structuralSecondFromMapWithoutDispatch(m)
 }
 
 // Parse [aastypes.IStructuralSecond] from a map,
@@ -437,19 +544,7 @@ func structuralSecondFromMapWithoutDispatch(
 	for k, v := range m {
 		switch k {
 		case "uniqueToSecond":
-			theUniqueToSecond, err = stringFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "uniqueToSecond",
-						},
-					)
-				}
-				return
-			}
+			theUniqueToSecond, err = stringFromJsonable(v)
 			foundUniqueToSecond = true
 
 		default:
@@ -459,6 +554,11 @@ func structuralSecondFromMapWithoutDispatch(
 					k,
 				),
 			)
+			return
+		}
+
+		if err != nil {
+			err = prependName(err, k)
 			return
 		}
 	}
@@ -485,56 +585,26 @@ func StructuralUnionFromJsonable(
 	result *aastypes.StructuralUnion,
 	err error,
 ) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected a JSON object, but got null",
-		)
-		return
-	}
-
 	m, ok := jsonable.(map[string]interface{})
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a JSON object, but got %T",
-				jsonable,
-			),
-		)
+		err = notAMapError(jsonable)
 		return
 	}
 
-	{
-		_, found0 := m["uniqueToFirst"]
-		if found0 {
-			var instance aastypes.IStructuralFirst
-			instance, err = StructuralFirstFromJsonable(
-				m,
-			)
-			if err != nil {
-				return
-			}
-			result = aastypes.NewStructuralUnionFromStructuralFirst(
-				instance,
-			)
-			return
-		}
+	if hasAllProperties(m, "uniqueToFirst") {
+		return unionFromMap(
+			m,
+			structuralFirstFromMapWithoutDispatch,
+			aastypes.NewStructuralUnionFromStructuralFirst,
+		)
 	}
 
-	{
-		_, found0 := m["uniqueToSecond"]
-		if found0 {
-			var instance aastypes.IStructuralSecond
-			instance, err = StructuralSecondFromJsonable(
-				m,
-			)
-			if err != nil {
-				return
-			}
-			result = aastypes.NewStructuralUnionFromStructuralSecond(
-				instance,
-			)
-			return
-		}
+	if hasAllProperties(m, "uniqueToSecond") {
+		return unionFromMap(
+			m,
+			structuralSecondFromMapWithoutDispatch,
+			aastypes.NewStructuralUnionFromStructuralSecond,
+		)
 	}
 
 	err = newDeserializationError(
@@ -552,27 +622,13 @@ func MixedAbstractMemberFromJsonable(
 	result aastypes.IMixedAbstractMember,
 	err error,
 ) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected a JSON object, but got null",
-		)
-		return
-	}
-
 	m, ok := jsonable.(map[string]interface{})
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a JSON object, but got %T",
-				jsonable,
-			),
-		)
+		err = notAMapError(jsonable)
 		return
 	}
 
-	result, err = mixedAbstractMemberFromMap(m)
-
-	return
+	return mixedAbstractMemberFromMap(m)
 }
 
 // Parse `jsonable` as an instance of [aastypes.IMixedAbstractDescendantOne],
@@ -583,27 +639,13 @@ func MixedAbstractDescendantOneFromJsonable(
 	result aastypes.IMixedAbstractDescendantOne,
 	err error,
 ) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected a JSON object, but got null",
-		)
-		return
-	}
-
 	m, ok := jsonable.(map[string]interface{})
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a JSON object, but got %T",
-				jsonable,
-			),
-		)
+		err = notAMapError(jsonable)
 		return
 	}
 
-	result, err = mixedAbstractDescendantOneFromMapWithoutDispatch(m)
-
-	return
+	return mixedAbstractDescendantOneFromMapWithoutDispatch(m)
 }
 
 // Parse [aastypes.IMixedAbstractDescendantOne] from a map,
@@ -621,19 +663,7 @@ func mixedAbstractDescendantOneFromMapWithoutDispatch(
 	for k, v := range m {
 		switch k {
 		case "uniqueToAbstractDescendantOne":
-			theUniqueToAbstractDescendantOne, err = stringFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "uniqueToAbstractDescendantOne",
-						},
-					)
-				}
-				return
-			}
+			theUniqueToAbstractDescendantOne, err = stringFromJsonable(v)
 			foundUniqueToAbstractDescendantOne = true
 
 		default:
@@ -643,6 +673,11 @@ func mixedAbstractDescendantOneFromMapWithoutDispatch(
 					k,
 				),
 			)
+			return
+		}
+
+		if err != nil {
+			err = prependName(err, k)
 			return
 		}
 	}
@@ -669,27 +704,13 @@ func MixedAbstractDescendantTwoFromJsonable(
 	result aastypes.IMixedAbstractDescendantTwo,
 	err error,
 ) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected a JSON object, but got null",
-		)
-		return
-	}
-
 	m, ok := jsonable.(map[string]interface{})
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a JSON object, but got %T",
-				jsonable,
-			),
-		)
+		err = notAMapError(jsonable)
 		return
 	}
 
-	result, err = mixedAbstractDescendantTwoFromMapWithoutDispatch(m)
-
-	return
+	return mixedAbstractDescendantTwoFromMapWithoutDispatch(m)
 }
 
 // Parse [aastypes.IMixedAbstractDescendantTwo] from a map,
@@ -707,19 +728,7 @@ func mixedAbstractDescendantTwoFromMapWithoutDispatch(
 	for k, v := range m {
 		switch k {
 		case "uniqueToAbstractDescendantTwo":
-			theUniqueToAbstractDescendantTwo, err = stringFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "uniqueToAbstractDescendantTwo",
-						},
-					)
-				}
-				return
-			}
+			theUniqueToAbstractDescendantTwo, err = stringFromJsonable(v)
 			foundUniqueToAbstractDescendantTwo = true
 
 		default:
@@ -729,6 +738,11 @@ func mixedAbstractDescendantTwoFromMapWithoutDispatch(
 					k,
 				),
 			)
+			return
+		}
+
+		if err != nil {
+			err = prependName(err, k)
 			return
 		}
 	}
@@ -755,27 +769,13 @@ func MixedConcreteWithDescendantsFromJsonable(
 	result aastypes.IMixedConcreteWithDescendants,
 	err error,
 ) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected a JSON object, but got null",
-		)
-		return
-	}
-
 	m, ok := jsonable.(map[string]interface{})
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a JSON object, but got %T",
-				jsonable,
-			),
-		)
+		err = notAMapError(jsonable)
 		return
 	}
 
-	result, err = mixedConcreteWithDescendantsFromMap(m)
-
-	return
+	return mixedConcreteWithDescendantsFromMap(m)
 }
 
 // Parse [aastypes.IMixedConcreteWithDescendants] from a map,
@@ -797,61 +797,14 @@ func mixedConcreteWithDescendantsFromMapWithoutDispatch(
 
 	foundSomeBaseProperty := false
 
-	var foundModelType bool
-
 	for k, v := range m {
 		switch k {
 		case "someBaseProperty":
-			theSomeBaseProperty, err = stringFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "someBaseProperty",
-						},
-					)
-				}
-				return
-			}
+			theSomeBaseProperty, err = stringFromJsonable(v)
 			foundSomeBaseProperty = true
 
 		case "modelType":
-			var modelType string
-			modelType, err = stringFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "modelType",
-						},
-					)
-				}
-				return
-			}
-
-			if modelType != "MixedConcreteWithDescendants" {
-				deseriaErr := newDeserializationError(
-					fmt.Sprintf(
-						"Expected the model type 'MixedConcreteWithDescendants', but got %v",
-						v,
-					),
-				)
-
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "modelType",
-					},
-				)
-
-				err = deseriaErr
-				return
-			}
-
-			foundModelType = true
+			// The model type has already been checked before the loop.
 
 		default:
 			err = newDeserializationError(
@@ -862,18 +815,16 @@ func mixedConcreteWithDescendantsFromMapWithoutDispatch(
 			)
 			return
 		}
+
+		if err != nil {
+			err = prependName(err, k)
+			return
+		}
 	}
 
 	if !foundSomeBaseProperty {
 		err = newDeserializationError(
 			"The required property 'someBaseProperty' is missing",
-		)
-		return
-	}
-
-	if !foundModelType {
-		err = newDeserializationError(
-			"The required property modelType is missing",
 		)
 		return
 	}
@@ -893,27 +844,18 @@ func MixedConcreteWithDescendantsChildFromJsonable(
 	result aastypes.IMixedConcreteWithDescendantsChild,
 	err error,
 ) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected a JSON object, but got null",
-		)
-		return
-	}
-
 	m, ok := jsonable.(map[string]interface{})
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a JSON object, but got %T",
-				jsonable,
-			),
-		)
+		err = notAMapError(jsonable)
 		return
 	}
 
-	result, err = mixedConcreteWithDescendantsChildFromMapWithoutDispatch(m)
+	err = checkModelType(m, "MixedConcreteWithDescendantsChild")
+	if err != nil {
+		return
+	}
 
-	return
+	return mixedConcreteWithDescendantsChildFromMapWithoutDispatch(m)
 }
 
 // Parse [aastypes.IMixedConcreteWithDescendantsChild] from a map,
@@ -930,77 +872,18 @@ func mixedConcreteWithDescendantsChildFromMapWithoutDispatch(
 	foundSomeBaseProperty := false
 	foundSomeChildProperty := false
 
-	var foundModelType bool
-
 	for k, v := range m {
 		switch k {
 		case "someBaseProperty":
-			theSomeBaseProperty, err = stringFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "someBaseProperty",
-						},
-					)
-				}
-				return
-			}
+			theSomeBaseProperty, err = stringFromJsonable(v)
 			foundSomeBaseProperty = true
 
 		case "someChildProperty":
-			theSomeChildProperty, err = stringFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "someChildProperty",
-						},
-					)
-				}
-				return
-			}
+			theSomeChildProperty, err = stringFromJsonable(v)
 			foundSomeChildProperty = true
 
 		case "modelType":
-			var modelType string
-			modelType, err = stringFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "modelType",
-						},
-					)
-				}
-				return
-			}
-
-			if modelType != "MixedConcreteWithDescendantsChild" {
-				deseriaErr := newDeserializationError(
-					fmt.Sprintf(
-						"Expected the model type 'MixedConcreteWithDescendantsChild', but got %v",
-						v,
-					),
-				)
-
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "modelType",
-					},
-				)
-
-				err = deseriaErr
-				return
-			}
-
-			foundModelType = true
+			// The model type has already been checked before the loop.
 
 		default:
 			err = newDeserializationError(
@@ -1009,6 +892,11 @@ func mixedConcreteWithDescendantsChildFromMapWithoutDispatch(
 					k,
 				),
 			)
+			return
+		}
+
+		if err != nil {
+			err = prependName(err, k)
 			return
 		}
 	}
@@ -1023,13 +911,6 @@ func mixedConcreteWithDescendantsChildFromMapWithoutDispatch(
 	if !foundSomeChildProperty {
 		err = newDeserializationError(
 			"The required property 'someChildProperty' is missing",
-		)
-		return
-	}
-
-	if !foundModelType {
-		err = newDeserializationError(
-			"The required property modelType is missing",
 		)
 		return
 	}
@@ -1050,27 +931,13 @@ func MixedConcreteLeafFromJsonable(
 	result aastypes.IMixedConcreteLeaf,
 	err error,
 ) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected a JSON object, but got null",
-		)
-		return
-	}
-
 	m, ok := jsonable.(map[string]interface{})
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a JSON object, but got %T",
-				jsonable,
-			),
-		)
+		err = notAMapError(jsonable)
 		return
 	}
 
-	result, err = mixedConcreteLeafFromMapWithoutDispatch(m)
-
-	return
+	return mixedConcreteLeafFromMapWithoutDispatch(m)
 }
 
 // Parse [aastypes.IMixedConcreteLeaf] from a map,
@@ -1088,19 +955,7 @@ func mixedConcreteLeafFromMapWithoutDispatch(
 	for k, v := range m {
 		switch k {
 		case "uniqueToConcreteLeaf":
-			theUniqueToConcreteLeaf, err = stringFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "uniqueToConcreteLeaf",
-						},
-					)
-				}
-				return
-			}
+			theUniqueToConcreteLeaf, err = stringFromJsonable(v)
 			foundUniqueToConcreteLeaf = true
 
 		default:
@@ -1110,6 +965,11 @@ func mixedConcreteLeafFromMapWithoutDispatch(
 					k,
 				),
 			)
+			return
+		}
+
+		if err != nil {
+			err = prependName(err, k)
 			return
 		}
 	}
@@ -1136,64 +996,32 @@ func MixedUnionFromJsonable(
 	result *aastypes.MixedUnion,
 	err error,
 ) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected a JSON object, but got null",
-		)
-		return
-	}
-
 	m, ok := jsonable.(map[string]interface{})
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a JSON object, but got %T",
-				jsonable,
-			),
-		)
+		err = notAMapError(jsonable)
 		return
 	}
 
-	modelTypeAny, foundModelType := m["modelType"]
-	if foundModelType {
+	if _, found := m["modelType"]; found {
 		var modelType string
-		modelType, ok = modelTypeAny.(string)
-		if !ok {
-			err = newDeserializationError(
-				fmt.Sprintf(
-					"Expected the property modelType to be a string, "+
-						"but got %T",
-					modelTypeAny,
-				),
-			)
+		modelType, err = modelTypeFromMap(m)
+		if err != nil {
 			return
 		}
 
 		switch modelType {
 		case "MixedConcreteWithDescendantsChild":
-			var instance aastypes.IMixedConcreteWithDescendantsChild
-			instance, err = MixedConcreteWithDescendantsChildFromJsonable(
+			return unionFromMap(
 				m,
+				mixedConcreteWithDescendantsChildFromMapWithoutDispatch,
+				aastypes.NewMixedUnionFromMixedConcreteWithDescendantsChild,
 			)
-			if err != nil {
-				return
-			}
-			result = aastypes.NewMixedUnionFromMixedConcreteWithDescendantsChild(
-				instance,
-			)
-			return
 		case "MixedConcreteWithDescendants":
-			var instance aastypes.IMixedConcreteWithDescendants
-			instance, err = MixedConcreteWithDescendantsFromJsonable(
+			return unionFromMap(
 				m,
+				mixedConcreteWithDescendantsFromMapWithoutDispatch,
+				aastypes.NewMixedUnionFromMixedConcreteWithDescendants,
 			)
-			if err != nil {
-				return
-			}
-			result = aastypes.NewMixedUnionFromMixedConcreteWithDescendants(
-				instance,
-			)
-			return
 		default:
 			err = newDeserializationError(
 				fmt.Sprintf(
@@ -1205,55 +1033,28 @@ func MixedUnionFromJsonable(
 		}
 	}
 
-	{
-		_, found0 := m["uniqueToAbstractDescendantOne"]
-		if found0 {
-			var instance aastypes.IMixedAbstractDescendantOne
-			instance, err = MixedAbstractDescendantOneFromJsonable(
-				m,
-			)
-			if err != nil {
-				return
-			}
-			result = aastypes.NewMixedUnionFromMixedAbstractDescendantOne(
-				instance,
-			)
-			return
-		}
+	if hasAllProperties(m, "uniqueToAbstractDescendantOne") {
+		return unionFromMap(
+			m,
+			mixedAbstractDescendantOneFromMapWithoutDispatch,
+			aastypes.NewMixedUnionFromMixedAbstractDescendantOne,
+		)
 	}
 
-	{
-		_, found0 := m["uniqueToAbstractDescendantTwo"]
-		if found0 {
-			var instance aastypes.IMixedAbstractDescendantTwo
-			instance, err = MixedAbstractDescendantTwoFromJsonable(
-				m,
-			)
-			if err != nil {
-				return
-			}
-			result = aastypes.NewMixedUnionFromMixedAbstractDescendantTwo(
-				instance,
-			)
-			return
-		}
+	if hasAllProperties(m, "uniqueToAbstractDescendantTwo") {
+		return unionFromMap(
+			m,
+			mixedAbstractDescendantTwoFromMapWithoutDispatch,
+			aastypes.NewMixedUnionFromMixedAbstractDescendantTwo,
+		)
 	}
 
-	{
-		_, found0 := m["uniqueToConcreteLeaf"]
-		if found0 {
-			var instance aastypes.IMixedConcreteLeaf
-			instance, err = MixedConcreteLeafFromJsonable(
-				m,
-			)
-			if err != nil {
-				return
-			}
-			result = aastypes.NewMixedUnionFromMixedConcreteLeaf(
-				instance,
-			)
-			return
-		}
+	if hasAllProperties(m, "uniqueToConcreteLeaf") {
+		return unionFromMap(
+			m,
+			mixedConcreteLeafFromMapWithoutDispatch,
+			aastypes.NewMixedUnionFromMixedConcreteLeaf,
+		)
 	}
 
 	err = newDeserializationError(
@@ -1271,27 +1072,18 @@ func ModelTypedFirstFromJsonable(
 	result aastypes.IModelTypedFirst,
 	err error,
 ) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected a JSON object, but got null",
-		)
-		return
-	}
-
 	m, ok := jsonable.(map[string]interface{})
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a JSON object, but got %T",
-				jsonable,
-			),
-		)
+		err = notAMapError(jsonable)
 		return
 	}
 
-	result, err = modelTypedFirstFromMapWithoutDispatch(m)
+	err = checkModelType(m, "ModelTypedFirst")
+	if err != nil {
+		return
+	}
 
-	return
+	return modelTypedFirstFromMapWithoutDispatch(m)
 }
 
 // Parse [aastypes.IModelTypedFirst] from a map,
@@ -1306,61 +1098,14 @@ func modelTypedFirstFromMapWithoutDispatch(
 
 	foundSomeProperty := false
 
-	var foundModelType bool
-
 	for k, v := range m {
 		switch k {
 		case "someProperty":
-			theSomeProperty, err = stringFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "someProperty",
-						},
-					)
-				}
-				return
-			}
+			theSomeProperty, err = stringFromJsonable(v)
 			foundSomeProperty = true
 
 		case "modelType":
-			var modelType string
-			modelType, err = stringFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "modelType",
-						},
-					)
-				}
-				return
-			}
-
-			if modelType != "ModelTypedFirst" {
-				deseriaErr := newDeserializationError(
-					fmt.Sprintf(
-						"Expected the model type 'ModelTypedFirst', but got %v",
-						v,
-					),
-				)
-
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "modelType",
-					},
-				)
-
-				err = deseriaErr
-				return
-			}
-
-			foundModelType = true
+			// The model type has already been checked before the loop.
 
 		default:
 			err = newDeserializationError(
@@ -1371,18 +1116,16 @@ func modelTypedFirstFromMapWithoutDispatch(
 			)
 			return
 		}
+
+		if err != nil {
+			err = prependName(err, k)
+			return
+		}
 	}
 
 	if !foundSomeProperty {
 		err = newDeserializationError(
 			"The required property 'someProperty' is missing",
-		)
-		return
-	}
-
-	if !foundModelType {
-		err = newDeserializationError(
-			"The required property modelType is missing",
 		)
 		return
 	}
@@ -1402,27 +1145,18 @@ func ModelTypedSecondFromJsonable(
 	result aastypes.IModelTypedSecond,
 	err error,
 ) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected a JSON object, but got null",
-		)
-		return
-	}
-
 	m, ok := jsonable.(map[string]interface{})
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a JSON object, but got %T",
-				jsonable,
-			),
-		)
+		err = notAMapError(jsonable)
 		return
 	}
 
-	result, err = modelTypedSecondFromMapWithoutDispatch(m)
+	err = checkModelType(m, "ModelTypedSecond")
+	if err != nil {
+		return
+	}
 
-	return
+	return modelTypedSecondFromMapWithoutDispatch(m)
 }
 
 // Parse [aastypes.IModelTypedSecond] from a map,
@@ -1437,61 +1171,14 @@ func modelTypedSecondFromMapWithoutDispatch(
 
 	foundSomeProperty := false
 
-	var foundModelType bool
-
 	for k, v := range m {
 		switch k {
 		case "someProperty":
-			theSomeProperty, err = stringFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "someProperty",
-						},
-					)
-				}
-				return
-			}
+			theSomeProperty, err = stringFromJsonable(v)
 			foundSomeProperty = true
 
 		case "modelType":
-			var modelType string
-			modelType, err = stringFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "modelType",
-						},
-					)
-				}
-				return
-			}
-
-			if modelType != "ModelTypedSecond" {
-				deseriaErr := newDeserializationError(
-					fmt.Sprintf(
-						"Expected the model type 'ModelTypedSecond', but got %v",
-						v,
-					),
-				)
-
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "modelType",
-					},
-				)
-
-				err = deseriaErr
-				return
-			}
-
-			foundModelType = true
+			// The model type has already been checked before the loop.
 
 		default:
 			err = newDeserializationError(
@@ -1502,18 +1189,16 @@ func modelTypedSecondFromMapWithoutDispatch(
 			)
 			return
 		}
+
+		if err != nil {
+			err = prependName(err, k)
+			return
+		}
 	}
 
 	if !foundSomeProperty {
 		err = newDeserializationError(
 			"The required property 'someProperty' is missing",
-		)
-		return
-	}
-
-	if !foundModelType {
-		err = newDeserializationError(
-			"The required property modelType is missing",
 		)
 		return
 	}
@@ -1533,64 +1218,32 @@ func ModelTypedUnionFromJsonable(
 	result *aastypes.ModelTypedUnion,
 	err error,
 ) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected a JSON object, but got null",
-		)
-		return
-	}
-
 	m, ok := jsonable.(map[string]interface{})
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a JSON object, but got %T",
-				jsonable,
-			),
-		)
+		err = notAMapError(jsonable)
 		return
 	}
 
-	modelTypeAny, foundModelType := m["modelType"]
-	if foundModelType {
+	if _, found := m["modelType"]; found {
 		var modelType string
-		modelType, ok = modelTypeAny.(string)
-		if !ok {
-			err = newDeserializationError(
-				fmt.Sprintf(
-					"Expected the property modelType to be a string, "+
-						"but got %T",
-					modelTypeAny,
-				),
-			)
+		modelType, err = modelTypeFromMap(m)
+		if err != nil {
 			return
 		}
 
 		switch modelType {
 		case "ModelTypedFirst":
-			var instance aastypes.IModelTypedFirst
-			instance, err = ModelTypedFirstFromJsonable(
+			return unionFromMap(
 				m,
+				modelTypedFirstFromMapWithoutDispatch,
+				aastypes.NewModelTypedUnionFromModelTypedFirst,
 			)
-			if err != nil {
-				return
-			}
-			result = aastypes.NewModelTypedUnionFromModelTypedFirst(
-				instance,
-			)
-			return
 		case "ModelTypedSecond":
-			var instance aastypes.IModelTypedSecond
-			instance, err = ModelTypedSecondFromJsonable(
+			return unionFromMap(
 				m,
+				modelTypedSecondFromMapWithoutDispatch,
+				aastypes.NewModelTypedUnionFromModelTypedSecond,
 			)
-			if err != nil {
-				return
-			}
-			result = aastypes.NewModelTypedUnionFromModelTypedSecond(
-				instance,
-			)
-			return
 		default:
 			err = newDeserializationError(
 				fmt.Sprintf(
@@ -1617,27 +1270,13 @@ func SomethingFromJsonable(
 	result aastypes.ISomething,
 	err error,
 ) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected a JSON object, but got null",
-		)
-		return
-	}
-
 	m, ok := jsonable.(map[string]interface{})
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a JSON object, but got %T",
-				jsonable,
-			),
-		)
+		err = notAMapError(jsonable)
 		return
 	}
 
-	result, err = somethingFromMapWithoutDispatch(m)
-
-	return
+	return somethingFromMapWithoutDispatch(m)
 }
 
 // Parse [aastypes.ISomething] from a map,
@@ -1670,251 +1309,46 @@ func somethingFromMapWithoutDispatch(
 	for k, v := range m {
 		switch k {
 		case "structuralProperty":
-			theStructuralProperty, err = StructuralUnionFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "structuralProperty",
-						},
-					)
-				}
-				return
-			}
+			theStructuralProperty, err = StructuralUnionFromJsonable(v)
 			foundStructuralProperty = true
 
 		case "mixedProperty":
-			theMixedProperty, err = MixedUnionFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "mixedProperty",
-						},
-					)
-				}
-				return
-			}
+			theMixedProperty, err = MixedUnionFromJsonable(v)
 			foundMixedProperty = true
 
 		case "modelTypedProperty":
-			theModelTypedProperty, err = ModelTypedUnionFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "modelTypedProperty",
-						},
-					)
-				}
-				return
-			}
+			theModelTypedProperty, err = ModelTypedUnionFromJsonable(v)
 			foundModelTypedProperty = true
 
 		case "listStructuralProperty":
-			jsonableArray, ok := v.([]interface{})
-			if !ok {
-				deseriaErr := newDeserializationError(
-					fmt.Sprintf(
-						"Expected an array, but got %T",
-						v,
-					),
-				)
-
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "listStructuralProperty",
-					},
-				)
-
-				err = deseriaErr
-
-				return
-			}
-
-			theListStructuralProperty, err = parseArray(
-				jsonableArray,
-				StructuralUnionFromJsonable,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "listStructuralProperty",
-						},
-					)
-				}
-
-				return
-			}
+			theListStructuralProperty, err = parseArray(v, StructuralUnionFromJsonable)
 			foundListStructuralProperty = true
 
 		case "listMixedProperty":
-			jsonableArray, ok := v.([]interface{})
-			if !ok {
-				deseriaErr := newDeserializationError(
-					fmt.Sprintf(
-						"Expected an array, but got %T",
-						v,
-					),
-				)
-
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "listMixedProperty",
-					},
-				)
-
-				err = deseriaErr
-
-				return
-			}
-
-			theListMixedProperty, err = parseArray(
-				jsonableArray,
-				MixedUnionFromJsonable,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "listMixedProperty",
-						},
-					)
-				}
-
-				return
-			}
+			theListMixedProperty, err = parseArray(v, MixedUnionFromJsonable)
 			foundListMixedProperty = true
 
 		case "listModelTypedProperty":
-			jsonableArray, ok := v.([]interface{})
-			if !ok {
-				deseriaErr := newDeserializationError(
-					fmt.Sprintf(
-						"Expected an array, but got %T",
-						v,
-					),
-				)
-
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "listModelTypedProperty",
-					},
-				)
-
-				err = deseriaErr
-
-				return
-			}
-
-			theListModelTypedProperty, err = parseArray(
-				jsonableArray,
-				ModelTypedUnionFromJsonable,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "listModelTypedProperty",
-						},
-					)
-				}
-
-				return
-			}
+			theListModelTypedProperty, err = parseArray(v, ModelTypedUnionFromJsonable)
 			foundListModelTypedProperty = true
 
 		case "tupleProperty":
-			jsonableArray, ok := v.([]interface{})
-			if !ok {
-				deseriaErr := newDeserializationError(
-					fmt.Sprintf(
-						"Expected an array, but got %T",
-						v,
-					),
-				)
-
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "tupleProperty",
-					},
-				)
-
-				err = deseriaErr
-
-				return
-			}
-
 			theTupleProperty, err = parseTuple3(
-				jsonableArray,
+				v,
 				StructuralUnionFromJsonable,
 				MixedUnionFromJsonable,
 				ModelTypedUnionFromJsonable,
 			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "tupleProperty",
-						},
-					)
-				}
-
-				return
-			}
 			foundTupleProperty = true
 
 		case "optionalStructuralProperty":
-			theOptionalStructuralProperty, err = StructuralUnionFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "optionalStructuralProperty",
-						},
-					)
-				}
-				return
-			}
+			theOptionalStructuralProperty, err = StructuralUnionFromJsonable(v)
 
 		case "optionalMixedProperty":
-			theOptionalMixedProperty, err = MixedUnionFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "optionalMixedProperty",
-						},
-					)
-				}
-				return
-			}
+			theOptionalMixedProperty, err = MixedUnionFromJsonable(v)
 
 		case "optionalModelTypedProperty":
-			theOptionalModelTypedProperty, err = ModelTypedUnionFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "optionalModelTypedProperty",
-						},
-					)
-				}
-				return
-			}
+			theOptionalModelTypedProperty, err = ModelTypedUnionFromJsonable(v)
 
 		default:
 			err = newDeserializationError(
@@ -1923,6 +1357,11 @@ func somethingFromMapWithoutDispatch(
 					k,
 				),
 			)
+			return
+		}
+
+		if err != nil {
+			err = prependName(err, k)
 			return
 		}
 	}
@@ -2006,26 +1445,9 @@ func mixedAbstractMemberFromMap(
 	result aastypes.IMixedAbstractMember,
 	err error,
 ) {
-	var modelTypeAny interface{}
-	var ok bool
-	modelTypeAny, ok = m["modelType"];
-	if !ok {
-		err = newDeserializationError(
-			"The required property modelType is missing",
-		)
-		return
-	}
-
 	var modelType string
-	modelType, ok = modelTypeAny.(string)
-	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected the property modelType to be a string, " +
-				"but got %T",
-				modelTypeAny,
-			),
-		)
+	modelType, err = modelTypeFromMap(m)
+	if err != nil {
 		return
 	}
 
@@ -2055,26 +1477,9 @@ func mixedConcreteWithDescendantsFromMap(
 	result aastypes.IMixedConcreteWithDescendants,
 	err error,
 ) {
-	var modelTypeAny interface{}
-	var ok bool
-	modelTypeAny, ok = m["modelType"];
-	if !ok {
-		err = newDeserializationError(
-			"The required property modelType is missing",
-		)
-		return
-	}
-
 	var modelType string
-	modelType, ok = modelTypeAny.(string)
-	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected the property modelType to be a string, " +
-				"but got %T",
-				modelTypeAny,
-			),
-		)
+	modelType, err = modelTypeFromMap(m)
+	if err != nil {
 		return
 	}
 

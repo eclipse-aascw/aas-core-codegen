@@ -52,6 +52,28 @@ func (de *DeserializationError) PathString() string {
 	return aasreporting.ToJSONPath(de.Path)
 }
 
+// Prepend the `name` segment to the path of the `err`, if it is
+// a de-serialization error, and return the `err` back for chaining.
+func prependName(err error, name string) error {
+	if deseriaErr, ok := err.(*DeserializationError); ok {
+		deseriaErr.Path.PrependName(
+			&aasreporting.NameSegment{Name: name},
+		)
+	}
+	return err
+}
+
+// Prepend the `index` segment to the path of the `err`, if it is
+// a de-serialization error, and return the `err` back for chaining.
+func prependIndex(err error, index int) error {
+	if deseriaErr, ok := err.(*DeserializationError); ok {
+		deseriaErr.Path.PrependIndex(
+			&aasreporting.IndexSegment{Index: index},
+		)
+	}
+	return err
+}
+
 // Parse `jsonable` as a boolean, or return an error.
 func boolFromJsonable(
 	jsonable interface{},
@@ -222,22 +244,109 @@ func bytesFromJsonable(
 	return
 }
 
-// Parse `jsonableArray` into a slice of `T` by calling `parseItem` on every
-// item, or return an error.
+// Return a pointer to the `value`, or the `err`, if any.
+//
+// This function takes the *results* of a parse function instead of the parse
+// function itself. Go binds all the results of a call to the whole parameter
+// list of the enclosing call, so this single helper composes with every parse
+// function, however many arguments that function takes -- including
+// `parseOptional(parseTuple2(v, ...))`, which a parser-taking signature could
+// not express, as the item parsers of a tuple vary both in number and in type.
+func parseOptional[T any](value T, err error) (*T, error) {
+	if err != nil {
+		return nil, err
+	}
+	return &value, nil
+}
+
+// Report that `jsonable` is no JSON object.
+func notAMapError(jsonable interface{}) error {
+	if jsonable == nil {
+		return newDeserializationError(
+			"Expected a JSON object, but got null",
+		)
+	}
+
+	return newDeserializationError(
+		fmt.Sprintf(
+			"Expected a JSON object, but got %T",
+			jsonable,
+		),
+	)
+}
+
+// Extract the `modelType` property of `m` as a string, or return an error.
+//
+// This is the only place which knows how the model type is spelled on the wire.
+// Both the dispatch on the model type and its check in a concrete class go
+// through it.
+func modelTypeFromMap(
+	m map[string]interface{},
+) (modelType string, err error) {
+	jsonable, ok := m["modelType"]
+	if !ok {
+		err = newDeserializationError(
+			"The required property modelType is missing",
+		)
+		return
+	}
+
+	modelType, err = stringFromJsonable(jsonable)
+	if err != nil {
+		err = prependName(err, "modelType")
+	}
+	return
+}
+
+// Check that `m` specifies the `expected` model type, or return an error.
+func checkModelType(
+	m map[string]interface{},
+	expected string,
+) (err error) {
+	var modelType string
+	modelType, err = modelTypeFromMap(m)
+	if err != nil {
+		return
+	}
+
+	if modelType != expected {
+		err = prependName(
+			newDeserializationError(
+				fmt.Sprintf(
+					"Expected the model type '%s', but got %s",
+					expected,
+					modelType,
+				),
+			),
+			"modelType",
+		)
+	}
+	return
+}
+
+// Parse `jsonable` as an array and parse every item with `parseItem`,
+// or return an error.
 func parseArray[T any](
-	jsonableArray []interface{},
+	jsonable interface{},
 	parseItem func(jsonable interface{}) (T, error),
 ) (result []T, err error) {
+	jsonableArray, ok := jsonable.([]interface{})
+	if !ok {
+		err = newDeserializationError(
+			fmt.Sprintf(
+				"Expected an array, but got %T",
+				jsonable,
+			),
+		)
+		return
+	}
+
 	result = make([]T, len(jsonableArray))
 	for i, itemJsonable := range jsonableArray {
 		var item T
 		item, err = parseItem(itemJsonable)
 		if err != nil {
-			if deseriaErr, ok := err.(*DeserializationError); ok {
-				deseriaErr.Path.PrependIndex(
-					&aasreporting.IndexSegment{Index: i},
-				)
-			}
+			err = prependIndex(err, i)
 			return
 		}
 		result[i] = item
@@ -245,14 +354,59 @@ func parseArray[T any](
 	return
 }
 
-// Parse `jsonableArray` into a aascommon.Tuple2[T0, T1] by calling `parseItem0`,
-// `parseItem1`, *etc.* on the correspondingly positioned item, or return
-// an error.
+// Report that `jsonable` is no text of a literal of the enumeration `enumName`.
+func notAnEnumTextError(
+	jsonable interface{},
+	enumName string,
+) error {
+	if jsonable == nil {
+		return newDeserializationError(
+			"Expected a string representation of " + enumName + ", but got null",
+		)
+	}
+
+	return newDeserializationError(
+		fmt.Sprintf(
+			"Expected a string representation of %s, but got %T",
+			enumName,
+			jsonable,
+		),
+	)
+}
+
+// Report that `text` is no literal of the enumeration `enumName`.
+func unexpectedEnumLiteralError(
+	text string,
+	enumName string,
+) error {
+	return newDeserializationError(
+		fmt.Sprintf(
+			"Expected a string representation of %s, but got %v",
+			enumName,
+			text,
+		),
+	)
+}
+
+// Parse `jsonable` as an array of exactly 2 item(s) and parse them into
+// a aascommon.Tuple2[T0, T1] with `parseItem0`, `parseItem1`, *etc.*,
+// or return an error.
 func parseTuple2[T0 any, T1 any](
-	jsonableArray []interface{},
+	jsonable interface{},
 	parseItem0 func(jsonable interface{}) (T0, error),
 	parseItem1 func(jsonable interface{}) (T1, error),
 ) (result aascommon.Tuple2[T0, T1], err error) {
+	jsonableArray, ok := jsonable.([]interface{})
+	if !ok {
+		err = newDeserializationError(
+			fmt.Sprintf(
+				"Expected an array, but got %T",
+				jsonable,
+			),
+		)
+		return
+	}
+
 	if len(jsonableArray) != 2 {
 		err = newDeserializationError(
 			fmt.Sprintf(
@@ -266,22 +420,14 @@ func parseTuple2[T0 any, T1 any](
 	var item0 T0
 	item0, err = parseItem0(jsonableArray[0])
 	if err != nil {
-		if deseriaErr, ok := err.(*DeserializationError); ok {
-			deseriaErr.Path.PrependIndex(
-				&aasreporting.IndexSegment{Index: 0},
-			)
-		}
+		err = prependIndex(err, 0)
 		return
 	}
 
 	var item1 T1
 	item1, err = parseItem1(jsonableArray[1])
 	if err != nil {
-		if deseriaErr, ok := err.(*DeserializationError); ok {
-			deseriaErr.Path.PrependIndex(
-				&aasreporting.IndexSegment{Index: 1},
-			)
-		}
+		err = prependIndex(err, 1)
 		return
 	}
 
@@ -292,11 +438,11 @@ func parseTuple2[T0 any, T1 any](
 	return
 }
 
-// Parse `jsonableArray` into a aascommon.Tuple6[T0, T1, T2, T3, T4, T5] by calling `parseItem0`,
-// `parseItem1`, *etc.* on the correspondingly positioned item, or return
-// an error.
+// Parse `jsonable` as an array of exactly 6 item(s) and parse them into
+// a aascommon.Tuple6[T0, T1, T2, T3, T4, T5] with `parseItem0`, `parseItem1`, *etc.*,
+// or return an error.
 func parseTuple6[T0 any, T1 any, T2 any, T3 any, T4 any, T5 any](
-	jsonableArray []interface{},
+	jsonable interface{},
 	parseItem0 func(jsonable interface{}) (T0, error),
 	parseItem1 func(jsonable interface{}) (T1, error),
 	parseItem2 func(jsonable interface{}) (T2, error),
@@ -304,6 +450,17 @@ func parseTuple6[T0 any, T1 any, T2 any, T3 any, T4 any, T5 any](
 	parseItem4 func(jsonable interface{}) (T4, error),
 	parseItem5 func(jsonable interface{}) (T5, error),
 ) (result aascommon.Tuple6[T0, T1, T2, T3, T4, T5], err error) {
+	jsonableArray, ok := jsonable.([]interface{})
+	if !ok {
+		err = newDeserializationError(
+			fmt.Sprintf(
+				"Expected an array, but got %T",
+				jsonable,
+			),
+		)
+		return
+	}
+
 	if len(jsonableArray) != 6 {
 		err = newDeserializationError(
 			fmt.Sprintf(
@@ -317,66 +474,42 @@ func parseTuple6[T0 any, T1 any, T2 any, T3 any, T4 any, T5 any](
 	var item0 T0
 	item0, err = parseItem0(jsonableArray[0])
 	if err != nil {
-		if deseriaErr, ok := err.(*DeserializationError); ok {
-			deseriaErr.Path.PrependIndex(
-				&aasreporting.IndexSegment{Index: 0},
-			)
-		}
+		err = prependIndex(err, 0)
 		return
 	}
 
 	var item1 T1
 	item1, err = parseItem1(jsonableArray[1])
 	if err != nil {
-		if deseriaErr, ok := err.(*DeserializationError); ok {
-			deseriaErr.Path.PrependIndex(
-				&aasreporting.IndexSegment{Index: 1},
-			)
-		}
+		err = prependIndex(err, 1)
 		return
 	}
 
 	var item2 T2
 	item2, err = parseItem2(jsonableArray[2])
 	if err != nil {
-		if deseriaErr, ok := err.(*DeserializationError); ok {
-			deseriaErr.Path.PrependIndex(
-				&aasreporting.IndexSegment{Index: 2},
-			)
-		}
+		err = prependIndex(err, 2)
 		return
 	}
 
 	var item3 T3
 	item3, err = parseItem3(jsonableArray[3])
 	if err != nil {
-		if deseriaErr, ok := err.(*DeserializationError); ok {
-			deseriaErr.Path.PrependIndex(
-				&aasreporting.IndexSegment{Index: 3},
-			)
-		}
+		err = prependIndex(err, 3)
 		return
 	}
 
 	var item4 T4
 	item4, err = parseItem4(jsonableArray[4])
 	if err != nil {
-		if deseriaErr, ok := err.(*DeserializationError); ok {
-			deseriaErr.Path.PrependIndex(
-				&aasreporting.IndexSegment{Index: 4},
-			)
-		}
+		err = prependIndex(err, 4)
 		return
 	}
 
 	var item5 T5
 	item5, err = parseItem5(jsonableArray[5])
 	if err != nil {
-		if deseriaErr, ok := err.(*DeserializationError); ok {
-			deseriaErr.Path.PrependIndex(
-				&aasreporting.IndexSegment{Index: 5},
-			)
-		}
+		err = prependIndex(err, 5)
 		return
 	}
 
@@ -396,38 +529,16 @@ func parseTuple6[T0 any, T1 any, T2 any, T3 any, T4 any, T5 any](
 func ResultFromJsonable(
 	jsonable interface{},
 ) (result aastypes.Result, err error) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected a string representation of Result, " +
-			"but got null",
-		)
-		return
-	}
-
 	text, ok := jsonable.(string)
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a string representation of Result, " +
-				"but got %T",
-				jsonable,
-			),
-		)
+		err = notAnEnumTextError(jsonable, "Result")
 		return
 	}
 
 	result, ok = aasstringification.ResultFromString(text)
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a string representation of Result, " +
-				"but got %v",
-				text,
-			),
-		)
-		return
+		err = unexpectedEnumLiteralError(text, "Result")
 	}
-
 	return
 }
 
@@ -439,27 +550,13 @@ func AbstractItemFromJsonable(
 	result aastypes.IAbstractItem,
 	err error,
 ) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected a JSON object, but got null",
-		)
-		return
-	}
-
 	m, ok := jsonable.(map[string]interface{})
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a JSON object, but got %T",
-				jsonable,
-			),
-		)
+		err = notAMapError(jsonable)
 		return
 	}
 
-	result, err = abstractItemFromMap(m)
-
-	return
+	return abstractItemFromMap(m)
 }
 
 // Parse `jsonable` as an instance of [aastypes.ISomeItem],
@@ -470,27 +567,18 @@ func SomeItemFromJsonable(
 	result aastypes.ISomeItem,
 	err error,
 ) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected a JSON object, but got null",
-		)
-		return
-	}
-
 	m, ok := jsonable.(map[string]interface{})
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a JSON object, but got %T",
-				jsonable,
-			),
-		)
+		err = notAMapError(jsonable)
 		return
 	}
 
-	result, err = someItemFromMapWithoutDispatch(m)
+	err = checkModelType(m, "SomeItem")
+	if err != nil {
+		return
+	}
 
-	return
+	return someItemFromMapWithoutDispatch(m)
 }
 
 // Parse [aastypes.ISomeItem] from a map,
@@ -505,61 +593,14 @@ func someItemFromMapWithoutDispatch(
 
 	foundName := false
 
-	var foundModelType bool
-
 	for k, v := range m {
 		switch k {
 		case "name":
-			theName, err = stringFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "name",
-						},
-					)
-				}
-				return
-			}
+			theName, err = stringFromJsonable(v)
 			foundName = true
 
 		case "modelType":
-			var modelType string
-			modelType, err = stringFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "modelType",
-						},
-					)
-				}
-				return
-			}
-
-			if modelType != "SomeItem" {
-				deseriaErr := newDeserializationError(
-					fmt.Sprintf(
-						"Expected the model type 'SomeItem', but got %v",
-						v,
-					),
-				)
-
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "modelType",
-					},
-				)
-
-				err = deseriaErr
-				return
-			}
-
-			foundModelType = true
+			// The model type has already been checked before the loop.
 
 		default:
 			err = newDeserializationError(
@@ -570,18 +611,16 @@ func someItemFromMapWithoutDispatch(
 			)
 			return
 		}
+
+		if err != nil {
+			err = prependName(err, k)
+			return
+		}
 	}
 
 	if !foundName {
 		err = newDeserializationError(
 			"The required property 'name' is missing",
-		)
-		return
-	}
-
-	if !foundModelType {
-		err = newDeserializationError(
-			"The required property modelType is missing",
 		)
 		return
 	}
@@ -601,27 +640,18 @@ func AnotherItemFromJsonable(
 	result aastypes.IAnotherItem,
 	err error,
 ) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected a JSON object, but got null",
-		)
-		return
-	}
-
 	m, ok := jsonable.(map[string]interface{})
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a JSON object, but got %T",
-				jsonable,
-			),
-		)
+		err = notAMapError(jsonable)
 		return
 	}
 
-	result, err = anotherItemFromMapWithoutDispatch(m)
+	err = checkModelType(m, "AnotherItem")
+	if err != nil {
+		return
+	}
 
-	return
+	return anotherItemFromMapWithoutDispatch(m)
 }
 
 // Parse [aastypes.IAnotherItem] from a map,
@@ -636,61 +666,14 @@ func anotherItemFromMapWithoutDispatch(
 
 	foundSerialNumber := false
 
-	var foundModelType bool
-
 	for k, v := range m {
 		switch k {
 		case "serialNumber":
-			theSerialNumber, err = int64FromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "serialNumber",
-						},
-					)
-				}
-				return
-			}
+			theSerialNumber, err = int64FromJsonable(v)
 			foundSerialNumber = true
 
 		case "modelType":
-			var modelType string
-			modelType, err = stringFromJsonable(
-				v,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "modelType",
-						},
-					)
-				}
-				return
-			}
-
-			if modelType != "AnotherItem" {
-				deseriaErr := newDeserializationError(
-					fmt.Sprintf(
-						"Expected the model type 'AnotherItem', but got %v",
-						v,
-					),
-				)
-
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "modelType",
-					},
-				)
-
-				err = deseriaErr
-				return
-			}
-
-			foundModelType = true
+			// The model type has already been checked before the loop.
 
 		default:
 			err = newDeserializationError(
@@ -701,18 +684,16 @@ func anotherItemFromMapWithoutDispatch(
 			)
 			return
 		}
+
+		if err != nil {
+			err = prependName(err, k)
+			return
+		}
 	}
 
 	if !foundSerialNumber {
 		err = newDeserializationError(
 			"The required property 'serialNumber' is missing",
-		)
-		return
-	}
-
-	if !foundModelType {
-		err = newDeserializationError(
-			"The required property modelType is missing",
 		)
 		return
 	}
@@ -732,27 +713,13 @@ func SomethingFromJsonable(
 	result aastypes.ISomething,
 	err error,
 ) {
-	if jsonable == nil {
-		err = newDeserializationError(
-			"Expected a JSON object, but got null",
-		)
-		return
-	}
-
 	m, ok := jsonable.(map[string]interface{})
 	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected a JSON object, but got %T",
-				jsonable,
-			),
-		)
+		err = notAMapError(jsonable)
 		return
 	}
 
-	result, err = somethingFromMapWithoutDispatch(m)
-
-	return
+	return somethingFromMapWithoutDispatch(m)
 }
 
 // Parse [aastypes.ISomething] from a map,
@@ -774,106 +741,18 @@ func somethingFromMapWithoutDispatch(
 	for k, v := range m {
 		switch k {
 		case "pair":
-			jsonableArray, ok := v.([]interface{})
-			if !ok {
-				deseriaErr := newDeserializationError(
-					fmt.Sprintf(
-						"Expected an array, but got %T",
-						v,
-					),
-				)
-
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "pair",
-					},
-				)
-
-				err = deseriaErr
-
-				return
-			}
-
-			thePair, err = parseTuple2(
-				jsonableArray,
-				stringFromJsonable,
-				int64FromJsonable,
-			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "pair",
-						},
-					)
-				}
-
-				return
-			}
+			thePair, err = parseTuple2(v, stringFromJsonable, int64FromJsonable)
 			foundPair = true
 
 		case "items":
-			jsonableArray, ok := v.([]interface{})
-			if !ok {
-				deseriaErr := newDeserializationError(
-					fmt.Sprintf(
-						"Expected an array, but got %T",
-						v,
-					),
-				)
-
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "items",
-					},
-				)
-
-				err = deseriaErr
-
-				return
-			}
-
 			theItems, err = parseTuple2(
-				jsonableArray,
-				AbstractItemFromJsonable,
-				AbstractItemFromJsonable,
+				v, AbstractItemFromJsonable, AbstractItemFromJsonable,
 			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "items",
-						},
-					)
-				}
-
-				return
-			}
 			foundItems = true
 
 		case "tricky":
-			jsonableArray, ok := v.([]interface{})
-			if !ok {
-				deseriaErr := newDeserializationError(
-					fmt.Sprintf(
-						"Expected an array, but got %T",
-						v,
-					),
-				)
-
-				deseriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "tricky",
-					},
-				)
-
-				err = deseriaErr
-
-				return
-			}
-
 			theTricky, err = parseTuple6(
-				jsonableArray,
+				v,
 				int64FromJsonable,
 				SomeItemFromJsonable,
 				AbstractItemFromJsonable,
@@ -881,17 +760,6 @@ func somethingFromMapWithoutDispatch(
 				int64FromJsonable,
 				ResultFromJsonable,
 			)
-			if err != nil {
-				if deseriaErr, ok := err.(*DeserializationError); ok {
-					deseriaErr.Path.PrependName(
-						&aasreporting.NameSegment{
-							Name: "tricky",
-						},
-					)
-				}
-
-				return
-			}
 			foundTricky = true
 
 		default:
@@ -901,6 +769,11 @@ func somethingFromMapWithoutDispatch(
 					k,
 				),
 			)
+			return
+		}
+
+		if err != nil {
+			err = prependName(err, k)
 			return
 		}
 	}
@@ -943,26 +816,9 @@ func abstractItemFromMap(
 	result aastypes.IAbstractItem,
 	err error,
 ) {
-	var modelTypeAny interface{}
-	var ok bool
-	modelTypeAny, ok = m["modelType"];
-	if !ok {
-		err = newDeserializationError(
-			"The required property modelType is missing",
-		)
-		return
-	}
-
 	var modelType string
-	modelType, ok = modelTypeAny.(string)
-	if !ok {
-		err = newDeserializationError(
-			fmt.Sprintf(
-				"Expected the property modelType to be a string, " +
-				"but got %T",
-				modelTypeAny,
-			),
-		)
+	modelType, err = modelTypeFromMap(m)
+	if err != nil {
 		return
 	}
 

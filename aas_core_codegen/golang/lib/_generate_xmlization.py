@@ -1,7 +1,7 @@
 """Generate code for XML de/serialization."""
 
 import io
-from typing import Tuple, Optional, List, Sequence, Set, Union
+from typing import Tuple, Optional, List, Set, Union
 
 from icontract import ensure, require
 
@@ -28,30 +28,6 @@ from aas_core_codegen.golang.common import (
 )
 
 # region Shared between the de-serialization and the serialization
-
-
-#: Maximum number of columns of a line of the generated code, with a tab counted as
-#: :py:data:`_TAB_WIDTH` columns
-_MAX_LINE_LENGTH = 88
-
-#: Number of columns a tab of indention takes up in the generated code
-_TAB_WIDTH = 4
-
-
-def _join_arguments(arguments: Sequence[str], indention: int) -> str:
-    """
-    Join the ``arguments`` of a call, on a single line if they fit on one.
-
-    The arguments are expected to be written on their own line(s), indented by
-    ``indention`` tabs, and followed by the closing parenthesis on yet another line.
-    A trailing comma is appended, as Golang requires it there.
-    """
-    joined = ", ".join(arguments) + ","
-
-    if indention * _TAB_WIDTH + len(joined) <= _MAX_LINE_LENGTH:
-        return joined
-
-    return ",\n".join(arguments) + ","
 
 
 # NOTE (mristin):
@@ -2733,7 +2709,7 @@ def _generate_write_scalar_item(scalar_item: _ScalarItem) -> Stripped:
 
     element_name_literal = golang_common.string_literal(scalar_item.element_name)
 
-    arguments_joined = _join_arguments(
+    arguments_joined = golang_common.join_arguments(
         [
             "encoder",
             element_name_literal,
@@ -2802,7 +2778,7 @@ def _generate_write_list_content_writer(
         type_annotation=items_type_anno, types_package=Identifier("aastypes")
     )
 
-    arguments_joined = _join_arguments(
+    arguments_joined = golang_common.join_arguments(
         ["encoder", "list", _item_writer_expr(items_type_anno, "v")], indention=2
     )
 
@@ -2843,7 +2819,7 @@ def _generate_write_tuple_content_writer(
         assert isinstance(item_type_anno, intermediate.AtomicTypeAnnotationAsTuple)
         item_writer_exprs.append(_item_writer_expr(item_type_anno, f"v{i + 1}"))
 
-    arguments_joined = _join_arguments(
+    arguments_joined = golang_common.join_arguments(
         ["encoder", "that", *item_writer_exprs], indention=2
     )
 
@@ -2993,7 +2969,7 @@ def _generate_snippet_to_serialize_property(
 
     getter_name = golang_naming.getter_name(prop.name)
 
-    arguments_joined = _join_arguments(
+    arguments_joined = golang_common.join_arguments(
         [
             "encoder",
             golang_common.string_literal(prop.xml_name),
@@ -3093,7 +3069,7 @@ def _generate_write_class(symbol_table: intermediate.SymbolTable) -> Stripped:
             Identifier(f"write_{cls.name}_as_sequence")
         )
 
-        arguments_joined = _join_arguments(
+        arguments_joined = golang_common.join_arguments(
             [
                 "encoder",
                 xml_class_name_literal,
