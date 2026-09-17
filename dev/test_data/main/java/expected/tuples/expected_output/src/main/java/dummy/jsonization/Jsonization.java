@@ -40,6 +40,12 @@ public class Jsonization {
      * we distinguish the implementation, realized in
      * {@link _DeserializeImplementation}, and the facade given in
      * {@link Deserialize} class.
+     *
+     * <p>Every value is parsed through a function which takes a single
+     * {@link JsonNode} and gives back a {@link Reporting.Result}, so that a list
+     * and a tuple can be composed out of the parsers of their items. Only they
+     * need such a composition -- every other value already has a function named
+     * after its very type.
      */
     private static class _DeserializeImplementation {
       /** Convert {@code value} to a string.
@@ -112,154 +118,301 @@ public class Jsonization {
       }
 
       /**
-       * Parse every item of {@code array} with {@code parseItem}.
+       * Mark the error of {@code result} as coming from the property {@code name}.
        *
-       * @param array JSON array to be parsed
-       * @param parseItem to parse a single item of the array
+       * <p>A {@code case} of a property loop is matched exactly when the key of
+       * the property equals its literal, so the key already names the property and
+       * no {@code case} has to spell it out a second time.
        */
-      private static <T> Reporting.Result<List<T>> parseArray(
-        JsonNode array,
-        Function<JsonNode, Reporting.Result<? extends T>> parseItem) {
-        final List<T> result = new ArrayList<>(array.size());
-        int index = 0;
-        for (JsonNode item : array) {
-          if (item == null) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected a non-null item, but got a null");
-            error.prependSegment(
-              new Reporting.IndexSegment(index));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<? extends T> parsedItemResult = parseItem.apply(item);
-          if (parsedItemResult.isError()) {
-            parsedItemResult.getError()
-              .prependSegment(
-              new Reporting.IndexSegment(index));
-            return Reporting.Result.failure(parsedItemResult.getError());
-          }
-
-          result.add(parsedItemResult.getResult());
-          index++;
-        }
-
-        return Reporting.Result.success(result);
+      private static <T> Reporting.Result<T> prependName(
+        Reporting.Result<?> result, String name) {
+        final Reporting.Error error = result.getError();
+        error.prependSegment(new Reporting.NameSegment(name));
+        return Reporting.Result.failure(error);
       }
 
       /**
-       * Parse {@code array} as a tuple of 2 item(s), each de-serialized
-       * with the corresponding {@code parseItemI}.
+       * Mark the error of {@code result} as coming from the item at {@code index}.
+       */
+      private static <T> Reporting.Result<T> prependIndex(
+        Reporting.Result<?> result, int index) {
+        final Reporting.Error error = result.getError();
+        error.prependSegment(new Reporting.IndexSegment(index));
+        return Reporting.Result.failure(error);
+      }
+
+      /**
+       * Report that {@code node} is no JSON object.
+       */
+      private static <T> Reporting.Result<T> notAJsonObject(JsonNode node) {
+        return Reporting.Result.failure(
+          new Reporting.Error(
+            "Expected a JsonObject, but got " +
+            (node == null ? "null" : node.getNodeType())));
+      }
+
+      /**
+       * Report that {@code node} is no JSON array.
+       */
+      private static <T> Reporting.Result<T> notAJsonArray(JsonNode node) {
+        return Reporting.Result.failure(
+          new Reporting.Error(
+            "Expected a JsonArray, but got " + node.getNodeType()));
+      }
+
+      /**
+       * Report a property which the class does not have.
+       */
+      private static <T> Reporting.Result<T> unexpectedProperty(String name) {
+        return Reporting.Result.failure(
+          new Reporting.Error("Unexpected property: " + name));
+      }
+
+      /**
+       * Report a required property which the JSON object did not give.
+       */
+      private static <T> Reporting.Result<T> missingRequiredProperty(String name) {
+        return Reporting.Result.failure(
+          new Reporting.Error(
+            "Required property \"" + name + "\" is missing"));
+      }
+
+      /**
+       * Extract the {@code modelType} property of {@code node} as a string.
        *
-       * @param array JSON array to be parsed
+       * <p>This is the only place which knows how the model type is spelled on
+       * the wire. Both the dispatch on the model type and its check in a concrete
+       * class go through it.
+       *
+       * @param node JSON object to be inspected
+       */
+      private static Reporting.Result<String> tryModelTypeFrom(JsonNode node) {
+        final JsonNode modelTypeNode = node.get("modelType");
+        if (modelTypeNode == null) {
+          return missingRequiredProperty("modelType");
+        }
+
+        final Reporting.Result<String> result = tryStringFrom(modelTypeNode);
+        if (result.isError()) {
+          return prependName(result, "modelType");
+        }
+
+        return result;
+      }
+
+      /**
+       * Check that {@code node} gives the {@code expected} model type, and return
+       * the error if it does not.
+       *
+       * <p>The model type is checked before the properties are read, so that a wrong
+       * one is reported without de-serializing any of them first, and so that
+       * the property loop carries nothing but the properties.
+       *
+       * @param node JSON object to be inspected
+       * @param expected model type of the class being de-serialized
+       */
+      private static Reporting.Error checkModelType(JsonNode node, String expected) {
+        final Reporting.Result<String> result = tryModelTypeFrom(node);
+        if (result.isError()) {
+          return result.getError();
+        }
+
+        final String modelType = result.getResult();
+        if (!modelType.equals(expected)) {
+          final Reporting.Error error = new Reporting.Error(
+            "Expected the model type '" + expected + "', " +
+            "but got '" + modelType + "'");
+          error.prependSegment(new Reporting.NameSegment("modelType"));
+          return error;
+        }
+
+        return null;
+      }
+
+      /**
+       * Parse {@code node} as a literal of the enumeration {@code enumType},
+       * converted from its text by {@code fromString}.
+       *
+       * <p>The stringification is passed in as a function value so that this one
+       * helper does the whole plumbing for every enumeration, and a single statement
+       * parses one. The literal and the class constrain each other, so the name in
+       * the error message can not drift from the type of the literal.
+       *
+       * @param node JSON node to be parsed
+       * @param fromString to convert the text into a literal
+       * @param enumType enumeration whose literal is expected
+       */
+      private static <T> Reporting.Result<T> tryEnumFrom(
+        JsonNode node,
+        Function<String, Optional<T>> fromString,
+        Class<T> enumType) {
+        final Reporting.Result<String> text = tryStringFrom(node);
+        if (text.isError()) {
+          return text.castTo(enumType);
+        }
+
+        final Optional<T> parsed = fromString.apply(text.getResult());
+        if (!parsed.isPresent()) {
+          return Reporting.Result.failure(
+            new Reporting.Error(
+              "Not a valid JSON representation of " + enumType.getSimpleName()));
+        }
+
+        return Reporting.Result.success(parsed.get());
+      }
+
+      /**
+       * Parse {@code node} as a JSON array of exactly 2 item(s), each
+       * de-serialized with the corresponding {@code parseItemI}.
+       *
+       * @param node JSON node to be parsed
        */
       private static <T1, T2> Reporting.Result<Tuple2<T1, T2>> parseTuple2(
-        JsonNode array,
+        JsonNode node,
         Function<JsonNode, Reporting.Result<? extends T1>> parseItem1,
         Function<JsonNode, Reporting.Result<? extends T2>> parseItem2) {
-        if (array.size() != 2) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected exactly 2 item(s), but got " + array.size());
-          return Reporting.Result.failure(error);
+        if (!node.isArray()) {
+          return notAJsonArray(node);
         }
 
-        final Reporting.Result<? extends T1> item1Result =
-          parseItem1.apply(array.get(0));
-        if (item1Result.isError()) {
-          item1Result.getError()
-            .prependSegment(new Reporting.IndexSegment(0));
-          return Reporting.Result.failure(item1Result.getError());
+        if (node.size() != 2) {
+          return Reporting.Result.failure(
+            new Reporting.Error(
+              "Expected exactly 2 item(s), but got " + node.size()));
         }
 
-        final Reporting.Result<? extends T2> item2Result =
-          parseItem2.apply(array.get(1));
-        if (item2Result.isError()) {
-          item2Result.getError()
-            .prependSegment(new Reporting.IndexSegment(1));
-          return Reporting.Result.failure(item2Result.getError());
+        final Reporting.Result<? extends T1> item1 =
+          parseItem1.apply(node.get(0));
+        if (item1.isError()) {
+          return prependIndex(item1, 0);
+        }
+
+        final Reporting.Result<? extends T2> item2 =
+          parseItem2.apply(node.get(1));
+        if (item2.isError()) {
+          return prependIndex(item2, 1);
         }
 
         return Reporting.Result.success(
           new Tuple2<>(
-            item1Result.getResult(),
-            item2Result.getResult()));
+            item1.getResult(),
+            item2.getResult()));
       }
 
       /**
-       * Parse {@code array} as a tuple of 6 item(s), each de-serialized
-       * with the corresponding {@code parseItemI}.
+       * Parse {@code node} as a JSON array of exactly 6 item(s), each
+       * de-serialized with the corresponding {@code parseItemI}.
        *
-       * @param array JSON array to be parsed
+       * @param node JSON node to be parsed
        */
       private static <T1, T2, T3, T4, T5, T6> Reporting.Result<Tuple6<T1, T2, T3, T4, T5, T6>> parseTuple6(
-        JsonNode array,
+        JsonNode node,
         Function<JsonNode, Reporting.Result<? extends T1>> parseItem1,
         Function<JsonNode, Reporting.Result<? extends T2>> parseItem2,
         Function<JsonNode, Reporting.Result<? extends T3>> parseItem3,
         Function<JsonNode, Reporting.Result<? extends T4>> parseItem4,
         Function<JsonNode, Reporting.Result<? extends T5>> parseItem5,
         Function<JsonNode, Reporting.Result<? extends T6>> parseItem6) {
-        if (array.size() != 6) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected exactly 6 item(s), but got " + array.size());
-          return Reporting.Result.failure(error);
+        if (!node.isArray()) {
+          return notAJsonArray(node);
         }
 
-        final Reporting.Result<? extends T1> item1Result =
-          parseItem1.apply(array.get(0));
-        if (item1Result.isError()) {
-          item1Result.getError()
-            .prependSegment(new Reporting.IndexSegment(0));
-          return Reporting.Result.failure(item1Result.getError());
+        if (node.size() != 6) {
+          return Reporting.Result.failure(
+            new Reporting.Error(
+              "Expected exactly 6 item(s), but got " + node.size()));
         }
 
-        final Reporting.Result<? extends T2> item2Result =
-          parseItem2.apply(array.get(1));
-        if (item2Result.isError()) {
-          item2Result.getError()
-            .prependSegment(new Reporting.IndexSegment(1));
-          return Reporting.Result.failure(item2Result.getError());
+        final Reporting.Result<? extends T1> item1 =
+          parseItem1.apply(node.get(0));
+        if (item1.isError()) {
+          return prependIndex(item1, 0);
         }
 
-        final Reporting.Result<? extends T3> item3Result =
-          parseItem3.apply(array.get(2));
-        if (item3Result.isError()) {
-          item3Result.getError()
-            .prependSegment(new Reporting.IndexSegment(2));
-          return Reporting.Result.failure(item3Result.getError());
+        final Reporting.Result<? extends T2> item2 =
+          parseItem2.apply(node.get(1));
+        if (item2.isError()) {
+          return prependIndex(item2, 1);
         }
 
-        final Reporting.Result<? extends T4> item4Result =
-          parseItem4.apply(array.get(3));
-        if (item4Result.isError()) {
-          item4Result.getError()
-            .prependSegment(new Reporting.IndexSegment(3));
-          return Reporting.Result.failure(item4Result.getError());
+        final Reporting.Result<? extends T3> item3 =
+          parseItem3.apply(node.get(2));
+        if (item3.isError()) {
+          return prependIndex(item3, 2);
         }
 
-        final Reporting.Result<? extends T5> item5Result =
-          parseItem5.apply(array.get(4));
-        if (item5Result.isError()) {
-          item5Result.getError()
-            .prependSegment(new Reporting.IndexSegment(4));
-          return Reporting.Result.failure(item5Result.getError());
+        final Reporting.Result<? extends T4> item4 =
+          parseItem4.apply(node.get(3));
+        if (item4.isError()) {
+          return prependIndex(item4, 3);
         }
 
-        final Reporting.Result<? extends T6> item6Result =
-          parseItem6.apply(array.get(5));
-        if (item6Result.isError()) {
-          item6Result.getError()
-            .prependSegment(new Reporting.IndexSegment(5));
-          return Reporting.Result.failure(item6Result.getError());
+        final Reporting.Result<? extends T5> item5 =
+          parseItem5.apply(node.get(4));
+        if (item5.isError()) {
+          return prependIndex(item5, 4);
+        }
+
+        final Reporting.Result<? extends T6> item6 =
+          parseItem6.apply(node.get(5));
+        if (item6.isError()) {
+          return prependIndex(item6, 5);
         }
 
         return Reporting.Result.success(
           new Tuple6<>(
-            item1Result.getResult(),
-            item2Result.getResult(),
-            item3Result.getResult(),
-            item4Result.getResult(),
-            item5Result.getResult(),
-            item6Result.getResult()));
+            item1.getResult(),
+            item2.getResult(),
+            item3.getResult(),
+            item4.getResult(),
+            item5.getResult(),
+            item6.getResult()));
+      }
+
+      /**
+       * Parse {@code node} as a tuple of 2 item(s).
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<Tuple2<String, Long>> parseTupleOf2_string_long(JsonNode node) {
+        return parseTuple2(
+          node,
+          _DeserializeImplementation::tryStringFrom,
+          _DeserializeImplementation::tryLongFrom);
+      }
+
+      /**
+       * Parse {@code node} as a tuple of 2 item(s).
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<Tuple2<IAbstractItem, IAbstractItem>> parseTupleOf2_IAbstractItem_IAbstractItem(JsonNode node) {
+        return parseTuple2(
+          node,
+          _DeserializeImplementation::tryIAbstractItemFrom,
+          _DeserializeImplementation::tryIAbstractItemFrom);
+      }
+
+      /**
+       * Parse {@code node} as a tuple of 6 item(s).
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<Tuple6<
+        Long,
+        ISomeItem,
+        IAbstractItem,
+        ISomeItem,
+        Long,
+        Result>> parseTupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result(JsonNode node) {
+        return parseTuple6(
+          node,
+          _DeserializeImplementation::tryLongFrom,
+          _DeserializeImplementation::trySomeItemFrom,
+          _DeserializeImplementation::tryIAbstractItemFrom,
+          _DeserializeImplementation::trySomeItemFrom,
+          _DeserializeImplementation::tryLongFrom,
+          _DeserializeImplementation::tryResultFrom);
       }
 
       /**
@@ -268,16 +421,7 @@ public class Jsonization {
        * @param node JSON node to be parsed
        */
       private static Reporting.Result<Result> tryResultFrom(JsonNode node) {
-        final Reporting.Result<String> textResult = tryStringFrom(node);
-        if (textResult.isError()) {
-          return textResult.castTo(Result.class);
-        }
-        final Optional<Result> result = Stringification.resultFromString(textResult.getResult());
-        if (!result.isPresent()) {
-          final Reporting.Error error = new Reporting.Error("Not a valid JSON representation of Result");
-          return Reporting.Result.failure(error);
-        }
-        return Reporting.Result.success(result.get());
+        return tryEnumFrom(node, Stringification::resultFromString, Result.class);
       }
 
       /**
@@ -288,29 +432,20 @@ public class Jsonization {
        */
       public static Reporting.Result<? extends IAbstractItem> tryIAbstractItemFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
-        final JsonNode modelTypeNode = node.get("modelType");
-        if (modelTypeNode == null) {
-          final Reporting.Error error = new Reporting.Error(
-              "Expected a model type, but none is present");
-          return Reporting.Result.failure(error);
-        }
-        final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
+        final Reporting.Result<String> modelTypeResult = tryModelTypeFrom(node);
         if (modelTypeResult.isError()) {
           return modelTypeResult.castTo(IAbstractItem.class);
         }
 
-        switch (modelTypeResult.getResult())
-        {
-          case "AnotherItem": {
-            return tryAnotherItemFrom(node);
-        }  case "SomeItem": {
-            return trySomeItemFrom(node);
-        }  default: {
+        switch (modelTypeResult.getResult()) {
+          case "AnotherItem":
+            return tryAnotherItemFromObject(node);
+          case "SomeItem":
+            return trySomeItemFromObject(node);
+          default: {
             final Reporting.Error error = new Reporting.Error(
               "Unexpected model type for IAbstractItem: " + modelTypeResult.getResult());
             return Reporting.Result.failure(error);
@@ -319,82 +454,56 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of SomeItem from {@param node}.
+       * Deserialize an instance of SomeItem from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<SomeItem> trySomeItemFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "SomeItem");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return trySomeItemFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of SomeItem from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<SomeItem> trySomeItemFromObject(JsonNode node) {
         String theName = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "name": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theNameResult = tryStringFrom(currentNode.getValue());
-              if (theNameResult.isError()) {
-                theNameResult.getError()
-                  .prependSegment(new Reporting.NameSegment("name"));
-                return theNameResult.castTo(SomeItem.class);
-              }
-              theName = theNameResult.getResult();
+              theName = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(SomeItem.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("SomeItem")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'SomeItem', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
         if (theName == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"name\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("name");
         }
 
         return Reporting.Result.success(new SomeItem(
@@ -402,82 +511,56 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of AnotherItem from {@param node}.
+       * Deserialize an instance of AnotherItem from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<AnotherItem> tryAnotherItemFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "AnotherItem");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryAnotherItemFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of AnotherItem from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<AnotherItem> tryAnotherItemFromObject(JsonNode node) {
         Long theSerialNumber = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "serialNumber": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends Long> parsed = tryLongFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends Long> theSerialNumberResult = tryLongFrom(currentNode.getValue());
-              if (theSerialNumberResult.isError()) {
-                theSerialNumberResult.getError()
-                  .prependSegment(new Reporting.NameSegment("serialNumber"));
-                return theSerialNumberResult.castTo(AnotherItem.class);
-              }
-              theSerialNumber = theSerialNumberResult.getResult();
+              theSerialNumber = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(AnotherItem.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("AnotherItem")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'AnotherItem', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
         if (theSerialNumber == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"serialNumber\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("serialNumber");
         }
 
         return Reporting.Result.success(new AnotherItem(
@@ -485,16 +568,13 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of Something from {@param node}.
+       * Deserialize an instance of Something from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<Something> trySomethingFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         Tuple2<String, Long> thePair = null;
@@ -508,127 +588,59 @@ public class Jsonization {
           Result> theTricky = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "pair": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<Tuple2<String, Long>> parsed =
+                parseTupleOf2_string_long(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayPair = currentNode.getValue();
-              if (!arrayPair.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayPair.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "pair"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<Tuple2<String, Long>> thePairResult = parseTuple2(
-                arrayPair,
-                _DeserializeImplementation::tryStringFrom,
-                _DeserializeImplementation::tryLongFrom);
-              if (thePairResult.isError()) {
-                thePairResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "pair"));
-                return thePairResult.castTo(Something.class);
-              }
-              thePair = thePairResult.getResult();
+              thePair = parsed.getResult();
               break;
             }
             case "items": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<Tuple2<IAbstractItem, IAbstractItem>> parsed =
+                parseTupleOf2_IAbstractItem_IAbstractItem(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayItems = currentNode.getValue();
-              if (!arrayItems.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayItems.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "items"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<Tuple2<IAbstractItem, IAbstractItem>> theItemsResult = parseTuple2(
-                arrayItems,
-                _DeserializeImplementation::tryIAbstractItemFrom,
-                _DeserializeImplementation::tryIAbstractItemFrom);
-              if (theItemsResult.isError()) {
-                theItemsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "items"));
-                return theItemsResult.castTo(Something.class);
-              }
-              theItems = theItemsResult.getResult();
+              theItems = parsed.getResult();
               break;
             }
             case "tricky": {
-              if (currentNode.getValue() == null) {
-                continue;
-              }
-
-              final JsonNode arrayTricky = currentNode.getValue();
-              if (!arrayTricky.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayTricky.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "tricky"));
-                return Reporting.Result.failure(error);
-              }
               final Reporting.Result<Tuple6<
                 Long,
                 ISomeItem,
                 IAbstractItem,
                 ISomeItem,
                 Long,
-                Result>> theTrickyResult = parseTuple6(
-                arrayTricky,
-                _DeserializeImplementation::tryLongFrom,
-                _DeserializeImplementation::trySomeItemFrom,
-                _DeserializeImplementation::tryIAbstractItemFrom,
-                _DeserializeImplementation::trySomeItemFrom,
-                _DeserializeImplementation::tryLongFrom,
-                _DeserializeImplementation::tryResultFrom);
-              if (theTrickyResult.isError()) {
-                theTrickyResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "tricky"));
-                return theTrickyResult.castTo(Something.class);
+                Result>> parsed =
+                parseTupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-              theTricky = theTrickyResult.getResult();
+              theTricky = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (thePair == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"pair\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("pair");
         }
 
         if (theItems == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"items\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("items");
         }
 
         if (theTricky == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"tricky\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("tricky");
         }
 
         return Reporting.Result.success(new Something(

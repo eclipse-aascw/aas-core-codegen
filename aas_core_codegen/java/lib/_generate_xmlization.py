@@ -31,29 +31,6 @@ from aas_core_codegen.java.common import (
 
 # region Names of the generated readers
 
-# NOTE (mristin):
-# A Java primitive is not a valid part of an identifier as it is spelled
-# (``byte[]``), so the primitives need monikers of their own. The monikers are
-# *lower-case* on purpose: every one of our types is named through
-# :py:func:`aas_core_codegen.naming.capitalized_camel_case`, which always
-# yields an upper-case initial, so a primitive moniker can never be confused
-# for one of our types -- not even for an enumeration which somebody named
-# ``String``.
-_PRIMITIVE_TYPE_TO_MONIKER: Final[Mapping[intermediate.PrimitiveType, str]] = {
-    intermediate.PrimitiveType.BOOL: "bool",
-    intermediate.PrimitiveType.INT: "long",
-    intermediate.PrimitiveType.FLOAT: "double",
-    intermediate.PrimitiveType.STR: "string",
-    intermediate.PrimitiveType.BYTEARRAY: "bytes",
-}
-assert all(
-    primitive_type in _PRIMITIVE_TYPE_TO_MONIKER
-    for primitive_type in intermediate.PrimitiveType
-)
-assert all(
-    moniker.islower() for moniker in _PRIMITIVE_TYPE_TO_MONIKER.values()
-), "The primitive monikers have to be lower-case, see the note above"
-
 #: Name the function converting the text content, and the type as it is called
 #: in the error messages, for each primitive
 _CONTENT_CONVERTER_BY_PRIMITIVE: Final[
@@ -79,50 +56,6 @@ _EMPTY_VALUE_BY_PRIMITIVE: Final[Mapping[intermediate.PrimitiveType, str]] = {
     intermediate.PrimitiveType.STR: '""',
     intermediate.PrimitiveType.BYTEARRAY: "new byte[0]",
 }
-
-
-@ensure(lambda result: "_" not in result)
-def _leaf_moniker(type_anno: intermediate.TypeAnnotationUnion) -> str:
-    """
-    Name a type which is neither a list nor a tuple.
-
-    The result must not contain an underscore, since the underscore is what
-    separates the tokens of a compound moniker. See :py:func:`_type_moniker`.
-    """
-    primitive_type = intermediate.try_primitive_type(type_anno)
-    if primitive_type is not None:
-        return _PRIMITIVE_TYPE_TO_MONIKER[primitive_type]
-
-    assert isinstance(type_anno, intermediate.OurTypeAnnotation), (
-        f"Expected a primitive, a constrained primitive or one of our types, "
-        f"but got: {type_anno}"
-    )
-
-    # NOTE (mristin):
-    # We name our types by ``generate_type`` so that the name of a reader can
-    # not drift apart from the type of that very reader.
-    return java_common.generate_type(type_anno)
-
-
-def _type_moniker(type_anno: intermediate.TypeAnnotationUnion) -> str:
-    """
-    Name the type in a way usable as a part of a Java identifier.
-
-    The monikers are a Polish notation over ``_``-separated tokens: ``ListOf``
-    takes exactly one argument, ``TupleOf{N}`` exactly ``N`` of them, and
-    everything else is a leaf. A leaf token never contains an underscore
-    (see :py:func:`_leaf_moniker`), so the encoding is injective -- two
-    different types can not be given the same moniker, and hence two different
-    readers can not be given the same name.
-    """
-    if isinstance(type_anno, intermediate.ListTypeAnnotation):
-        return f"ListOf_{_type_moniker(type_anno.items)}"
-
-    if isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        joined = "_".join(_type_moniker(item) for item in type_anno.items)
-        return f"TupleOf{len(type_anno.items)}_{joined}"
-
-    return _leaf_moniker(type_anno)
 
 
 def _is_instance_type(type_anno: intermediate.TypeAnnotationUnion) -> bool:
@@ -195,9 +128,9 @@ def _content_reader_name(type_anno: intermediate.TypeAnnotationUnion) -> Identif
     if isinstance(
         type_anno, (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation)
     ):
-        return Identifier(f"read{_type_moniker(type_anno)}")
+        return Identifier(f"read{java_common.type_moniker(type_anno)}")
 
-    return Identifier(f"readTextAs_{_leaf_moniker(type_anno)}")
+    return Identifier(f"readTextAs_{java_common.leaf_moniker(type_anno)}")
 
 
 @require(lambda v_name: v_name.startswith("v"))
@@ -206,7 +139,7 @@ def _at_v_reader_name(
     type_anno: intermediate.TypeAnnotationUnion, v_name: str
 ) -> Identifier:
     """Name the function reading ``type_anno`` from an element called ``v_name``."""
-    return Identifier(f"readAtV{v_name[1:]}_{_type_moniker(type_anno)}")
+    return Identifier(f"readAtV{v_name[1:]}_{java_common.type_moniker(type_anno)}")
 
 
 def _element_reader_name(
@@ -259,7 +192,7 @@ def _content_writer_name(type_anno: intermediate.TypeAnnotationUnion) -> Identif
     if isinstance(
         type_anno, (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation)
     ):
-        return Identifier(f"write{_type_moniker(type_anno)}")
+        return Identifier(f"write{java_common.type_moniker(type_anno)}")
 
     primitive_type = intermediate.try_primitive_type(type_anno)
 
@@ -278,7 +211,7 @@ def _at_v_writer_name(
     type_anno: intermediate.TypeAnnotationUnion, v_name: str
 ) -> Identifier:
     """Name the function writing ``type_anno`` as an element called ``v_name``."""
-    return Identifier(f"writeAtV{v_name[1:]}_{_type_moniker(type_anno)}")
+    return Identifier(f"writeAtV{v_name[1:]}_{java_common.type_moniker(type_anno)}")
 
 
 def _element_writer_name(
@@ -397,7 +330,7 @@ def _collect_needed(symbol_table: intermediate.SymbolTable) -> _Needed:
     @require(lambda type_anno: not _is_instance_type(type_anno))
     def register_content(type_anno: intermediate.TypeAnnotationUnion) -> None:
         """Register the reader of the content of an element as ``type_anno``."""
-        moniker = _type_moniker(type_anno)
+        moniker = java_common.type_moniker(type_anno)
         if moniker in needed.content_readers:
             return
 

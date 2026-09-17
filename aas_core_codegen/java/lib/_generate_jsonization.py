@@ -2,7 +2,7 @@
 
 import io
 import textwrap
-from typing import Tuple, Optional, List
+from typing import Final, List, Optional, Set, Tuple
 
 from icontract import ensure
 
@@ -25,125 +25,29 @@ from aas_core_codegen.java.common import (
     INDENT4 as IIII,
 )
 
+# region De-serialization
 
-def _generate_from_method_for_enumeration(
-    enumeration: intermediate.Enumeration,
-) -> Stripped:
-    """Generate the deserialization method for an enumeration."""
-    name = java_naming.enum_name(identifier=enumeration.name)
-    var_name = java_naming.variable_name(identifier=enumeration.name)
-    method_name = java_naming.method_name(Identifier(f"{enumeration.name}_from_string"))
+#: Maximal length of a generated line before a call is broken over two lines
+_MAX_LINE_LENGTH: Final[int] = 100
 
-    message_literal = java_common.string_literal(
-        f"Not a valid JSON representation of {name}"
-    )
+#: Indentation, in characters, of the body of a function of
+#: the de-serialization implementation. The body sits four levels deep: the class
+#: ``Jsonization``, the class ``_DeserializeImplementation``, the function and
+#: finally its body.
+_FUNCTION_BODY_INDENTATION: Final[int] = len(I) * 4
 
-    return Stripped(
-        f"""\
-/**
- * Deserialize the enumeration {name} from the {{@code node}}.
- *
- * @param node JSON node to be parsed
- */
-private static Reporting.Result<{name}> try{name}From(JsonNode node) {{
-{I}final Reporting.Result<String> textResult = tryStringFrom(node);
-{I}if (textResult.isError()) {{
-{II}return textResult.castTo({name}.class);
-{I}}}
-{I}final Optional<{name}> {var_name} = Stringification.{method_name}(textResult.getResult());
-{I}if (!{var_name}.isPresent()) {{
-{II}final Reporting.Error error = new Reporting.Error({message_literal});
-{II}return Reporting.Result.failure(error);
-{I}}}
-{I}return Reporting.Result.success({var_name}.get());
-}}"""
-    )
+#: Indentation, in characters, of the body of a ``case`` of a property loop.
+#: The body sits seven levels deep: the class ``Jsonization``, the class
+#: ``_DeserializeImplementation``, the function, its body, the loop body,
+#: the ``switch`` body and finally the ``case`` body.
+_CASE_BODY_INDENTATION: Final[int] = len(I) * 7
+
+#: Name of the class through which the de-serialization is dispatched. A method
+#: reference to one of its static parsers has to be qualified by it.
+_DESERIALIZE_IMPL_NAME: Final[Identifier] = Identifier("_DeserializeImplementation")
 
 
-def _generate_from_method_for_interface(
-    interface: intermediate.Interface,
-) -> Stripped:
-    """Generate the deserialization method for an interface."""
-    name = java_naming.interface_name(interface.name)
-    interface_name = java_naming.interface_name(interface.name)
-
-    blocks = [
-        Stripped(
-            f"""\
-if (node == null || !node.isObject()) {{
-{I}final Reporting.Error error = new Reporting.Error(
-{II}"Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-{I}return Reporting.Result.failure(error);
-}}
-
-final JsonNode modelTypeNode = node.get("modelType");
-if (modelTypeNode == null) {{
-{I}final Reporting.Error error = new Reporting.Error(
-{III}"Expected a model type, but none is present");
-{I}return Reporting.Result.failure(error);
-}}
-final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
-if (modelTypeResult.isError()) {{
-{I}return modelTypeResult.castTo({interface_name}.class);
-}}"""
-        ),
-    ]  # type: List[Stripped]
-
-    # region Write the switch block
-
-    switch_writer = io.StringIO()
-    switch_writer.write(
-        """\
-switch (modelTypeResult.getResult())
-{
-"""
-    )
-
-    for implementer in interface.implementers:
-        model_type = naming.json_model_type(implementer.name)
-        implementer_name = java_naming.class_name(implementer.name)
-        switch_writer.write(
-            f"""\
-{I}case {java_common.string_literal(model_type)}: {{
-{II}return try{implementer_name}From(node);
-}}"""
-        )
-
-    switch_writer.write(
-        f"""\
-{I}default: {{
-{II}final Reporting.Error error = new Reporting.Error(
-{III}"Unexpected model type for {name}: " + modelTypeResult.getResult());
-{II}return Reporting.Result.failure(error);
-{I}}}
-}}"""
-    )
-    blocks.append(Stripped(switch_writer.getvalue()))
-
-    # endregion
-
-    writer = io.StringIO()
-
-    writer.write(
-        f"""\
-/**
- * Deserialize an instance of {name} by dispatching
- * based on {{@code modelType}} property of the {{@code node}}.
- *
- * @param node JSON node to be parsed
- */
-public static Reporting.Result<? extends {name}> try{name}From(JsonNode node) {{
-"""
-    )
-
-    for i, block in enumerate(blocks):
-        if i > 0:
-            writer.write("\n\n")
-        writer.write(textwrap.indent(block, I))
-
-    writer.write("\n}")
-
-    return Stripped(writer.getvalue())
+# region Names of the generated parsers
 
 
 _PARSE_METHOD_BY_PRIMITIVE_TYPE = {
@@ -160,7 +64,7 @@ assert all(
 
 def _parse_method_for_atomic_value(
     type_annotation: intermediate.AtomicTypeAnnotation,
-) -> Stripped:
+) -> Identifier:
     """Determine the parse method for deserializing an atomic non-optional value."""
     parse_method = None  # type: Optional[str]
 
@@ -195,7 +99,310 @@ def _parse_method_for_atomic_value(
     else:
         assert_never(type_annotation)
 
-    return Stripped(parse_method)
+    return Identifier(parse_method)
+
+
+def _parse_method_name(type_anno: intermediate.TypeAnnotationUnion) -> Identifier:
+    """
+    Name the function parsing a value of ``type_anno`` from a JSON node.
+
+    An atomic value already has a function of its own to be named after. A list
+    and a tuple do not, so they are composed out of the parsers of their items
+    and named by the moniker of the type (see
+    :py:func:`aas_core_codegen.java.common.type_moniker`).
+    """
+    if isinstance(
+        type_anno, (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation)
+    ):
+        return Identifier(f"parse{java_common.type_moniker(type_anno)}")
+
+    assert isinstance(
+        type_anno, intermediate.AtomicTypeAnnotationAsTuple
+    ), f"Expected an atomic type annotation, but got: {type_anno}"
+
+    return _parse_method_for_atomic_value(type_anno)
+
+
+def _item_parser_reference(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
+    """
+    Reference the parser of a single item of a list or of a tuple.
+
+    A method reference to a static method captures nothing, so the JVM
+    instantiates it once and caches it at the call site. Naming a composed
+    parser (see :py:func:`_parse_method_name`) instead of composing it at every
+    property therefore costs nothing at run-time, and leaves one call site per
+    item type instead of one per property.
+    """
+    assert isinstance(type_anno, intermediate.AtomicTypeAnnotationAsTuple), (
+        f"We only support lists and tuples of atomic values (primitives, "
+        f"constrained primitives, enumeration literals) or classes when "
+        f"de-serializing from JSON, but got the nested type {type_anno}. "
+        f"Please contact the developers if you need this feature."
+    )
+
+    return Stripped(
+        f"{_DESERIALIZE_IMPL_NAME}::{_parse_method_for_atomic_value(type_anno)}"
+    )
+
+
+def _from_method_name(cls: intermediate.ClassUnion) -> Identifier:
+    """Name the function parsing an instance of ``cls`` from a JSON node."""
+    return Identifier(f"try{java_naming.class_name(cls.name)}From")
+
+
+def _from_object_method_name(cls: intermediate.ConcreteClass) -> Identifier:
+    """
+    Name the function parsing ``cls`` from a JSON object of a checked model type.
+
+    A dispatcher has already read the model type in order to dispatch on it, so
+    the function it dispatches to must not read it a second time. A class which
+    carries no model type has nothing to check in the first place, and
+    an implementation-specific class brings its own function, so in both cases
+    this is simply :py:func:`_from_method_name`.
+    """
+    if not cls.serialization.with_model_type or cls.is_implementation_specific:
+        return _from_method_name(cls)
+
+    return Identifier(f"try{java_naming.class_name(cls.name)}FromObject")
+
+
+# endregion
+
+# region Shared errors and helpers
+
+
+def _generate_prepend_name() -> Stripped:
+    """Generate the helper marking an error as coming from a named property."""
+    return Stripped(
+        f"""\
+/**
+ * Mark the error of {{@code result}} as coming from the property {{@code name}}.
+ *
+ * <p>A {{@code case}} of a property loop is matched exactly when the key of
+ * the property equals its literal, so the key already names the property and
+ * no {{@code case}} has to spell it out a second time.
+ */
+private static <T> Reporting.Result<T> prependName(
+{I}Reporting.Result<?> result, String name) {{
+{I}final Reporting.Error error = result.getError();
+{I}error.prependSegment(new Reporting.NameSegment(name));
+{I}return Reporting.Result.failure(error);
+}}"""
+    )
+
+
+def _generate_prepend_index() -> Stripped:
+    """Generate the helper marking an error as coming from an indexed item."""
+    return Stripped(
+        f"""\
+/**
+ * Mark the error of {{@code result}} as coming from the item at {{@code index}}.
+ */
+private static <T> Reporting.Result<T> prependIndex(
+{I}Reporting.Result<?> result, int index) {{
+{I}final Reporting.Error error = result.getError();
+{I}error.prependSegment(new Reporting.IndexSegment(index));
+{I}return Reporting.Result.failure(error);
+}}"""
+    )
+
+
+def _generate_not_a_json_object() -> Stripped:
+    """Generate the error for a node which is no JSON object."""
+    return Stripped(
+        f"""\
+/**
+ * Report that {{@code node}} is no JSON object.
+ */
+private static <T> Reporting.Result<T> notAJsonObject(JsonNode node) {{
+{I}return Reporting.Result.failure(
+{II}new Reporting.Error(
+{III}"Expected a JsonObject, but got " +
+{III}(node == null ? "null" : node.getNodeType())));
+}}"""
+    )
+
+
+def _generate_not_a_json_array() -> Stripped:
+    """Generate the error for a node which is no JSON array."""
+    return Stripped(
+        f"""\
+/**
+ * Report that {{@code node}} is no JSON array.
+ */
+private static <T> Reporting.Result<T> notAJsonArray(JsonNode node) {{
+{I}return Reporting.Result.failure(
+{II}new Reporting.Error(
+{III}"Expected a JsonArray, but got " + node.getNodeType()));
+}}"""
+    )
+
+
+def _generate_unexpected_property() -> Stripped:
+    """Generate the error for a property which the class does not have."""
+    return Stripped(
+        f"""\
+/**
+ * Report a property which the class does not have.
+ */
+private static <T> Reporting.Result<T> unexpectedProperty(String name) {{
+{I}return Reporting.Result.failure(
+{II}new Reporting.Error("Unexpected property: " + name));
+}}"""
+    )
+
+
+def _generate_missing_required_property() -> Stripped:
+    """Generate the error for a required property which the object omitted."""
+    return Stripped(
+        f"""\
+/**
+ * Report a required property which the JSON object did not give.
+ */
+private static <T> Reporting.Result<T> missingRequiredProperty(String name) {{
+{I}return Reporting.Result.failure(
+{II}new Reporting.Error(
+{III}"Required property \\"" + name + "\\" is missing"));
+}}"""
+    )
+
+
+def _generate_try_enum_from_helper() -> Stripped:
+    """Generate the generic helper parsing a JSON string as an enumeration literal."""
+    return Stripped(
+        f"""\
+/**
+ * Parse {{@code node}} as a literal of the enumeration {{@code enumType}},
+ * converted from its text by {{@code fromString}}.
+ *
+ * <p>The stringification is passed in as a function value so that this one
+ * helper does the whole plumbing for every enumeration, and a single statement
+ * parses one. The literal and the class constrain each other, so the name in
+ * the error message can not drift from the type of the literal.
+ *
+ * @param node JSON node to be parsed
+ * @param fromString to convert the text into a literal
+ * @param enumType enumeration whose literal is expected
+ */
+private static <T> Reporting.Result<T> tryEnumFrom(
+{I}JsonNode node,
+{I}Function<String, Optional<T>> fromString,
+{I}Class<T> enumType) {{
+{I}final Reporting.Result<String> text = tryStringFrom(node);
+{I}if (text.isError()) {{
+{II}return text.castTo(enumType);
+{I}}}
+
+{I}final Optional<T> parsed = fromString.apply(text.getResult());
+{I}if (!parsed.isPresent()) {{
+{II}return Reporting.Result.failure(
+{III}new Reporting.Error(
+{IIII}"Not a valid JSON representation of " + enumType.getSimpleName()));
+{I}}}
+
+{I}return Reporting.Result.success(parsed.get());
+}}"""
+    )
+
+
+def _generate_try_model_type_from() -> Stripped:
+    """Generate the extraction of the ``modelType`` property."""
+    return Stripped(
+        f"""\
+/**
+ * Extract the {{@code modelType}} property of {{@code node}} as a string.
+ *
+ * <p>This is the only place which knows how the model type is spelled on
+ * the wire. Both the dispatch on the model type and its check in a concrete
+ * class go through it.
+ *
+ * @param node JSON object to be inspected
+ */
+private static Reporting.Result<String> tryModelTypeFrom(JsonNode node) {{
+{I}final JsonNode modelTypeNode = node.get("modelType");
+{I}if (modelTypeNode == null) {{
+{II}return missingRequiredProperty("modelType");
+{I}}}
+
+{I}final Reporting.Result<String> result = tryStringFrom(modelTypeNode);
+{I}if (result.isError()) {{
+{II}return prependName(result, "modelType");
+{I}}}
+
+{I}return result;
+}}"""
+    )
+
+
+def _generate_check_model_type() -> Stripped:
+    """Generate the check of the ``modelType`` property against the expected one."""
+    return Stripped(
+        f"""\
+/**
+ * Check that {{@code node}} gives the {{@code expected}} model type, and return
+ * the error if it does not.
+ *
+ * <p>The model type is checked before the properties are read, so that a wrong
+ * one is reported without de-serializing any of them first, and so that
+ * the property loop carries nothing but the properties.
+ *
+ * @param node JSON object to be inspected
+ * @param expected model type of the class being de-serialized
+ */
+private static Reporting.Error checkModelType(JsonNode node, String expected) {{
+{I}final Reporting.Result<String> result = tryModelTypeFrom(node);
+{I}if (result.isError()) {{
+{II}return result.getError();
+{I}}}
+
+{I}final String modelType = result.getResult();
+{I}if (!modelType.equals(expected)) {{
+{II}final Reporting.Error error = new Reporting.Error(
+{III}"Expected the model type '" + expected + "', " +
+{III}"but got '" + modelType + "'");
+{II}error.prependSegment(new Reporting.NameSegment("modelType"));
+{II}return error;
+{I}}}
+
+{I}return null;
+}}"""
+    )
+
+
+def _generate_parse_array_helper() -> Stripped:
+    """Generate the generic helper to parse a JSON array as a list."""
+    return Stripped(
+        f"""\
+/**
+ * Parse {{@code node}} as a JSON array, and every of its items with
+ * {{@code parseItem}}.
+ *
+ * @param node JSON node to be parsed
+ * @param parseItem to parse a single item of the array
+ */
+private static <T> Reporting.Result<List<T>> parseArray(
+{I}JsonNode node,
+{I}Function<JsonNode, Reporting.Result<? extends T>> parseItem) {{
+{I}if (!node.isArray()) {{
+{II}return notAJsonArray(node);
+{I}}}
+
+{I}final List<T> result = new ArrayList<>(node.size());
+
+{I}int index = 0;
+{I}for (JsonNode item : node) {{
+{II}final Reporting.Result<? extends T> parsedItem = parseItem.apply(item);
+{II}if (parsedItem.isError()) {{
+{III}return prependIndex(parsedItem, index);
+{II}}}
+
+{II}result.add(parsedItem.getResult());
+{II}index++;
+{I}}}
+
+{I}return Reporting.Result.success(result);
+}}"""
+    )
 
 
 def _generate_parse_tuple_helper(arity: int) -> Stripped:
@@ -203,35 +410,37 @@ def _generate_parse_tuple_helper(arity: int) -> Stripped:
     type_params = [f"T{i + 1}" for i in range(arity)]
     tuple_type = f"Tuple{arity}<{', '.join(type_params)}>"
 
-    param_lines = [
-        f"Function<JsonNode, Reporting.Result<? extends T{i + 1}>> parseItem{i + 1}"
-        for i in range(arity)
-    ]
-
     writer = io.StringIO()
     writer.write(
         f"""\
 /**
- * Parse {{@code array}} as a tuple of {arity} item(s), each de-serialized
- * with the corresponding {{@code parseItemI}}.
+ * Parse {{@code node}} as a JSON array of exactly {arity} item(s), each
+ * de-serialized with the corresponding {{@code parseItemI}}.
  *
- * @param array JSON array to be parsed
+ * @param node JSON node to be parsed
  */
 private static <{", ".join(type_params)}> Reporting.Result<{tuple_type}> parseTuple{arity}(
-{I}JsonNode array,
+{I}JsonNode node,
 """
     )
-    for i, param_line in enumerate(param_lines):
-        writer.write(I)
-        writer.write(param_line)
-        writer.write(",\n" if i < len(param_lines) - 1 else ") {\n")
+
+    for i in range(arity):
+        writer.write(
+            f"{I}Function<JsonNode, Reporting.Result<? extends T{i + 1}>> "
+            f"parseItem{i + 1}"
+        )
+        writer.write(",\n" if i < arity - 1 else ") {\n")
 
     writer.write(
         f"""\
-{I}if (array.size() != {arity}) {{
-{II}final Reporting.Error error = new Reporting.Error(
-{III}"Expected exactly {arity} item(s), but got " + array.size());
-{II}return Reporting.Result.failure(error);
+{I}if (!node.isArray()) {{
+{II}return notAJsonArray(node);
+{I}}}
+
+{I}if (node.size() != {arity}) {{
+{II}return Reporting.Result.failure(
+{III}new Reporting.Error(
+{IIII}"Expected exactly {arity} item(s), but got " + node.size()));
 {I}}}
 
 """
@@ -240,19 +449,17 @@ private static <{", ".join(type_params)}> Reporting.Result<{tuple_type}> parseTu
     for i in range(arity):
         writer.write(
             f"""\
-{I}final Reporting.Result<? extends T{i + 1}> item{i + 1}Result =
-{II}parseItem{i + 1}.apply(array.get({i}));
-{I}if (item{i + 1}Result.isError()) {{
-{II}item{i + 1}Result.getError()
-{III}.prependSegment(new Reporting.IndexSegment({i}));
-{II}return Reporting.Result.failure(item{i + 1}Result.getError());
+{I}final Reporting.Result<? extends T{i + 1}> item{i + 1} =
+{II}parseItem{i + 1}.apply(node.get({i}));
+{I}if (item{i + 1}.isError()) {{
+{II}return prependIndex(item{i + 1}, {i});
 {I}}}
 
 """
         )
 
     tuple_literal = java_common.generate_tuple_literal(
-        item_exprs=[Stripped(f"item{i + 1}Result.getResult()") for i in range(arity)]
+        item_exprs=[Stripped(f"item{i + 1}.getResult()") for i in range(arity)]
     )
 
     writer.write(
@@ -265,12 +472,224 @@ private static <{", ".join(type_params)}> Reporting.Result<{tuple_type}> parseTu
     return Stripped(writer.getvalue())
 
 
-@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
-def _generate_deserialize_constructor_argument(
+# endregion
+
+# region Composed parsers
+
+
+def _composed_type_annotations(
+    symbol_table: intermediate.SymbolTable,
+) -> List[intermediate.TypeAnnotationUnion]:
+    """
+    List the list- and tuple-typed values which need a parser of their own.
+
+    Only a list and a tuple have no function of their own to be named after, so
+    only they are composed out of the parsers of their items.
+
+    The result is de-duplicated by the moniker, which is injective (see
+    :py:func:`aas_core_codegen.java.common.type_moniker`), so that two distinct
+    types can never be conflated into one parser.
+
+    An implementation-specific class is scanned as well, although its own
+    function is given as a snippet: the snippet still parses the properties of
+    that very class, and hence may well call the parsers of their types.
+    """
+    result = []  # type: List[intermediate.TypeAnnotationUnion]
+    observed = set()  # type: Set[str]
+
+    for cls in symbol_table.concrete_classes:
+        for arg in cls.constructor.arguments:
+            type_anno = intermediate.beneath_optional(arg.type_annotation)
+
+            if not isinstance(
+                type_anno,
+                (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
+            ):
+                continue
+
+            moniker = java_common.type_moniker(type_anno)
+            if moniker not in observed:
+                observed.add(moniker)
+                result.append(type_anno)
+
+    return result
+
+
+def _generate_composed_parser(
+    type_anno: intermediate.TypeAnnotationUnion,
+) -> Stripped:
+    """Generate the parser of the list or of the tuple ``type_anno``."""
+    name = _parse_method_name(type_anno)
+    value_type = java_common.generate_type(type_anno)
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        item_parser = _item_parser_reference(type_anno.items)
+
+        description = (
+            f"a list of {{@code {java_common.generate_type(type_anno.items)}}}"
+        )
+
+        body = Stripped(f"return parseArray(node, {item_parser});")
+        if _FUNCTION_BODY_INDENTATION + len(body) > _MAX_LINE_LENGTH:
+            body = Stripped(
+                f"""\
+return parseArray(
+{I}node,
+{I}{item_parser});"""
+            )
+
+    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        item_parsers_joined = ",\n".join(
+            _item_parser_reference(item_type_anno) for item_type_anno in type_anno.items
+        )
+
+        description = f"a tuple of {len(type_anno.items)} item(s)"
+
+        body = Stripped(
+            f"""\
+return parseTuple{len(type_anno.items)}(
+{I}node,
+{I}{indent_but_first_line(item_parsers_joined, I)});"""
+        )
+
+    else:
+        raise AssertionError(
+            f"Expected a list or a tuple type annotation, but got: {type_anno}"
+        )
+
+    # NOTE (mristin):
+    # We describe the type in words rather than spelling it out, since
+    # ``generate_type`` breaks a long tuple over several lines, which a Javadoc
+    # comment can not carry.
+    return Stripped(
+        f"""\
+/**
+ * Parse {{@code node}} as {description}.
+ *
+ * @param node JSON node to be parsed
+ */
+private static Reporting.Result<{value_type}> {name}(JsonNode node) {{
+{I}{indent_but_first_line(body, I)}
+}}"""
+    )
+
+
+# endregion
+
+# region Parsers of a single type
+
+
+def _generate_from_method_for_enumeration(
+    enumeration: intermediate.Enumeration,
+) -> Stripped:
+    """Generate the deserialization method for an enumeration."""
+    name = java_naming.enum_name(identifier=enumeration.name)
+    method_name = java_naming.method_name(Identifier(f"{enumeration.name}_from_string"))
+
+    call = f"return tryEnumFrom(node, Stringification::{method_name}, {name}.class);"
+    if _FUNCTION_BODY_INDENTATION + len(call) > _MAX_LINE_LENGTH:
+        call = f"""\
+return tryEnumFrom(
+{I}node,
+{I}Stringification::{method_name},
+{I}{name}.class);"""
+
+    return Stripped(
+        f"""\
+/**
+ * Deserialize the enumeration {name} from the {{@code node}}.
+ *
+ * @param node JSON node to be parsed
+ */
+private static Reporting.Result<{name}> try{name}From(JsonNode node) {{
+{I}{indent_but_first_line(Stripped(call), I)}
+}}"""
+    )
+
+
+def _generate_json_object_guard() -> Stripped:
+    """Generate the guard rejecting a node which is no JSON object."""
+    return Stripped(
+        f"""\
+if (node == null || !node.isObject()) {{
+{I}return notAJsonObject(node);
+}}"""
+    )
+
+
+def _generate_from_method_for_interface(
+    interface: intermediate.Interface,
+) -> Stripped:
+    """Generate the deserialization method for an interface."""
+    name = java_naming.interface_name(interface.name)
+
+    switch_writer = io.StringIO()
+    switch_writer.write("switch (modelTypeResult.getResult()) {\n")
+
+    for implementer in interface.implementers:
+        model_type = naming.json_model_type(implementer.name)
+        switch_writer.write(
+            f"""\
+{I}case {java_common.string_literal(model_type)}:
+{II}return {_from_object_method_name(implementer)}(node);
+"""
+        )
+
+    switch_writer.write(
+        f"""\
+{I}default: {{
+{II}final Reporting.Error error = new Reporting.Error(
+{III}"Unexpected model type for {name}: " + modelTypeResult.getResult());
+{II}return Reporting.Result.failure(error);
+{I}}}
+}}"""
+    )
+
+    return Stripped(
+        f"""\
+/**
+ * Deserialize an instance of {name} by dispatching
+ * based on {{@code modelType}} property of the {{@code node}}.
+ *
+ * @param node JSON node to be parsed
+ */
+public static Reporting.Result<? extends {name}> try{name}From(JsonNode node) {{
+{I}{indent_but_first_line(_generate_json_object_guard(), I)}
+
+{I}final Reporting.Result<String> modelTypeResult = tryModelTypeFrom(node);
+{I}if (modelTypeResult.isError()) {{
+{II}return modelTypeResult.castTo({name}.class);
+{I}}}
+
+{I}{indent_but_first_line(Stripped(switch_writer.getvalue()), I)}
+}}"""
+    )
+
+
+def _generate_check_model_type_call(cls: intermediate.ConcreteClass) -> Stripped:
+    """Generate the check of the model type preceding the property loop of ``cls``."""
+    model_type_literal = java_common.string_literal(naming.json_model_type(cls.name))
+
+    call = f"final Reporting.Error modelTypeError = checkModelType(node, {model_type_literal});"
+    if _FUNCTION_BODY_INDENTATION + len(call) > _MAX_LINE_LENGTH:
+        call = f"""\
+final Reporting.Error modelTypeError = checkModelType(
+{I}node, {model_type_literal});"""
+
+    return Stripped(
+        f"""\
+{call}
+if (modelTypeError != null) {{
+{I}return Reporting.Result.failure(modelTypeError);
+}}"""
+    )
+
+
+def _generate_case_for_argument(
     arg: intermediate.Argument,
     cls: intermediate.ConcreteClass,
-) -> Tuple[Optional[Stripped], Optional[Error]]:
-    """Generate the code snippet for de-serializing the constructor argument ``arg``."""
+) -> Stripped:
+    """Generate the ``case`` of the property loop de-serializing ``arg``."""
     type_anno = intermediate.beneath_optional(arg.type_annotation)
 
     # Prefix the variables to avoid naming conflicts
@@ -279,237 +698,88 @@ def _generate_deserialize_constructor_argument(
     json_name = cls.properties_by_name[arg.name].json_name
     assert not java_common.needs_escaping(json_name)
 
-    json_literal = java_common.string_literal(json_name)
-
-    parse_block = None  # type: Optional[Stripped]
     if isinstance(
-        type_anno,
-        (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
+        type_anno, (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation)
     ):
-        parse_method = _parse_method_for_atomic_value(type_anno)
-
-        value_type = java_common.generate_type(type_anno)
-
-        cls_name = java_naming.class_name(cls.name)
-
-        parse_block = Stripped(
-            f"""\
-final Reporting.Result<? extends {value_type}> {target_var}Result = {parse_method}(currentNode.getValue());
-if ({target_var}Result.isError()) {{
-{I}{target_var}Result.getError()
-{II}.prependSegment(new Reporting.NameSegment("{json_name}"));
-{I}return {target_var}Result.castTo({cls_name}.class);
-}}
-{target_var} = {target_var}Result.getResult();"""
-        )
-
-    elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
-            f"We only support lists of atomic values (primitives, constrained "
-            f"primitives, enumeration literals) or classes when de-serializing "
-            f"from JSON, but the argument {arg.name!r} has the unsupported "
-            f"nested type {arg.type_annotation}. Please contact the developers "
-            f"if you need this feature."
-        )
-
-        item_type = java_common.generate_type(type_anno.items)
-
-        array_var = java_naming.variable_name(Identifier(f"array_{arg.name}"))
-
-        cls_name = java_naming.class_name(cls.name)
-
-        parse_method = _parse_method_for_atomic_value(type_anno.items)
-
-        parse_block = Stripped(
-            f"""\
-final JsonNode {array_var} = currentNode.getValue();
-if (!{array_var}.isArray()) {{
-{I}final Reporting.Error error = new Reporting.Error(
-{II}"Expected a JsonArray, but got " + {array_var}.getNodeType());
-{I}error.prependSegment(
-{II}new Reporting.NameSegment(
-{III}{json_literal}));
-{I}return Reporting.Result.failure(error);
-}}
-final Reporting.Result<List<{item_type}>> {target_var}Result = parseArray(
-{I}{array_var},
-{I}_DeserializeImplementation::{parse_method});
-if ({target_var}Result.isError()) {{
-{I}{target_var}Result.getError()
-{II}.prependSegment(
-{III}new Reporting.NameSegment(
-{IIII}{json_literal}));
-{I}return {target_var}Result.castTo({cls_name}.class);
-}}
-{target_var} = {target_var}Result.getResult();"""
-        )
-    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        arity = len(type_anno.items)
-
-        array_var = java_naming.variable_name(Identifier(f"array_{arg.name}"))
-
-        cls_name = java_naming.class_name(cls.name)
-        tuple_type = java_common.generate_type(type_anno)
-
-        item_parsers = []  # type: List[Stripped]
-        for item_type_anno in type_anno.items:
-            assert isinstance(
-                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
-            ), (
-                f"Expected an atomic tuple item (a primitive, a constrained "
-                f"primitive, an enumeration or a class), but got {item_type_anno}. "
-                f"This should have already been verified in "
-                f"intermediate._translate._verify_only_simple_type_patterns."
-            )
-
-            parse_method = _parse_method_for_atomic_value(item_type_anno)
-            item_parsers.append(Stripped(f"_DeserializeImplementation::{parse_method}"))
-
-        joined_item_parsers = ",\n".join(item_parsers)
-
-        parse_block = Stripped(
-            f"""\
-final JsonNode {array_var} = currentNode.getValue();
-if (!{array_var}.isArray()) {{
-{I}final Reporting.Error error = new Reporting.Error(
-{II}"Expected a JsonArray, but got " + {array_var}.getNodeType());
-{I}error.prependSegment(
-{II}new Reporting.NameSegment(
-{III}{json_literal}));
-{I}return Reporting.Result.failure(error);
-}}
-final Reporting.Result<{tuple_type}> {target_var}Result = parseTuple{arity}(
-{I}{array_var},
-{I}{indent_but_first_line(joined_item_parsers, I)});
-if ({target_var}Result.isError()) {{
-{I}{target_var}Result.getError()
-{II}.prependSegment(
-{III}new Reporting.NameSegment(
-{IIII}{json_literal}));
-{I}return {target_var}Result.castTo({cls_name}.class);
-}}
-{target_var} = {target_var}Result.getResult();"""
-        )
+        # NOTE (mristin):
+        # A list and a tuple are parsed into their exact type, whereas an atomic
+        # value of one of our classes is parsed by the function of the concrete
+        # class and hence only *extends* the type of the property.
+        result_type = java_common.generate_type(type_anno)
     else:
-        assert_never(arg.type_annotation)
+        result_type = Stripped(f"? extends {java_common.generate_type(type_anno)}")
 
-    return parse_block, None
+    call = f"{_parse_method_name(type_anno)}(value)"
+
+    declaration = f"final Reporting.Result<{result_type}> parsed = {call};"
+    if _CASE_BODY_INDENTATION + len(declaration) > _MAX_LINE_LENGTH:
+        declaration = f"""\
+final Reporting.Result<{result_type}> parsed =
+{I}{call};"""
+
+    return Stripped(
+        f"""\
+case {java_common.string_literal(json_name)}: {{
+{I}{indent_but_first_line(Stripped(declaration), I)}
+{I}if (parsed.isError()) {{
+{II}return prependName(parsed, key);
+{I}}}
+{I}{target_var} = parsed.getResult();
+{I}break;
+}}"""
+    )
 
 
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
-def _generate_from_method_for_class(
+def _generate_from_object_body(
     cls: intermediate.ConcreteClass,
-) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
-    """Generate the deserialization method for a concrete class."""
+) -> Tuple[Optional[List[Stripped]], Optional[List[Error]]]:
+    """Generate the blocks reading the properties of ``cls`` from a JSON object."""
     errors = []  # type: List[Error]
 
     name = java_naming.class_name(cls.name)
 
-    blocks = [
-        Stripped(
-            f"""\
-if (node == null || !node.isObject()) {{
-{I}final Reporting.Error error = new Reporting.Error(
-{II}"Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-{I}return Reporting.Result.failure(error);
-}}"""
-        ),
-    ]  # type: List[Stripped]
+    blocks = []  # type: List[Stripped]
 
     # region Initialize argument variables to null
 
-    args_init_writer = io.StringIO()
-    for i, arg in enumerate(cls.constructor.arguments):
-        arg_var = java_naming.variable_name(Identifier(f"the_{arg.name}"))
-        type_anno = intermediate.beneath_optional(arg.type_annotation)
-        arg_type = java_common.generate_type(type_anno)
+    if len(cls.constructor.arguments) > 0:
+        args_init_writer = io.StringIO()
+        for i, arg in enumerate(cls.constructor.arguments):
+            arg_var = java_naming.variable_name(Identifier(f"the_{arg.name}"))
+            type_anno = intermediate.beneath_optional(arg.type_annotation)
+            arg_type = java_common.generate_type(type_anno)
 
-        if i > 0:
-            args_init_writer.write("\n")
-        args_init_writer.write(f"{arg_type} {arg_var} = null;")
+            if i > 0:
+                args_init_writer.write("\n")
+            args_init_writer.write(f"{arg_type} {arg_var} = null;")
 
-    blocks.append(Stripped(args_init_writer.getvalue()))
-
-    if cls.serialization.with_model_type:
-        blocks.append(Stripped("String modelType = null;"))
+        blocks.append(Stripped(args_init_writer.getvalue()))
 
     # endregion
 
     # region Switch on property name
 
-    cases = []  # type: List[Stripped]
-    for arg in cls.constructor.arguments:
-        case_body, error = _generate_deserialize_constructor_argument(arg=arg, cls=cls)
-        if error is not None:
-            errors.append(error)
-        else:
-            assert case_body is not None
-            json_name = cls.properties_by_name[arg.name].json_name
-
-            # NOTE (empwilli):
-            # We put ``if (currentNode.getValue() == null)`` here instead of the outer loop
-            # since we want to detect the unexpected additional properties even
-            # though their value can be set to null.
-
-            cases.append(
-                Stripped(
-                    f"""\
-case {java_common.string_literal(json_name)}: {{
-{I}if (currentNode.getValue() == null) {{
-{II}continue;
-{I}}}
-
-{I}{indent_but_first_line(case_body, I)}
-{I}break;
-}}"""
-                )
-            )
-
-    if len(errors) > 0:
-        return None, errors
+    cases = [
+        _generate_case_for_argument(arg=arg, cls=cls)
+        for arg in cls.constructor.arguments
+    ]  # type: List[Stripped]
 
     if cls.serialization.with_model_type:
-        cls_name = java_naming.class_name(cls.name)
-        model_type = naming.json_model_type(cls.name)
-
         cases.append(
             Stripped(
                 f"""\
-case "modelType": {{
-{I}if (currentNode.getValue() == null) {{
-{II}final Reporting.Error error = new Reporting.Error(
-{III}"Expected a model type, but got null");
-{II}return Reporting.Result.failure(error);
-{I}}}
-{I}final Reporting.Result<? extends String> modelTypeResult =
-{II}_DeserializeImplementation.tryStringFrom(currentNode.getValue());
-{I}if (modelTypeResult.isError()) {{
-{II}modelTypeResult.getError()
-{III}.prependSegment(new Reporting.NameSegment("modelType"));
-{II}return modelTypeResult.castTo({cls_name}.class);
-{I}}}
-{I}modelType = modelTypeResult.getResult();
-
-{I}if (!modelType.equals("{model_type}")) {{
-{II}final Reporting.Error error = new Reporting.Error(
-{III}"Expected the model type '{model_type}', " +
-{III}"but got '" + modelType + "'");
-{III}error.prependSegment(new Reporting.NameSegment("modelType"));
-{III}return Reporting.Result.failure(error);
-{I}}}
-{I}break;
-}}"""
+case "modelType":
+{I}// The model type has already been checked before the loop.
+{I}break;"""
             )
         )
 
     cases.append(
         Stripped(
             f"""\
-default: {{
-{I}final Reporting.Error error = new Reporting.Error(
-{II}"Unexpected property: " + currentNode.getKey());
-{I}return Reporting.Result.failure(error);
-}}"""
+default:
+{I}return unexpectedProperty(key);"""
         )
     )
 
@@ -517,10 +787,15 @@ default: {{
     foreach_writer.write(
         f"""\
 for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {{
-{I}Map.Entry<String, JsonNode> currentNode = iterator.next();
-
-{I}switch (currentNode.getKey()) {{"""
+{I}final Map.Entry<String, JsonNode> keyValue = iterator.next();
+{I}final String key = keyValue.getKey();
+"""
     )
+
+    if len(cls.constructor.arguments) > 0:
+        foreach_writer.write(f"{I}final JsonNode value = keyValue.getValue();\n")
+
+    foreach_writer.write(f"\n{I}switch (key) {{")
 
     for case_block in cases:
         foreach_writer.write("\n")
@@ -534,20 +809,7 @@ for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.ha
 
     # region Check required
 
-    if cls.serialization.with_model_type:
-        blocks.append(
-            Stripped(
-                f"""\
-if (modelType == null) {{
-{I}final Reporting.Error error = new Reporting.Error(
-{II}"Required property \\"modelType\\" is missing");
-{I}return Reporting.Result.failure(error);
-}}"""
-            )
-        )
-
-    required_check_writer = io.StringIO()
-    for i, arg in enumerate(cls.constructor.arguments):
+    for arg in cls.constructor.arguments:
         if isinstance(arg.type_annotation, intermediate.OptionalTypeAnnotation):
             continue
 
@@ -555,19 +817,14 @@ if (modelType == null) {{
         json_name = cls.properties_by_name[arg.name].json_name
         assert not java_common.needs_escaping(json_name)
 
-        if i > 0:
-            required_check_writer.write("\n\n")
-
-        required_check_writer.write(
-            f"""\
+        blocks.append(
+            Stripped(
+                f"""\
 if ({arg_var} == null) {{
-{I}final Reporting.Error error = new Reporting.Error(
-{II}"Required property \\\"{json_name}\\\" is missing");
-{I}return Reporting.Result.failure(error);
+{I}return missingRequiredProperty({java_common.string_literal(json_name)});
 }}"""
+            )
         )
-
-    blocks.append(Stripped(required_check_writer.getvalue()))
 
     # endregion
 
@@ -640,19 +897,24 @@ if ({arg_var} == null) {{
             return None, errors
 
         blocks.append(Stripped(init_writer.getvalue()))
+
     # endregion
 
-    writer = io.StringIO()
+    return blocks, None
 
+
+def _wrap_from_method(
+    name: str,
+    method_name: Identifier,
+    blocks: List[Stripped],
+    doc: Stripped,
+) -> Stripped:
+    """Wrap the ``blocks`` into the de-serialization method ``method_name``."""
+    writer = io.StringIO()
+    writer.write(doc)
     writer.write(
-        f"""\
-/**
- * Deserialize an instance of {name} from {{@param node}}.
- *
- * @param node JSON node to be parsed
- * @param elem Error, if any, during the deserialization
- */
-private static Reporting.Result<{name}> try{name}From(JsonNode node) {{
+        f"""
+private static Reporting.Result<{name}> {method_name}(JsonNode node) {{
 """
     )
 
@@ -663,7 +925,81 @@ private static Reporting.Result<{name}> try{name}From(JsonNode node) {{
 
     writer.write("\n}")
 
-    return Stripped(writer.getvalue()), None
+    return Stripped(writer.getvalue())
+
+
+@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+def _generate_from_methods_for_class(
+    cls: intermediate.ConcreteClass,
+) -> Tuple[Optional[List[Stripped]], Optional[List[Error]]]:
+    """Generate the deserialization method(s) for a concrete class."""
+    name = java_naming.class_name(cls.name)
+
+    body_blocks, errors = _generate_from_object_body(cls=cls)
+    if errors is not None:
+        return None, errors
+
+    assert body_blocks is not None
+
+    if not cls.serialization.with_model_type:
+        # NOTE (mristin):
+        # There is no model type to check, so the function reading the properties
+        # is the entry point itself.
+        blocks = [_generate_json_object_guard()] + body_blocks
+
+        return (
+            [
+                _wrap_from_method(
+                    name=name,
+                    method_name=_from_method_name(cls),
+                    blocks=blocks,
+                    doc=Stripped(
+                        f"""\
+/**
+ * Deserialize an instance of {name} from {{@code node}}.
+ *
+ * @param node JSON node to be parsed
+ */"""
+                    ),
+                )
+            ],
+            None,
+        )
+
+    entry_point = _wrap_from_method(
+        name=name,
+        method_name=_from_method_name(cls),
+        blocks=[
+            _generate_json_object_guard(),
+            _generate_check_model_type_call(cls=cls),
+            Stripped(f"return {_from_object_method_name(cls)}(node);"),
+        ],
+        doc=Stripped(
+            f"""\
+/**
+ * Deserialize an instance of {name} from {{@code node}}.
+ *
+ * @param node JSON node to be parsed
+ */"""
+        ),
+    )
+
+    from_object = _wrap_from_method(
+        name=name,
+        method_name=_from_object_method_name(cls),
+        blocks=body_blocks,
+        doc=Stripped(
+            f"""\
+/**
+ * Deserialize an instance of {name} from the JSON object {{@code node}} whose
+ * model type has already been checked.
+ *
+ * @param node JSON object to be parsed
+ */"""
+        ),
+    )
+
+    return [entry_point, from_object], None
 
 
 def _generate_from_method_for_named_union(
@@ -692,14 +1028,7 @@ def _generate_from_method_for_named_union(
     ]
 
     blocks = [
-        Stripped(
-            f"""\
-if (node == null || !node.isObject()) {{
-{I}final Reporting.Error error = new Reporting.Error(
-{II}"Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-{I}return Reporting.Result.failure(error);
-}}"""
-        ),
+        _generate_json_object_guard(),
     ]  # type: List[Stripped]
 
     if len(with_model_type) > 0:
@@ -712,7 +1041,8 @@ if (node == null || !node.isObject()) {{
             switch_writer.write(
                 f"""\
 {I}case {java_common.string_literal(model_type)}: {{
-{II}final Reporting.Result<{implementer_name}> result = try{implementer_name}From(node);
+{II}final Reporting.Result<{implementer_name}> result =
+{III}{_from_object_method_name(implementer)}(node);
 {II}if (result.isError()) {{
 {III}return result.castTo({name}.class);
 {II}}}
@@ -738,7 +1068,7 @@ final JsonNode modelTypeNode = node.get("modelType");
 if (modelTypeNode != null) {{
 {I}final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
 {I}if (modelTypeResult.isError()) {{
-{II}return modelTypeResult.castTo({name}.class);
+{II}return prependName(modelTypeResult, "modelType");
 {I}}}
 {I}{indent_but_first_line(Stripped(switch_writer.getvalue()), I)}
 }}"""
@@ -770,7 +1100,7 @@ if (modelTypeNode != null) {{
             Stripped(
                 f"""\
 if ({condition}) {{
-{I}final Reporting.Result<{implementer_name}> result = try{implementer_name}From(node);
+{I}final Reporting.Result<{implementer_name}> result = {_from_method_name(implementer)}(node);
 {I}if (result.isError()) {{
 {II}return result.castTo({name}.class);
 {I}}}
@@ -811,14 +1141,12 @@ public static Reporting.Result<{name}> try{name}From(JsonNode node) {{
     return Stripped(writer.getvalue())
 
 
-@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
-def _generate_deserialize_impl(
-    symbol_table: intermediate.SymbolTable,
-    spec_impls: specific_implementations.SpecificImplementations,
-) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
-    """Generate the implementation of the deserialization."""
-    errors = []  # type: List[Error]
-    blocks = [
+# endregion
+
+
+def _generate_primitive_parsers() -> List[Stripped]:
+    """Generate the parsers of the primitive JSON values."""
+    return [
         Stripped(
             f"""\
 /** Convert {{@code value}} to a string.
@@ -898,47 +1226,124 @@ private static Reporting.Result<byte[]> tryBytesFrom(JsonNode value) {{
 {I}return Reporting.Result.success(decodedData);
 }}"""
         ),
-        Stripped(
-            f"""\
-/**
- * Parse every item of {{@code array}} with {{@code parseItem}}.
- *
- * @param array JSON array to be parsed
- * @param parseItem to parse a single item of the array
- */
-private static <T> Reporting.Result<List<T>> parseArray(
-{I}JsonNode array,
-{I}Function<JsonNode, Reporting.Result<? extends T>> parseItem) {{
-{I}final List<T> result = new ArrayList<>(array.size());
-{I}int index = 0;
-{I}for (JsonNode item : array) {{
-{II}if (item == null) {{
-{III}final Reporting.Error error = new Reporting.Error(
-{IIII}"Expected a non-null item, but got a null");
-{III}error.prependSegment(
-{IIII}new Reporting.IndexSegment(index));
-{III}return Reporting.Result.failure(error);
-{II}}}
+    ]
 
-{II}final Reporting.Result<? extends T> parsedItemResult = parseItem.apply(item);
-{II}if (parsedItemResult.isError()) {{
-{III}parsedItemResult.getError()
-{IIII}.prependSegment(
-{IIII}new Reporting.IndexSegment(index));
-{III}return Reporting.Result.failure(parsedItemResult.getError());
-{II}}}
 
-{II}result.add(parsedItemResult.getResult());
-{II}index++;
-{I}}}
+@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+def _generate_deserialize_impl(
+    symbol_table: intermediate.SymbolTable,
+    spec_impls: specific_implementations.SpecificImplementations,
+) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
+    """Generate the implementation of the deserialization."""
+    errors = []  # type: List[Error]
 
-{I}return Reporting.Result.success(result);
-}}"""
-        ),
-    ]  # type: List[Stripped]
+    # region Decide which of the shared helpers are needed
 
-    for arity in intermediate.tuple_arities(symbol_table):
+    # NOTE (mristin):
+    # The helpers follow the call graph: a model which never composes a list
+    # pays for neither the composition nor the errors which only it can report.
+
+    parsed_classes = [
+        cls
+        for cls in symbol_table.concrete_classes
+        if not cls.is_implementation_specific
+    ]
+
+    interfaces = [
+        our_type.interface
+        for our_type in symbol_table.our_types
+        if isinstance(
+            our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+        )
+        and our_type.interface is not None
+    ]
+
+    named_unions = [
+        our_type
+        for our_type in symbol_table.our_types
+        if isinstance(our_type, intermediate.NamedUnion)
+    ]
+
+    composed_type_annotations = _composed_type_annotations(symbol_table)
+
+    needs_parse_array = any(
+        isinstance(type_anno, intermediate.ListTypeAnnotation)
+        for type_anno in composed_type_annotations
+    )
+
+    tuple_arities = intermediate.tuple_arities(symbol_table)
+
+    #: Both the array helper and the tuple helpers report a non-array and mark
+    #: the index of the item which failed.
+    needs_array_helpers = needs_parse_array or len(tuple_arities) > 0
+
+    needs_check_model_type = any(
+        cls.serialization.with_model_type for cls in parsed_classes
+    )
+
+    needs_try_model_type_from = needs_check_model_type or len(interfaces) > 0
+
+    needs_not_a_json_object = (
+        len(parsed_classes) > 0 or len(interfaces) > 0 or len(named_unions) > 0
+    )
+
+    needs_prepend_name = (
+        needs_try_model_type_from
+        or any(
+            implementer.serialization.with_model_type
+            for named_union in named_unions
+            for implementer in named_union.implementers
+        )
+        or any(len(cls.constructor.arguments) > 0 for cls in parsed_classes)
+    )
+
+    needs_try_enum_from = len(symbol_table.enumerations) > 0
+
+    needs_missing_required_property = needs_try_model_type_from or any(
+        not isinstance(arg.type_annotation, intermediate.OptionalTypeAnnotation)
+        for cls in parsed_classes
+        for arg in cls.constructor.arguments
+    )
+
+    # endregion
+
+    blocks = _generate_primitive_parsers()  # type: List[Stripped]
+
+    if needs_prepend_name:
+        blocks.append(_generate_prepend_name())
+
+    if needs_array_helpers:
+        blocks.append(_generate_prepend_index())
+
+    if needs_not_a_json_object:
+        blocks.append(_generate_not_a_json_object())
+
+    if needs_array_helpers:
+        blocks.append(_generate_not_a_json_array())
+
+    if len(parsed_classes) > 0:
+        blocks.append(_generate_unexpected_property())
+
+    if needs_missing_required_property:
+        blocks.append(_generate_missing_required_property())
+
+    if needs_try_model_type_from:
+        blocks.append(_generate_try_model_type_from())
+
+    if needs_check_model_type:
+        blocks.append(_generate_check_model_type())
+
+    if needs_try_enum_from:
+        blocks.append(_generate_try_enum_from_helper())
+
+    if needs_parse_array:
+        blocks.append(_generate_parse_array_helper())
+
+    for arity in tuple_arities:
         blocks.append(_generate_parse_tuple_helper(arity=arity))
+
+    for type_anno in composed_type_annotations:
+        blocks.append(_generate_composed_parser(type_anno))
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
@@ -975,13 +1380,15 @@ private static <T> Reporting.Result<List<T>> parseArray(
 
                     blocks.append(spec_impls[implementation_key])
                 else:
-                    block, cls_errors = _generate_from_method_for_class(cls=our_type)
+                    cls_blocks, cls_errors = _generate_from_methods_for_class(
+                        cls=our_type
+                    )
                     if cls_errors is not None:
                         errors.extend(cls_errors)
                         continue
-                    else:
-                        assert block is not None
-                        blocks.append(block)
+
+                    assert cls_blocks is not None
+                    blocks.extend(cls_blocks)
 
         elif isinstance(our_type, intermediate.NamedUnion):
             blocks.append(_generate_from_method_for_named_union(named_union=our_type))
@@ -1009,6 +1416,12 @@ private static <T> Reporting.Result<List<T>> parseArray(
  * we distinguish the implementation, realized in
  * {@link _DeserializeImplementation}, and the facade given in
  * {@link Deserialize} class.
+ *
+ * <p>Every value is parsed through a function which takes a single
+ * {@link JsonNode} and gives back a {@link Reporting.Result}, so that a list
+ * and a tuple can be composed out of the parsers of their items. Only they
+ * need such a composition -- every other value already has a function named
+ * after its very type.
  */
 private static class _DeserializeImplementation {
 """
@@ -1148,6 +1561,11 @@ public static class Deserialize
     writer.write("\n}")
 
     return Stripped(writer.getvalue())
+
+
+# endregion
+
+# region Serialization
 
 
 def _generate_serialize_primitive_value(
@@ -1792,6 +2210,8 @@ public static class Serialize
 
     return Stripped(writer.getvalue())
 
+
+# endregion
 
 # fmt: off
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))

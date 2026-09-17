@@ -40,6 +40,12 @@ public class Jsonization {
      * we distinguish the implementation, realized in
      * {@link _DeserializeImplementation}, and the facade given in
      * {@link Deserialize} class.
+     *
+     * <p>Every value is parsed through a function which takes a single
+     * {@link JsonNode} and gives back a {@link Reporting.Result}, so that a list
+     * and a tuple can be composed out of the parsers of their items. Only they
+     * need such a composition -- every other value already has a function named
+     * after its very type.
      */
     private static class _DeserializeImplementation {
       /** Convert {@code value} to a string.
@@ -112,51 +118,54 @@ public class Jsonization {
       }
 
       /**
-       * Parse every item of {@code array} with {@code parseItem}.
+       * Mark the error of {@code result} as coming from the property {@code name}.
        *
-       * @param array JSON array to be parsed
-       * @param parseItem to parse a single item of the array
+       * <p>A {@code case} of a property loop is matched exactly when the key of
+       * the property equals its literal, so the key already names the property and
+       * no {@code case} has to spell it out a second time.
        */
-      private static <T> Reporting.Result<List<T>> parseArray(
-        JsonNode array,
-        Function<JsonNode, Reporting.Result<? extends T>> parseItem) {
-        final List<T> result = new ArrayList<>(array.size());
-        int index = 0;
-        for (JsonNode item : array) {
-          if (item == null) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected a non-null item, but got a null");
-            error.prependSegment(
-              new Reporting.IndexSegment(index));
-            return Reporting.Result.failure(error);
-          }
-
-          final Reporting.Result<? extends T> parsedItemResult = parseItem.apply(item);
-          if (parsedItemResult.isError()) {
-            parsedItemResult.getError()
-              .prependSegment(
-              new Reporting.IndexSegment(index));
-            return Reporting.Result.failure(parsedItemResult.getError());
-          }
-
-          result.add(parsedItemResult.getResult());
-          index++;
-        }
-
-        return Reporting.Result.success(result);
+      private static <T> Reporting.Result<T> prependName(
+        Reporting.Result<?> result, String name) {
+        final Reporting.Error error = result.getError();
+        error.prependSegment(new Reporting.NameSegment(name));
+        return Reporting.Result.failure(error);
       }
 
       /**
-       * Deserialize an instance of Something from {@param node}.
+       * Report that {@code node} is no JSON object.
+       */
+      private static <T> Reporting.Result<T> notAJsonObject(JsonNode node) {
+        return Reporting.Result.failure(
+          new Reporting.Error(
+            "Expected a JsonObject, but got " +
+            (node == null ? "null" : node.getNodeType())));
+      }
+
+      /**
+       * Report a property which the class does not have.
+       */
+      private static <T> Reporting.Result<T> unexpectedProperty(String name) {
+        return Reporting.Result.failure(
+          new Reporting.Error("Unexpected property: " + name));
+      }
+
+      /**
+       * Report a required property which the JSON object did not give.
+       */
+      private static <T> Reporting.Result<T> missingRequiredProperty(String name) {
+        return Reporting.Result.failure(
+          new Reporting.Error(
+            "Required property \"" + name + "\" is missing"));
+      }
+
+      /**
+       * Deserialize an instance of Something from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<Something> trySomethingFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         Boolean theSomeBool = null;
@@ -166,115 +175,74 @@ public class Jsonization {
         byte[] theSomeBytes = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "someBool": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends Boolean> parsed = tryBooleanFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends Boolean> theSomeBoolResult = tryBooleanFrom(currentNode.getValue());
-              if (theSomeBoolResult.isError()) {
-                theSomeBoolResult.getError()
-                  .prependSegment(new Reporting.NameSegment("someBool"));
-                return theSomeBoolResult.castTo(Something.class);
-              }
-              theSomeBool = theSomeBoolResult.getResult();
+              theSomeBool = parsed.getResult();
               break;
             }
             case "someInt": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends Long> parsed = tryLongFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends Long> theSomeIntResult = tryLongFrom(currentNode.getValue());
-              if (theSomeIntResult.isError()) {
-                theSomeIntResult.getError()
-                  .prependSegment(new Reporting.NameSegment("someInt"));
-                return theSomeIntResult.castTo(Something.class);
-              }
-              theSomeInt = theSomeIntResult.getResult();
+              theSomeInt = parsed.getResult();
               break;
             }
             case "someFloat": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends Double> parsed = tryDoubleFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends Double> theSomeFloatResult = tryDoubleFrom(currentNode.getValue());
-              if (theSomeFloatResult.isError()) {
-                theSomeFloatResult.getError()
-                  .prependSegment(new Reporting.NameSegment("someFloat"));
-                return theSomeFloatResult.castTo(Something.class);
-              }
-              theSomeFloat = theSomeFloatResult.getResult();
+              theSomeFloat = parsed.getResult();
               break;
             }
             case "someString": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theSomeStringResult = tryStringFrom(currentNode.getValue());
-              if (theSomeStringResult.isError()) {
-                theSomeStringResult.getError()
-                  .prependSegment(new Reporting.NameSegment("someString"));
-                return theSomeStringResult.castTo(Something.class);
-              }
-              theSomeString = theSomeStringResult.getResult();
+              theSomeString = parsed.getResult();
               break;
             }
             case "someBytes": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends byte[]> parsed = tryBytesFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends byte[]> theSomeBytesResult = tryBytesFrom(currentNode.getValue());
-              if (theSomeBytesResult.isError()) {
-                theSomeBytesResult.getError()
-                  .prependSegment(new Reporting.NameSegment("someBytes"));
-                return theSomeBytesResult.castTo(Something.class);
-              }
-              theSomeBytes = theSomeBytesResult.getResult();
+              theSomeBytes = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theSomeBool == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"someBool\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("someBool");
         }
 
         if (theSomeInt == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"someInt\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("someInt");
         }
 
         if (theSomeFloat == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"someFloat\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("someFloat");
         }
 
         if (theSomeString == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"someString\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("someString");
         }
 
         if (theSomeBytes == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"someBytes\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("someBytes");
         }
 
         return Reporting.Result.success(new Something(
