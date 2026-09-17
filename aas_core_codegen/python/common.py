@@ -6,8 +6,9 @@ from typing import List, cast, Tuple, Optional, Mapping
 
 from icontract import ensure, require
 
-from aas_core_codegen import intermediate
+from aas_core_codegen import intermediate, naming
 from aas_core_codegen.common import (
+    Error,
     Stripped,
     assert_never,
     Identifier,
@@ -283,6 +284,105 @@ def _assert_all_primitive_types_are_mapped() -> None:
 
 
 _assert_all_primitive_types_are_mapped()
+
+
+# NOTE (mristin):
+# A primitive is not one of our types, so it has no name in the meta-model, and
+# the composed de/serializers need a moniker for it. The monikers are the parts
+# out of which we build the names of the composed de/serializers. The parts are
+# separated by a double underscore, and a moniker never contains one, so that
+# a name can always be split back into its parts. The arity is spelled out in
+# a tuple's name for the same reason. The names are thus unique by construction,
+# and we need no check for collisions -- except against a type of the meta-model
+# whose name gives the same moniker as a primitive, which
+# :py:func:`errors_in_monikers` diagnoses.
+MONIKER_BY_PRIMITIVE_TYPE = {
+    intermediate.PrimitiveType.BOOL: "bool",
+    intermediate.PrimitiveType.INT: "int",
+    intermediate.PrimitiveType.FLOAT: "float",
+    intermediate.PrimitiveType.STR: "str",
+    intermediate.PrimitiveType.BYTEARRAY: "bytes",
+}
+assert all(
+    literal in MONIKER_BY_PRIMITIVE_TYPE for literal in intermediate.PrimitiveType
+)
+
+
+# fmt: off
+@ensure(
+    lambda result:
+    "__" not in result,
+    "A moniker contains no double underscore, as the double underscore separates "
+    "the parts of a composed de/serializer's name"
+)
+# fmt: on
+def atomic_moniker(type_annotation: intermediate.TypeAnnotationUnion) -> Identifier:
+    """
+    Determine the moniker of the atomic ``type_annotation``.
+
+    See the note on :py:attr:`MONIKER_BY_PRIMITIVE_TYPE` for the grammar which
+    the monikers make up.
+    """
+    primitive_type = intermediate.try_primitive_type(type_annotation)
+    if primitive_type is not None:
+        return Identifier(MONIKER_BY_PRIMITIVE_TYPE[primitive_type])
+
+    assert isinstance(
+        type_annotation, intermediate.OurTypeAnnotation
+    ), f"Expected an atomic type annotation, but got: {type_annotation}"
+
+    return Identifier(naming.lower_snake_case(type_annotation.our_type.name))
+
+
+def errors_in_monikers(symbol_table: intermediate.SymbolTable) -> List[Error]:
+    """
+    Check that no type of the meta-model gives the moniker of a primitive.
+
+    Otherwise, the de/serializers of the two would be given the same name, and one
+    would silently redefine the other in the generated code.
+    """
+    errors = []  # type: List[Error]
+
+    for our_type in symbol_table.our_types:
+        if isinstance(our_type, intermediate.ConstrainedPrimitive):
+            continue
+
+        if naming.lower_snake_case(our_type.name) in MONIKER_BY_PRIMITIVE_TYPE.values():
+            errors.append(
+                Error(
+                    our_type.parsed.node,
+                    f"The name of the type {our_type.name!r} gives the same moniker "
+                    f"as one of the primitive types, so the de/serializers of the two "
+                    f"would be given the same name. Please rename the type, or "
+                    f"contact the developers if you need this feature.",
+                )
+            )
+
+    return errors
+
+
+def describe_atomic_type(type_annotation: intermediate.TypeAnnotationUnion) -> Stripped:
+    """Describe the atomic ``type_annotation`` for a docstring."""
+    primitive_type = intermediate.try_primitive_type(type_annotation)
+    if primitive_type is not None and isinstance(
+        type_annotation, intermediate.PrimitiveTypeAnnotation
+    ):
+        return Stripped(f"``{MONIKER_BY_PRIMITIVE_TYPE[primitive_type]}``")
+
+    assert isinstance(
+        type_annotation, intermediate.OurTypeAnnotation
+    ), f"Expected an atomic type annotation, but got: {type_annotation}"
+
+    our_type = type_annotation.our_type
+
+    if isinstance(our_type, intermediate.NamedUnion):
+        type_name = python_naming.union_name(our_type.name)  # type: Identifier
+    elif isinstance(our_type, intermediate.Enumeration):
+        type_name = python_naming.enum_name(our_type.name)
+    else:
+        type_name = python_naming.class_name(our_type.name)
+
+    return Stripped(f":py:class:`.types.{type_name}`")
 
 
 INDENT = "    "
