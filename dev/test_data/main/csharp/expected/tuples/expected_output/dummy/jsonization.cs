@@ -923,6 +923,32 @@ namespace dummy
             : Visitation.AbstractTransformer<Nodes.JsonObject>
         {
             /// <summary>
+            /// Dispatch the serialization over the run-time type of an instance.
+            /// </summary>
+            /// <remarks>
+            /// The transformer carries no state, so a single instance serves the whole
+            /// program. No field initializer reads it, only
+            /// <see cref="TransformIClass" /> does, so it does not matter where among
+            /// the serializers it is initialized.
+            /// </remarks>
+            [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
+            private static readonly Transformer _instance = new Transformer();
+
+            /// <summary>
+            /// Serialize <paramref name="that" /> into a JSON object.
+            /// </summary>
+            /// <remarks>
+            /// Which JSON object that is, is decided by the run-time type of
+            /// <paramref name="that" />, so this one serializer serves every abstract
+            /// class and every concrete class with descendants, as well as the item of
+            /// a list or of a tuple of any of them.
+            /// </remarks>
+            internal static Nodes.JsonObject TransformIClass(Aas.IClass that)
+            {
+                return _instance.Transform(that);
+            }
+
+            /// <summary>
             /// Convert <paramref name="that" /> 64-bit long integer to a JSON value.
             /// </summary>
             /// <param name="that">value to be converted</param>
@@ -943,107 +969,101 @@ namespace dummy
             }
 
             /// <summary>
-            /// Serialize every item of <paramref name="items" /> with
-            /// <paramref name="serializeItem" /> into a JSON array.
+            /// Serialize <paramref name="that" /> into a JSON value.
             /// </summary>
             /// <remarks>
-            /// This is shared by all the list-typed properties.
+            /// This is the shape shared by every serialization step, so that the steps
+            /// can be composed. Unlike the XML side, no combinator is needed to frame
+            /// the value -- a JSON value stands on its own -- so the only composition
+            /// is over the items of a list or of a tuple.
             /// </remarks>
-            /// <typeparam name="T">Type of a single list item</typeparam>
-            private static Nodes.JsonArray SerializeArray<T>(
-                IEnumerable<T> items,
-                System.Func<T, Nodes.JsonNode?> serializeItem)
-            {
-                var result = new Nodes.JsonArray();
-                foreach (T item in items)
-                {
-                    result.Add(
-                        serializeItem(item));
-                }
-                return result;
-            }
+            /// <typeparam name="T">Type of the value to be serialized</typeparam>
+            private delegate Nodes.JsonNode? Serializer<in T>(T that);
 
             /// <summary>
             /// Convert <paramref name="that" /> to a JSON value.
             /// </summary>
-            [CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
-            private static Nodes.JsonValue ToJsonValue(bool that)
-            {
-                return Nodes.JsonValue.Create(that);
-            }
-
-            /// <summary>
-            /// Convert <paramref name="that" /> to a JSON value.
-            /// </summary>
-            [CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
-            private static Nodes.JsonValue ToJsonValue(double that)
-            {
-                return Nodes.JsonValue.Create(that);
-            }
-
-            /// <summary>
-            /// Convert <paramref name="that" /> to a JSON value.
-            /// </summary>
-            [CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
             private static Nodes.JsonValue ToJsonValue(string that)
             {
                 return Nodes.JsonValue.Create(that);
             }
 
             /// <summary>
-            /// Convert <paramref name="that" /> to a JSON value.
+            /// Compose the serializer of a tuple of 2 item(s), whose items are
+            /// serialized with <paramref name="serializeItem0" />,
+            /// <paramref name="serializeItem1" />, *etc.*
             /// </summary>
-            [CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
-            private static Nodes.JsonValue ToJsonValue(byte[] that)
+            /// <remarks>
+            /// This is shared by all the tuple-typed properties of arity 2. Just
+            /// like for a list, the composition is performed once, when the field
+            /// holding the result is initialized.
+            /// </remarks>
+            private static Serializer<(T0, T1)> SerializeTuple2<T0, T1>(
+                Serializer<T0> serializeItem0,
+                Serializer<T1> serializeItem1)
             {
-                return Nodes.JsonValue.Create(System.Convert.ToBase64String(that));
+                return (that) =>
+                {
+                    var result = new Nodes.JsonArray();
+                    result.Add(serializeItem0(that.Item1));
+                    result.Add(serializeItem1(that.Item2));
+                    return result;
+                };
             }
 
             /// <summary>
-            /// Serialize the tuple <paramref name="that" /> of 2 item(s) with
-            /// <paramref name="serializeItem0" />, <paramref name="serializeItem1" />, *etc.*
-            /// into a JSON array.
+            /// Compose the serializer of a tuple of 6 item(s), whose items are
+            /// serialized with <paramref name="serializeItem0" />,
+            /// <paramref name="serializeItem1" />, *etc.*
             /// </summary>
             /// <remarks>
-            /// This is shared by all the tuple-typed properties of arity 2.
+            /// This is shared by all the tuple-typed properties of arity 6. Just
+            /// like for a list, the composition is performed once, when the field
+            /// holding the result is initialized.
             /// </remarks>
-            private static Nodes.JsonArray SerializeTuple2<T0, T1>(
-                (T0, T1) that,
-                System.Func<T0, Nodes.JsonNode?> serializeItem0,
-                System.Func<T1, Nodes.JsonNode?> serializeItem1)
+            private static Serializer<(T0, T1, T2, T3, T4, T5)> SerializeTuple6<T0, T1, T2, T3, T4, T5>(
+                Serializer<T0> serializeItem0,
+                Serializer<T1> serializeItem1,
+                Serializer<T2> serializeItem2,
+                Serializer<T3> serializeItem3,
+                Serializer<T4> serializeItem4,
+                Serializer<T5> serializeItem5)
             {
-                var result = new Nodes.JsonArray();
-                result.Add(serializeItem0(that.Item1));
-                result.Add(serializeItem1(that.Item2));
-                return result;
+                return (that) =>
+                {
+                    var result = new Nodes.JsonArray();
+                    result.Add(serializeItem0(that.Item1));
+                    result.Add(serializeItem1(that.Item2));
+                    result.Add(serializeItem2(that.Item3));
+                    result.Add(serializeItem3(that.Item4));
+                    result.Add(serializeItem4(that.Item5));
+                    result.Add(serializeItem5(that.Item6));
+                    return result;
+                };
             }
 
-            /// <summary>
-            /// Serialize the tuple <paramref name="that" /> of 6 item(s) with
-            /// <paramref name="serializeItem0" />, <paramref name="serializeItem1" />, *etc.*
-            /// into a JSON array.
-            /// </summary>
-            /// <remarks>
-            /// This is shared by all the tuple-typed properties of arity 6.
-            /// </remarks>
-            private static Nodes.JsonArray SerializeTuple6<T0, T1, T2, T3, T4, T5>(
-                (T0, T1, T2, T3, T4, T5) that,
-                System.Func<T0, Nodes.JsonNode?> serializeItem0,
-                System.Func<T1, Nodes.JsonNode?> serializeItem1,
-                System.Func<T2, Nodes.JsonNode?> serializeItem2,
-                System.Func<T3, Nodes.JsonNode?> serializeItem3,
-                System.Func<T4, Nodes.JsonNode?> serializeItem4,
-                System.Func<T5, Nodes.JsonNode?> serializeItem5)
-            {
-                var result = new Nodes.JsonArray();
-                result.Add(serializeItem0(that.Item1));
-                result.Add(serializeItem1(that.Item2));
-                result.Add(serializeItem2(that.Item3));
-                result.Add(serializeItem3(that.Item4));
-                result.Add(serializeItem4(that.Item5));
-                result.Add(serializeItem5(that.Item6));
-                return result;
-            }
+            private static readonly Serializer<(string, long)> Serialize_TupleOf2_string_long = (
+                SerializeTuple2<string, long>(
+                    ToJsonValue,
+                    ToJsonValue));
+
+            private static readonly Serializer<
+                (IAbstractItem, IAbstractItem)
+            > Serialize_TupleOf2_IAbstractItem_IAbstractItem = (
+                SerializeTuple2<IAbstractItem, IAbstractItem>(
+                    TransformIClass,
+                    TransformIClass));
+
+            private static readonly Serializer<
+                (long, ISomeItem, IAbstractItem, ISomeItem, long, Result)
+            > Serialize_TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result = (
+                SerializeTuple6<long, ISomeItem, IAbstractItem, ISomeItem, long, Result>(
+                    ToJsonValue,
+                    TransformIClass,
+                    TransformIClass,
+                    TransformIClass,
+                    ToJsonValue,
+                    Serialize.ResultToJsonValue));
 
             public override Nodes.JsonObject TransformSomeItem(
                 Aas.ISomeItem that
@@ -1079,27 +1099,14 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                Nodes.JsonArray arrayPair = SerializeTuple2(
-                    that.Pair,
-                    Transformer.ToJsonValue,
-                    Transformer.ToJsonValue);
-                result["pair"] = arrayPair;
+                result["pair"] = Serialize_TupleOf2_string_long(
+                    that.Pair);
 
-                Nodes.JsonArray arrayItems = SerializeTuple2(
-                    that.Items,
-                    Transform,
-                    Transform);
-                result["items"] = arrayItems;
+                result["items"] = Serialize_TupleOf2_IAbstractItem_IAbstractItem(
+                    that.Items);
 
-                Nodes.JsonArray arrayTricky = SerializeTuple6(
-                    that.Tricky,
-                    Transformer.ToJsonValue,
-                    Transform,
-                    Transform,
-                    Transform,
-                    Transformer.ToJsonValue,
-                    Serialize.ResultToJsonValue);
-                result["tricky"] = arrayTricky;
+                result["tricky"] = Serialize_TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result(
+                    that.Tricky);
 
                 return result;
             }
@@ -1121,14 +1128,12 @@ namespace dummy
         /// </example>
         public static class Serialize
         {
-            private static readonly Transformer Transformer = new Transformer();
-
             /// <summary>
             /// Serialize an instance of the meta-model into a JSON object.
             /// </summary>
             public static Nodes.JsonObject ToJsonObject(Aas.IClass that)
             {
-                return Serialize.Transformer.Transform(that);
+                return Transformer.TransformIClass(that);
             }
 
             /// <summary>

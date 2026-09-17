@@ -1064,6 +1064,32 @@ namespace dummy
             : Visitation.AbstractTransformer<Nodes.JsonObject>
         {
             /// <summary>
+            /// Dispatch the serialization over the run-time type of an instance.
+            /// </summary>
+            /// <remarks>
+            /// The transformer carries no state, so a single instance serves the whole
+            /// program. No field initializer reads it, only
+            /// <see cref="TransformIClass" /> does, so it does not matter where among
+            /// the serializers it is initialized.
+            /// </remarks>
+            [CodeAnalysis.SuppressMessage("ReSharper", "InconsistentNaming")]
+            private static readonly Transformer _instance = new Transformer();
+
+            /// <summary>
+            /// Serialize <paramref name="that" /> into a JSON object.
+            /// </summary>
+            /// <remarks>
+            /// Which JSON object that is, is decided by the run-time type of
+            /// <paramref name="that" />, so this one serializer serves every abstract
+            /// class and every concrete class with descendants, as well as the item of
+            /// a list or of a tuple of any of them.
+            /// </remarks>
+            internal static Nodes.JsonObject TransformIClass(Aas.IClass that)
+            {
+                return _instance.Transform(that);
+            }
+
+            /// <summary>
             /// Convert <paramref name="that" /> 64-bit long integer to a JSON value.
             /// </summary>
             /// <param name="that">value to be converted</param>
@@ -1081,27 +1107,6 @@ namespace dummy
                         $"The number can not be losslessly represented in JSON: {that}");
                 }
                 return Nodes.JsonValue.Create(that);
-            }
-
-            /// <summary>
-            /// Serialize every item of <paramref name="items" /> with
-            /// <paramref name="serializeItem" /> into a JSON array.
-            /// </summary>
-            /// <remarks>
-            /// This is shared by all the list-typed properties.
-            /// </remarks>
-            /// <typeparam name="T">Type of a single list item</typeparam>
-            private static Nodes.JsonArray SerializeArray<T>(
-                IEnumerable<T> items,
-                System.Func<T, Nodes.JsonNode?> serializeItem)
-            {
-                var result = new Nodes.JsonArray();
-                foreach (T item in items)
-                {
-                    result.Add(
-                        serializeItem(item));
-                }
-                return result;
             }
 
             public override Nodes.JsonObject TransformBranch(
@@ -1170,10 +1175,10 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                result["someChoice"] = Transform(
+                result["someChoice"] = TransformIClass(
                     that.SomeChoice);
 
-                result["somethingWithoutChoice"] = Transform(
+                result["somethingWithoutChoice"] = TransformIClass(
                     that.SomethingWithoutChoice);
 
                 return result;
@@ -1185,10 +1190,10 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                result["node"] = Transform(
+                result["node"] = TransformIClass(
                     that.Node);
 
-                result["something"] = Transform(
+                result["something"] = TransformIClass(
                     that.Something);
 
                 return result;
@@ -1211,14 +1216,12 @@ namespace dummy
         /// </example>
         public static class Serialize
         {
-            private static readonly Transformer Transformer = new Transformer();
-
             /// <summary>
             /// Serialize an instance of the meta-model into a JSON object.
             /// </summary>
             public static Nodes.JsonObject ToJsonObject(Aas.IClass that)
             {
-                return Serialize.Transformer.Transform(that);
+                return Transformer.TransformIClass(that);
             }
         }  // public static class Serialize
     }  // public static class Jsonization
