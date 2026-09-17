@@ -97,7 +97,7 @@ def _generate_shallow_copy_transform_method(
             prop_name = csharp_naming.property_name(arg.name)
             constructor_arg_exprs.append(f"that.{prop_name}")
 
-        # NOTE (mristin, 2022-11-03):
+        # NOTE (mristin):
         # This is poor man's heuristic for line breaking, but it works fairly well
         # in practice.
         args_joined = ", ".join(constructor_arg_exprs)
@@ -569,7 +569,7 @@ using System.Collections.Generic;  // can't alias"""
         )
     )
 
-    # NOTE (mristin, 2022-11-03):
+    # NOTE (mristin):
     # We wrap the shallow and deep copying in generic methods to allow for easier
     # enforcement of runtime type safety for the client. Otherwise, if we directly
     # provided the transformer, the client would always need to make the casts, which

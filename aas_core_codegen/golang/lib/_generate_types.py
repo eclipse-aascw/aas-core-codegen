@@ -52,7 +52,7 @@ def _human_readable_identifier(
 
     The reader should be able to trace ``something`` back to the meta-model.
     """
-    # NOTE (mristin, 2023-03-29):
+    # NOTE (mristin):
     # This function has been copy-pasted from
     # :py:mod:`aas_core_codegen.python.structure._generate`. We tried to refactor it to
     # :py:mod:`aas_core_codegen.intermediate`, but it turned out that the refactored
@@ -86,7 +86,7 @@ def _verify_intra_structure_collisions(
     errors = []  # type: List[Error]
 
     if isinstance(our_type, intermediate.Enumeration):
-        # NOTE (mristin, 2023-03-29):
+        # NOTE (mristin):
         # We already checked for collisions of enumeration literals in
         # the inter-structure collision checks.
         pass
@@ -279,7 +279,7 @@ def _verify_structure_name_collisions(
             else:
                 observed_structure_names[name] = enum_or_cls
 
-    # NOTE (mristin, 2023-03-29):
+    # NOTE (mristin):
     # Enumeration literals are global constants in Go, so we have to consider them
     # for collisions as well.
     for enum in symbol_table.enumerations:
@@ -357,7 +357,7 @@ def _generate_comment_for_enumeration_literal(
     literal: intermediate.EnumerationLiteral,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the documentation comment for the given enumeration literal."""
-    # NOTE (mristin, 2023-03-29):
+    # NOTE (mristin):
     # We need to state the pre-condition for the second time for mypy.
     assert literal.description is not None
 
@@ -386,7 +386,7 @@ def _generate_comment_for_cls_or_enum(
     cls_or_enum: Union[intermediate.Enumeration, intermediate.ClassUnion],
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the documentation comment for our type."""
-    # NOTE (mristin, 2023-03-29):
+    # NOTE (mristin):
     # We need to state the pre-condition for the second time for mypy.
     assert cls_or_enum.description is not None
 
@@ -466,7 +466,7 @@ def _generate_enum(
 
             literal_name = golang_naming.enum_literal_name(enum.name, literal.name)
 
-            # NOTE (mristin, 2023-03-29):
+            # NOTE (mristin):
             # We optimize for comparisons instead of stringification.
             # The stringification is delegated to a separate module.
 
@@ -894,7 +894,7 @@ def _generate_constructor(
     )
     # fmt: on
 
-    # NOTE (mristin, 2023-03-31):
+    # NOTE (mristin):
     # Golang is peculiar, so we do not transpile the in-lined statements, but simply set
     # the required properties to argument values and optional values to default argument
     # values, if any were specified.
@@ -935,7 +935,7 @@ def _generate_constructor(
 
         private_prop_name = golang_naming.private_property_name(arg.name)
 
-        # NOTE (mristin, 2023-03-31):
+        # NOTE (mristin):
         # We have to be careful: an optional property will be generated with a pointer
         # type.
 
@@ -1080,7 +1080,7 @@ def _generate_comment_for_property(
     prop: intermediate.Property,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the documentation comment for the given property."""
-    # NOTE (mristin, 2022-10-29):
+    # NOTE (mristin):
     # We need to write a double assertion for mypy.
     assert prop.description is not None
 
@@ -1818,7 +1818,7 @@ type IClass interface {{
                 blocks.append(_literals_of_enum(enum=our_type))
 
         elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-            # NOTE (mristin, 2023-03-31):
+            # NOTE (mristin):
             # We do not generate the constrained primitives as types. We only
             # consider them in the verification.
             continue

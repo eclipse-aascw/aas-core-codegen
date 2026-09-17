@@ -26,7 +26,7 @@ def _check_support(
     The ``argument`` specifies the argument to the verification function, which should
     not be used.
     """
-    # NOTE (mristin, 2021-12-19):
+    # NOTE (mristin):
     # This run-time check is necessary as we already burned our fingers with it.
     assert isinstance(node, parse_tree.Node), f"{node=}"
 
@@ -278,7 +278,7 @@ def try_to_understand(
             None,
         )
 
-    # NOTE (mristin, 2021-12-19):
+    # NOTE (mristin):
     # From here on we return errors. The verification function looks like a pattern
     # matching so if we can not match (no pun intended), we should signal the user that
     # something was unexpected.

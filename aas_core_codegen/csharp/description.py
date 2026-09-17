@@ -169,20 +169,20 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[_NodeUnion]):
             name = csharp_naming.enum_name(element.our_type.name)
 
         elif isinstance(element.our_type, intermediate.ConstrainedPrimitive):
-            # NOTE (mristin, 2021-12-17):
+            # NOTE (mristin):
             # We do not generate a class for constrained primitives, but we
             # leave it as class name, as that is what we used for ``Verify*`` function.
             name = csharp_naming.class_name(element.our_type.name)
 
         elif isinstance(element.our_type, intermediate.Class):
             if isinstance(element.our_type, intermediate.AbstractClass):
-                # NOTE (mristin, 2021-12-25):
+                # NOTE (mristin):
                 # We do not generate C# code for abstract classes, so we have to refer
                 # to the interface.
                 name = csharp_naming.interface_name(element.our_type.name)
 
             elif isinstance(element.our_type, intermediate.ConcreteClass):
-                # NOTE (mristin, 2021-12-25):
+                # NOTE (mristin):
                 # Though a concrete class can have multiple descendants and the writer
                 # might actually want to refer to the *interface* instead of
                 # the concrete class, we do the best effort here and resolve it to the
@@ -199,7 +199,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[_NodeUnion]):
             name = csharp_naming.class_name(element.our_type.name)
 
         else:
-            # NOTE (mristin, 2022-03-30):
+            # NOTE (mristin):
             # This is a very special case where we had problems with an interface.
             # We leave this check here, just in case the bug resurfaces.
             if isinstance(element.our_type, intermediate_translate._PlaceholderOurType):
@@ -210,7 +210,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[_NodeUnion]):
 
             assert_never(element.our_type)
 
-        # NOTE (mristin, 2022-06-19):
+        # NOTE (mristin):
         # We need to prefix the cref in case there are naming conflicts.
         prefixed_name = f"Aas.{name}"
 
@@ -236,7 +236,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[_NodeUnion]):
                     element.reference.cls.name
                 )
             elif isinstance(element.reference.cls, intermediate.ConcreteClass):
-                # NOTE (mristin, 2021-12-25):
+                # NOTE (mristin):
                 # Though a concrete class can have multiple descendants and the writer
                 # might actually want to refer to the *interface* instead of
                 # the concrete class, we do the best effort here and resolve it to the
@@ -261,7 +261,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[_NodeUnion]):
 
             cref = f"{name_of_our_type}.{literal_name}"
         else:
-            # NOTE (mristin, 2022-03-30):
+            # NOTE (mristin):
             # This is a very special case where we had problems with an interface.
             # We leave this check here, just in case the bug resurfaces.
             if isinstance(
@@ -276,7 +276,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[_NodeUnion]):
 
             assert_never(element.reference)
 
-        # NOTE (mristin, 2022-06-19):
+        # NOTE (mristin):
         # We need to prefix the cref in case there are naming conflicts.
         prefixed_cref = f"Aas.{cref}"
 
@@ -585,7 +585,7 @@ def _render_summary_remarks_constraints(
         else:
             assert body is not None
 
-            # NOTE (mristin, 2022-07-21):
+            # NOTE (mristin):
             # We in-line the constraint prefix for better readability.
 
             # noinspection PyUnresolvedReferences
@@ -726,7 +726,7 @@ class _ToTextDirectivesVisitor(_NodeVisitor):
     def visit_element(self, node: _Element) -> None:
         """Visit the element node and its children."""
         if node.name in ("summary", "remarks", "para", "param", "returns"):
-            # NOTE (mristin, 2022-07-18):
+            # NOTE (mristin):
             # We render these tags without indention for better readability.
 
             start_element_writer = io.StringIO()
@@ -752,7 +752,7 @@ class _ToTextDirectivesVisitor(_NodeVisitor):
             self.directives.append(_TextBlock(parts=[f"</{node.name}>"]))
 
         elif node.name in ("ul", "li"):
-            # NOTE (mristin, 2022-07-18):
+            # NOTE (mristin):
             # We put the list elements on new lines and indent them.
             assert (
                 len(node.attrs) == 0
@@ -776,7 +776,7 @@ class _ToTextDirectivesVisitor(_NodeVisitor):
             self.directives.append(_TextBlock(parts=[f"</{node.name}>"]))
 
         else:
-            # NOTE (mristin, 2022-07-18):
+            # NOTE (mristin):
             # We inline all the other elements.
 
             start_element_writer = io.StringIO()
@@ -915,7 +915,7 @@ def _to_text(node: _NodeUnion) -> str:
     to_text_directives_visitor = _ToTextDirectivesVisitor()
     to_text_directives_visitor.visit(node)
 
-    # NOTE (mristin, 2022-07-18):
+    # NOTE (mristin):
     # We compress to do away with the new-line enforcement and consecutive and empty
     # blocks, so that the operations below become much easier to write.
     directives = _compress_text_directives(to_text_directives_visitor.directives)
@@ -1057,7 +1057,7 @@ def _render_description_of_signature(
     returns_node = None  # type: Optional[_NodeUnion]
 
     if description.returns is not None:
-        # NOTE (mristin, 2022-07-18):
+        # NOTE (mristin):
         # We need to help the type checker in PyCharm a bit.
         assert isinstance(description.returns, docutils.nodes.field_body)
 

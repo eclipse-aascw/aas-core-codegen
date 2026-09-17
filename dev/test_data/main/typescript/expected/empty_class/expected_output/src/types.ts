@@ -19,7 +19,7 @@ export enum ModelType {
  */
 export function *overModelType (
 ): Iterable<ModelType> {
-  // NOTE (mristin, 2022-12-03):
+  // NOTE (mristin):
   // We yield numbers instead of literals to avoid name lookups on platforms
   // which do not provide JIT compilation of hot paths.
   yield <ModelType>0;  // Something
@@ -91,7 +91,7 @@ export class Something extends Class {
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>0;  // Something

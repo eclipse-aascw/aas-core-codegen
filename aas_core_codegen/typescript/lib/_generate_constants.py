@@ -95,7 +95,7 @@ def _generate_constant_primitive(
     elif constant.a_type is intermediate.PrimitiveType.FLOAT:
         assert isinstance(constant.value, float)
 
-        # NOTE (mristin, 2022-11-11):
+        # NOTE (mristin):
         # We assume that the float constants are not meant to be all to precise.
         # Therefore, we use a string representation here. However, beware that we
         # might have to use a more precise representation in the future if the spec
@@ -187,7 +187,7 @@ def _generate_constant_set_of_primitives(
         for literal in constant.literals:
             assert isinstance(literal.value, float)
 
-            # NOTE (mristin, 2022-11-12):
+            # NOTE (mristin):
             # We assume that the float constants are not meant to be all to precise.
             # Therefore, we use a string representation here. However, beware that we
             # might have to use a more precise representation in the future if the spec

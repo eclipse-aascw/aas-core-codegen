@@ -25,7 +25,7 @@ class Something(SomethingAbstract):
     property_g: Optional[str]
     property_h: Optional[str]
 
-    # NOTE (mristin, 2022-03-25):
+    # NOTE (mristin):
     # The order of the inherited and defined properties do not match the order of
     # the constructor arguments.
 

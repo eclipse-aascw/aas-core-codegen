@@ -332,7 +332,7 @@ func readTextAs_double(
 		return
 	}
 
-	// NOTE (2023-06-14):
+	// NOTE:
 	// We explicitly do not check for loss of precision, as the majority of people will
 	// use string representation of the floating point numbers ignoring the precision
 	// issues. For example, the closest double-precision number to the number `359.9` is

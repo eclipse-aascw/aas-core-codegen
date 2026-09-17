@@ -95,7 +95,7 @@ class _RegexRendererForJavaScript(parse_retree.Renderer):
         else:
             code = ord(node.character)
             # pylint: disable=line-too-long
-            # NOTE (mristin, 2022-12-09):
+            # NOTE (mristin):
             # See: https://dmitripavlutin.com/what-every-javascript-developer-should-know-about-unicode/#24-surrogate-pairs
             return [f"\\u{{{code:x}}}"]
 
@@ -164,7 +164,7 @@ class _PatternVerificationTranspiler(
         self, node: parse_tree.Constant
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
         if isinstance(node.value, str):
-            # NOTE (mristin, 2022-06-11):
+            # NOTE (mristin):
             # We assume that all the string constants are valid regular expressions.
 
             regex, parse_error = parse_retree.parse(values=[node.value])
@@ -187,7 +187,7 @@ class _PatternVerificationTranspiler(
 
             assert regex is not None
 
-            # NOTE (mristin, 2022-11-04):
+            # NOTE (mristin):
             # Strictly speaking, this is a joined string with a single value, a string
             # literal. Thus, do not be confused by the name of the function —
             # this function treats both joined formatted values *and* string literals.
@@ -243,7 +243,7 @@ class _PatternVerificationTranspiler(
             return None, error
         assert code is not None
 
-        # NOTE (mristin, 2022-11-24):
+        # NOTE (mristin):
         # We assume that the variables won't change in the patterns. If this assumption
         # is broken, fix the code here by first inspecting the scope and classifying
         # the variables into constant ones and modifiable ones.
@@ -255,7 +255,7 @@ def _transpile_pattern_verification(
     verification: intermediate.PatternVerification,
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Generate the verification function that checks the regular expressions."""
-    # NOTE (mristin, 2022-11-12):
+    # NOTE (mristin):
     # We assume that we performed all the checks at the intermediate stage.
 
     construct_name = typescript_naming.function_name(
@@ -674,7 +674,7 @@ def _transpile_invariant(
 
     writer.write(f"{I}yield new VerificationError(\n")
 
-    # NOTE (mristin, 2022-11-12):
+    # NOTE (mristin):
     # We need to wrap the description in multiple literals as a single long
     # string literal is often too much for the readability.
     invariant_description_lines = wrap_text_into_lines(invariant.description)
@@ -715,7 +715,7 @@ def _generate_verify_property_snippet(
 
     Return an empty string if there is nothing to be verified for the given property.
     """
-    # NOTE (mristin, 2022-11-12):
+    # NOTE (mristin):
     # Instead of writing here a complex but general solution with unrolling we choose
     # to provide a simple, but limited, solution. First, the meta-model is quite
     # limited itself at the moment, so the complexity of the general solution is not
@@ -1462,7 +1462,7 @@ def generate(
     )
     if module_docstring_error is not None:
         errors.append(module_docstring_error)
-        # NOTE (mristin, 2023-03-18):
+        # NOTE (mristin):
         # Allow the execution to continue to catch other errors as well
         module_docstring = Stripped("")
 
@@ -1560,7 +1560,7 @@ export class Path {{
  * Represent a verification error in the data.
  */
 export class VerificationError {{
-{I}// NOTE (mristin, 2022-11-12):
+{I}// NOTE (mristin):
 {I}// The name `VerificationError` is redundant since it lives in `verification` module,
 {I}// and it would have made more sense to call it simply `Error`. Unfortunately in this case,
 {I}// `Error` is a reserved name by JavaScript.
@@ -1675,7 +1675,7 @@ export function *verify(
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
-            # NOTE (mristin, 2022-11-12):
+            # NOTE (mristin):
             # We do not verify the enumerations explicitly in TypeScript and
             # leave those checks to TypeScript compiler.
             pass
@@ -1704,7 +1704,7 @@ export function *verify(
                 intermediate.NamedUnion,
             ),
         ):
-            # NOTE (mristin, 2022-11-12):
+            # NOTE (mristin):
             # We provide a general dispatch function for the most abstract
             # class ``Class``.
             pass

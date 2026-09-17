@@ -484,7 +484,7 @@ export function queryConditionFromJsonable(
     const setterMethod =
       SETTER_MAP_FOR_QUERY_CONDITION.get(key);
 
-    // NOTE (mristin, 2022-11-30):
+    // NOTE (mristin):
     // Since we conflate here a JavaScript object with a JSON object, we ignore
     // properties which we do not know how to de-serialize and assume they are
     // related to the *JavaScript* properties of the object or `Object` prototype.

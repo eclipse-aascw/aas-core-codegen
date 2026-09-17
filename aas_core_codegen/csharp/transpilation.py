@@ -337,7 +337,7 @@ class Transpiler(
         if isinstance(node.antecedent, no_parentheses_types_in_this_context):
             not_antecedent = f"!{antecedent}"
         else:
-            # NOTE (mristin, 2022-04-07):
+            # NOTE (mristin):
             # This is a very rudimentary heuristic for breaking the lines, and can be
             # greatly improved by rendering into C# code. However, at this point, we
             # lack time for more sophisticated reformatting approaches.
@@ -350,7 +350,7 @@ class Transpiler(
                 not_antecedent = f"!({antecedent})"
 
         if not isinstance(node.consequent, no_parentheses_types_in_this_context):
-            # NOTE (mristin, 2022-04-07):
+            # NOTE (mristin):
             # This is a very rudimentary heuristic for breaking the lines, and can be
             # greatly improved by rendering into C# code. However, at this point, we
             # lack time for more sophisticated reformatting approaches.
@@ -440,7 +440,7 @@ class Transpiler(
                 node.original_node, "Failed to transpile the function call", errors
             )
 
-        # NOTE (mristin, 2021-12-16):
+        # NOTE (mristin):
         # The validity of the arguments is checked in
         # :py:func:`aas_core_codegen.intermediate._translate.translate`, so we do not
         # have to test for argument arity here.
@@ -655,7 +655,7 @@ class Transpiler(
             )
 
             if not isinstance(value_node, no_parentheses_types_in_this_context):
-                # NOTE (mristin, 2022-04-07):
+                # NOTE (mristin):
                 # This is a very rudimentary heuristic for breaking the lines, and can
                 # be greatly improved by rendering into C# code. However, at this point,
                 # we lack time for more sophisticated reformatting approaches.
@@ -710,7 +710,7 @@ class Transpiler(
             )
 
             if not isinstance(value_node, no_parentheses_types_in_this_context):
-                # NOTE (mristin, 2022-04-07):
+                # NOTE (mristin):
                 # This is a very rudimentary heuristic for breaking the lines, and can
                 # be greatly improved by rendering into C# code. However, at this point,
                 # we lack time for more sophisticated reformatting approaches.
@@ -993,7 +993,7 @@ Enumerable.Range(
         if isinstance(node.target, parse_tree.Name):
             type_anno = self._environment.find(identifier=node.target.identifier)
             if type_anno is None:
-                # NOTE (mristin, 2022-07-12):
+                # NOTE (mristin):
                 # This is a variable definition as we did not specify the identifier
                 # in the environment.
 
@@ -1021,7 +1021,7 @@ Enumerable.Range(
         assert target is not None
         assert value is not None
 
-        # NOTE (mristin, 2022-07-12):
+        # NOTE (mristin):
         # This is a rudimentary heuristic for basic line breaks, but works well in
         # practice.
         if "\n" not in value and len(value) > 50:
@@ -1048,7 +1048,7 @@ Enumerable.Range(
 
         assert value is not None
 
-        # NOTE (mristin, 2022-07-12):
+        # NOTE (mristin):
         # This is a rudimentary heuristic for basic line breaks, but works well in
         # practice.
         if "\n" not in value and len(value) > 50:

@@ -248,7 +248,7 @@ PRIMITIVE_TYPE_MAP = {
     intermediate.PrimitiveType.INT: Stripped("int"),
     intermediate.PrimitiveType.FLOAT: Stripped("float"),
     intermediate.PrimitiveType.STR: Stripped("str"),
-    # NOTE (mristin, 2022-10-14):
+    # NOTE (mristin):
     # Since most Python functions and encodings deal with ``bytes`` instead of
     # ``bytearrays``, we decided to use ``bytes`` in the SDK.
     intermediate.PrimitiveType.BYTEARRAY: Stripped("bytes"),
@@ -403,7 +403,7 @@ def generate_type(
     elif isinstance(type_annotation, intermediate.OurTypeAnnotation):
         our_type = type_annotation.our_type
 
-        # NOTE (mristin, 2022-09-17):
+        # NOTE (mristin):
         # If no ``types_module``, we mark all enumerations and classes as string
         # literals to avoid problems caused by lack of forward declaration in Python. If
         # we created a dependency graph, we could strip away some quotes, but we believe

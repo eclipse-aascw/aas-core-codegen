@@ -105,7 +105,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
                 result = f":py:class:`.types.{name}`"
 
         elif isinstance(element.our_type, intermediate.ConstrainedPrimitive):
-            # NOTE (mristin, 2022-09-08):
+            # NOTE (mristin):
             # We do not generate a class for constrained primitives, but we
             # leave it here as a literal.
             result = f"``{name}``"
@@ -155,7 +155,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
     def transform_reference_to_argument_in_doc(
         self, element: intermediate_doc.ReferenceToArgument
     ) -> Tuple[Optional[str], Optional[List[str]]]:
-        # NOTE (mristin, 2022-09-08):
+        # NOTE (mristin):
         # We rely here on sphinx-paramlinks extension.
 
         arg_name = python_naming.argument_name(Identifier(element.reference))
@@ -187,7 +187,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
     def transform_literal(
         self, element: docutils.nodes.literal
     ) -> Tuple[Optional[str], Optional[List[str]]]:
-        # NOTE (mristin, 2022-09-08):
+        # NOTE (mristin):
         # We fail here catastrophically if there are backticks as there is no easy way
         # to escape them in RST. However, since our meta-model is also written in
         # Python, this assertion will almost always pass.
@@ -288,7 +288,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
 
             writer.write("* ")
 
-            # NOTE (mristin, 2022-09-14):
+            # NOTE (mristin):
             # This has a potentially exponential complexity w.r.t. indention level.
             # However, as the indention level is thus far limited to only a single
             # level, we ignore this pitfall for the moment.

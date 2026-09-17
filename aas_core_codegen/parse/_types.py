@@ -178,7 +178,7 @@ class ConstantPrimitive(Constant):
 class ConstantSet(Constant):
     """Represent a constant set in the meta-model."""
 
-    # NOTE (mristin, 2022-07-01):
+    # NOTE (mristin):
     # At this moment, we only support enumeration subsets and sets of strings. That is
     # why we enforce only the atomic type annotations for the
     # :attr:`~items_type_annotation`. Subscripted type annotations are also possible,
@@ -1017,7 +1017,7 @@ class SymbolTable(UnverifiedSymbolTable):
         return cast(SymbolTable, symbol_table)
 
 
-# NOTE (mristin, 2022-07-01):
+# NOTE (mristin):
 # At this moment, we only handle one type of constants, namely constant sets. However,
 # we do anticipate more types of constants in the future, so we already prepare
 # the program structure for that case.

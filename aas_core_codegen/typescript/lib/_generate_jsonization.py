@@ -525,7 +525,7 @@ const {mapping_name} =
                 Identifier(f"{implementer.name}_from_jsonable")
             )
         else:
-            # NOTE (mristin, 2022-11-25):
+            # NOTE (mristin):
             # We can not use the public function as it would end in an endless dispatch
             # loop. Hence, we introduce a function which assumes the type and explicitly
             # does not dispatch.
@@ -942,7 +942,7 @@ def _generate_setter(cls: intermediate.ConcreteClass) -> Stripped:
             prop.type_annotation, types_module=Identifier("AasTypes")
         )
 
-        # NOTE (mristin, 2022-11-25):
+        # NOTE (mristin):
         # We make all the properties optional since we switch over the properties
         # during the de-serialization.
         if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
@@ -1311,7 +1311,7 @@ for (const key in jsonObject) {{
 {I}const setterMethod =
 {II}{map_name}.get(key);
 
-{I}// NOTE (mristin, 2022-11-30):
+{I}// NOTE (mristin):
 {I}// Since we conflate here a JavaScript object with a JSON object, we ignore
 {I}// properties which we do not know how to de-serialize and assume they are
 {I}// related to the *JavaScript* properties of the object or `Object` prototype.
@@ -1487,7 +1487,7 @@ or an error if any"""
         Stripped(description)
     )
 
-    # NOTE (mristin, 2022-11-30):
+    # NOTE (mristin):
     # We export it only if the de-serialization of the class is equivalent to
     # the de-serialization without a dispatch.
     maybe_export_prefix = "export " if len(cls.concrete_descendants) == 0 else ""
@@ -2058,7 +2058,7 @@ function newDeserializationError<T>(
                     )
                     continue
             else:
-                # NOTE (mristin, 2022-11-25):
+                # NOTE (mristin):
                 # While TypeScript supports ``switch`` statement, it is not guaranteed
                 # to run in sublinear time. Hence, we have to create a map with set
                 # methods, see:
@@ -2073,7 +2073,7 @@ function newDeserializationError<T>(
         else:
             assert_never(our_type)
 
-    # NOTE (mristin, 2022-11-25):
+    # NOTE (mristin):
     # We add all the dispatch mappings at the end as the functions might not have been
     # defined yet.
     for cls in symbol_table.classes:

@@ -264,11 +264,11 @@ def _translate_to_simple_type(
                     if error is not None:
                         return None, error
                 else:
-                    # NOTE (mristin, 2023-02-27):
+                    # NOTE (mristin):
                     # The module ``greenery`` is not annotated with types at the moment.
                     merger = None  # type: Optional[Any]
                     for pattern_constraint in patterns_relevant_for_xsd:
-                        # NOTE (mristin, 2023-02-27):
+                        # NOTE (mristin):
                         # Greenery expects the characters to be in Unicode and not escaped.
                         translated_for_greenery = (
                             _undo_escaping_backslash_x_u_and_U_in_pattern(
@@ -857,7 +857,7 @@ def _define_for_class(
 
     The root element is to be *extended* with the resulting list.
     """
-    # NOTE (mristin, 2022-03-30):
+    # NOTE (mristin):
     # We define each set of properties in a group. Then we reference these groups
     # among the complex types.
     # See: https://stackoverflow.com/questions/1198755/xml-schemas-with-multiple-inheritance
@@ -1133,7 +1133,7 @@ def _generate(
 
     errors = []  # type: List[Error]
 
-    # NOTE (mristin, 2022-04-09):
+    # NOTE (mristin):
     # We remove any whitespace tail and text in all the tags, and make sure there is no
     # unexpected text anywhere.
     for element in root.iter():
@@ -1281,7 +1281,7 @@ def _generate(
                 elements = _define_for_enumeration(enumeration=our_type)
 
             elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-                # NOTE (mristin, 2022-03-30):
+                # NOTE (mristin):
                 # We in-line the constraints from the constrained primitives directly
                 # in the properties. We do not want to introduce separate definitions
                 # for them as that would make it more difficult for downstream code
@@ -1366,14 +1366,14 @@ def _generate(
 
     _sort_by_tags_and_names_in_place(root)
 
-    # NOTE (mristin, 2022-03-30):
+    # NOTE (mristin):
     # For some unknown reason, ElementTree erases the xmlns property of the root
     # element. Therefore, we need to add it here manually.
     root.attrib["xmlns"] = xmlns
 
     text = ET.tostring(root, encoding="unicode", method="xml")
 
-    # NOTE (mristin, 2021-11-23):
+    # NOTE (mristin):
     # This approach is slow, but effective. As long as the meta-model is not too big,
     # this should work.
     # noinspection PyUnresolvedReferences

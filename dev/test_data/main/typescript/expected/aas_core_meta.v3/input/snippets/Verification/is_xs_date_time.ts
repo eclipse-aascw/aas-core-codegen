@@ -9,7 +9,7 @@
  * @returns `true` if `value` is a valid `xs:dateTime`
  */
 export function isXsDateTime(value: string): boolean {
-  // NOTE (mristin, 2022-11-23):
+  // NOTE (mristin):
   // We can not use date functions from the standard library as it does not
   // handle years BCE (*e.g.*, `-0003-01-02`).
 

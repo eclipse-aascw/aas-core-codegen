@@ -21,7 +21,7 @@ export enum ModelType {
  */
 export function *overModelType (
 ): Iterable<ModelType> {
-  // NOTE (mristin, 2022-12-03):
+  // NOTE (mristin):
   // We yield numbers instead of literals to avoid name lookups on platforms
   // which do not provide JIT compilation of hot paths.
   yield <ModelType>0;  // SomeItem
@@ -106,7 +106,7 @@ export enum Result {
  */
 export function *overResult(
 ): IterableIterator<Result> {
-  // NOTE (mristin, 2022-12-03):
+  // NOTE (mristin):
   // We yield numbers instead of literals to avoid name lookups on platforms
   // which do not provide JIT compilation of hot paths.
   yield <Result>0; // Ok
@@ -125,7 +125,7 @@ export class SomeItem
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>0;  // SomeItem
@@ -218,7 +218,7 @@ export class AnotherItem
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>1;  // AnotherItem
@@ -309,7 +309,7 @@ export class Something extends Class {
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>2;  // Something

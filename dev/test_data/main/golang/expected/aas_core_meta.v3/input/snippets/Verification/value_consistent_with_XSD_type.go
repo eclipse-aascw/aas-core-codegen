@@ -73,11 +73,11 @@ func IsXsDate(value string) bool {
 		return false
 	}
 
-	// NOTE (mristin, 2023-05-10):
+	// NOTE (mristin):
 	// We can not use the date functions from the standard library as we have
 	// to handle years BCE according to the XML date type.
 
-	// NOTE (mristin, 2023-05-12):
+	// NOTE (mristin):
     // We need to match the prefix as zone offsets are allowed in the dates. Optimally,
     // we would re-use the pattern matching from `MatchesXsDate`, but this
     // would make the code generation and constraint inference for schemas much more
@@ -189,7 +189,7 @@ func IsXsDouble(value string) bool {
 		)
 	}
 
-	// NOTE (2023-05-12):
+	// NOTE:
 	// We explicitly do not check for loss of precision, as the majority of people will
 	// use string representation of the floating point numbers ignoring the precision
 	// issues. For example, the closest double-precision number to the number `359.9` is
@@ -225,7 +225,7 @@ func IsXsFloat(value string) bool {
 		)
 	}
 
-	// NOTE (2023-05-12):
+	// NOTE:
 	// We explicitly do not check for loss of precision, as the majority of people will
 	// use string representation of the floating point numbers ignoring the precision
 	// issues. For example, `float64(float32(3.2)) == 3.2` is false in Golang, but "3.2"

@@ -612,7 +612,7 @@ function branchFromJsonableWithoutDispatch(
     const setterMethod =
       SETTER_MAP_FOR_BRANCH.get(key);
 
-    // NOTE (mristin, 2022-11-30):
+    // NOTE (mristin):
     // Since we conflate here a JavaScript object with a JSON object, we ignore
     // properties which we do not know how to de-serialize and assume they are
     // related to the *JavaScript* properties of the object or `Object` prototype.
@@ -859,7 +859,7 @@ function leafFromJsonableWithoutDispatch(
     const setterMethod =
       SETTER_MAP_FOR_LEAF.get(key);
 
-    // NOTE (mristin, 2022-11-30):
+    // NOTE (mristin):
     // Since we conflate here a JavaScript object with a JSON object, we ignore
     // properties which we do not know how to de-serialize and assume they are
     // related to the *JavaScript* properties of the object or `Object` prototype.
@@ -1082,7 +1082,7 @@ export function blossomFromJsonable(
     const setterMethod =
       SETTER_MAP_FOR_BLOSSOM.get(key);
 
-    // NOTE (mristin, 2022-11-30):
+    // NOTE (mristin):
     // Since we conflate here a JavaScript object with a JSON object, we ignore
     // properties which we do not know how to de-serialize and assume they are
     // related to the *JavaScript* properties of the object or `Object` prototype.
@@ -1245,7 +1245,7 @@ export function somethingFromJsonable(
     const setterMethod =
       SETTER_MAP_FOR_SOMETHING.get(key);
 
-    // NOTE (mristin, 2022-11-30):
+    // NOTE (mristin):
     // Since we conflate here a JavaScript object with a JSON object, we ignore
     // properties which we do not know how to de-serialize and assume they are
     // related to the *JavaScript* properties of the object or `Object` prototype.
@@ -1379,7 +1379,7 @@ export function containerFromJsonable(
     const setterMethod =
       SETTER_MAP_FOR_CONTAINER.get(key);
 
-    // NOTE (mristin, 2022-11-30):
+    // NOTE (mristin):
     // Since we conflate here a JavaScript object with a JSON object, we ignore
     // properties which we do not know how to de-serialize and assume they are
     // related to the *JavaScript* properties of the object or `Object` prototype.

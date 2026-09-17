@@ -9,7 +9,7 @@ from typing import Optional
 
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
-    # NOTE (mristin, 2022-04-08):
+    # NOTE (mristin):
     # We need to disable warnings. Jsonschema package at the latest version (4.4.0) has
     # a problem with JSON schema draft 2019-09 and crashes with an recursion error,
     # see: https://github.com/python-jsonschema/jsonschema/issues/847.
@@ -140,7 +140,7 @@ class Test_pattern_transpilation(unittest.TestCase):
             pattern,
         )
 
-        # NOTE (mristin, 2024-05-08):
+        # NOTE (mristin):
         # We also test for the JSON representation to test against a possible bug
         # reported in:
         # https://github.com/admin-shell-io/aas-specs/pull/426 and
@@ -148,7 +148,7 @@ class Test_pattern_transpilation(unittest.TestCase):
 
         pattern_json = json.dumps(pattern)
         self.assertEqual(
-            # NOTE (mristin, 2024-05-08):
+            # NOTE (mristin):
             # Mind the ``r`` modifier for the string literals!
             r'"^([\\x09\\x0a\\x0d\\x20-\\ud7ff\\ue000-\\ufffd]'
             r"|\\ud800[\\udc00-\\udfff]|[\\ud801-\\udbfe][\\udc00-\\udfff]"

@@ -65,7 +65,7 @@ def _generate_constant_primitive(
         return Stripped(f"public static const long {constant_name} = {literal};"), None
 
     elif constant.a_type is intermediate.PrimitiveType.FLOAT:
-        # NOTE (mristin, 2022-07-06):
+        # NOTE (mristin):
         # We assume that the float constants are not meant to be all to precise.
         # Therefore, we use a string representation here. However, beware that we
         # might have to use a more precise representation in the future if the spec
@@ -152,7 +152,7 @@ public static readonly HashSet<long> {constant_name} = (
         writer.write(f"{I}}});")
 
     elif constant.a_type is intermediate.PrimitiveType.FLOAT:
-        # NOTE (mristin, 2022-07-06):
+        # NOTE (mristin):
         # We assume that the float constants are not meant to be all to precise.
         # Therefore, we use a string representation here. However, beware that we
         # might have to use a more precise representation in the future if the spec
@@ -236,7 +236,7 @@ def _generate_constant_set_of_enumeration_literals(
 
     writer = io.StringIO()
 
-    # NOTE (mristin, 2022-08-19):
+    # NOTE (mristin):
     # We make the sets of enumeration literals work on nullables to avoid checking
     # nullability all the time in the code. This gives a bit less performant code,
     # but a much more readable one.

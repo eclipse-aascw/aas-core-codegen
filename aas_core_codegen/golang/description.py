@@ -89,7 +89,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
                 element.our_type,
                 (intermediate.AbstractClass, intermediate.ConcreteClass),
             ):
-                # NOTE (mristin, 2023-03-28):
+                # NOTE (mristin):
                 # We always refer to interfaces even in cases of concrete classes without
                 # concrete descendants since we want to allow enhancing.
                 name = golang_naming.interface_name(element.our_type.name)
@@ -103,7 +103,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
                 result = f"[{golang_common.TYPES_PACKAGE}.{name}]"
 
         elif isinstance(element.our_type, intermediate.ConstrainedPrimitive):
-            # NOTE (mristin, 2022-09-08):
+            # NOTE (mristin):
             # We do not generate a class for constrained primitives, but we
             # leave it here as a literal.
 
@@ -184,7 +184,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
     def transform_literal(
         self, element: docutils.nodes.literal
     ) -> Tuple[Optional[str], Optional[List[str]]]:
-        # NOTE (mristin, 2023-03-28):
+        # NOTE (mristin):
         # We fail here catastrophically if there are backticks as there is no easy way
         # to escape them in godoc. However, since our meta-model is written in
         # Python, this assertion will almost always pass as we can not escape backtics
@@ -253,7 +253,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
 
         content = "".join(children)
 
-        # NOTE (mristin, 2023-03-28):
+        # NOTE (mristin):
         # At this point, godoc still does not support emphasis :(.
         return content, None
 
@@ -287,7 +287,7 @@ class _ElementRenderer(intermediate_doc.DocutilsElementTransformer[str]):
 
             writer.write("  • ")
 
-            # NOTE (mristin, 2023-03-28):
+            # NOTE (mristin):
             # This has a potentially exponential complexity w.r.t. indention level.
             # However, as the indention level is thus far limited to only a single
             # level, we ignore this pitfall for the moment.

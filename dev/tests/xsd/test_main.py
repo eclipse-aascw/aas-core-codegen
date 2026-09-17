@@ -63,7 +63,7 @@ class Test_undo_escaping_x(unittest.TestCase):
 
 
 class Test_translate_pattern(unittest.TestCase):
-    # NOTE (mristin, 2022-06-18):
+    # NOTE (mristin):
     # This is relevant since XSD are always anchored.
     # See: https://stackoverflow.com/questions/4367914/regular-expression-in-xml-schema-definition-fails
 
@@ -80,7 +80,7 @@ class Test_translate_pattern(unittest.TestCase):
             self.assertEqual(expected, fixed, identifier)
 
     def test_table_for_rendering_quantifiers(self) -> None:
-        # NOTE (mristin, 2024-03-22):
+        # NOTE (mristin):
         # We explicitly test for quantifiers to make sure that they all comply with
         # XSD patterns. For example, when only the maximum quantifier is given,
         # the minimum quantifier of 0 must be indicated explicitly.

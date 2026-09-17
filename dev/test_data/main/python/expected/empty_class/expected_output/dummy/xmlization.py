@@ -162,7 +162,7 @@ class Element(Protocol):
 class HasIterparse(Protocol):
     """Parse an XML document incrementally."""
 
-    # NOTE (mristin, 2022-10-26):
+    # NOTE (mristin):
     # ``self`` is not used in this context, but is necessary for Mypy,
     # see: https://github.com/python/mypy/issues/5018 and
     # https://github.com/python/mypy/commit/3efbc5c5e910296a60ed5b9e0e7eb11dd912c3ed#diff-e165eb7aed9dca0a5ebd93985c8cd263a6462d36ac185f9461348dc5a1396d76R9937
@@ -638,7 +638,7 @@ def from_str(
     )
 
 
-# NOTE (mristin, 2022-10-08):
+# NOTE (mristin):
 # Directly using the iterator turned out to result in very complex function
 # designs. The design became much simpler as soon as we considered one look-ahead
 # element. We came up finally with the following pattern which all the protected
@@ -1193,7 +1193,7 @@ class _Serializer(aas_types.AbstractVisitor):
         None
     ]
 
-    # NOTE (mristin, 2022-10-14):
+    # NOTE (mristin):
     # The serialization procedure is quite rigid. We leverage the specifics of
     # the serialization procedure to optimize the code a bit.
     #
@@ -1227,7 +1227,7 @@ class _Serializer(aas_types.AbstractVisitor):
         """
         self.stream.write(f'<{name} xmlns="{NAMESPACE}">')
 
-        # NOTE (mristin, 2022-10-14):
+        # NOTE (mristin):
         # Any subsequence call to `_write_start_element` or `_write_empty_element`
         # should not specify the namespace of the element as we specified now already
         # specified it.

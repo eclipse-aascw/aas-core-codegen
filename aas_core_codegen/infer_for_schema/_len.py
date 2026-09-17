@@ -206,7 +206,7 @@ def min_with_none(*args: Optional[int]) -> Optional[int]:
 
     >>> min_with_none(None, None)
     """
-    # NOTE (mristin, 2022-03-02):
+    # NOTE (mristin):
     # There is no one-liner in Python for this.
     # See: https://stackoverflow.com/questions/2295461/list-minimum-in-python-with-none
     minimum = None  # type: Optional[int]
@@ -229,7 +229,7 @@ def max_with_none(*args: Optional[int]) -> Optional[int]:
 
     >>> max_with_none(None, None)
     """
-    # NOTE (mristin, 2022-03-02):
+    # NOTE (mristin):
     # There is no one-liner in Python for this.
     # See: https://stackoverflow.com/questions/2295461/list-minimum-in-python-with-none
     maximum = None  # type: Optional[int]
@@ -354,14 +354,14 @@ def len_constraints_from_invariants(
 
     # region Infer the constraints in the loose form from all the invariants
 
-    # NOTE (mristin, 2021-11-30):
+    # NOTE (mristin):
     # We iterate only once through the invariants instead of inferring the constraints
     # for each property individually to be able to keep linear time complexity.
 
     errors = []  # type: List[Error]
 
     for invariant in cls.invariants:
-        # NOTE (mristin, 2022-01-02):
+        # NOTE (mristin):
         # We consider only the genuine invariants of the class, and ignore
         # the invariants of its ancestors.
 
@@ -474,7 +474,7 @@ def infer_len_constraint_of_self(
     constraints = []  # type: List[_ConstraintUnion]
 
     for invariant in constrained_primitive.invariants:
-        # NOTE (mristin, 2022-01-02):
+        # NOTE (mristin):
         # We consider only the genuine invariants of the constrained primitive, and
         # ignore the invariants of its ancestors.
         if invariant.specified_for is not constrained_primitive:

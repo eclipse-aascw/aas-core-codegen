@@ -875,7 +875,7 @@ if (obj == null)
         arg_var = csharp_naming.variable_name(Identifier(f"the_{arg.name}"))
         arg_type = csharp_common.generate_type(arg.type_annotation)
 
-        # NOTE (mristin, 2022-07-22):
+        # NOTE (mristin):
         # We make all the argument variables optional since we switch over
         # the properties. Even the mandatory constructor arguments can be omitted
         # during an invalid deserialization!
@@ -1053,7 +1053,7 @@ if (modelType == null)
         for i, arg in enumerate(cls.constructor.arguments):
             prop = cls.properties_by_name[arg.name]
 
-            # NOTE (mristin, 2022-03-11):
+            # NOTE (mristin):
             # The argument to the constructor may be optional while the property
             # might be required, since we can set the default value in the body of
             # the constructor. However, we can not have an optional property and a

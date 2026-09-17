@@ -231,7 +231,7 @@ class Test_against_recorded(unittest.TestCase):
                 symbol_table_str = intermediate.dump(symbol_table)
 
                 if tests.common.RERECORD:
-                    # NOTE (mristin, 2023-11-07):
+                    # NOTE (mristin):
                     # We have to write the bytes since Git considers too long text
                     # files to be binaries. This is problematic when we re-record
                     # on Windows and Linux due to the different line endings.
@@ -245,7 +245,7 @@ class Test_against_recorded(unittest.TestCase):
                     expected_symbol_table_pth.write_bytes(symbol_table_bytes)
                 else:
                     try:
-                        # NOTE (mristin, 2023-11-07):
+                        # NOTE (mristin):
                         # We assume that Python will automatically represent new lines
                         # as ``\n`` so that it matches ``symbol_table_bytes`` above.
 

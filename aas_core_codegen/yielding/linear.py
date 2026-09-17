@@ -214,7 +214,7 @@ def _linearize_if_true(
 
     Return the linearization and the next available label.
     """
-    # NOTE (mristin, 2023-10-20):
+    # NOTE (mristin):
     # We will fix this if-statement at the end, once we know the labels for ``on_true``
     # and ``on_false``.
     if_statement = If(condition=if_true_node.condition, label=label)
@@ -226,7 +226,7 @@ def _linearize_if_true(
         body, label = _linearize_sequence(if_true_node.body, label)
         result.extend(body)
 
-        # NOTE (mristin, 2023-10-20):
+        # NOTE (mristin):
         # This jump will be fixed after we know the exact target.
         jump_to_done_after_body = Jump(target=-1, label=label)
         result.append(jump_to_done_after_body)
@@ -267,7 +267,7 @@ def _linearize_if_false(
 
     Return the linearization and the next available label.
     """
-    # NOTE (mristin, 2023-10-20):
+    # NOTE (mristin):
     # We will fix this if-statement at the end, once we know the labels for ``on_true``
     # and ``on_false``.
     if_statement = If(condition=if_false_node.condition, label=label)
@@ -279,7 +279,7 @@ def _linearize_if_false(
         body, label = _linearize_sequence(if_false_node.body, label)
         result.extend(body)
 
-        # NOTE (mristin, 2023-10-22):
+        # NOTE (mristin):
         # This jump will be fixed after we know the exact target.
         jump_to_done_after_body = Jump(target=-1, label=label)
         result.append(jump_to_done_after_body)
@@ -326,7 +326,7 @@ def _linearize_for(
         result.append(Command(for_node.init, label=label))
         label += 1
 
-    # NOTE (mristin, 2023-10-20):
+    # NOTE (mristin):
     # We will fix this if-statement at the end, once we know the label for ``on_true``.
     if_statement = If(condition=for_node.condition, label=label)
 
@@ -365,7 +365,7 @@ def _linearize_while(
     """
     result = []  # type: List[StatementUnion]
 
-    # NOTE (mristin, 2023-10-28):
+    # NOTE (mristin):
     # We will fix this if-statement at the end, once we know the label for ``on_true``.
     if_statement = If(condition=while_node.condition, label=label)
     label += 1
@@ -494,7 +494,7 @@ def _remove_noops_in_place(statements: List[StatementUnion]) -> List[StatementUn
     The input statements list is invalidated, and should not be used after the call
     to this function.
     """
-    # NOTE (mristin, 2023-10-20):
+    # NOTE (mristin):
     # We can safely remove all no-ops which do not have a label, since they are
     # not targeted at all.
     statements = [
@@ -503,7 +503,7 @@ def _remove_noops_in_place(statements: List[StatementUnion]) -> List[StatementUn
         if not isinstance(statement, Noop) or statement.label is not None
     ]
 
-    # NOTE (mristin, 2023-10-20):
+    # NOTE (mristin):
     # We will iterate through the statements now, map all the targets to the new
     # labels, and mark the no-ops for removal by unsetting their labels.
 
@@ -517,7 +517,7 @@ def _remove_noops_in_place(statements: List[StatementUnion]) -> List[StatementUn
             if len(noop_block) == 0:
                 continue
 
-            # NOTE (mristin, 2023-10-20):
+            # NOTE (mristin):
             # If the statement does not have a label, we arbitrarily assign the label
             # of the first no-op in the block.
             if statement.label is None:
@@ -544,7 +544,7 @@ def _remove_noops_in_place(statements: List[StatementUnion]) -> List[StatementUn
             noop_block = []
 
     if len(noop_block) > 1:
-        # NOTE (mristin, 2023-10-20):
+        # NOTE (mristin):
         # This is a trailing no-op block. We simply reduce it to one no-op.
         iter_noop_block = iter(noop_block)
         next(iter_noop_block)
@@ -563,7 +563,7 @@ def _remove_noops_in_place(statements: List[StatementUnion]) -> List[StatementUn
             old_to_new_target[noop.label] = noop_block[0].label
             noop.label = None
 
-    # NOTE (mristin, 2023-10-20):
+    # NOTE (mristin):
     # We marked all no-ops for removal by unsetting their label.
     statements = [
         statement
@@ -571,7 +571,7 @@ def _remove_noops_in_place(statements: List[StatementUnion]) -> List[StatementUn
         if not isinstance(statement, Noop) or statement.label is not None
     ]
 
-    # NOTE (mristin, 2023-10-20):
+    # NOTE (mristin):
     # Now we have to re-wire the targets.
     for statement in statements:
         if isinstance(statement, If):
@@ -624,13 +624,13 @@ def _fix_labels_in_place(statements: List[StatementUnion]) -> None:
         + 1
     )
 
-    # NOTE (mristin, 2023-10-20):
+    # NOTE (mristin):
     # We simply set the first label to some arbitrary number and fix it later.
     if statements[0].label is None:
         statements[0].label = label
         label += 1
 
-    # NOTE (mristin, 2023-10-21):
+    # NOTE (mristin):
     # We add a label after each yield so that we can split the statements in block,
     # where each block starts with a statement label.
     for previous, current in pairwise(statements):
@@ -638,7 +638,7 @@ def _fix_labels_in_place(statements: List[StatementUnion]) -> None:
             current.label = label
             label += 1
 
-    # NOTE (mristin, 2023-10-21):
+    # NOTE (mristin):
     # Now reset all labels so that they are consecutive.
 
     label = 0

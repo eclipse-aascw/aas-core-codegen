@@ -438,7 +438,7 @@ def wrap_text_into_lines(text: str, line_width: int = 60) -> List[str]:
     if len(parts) == 1:
         return [text]
 
-    # NOTE (mristin, 2022-04-08):
+    # NOTE (mristin):
     # We do not want to cut out "the", "a" and "an" on separate lines, so we split
     # the text once more in tokens where the articles are kept in the same token as
     # the word.
@@ -466,7 +466,7 @@ def wrap_text_into_lines(text: str, line_width: int = 60) -> List[str]:
     if article is not None:
         tokens.append(article)
 
-    # NOTE (mristin, 2022-04-08):
+    # NOTE (mristin):
     # We add space to the tokens so that it is easier to re-flow them.
     tokens = [
         f"{token} " if i < len(tokens) - 1 else token for i, token in enumerate(tokens)

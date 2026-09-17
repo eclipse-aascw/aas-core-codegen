@@ -34,7 +34,7 @@ class PassThroughVisitor(Visitor):
 
     def visit_symbol(self, node: Symbol) -> None:
         """Visit the ``symbol``."""
-        # NOTE (mristin, 2022-06-10):
+        # NOTE (mristin):
         # The recursion stops here.
 
     def visit_term(self, node: Term) -> None:
@@ -51,12 +51,12 @@ class PassThroughVisitor(Visitor):
 
     def visit_char(self, node: Char) -> None:
         """Visit the ``char``."""
-        # NOTE (mristin, 2022-06-10):
+        # NOTE (mristin):
         # The recursion stops here.
 
     def visit_quantifier(self, node: Quantifier) -> None:
         """Visit the ``quantifier``."""
-        # NOTE (mristin, 2022-06-10):
+        # NOTE (mristin):
         # The recursion stops here.
 
     def visit_char_set(self, node: CharSet) -> None:
@@ -66,5 +66,5 @@ class PassThroughVisitor(Visitor):
 
     def visit_range(self, node: Range) -> None:
         """Visit the ``range``."""
-        # NOTE (mristin, 2022-06-10):
+        # NOTE (mristin):
         # The recursion stops here.

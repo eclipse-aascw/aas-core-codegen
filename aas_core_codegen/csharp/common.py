@@ -139,7 +139,7 @@ def generate_type(
             return PRIMITIVE_TYPE_MAP[our_type.constrainee]
 
         elif isinstance(our_type, intermediate.Class):
-            # NOTE (mristin, 2023-02-08):
+            # NOTE (mristin):
             # We want to allow custom enhancements and wrappings around
             # our model classes. Therefore, we always operate over C# interfaces
             # instead of concrete classes, even if the class is a concrete one and

@@ -165,7 +165,7 @@ def main() -> int:
             if exit_code != 0:
                 return 1
 
-            # NOTE (mristin, 2024-01-26):
+            # NOTE (mristin):
             # We have to re-format just after the ssort,
             # see: https://pypi.org/project/ssort/,
             # "We recommend that you reformat using isort and black
@@ -290,7 +290,7 @@ def main() -> int:
             if pth.name == "__main__.py":
                 continue
 
-            # NOTE (mristin, 2021-12-27):
+            # NOTE (mristin):
             # The subprocess calls are expensive, call only if there is an actual
             # doctest
             text = pth.read_text(encoding="utf-8")

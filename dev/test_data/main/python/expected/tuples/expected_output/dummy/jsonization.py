@@ -141,7 +141,7 @@ class DeserializationException(Exception):
         self.path = Path()
 
 
-# NOTE (mristin, 2022-10-03):
+# NOTE (mristin):
 # Recursive definitions are not yet available in mypy
 # (see https://github.com/python/mypy/issues/731). We have to use ``Any``
 # here, instead of recursive type annotations.

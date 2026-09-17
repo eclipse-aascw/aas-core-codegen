@@ -9,7 +9,7 @@ private static readonly Regex RegexDatePrefix = (
 /// <returns>True if <paramref name="year"/> is a leap year</returns>
 public static bool IsLeapYear(System.Numerics.BigInteger year)
 {
-    // NOTE (mristin, 2023-03-16):
+    // NOTE (mristin):
     // We consider the years B.C. to be one-off.
     // See the note at: https://www.w3.org/TR/xmlschema-2/#dateTime:
     // "'-0001' is the lexical representation of the year 1 Before Common Era
@@ -51,7 +51,7 @@ public static bool IsLeapYear(System.Numerics.BigInteger year)
 /// </returns>
 private static bool IsPrefixedWithValidDate(string value)
 {
-    // NOTE (mristin, 2023-03-16):
+    // NOTE (mristin):
     // We can not use System.DateTime.ParseExact since it does not handle the zero and
     // BCE years correctly. Therefore, we have to roll out our own date validator.
     var match = RegexDatePrefix.Match(value);

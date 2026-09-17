@@ -98,7 +98,7 @@ export class Path {
  * Represent a verification error in the data.
  */
 export class VerificationError {
-  // NOTE (mristin, 2022-11-12):
+  // NOTE (mristin):
   // The name `VerificationError` is redundant since it lives in `verification` module,
   // and it would have made more sense to call it simply `Error`. Unfortunately in this case,
   // `Error` is a reserved name by JavaScript.

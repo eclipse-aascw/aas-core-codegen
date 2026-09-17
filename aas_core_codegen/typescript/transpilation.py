@@ -60,7 +60,7 @@ class Transpiler(
             parent=environment
         )
 
-        # NOTE (mristin, 2022-11-04):
+        # NOTE (mristin):
         # Keep track whenever we define a variable name, so that we can know how to
         # resolve it as a name in the TypeScript code.
         #
@@ -204,7 +204,7 @@ class Transpiler(
         if not isinstance(node.collection, no_parentheses_types):
             collection = Stripped(f"({collection})")
 
-        # NOTE (mristin, 2022-11-30):
+        # NOTE (mristin):
         # Poor man's re-flow
         result = Stripped(f"AasCommon.at({collection}, {index})")
         if len(collection) + len(index) < 20:
@@ -371,7 +371,7 @@ AasCommon.at(
         if isinstance(node.antecedent, no_parentheses_types_in_this_context):
             not_antecedent = f"!{antecedent}"
         else:
-            # NOTE (mristin, 2022-11-09):
+            # NOTE (mristin):
             # This is a very rudimentary heuristic for breaking the lines, and can be
             # greatly improved by rendering into TypeScript code. However, at this
             # point, we lack time for more sophisticated reformatting approaches.
@@ -384,7 +384,7 @@ AasCommon.at(
                 not_antecedent = f"!({antecedent})"
 
         if not isinstance(node.consequent, no_parentheses_types_in_this_context):
-            # NOTE (mristin, 2022-11-04):
+            # NOTE (mristin):
             # This is a very rudimentary heuristic for breaking the lines, and can be
             # greatly improved by rendering into TypeScript code. However, at this
             # point, we lack time for more sophisticated reformatting approaches.
@@ -569,7 +569,7 @@ AasCommon.at(
     def transform_function_call(
         self, node: parse_tree.FunctionCall
     ) -> Tuple[Optional[Stripped], Optional[Error]]:
-        # NOTE (mristin, 2022-11-09):
+        # NOTE (mristin):
         # The validity of the arguments is checked in
         # :py:func:`aas_core_codegen.intermediate._translate.translate`, so we do not
         # have to test for argument arity here.
@@ -738,7 +738,7 @@ AasCommon.at(
             )
 
             if not isinstance(value_node, no_parentheses_types_in_this_context):
-                # NOTE (mristin, 2022-11-04):
+                # NOTE (mristin):
                 # This is a very rudimentary heuristic for breaking the lines, and can
                 # be greatly improved by rendering into TypeScript code. However, at
                 # this point, we lack time for more sophisticated reformatting
@@ -1049,7 +1049,7 @@ AasCommon.range(
         if isinstance(node.target, parse_tree.Name):
             type_anno = self._environment.find(identifier=node.target.identifier)
             if type_anno is None:
-                # NOTE (mristin, 2022-11-04):
+                # NOTE (mristin):
                 # This is a variable definition as we did not specify the identifier
                 # in the environment.
 
@@ -1071,7 +1071,7 @@ AasCommon.range(
         assert target is not None
         assert value is not None
 
-        # NOTE (mristin, 2022-11-04):
+        # NOTE (mristin):
         # This is a rudimentary heuristic for basic line breaks, but works well in
         # practice.
         if "\n" not in value and len(value) > 50:
@@ -1098,7 +1098,7 @@ AasCommon.range(
 
         assert value is not None
 
-        # NOTE (mristin, 2022-11-04):
+        # NOTE (mristin):
         # This is a rudimentary heuristic for basic line breaks, but works well in
         # practice.
         if "\n" not in value or len(value) > 50:

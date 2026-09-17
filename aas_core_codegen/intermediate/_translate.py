@@ -164,7 +164,7 @@ def _role_reference_to_our_type(  # type: ignore
     # noinspection PyUnresolvedReferences
     options = docutils.parsers.rst.roles.normalize_options(options)
 
-    # NOTE (mristin, 2021-12-27):
+    # NOTE (mristin):
     # We need to create a placeholder as the symbol table might not be fully created
     # at the point when we translate the documentation.
     #
@@ -225,7 +225,7 @@ def _role_reference_to_attribute(  # type: ignore
 
     path = _strip_sphinx_formatting_directives_from_reference(text)
 
-    # NOTE (mristin, 2021-12-27):
+    # NOTE (mristin):
     # We need to create a placeholder as the symbol table might not be fully created
     # at the point when we translate the documentation.
     #
@@ -319,7 +319,7 @@ def _role_reference_to_constant(  # type: ignore
 
     name = _strip_sphinx_formatting_directives_from_reference(text)
 
-    # NOTE (mristin, 2021-12-27):
+    # NOTE (mristin):
     # We need to create a placeholder as the symbol table might not be fully created
     # at the point when we translate the documentation.
     #
@@ -1132,7 +1132,7 @@ def _to_property(
             name=parsed.name,
             type_annotation=_to_type_annotation(parsed.type_annotation),
             description=description,
-            # NOTE (mristin, 2021-12-26):
+            # NOTE (mristin):
             # We can only resolve the ``specified_for`` when the class is actually
             # created. Therefore, we assign here a placeholder and fix it later
             # in a second pass.
@@ -1222,7 +1222,7 @@ def _to_method(
         if description_errors is not None:
             return None, description_errors
 
-    # NOTE (mristin, 2021-12-26):
+    # NOTE (mristin):
     # We can only resolve the ``specified_for`` when the class is actually
     # created. Therefore, we assign here a placeholder and fix it later in a second
     # pass.
@@ -1288,12 +1288,12 @@ def _determine_constrained_primitives_by_name(
     For example, if a class that inherits from a primitive type also specifies
     properties or methods.
     """
-    # NOTE (mristin, 2022-03-18):
+    # NOTE (mristin):
     # While we perform different stackings in second passes, we can not stack the
     # constrainees in the second pass since we need to determine whether a class is a
     # constrained primitive *or* an abstract or a concrete class.
 
-    # NOTE (mristin, 2021-12-22):
+    # NOTE (mristin):
     # We consider two sets of constrained primitives. The first set is
     # the initial set that constraints the primitive. The second set, the extended
     # set, is a set of constrained primitive types which inherit from one or
@@ -1342,7 +1342,7 @@ def _determine_constrained_primitives_by_name(
 
     # region Second pass to propagate from the initial set
 
-    # NOTE (mristin, 2021-12-23):
+    # NOTE (mristin):
     # Find the connected component from all the classes of the initial set.
     # See https://en.wikipedia.org/wiki/Component_(graph_theory)
 
@@ -1365,7 +1365,7 @@ def _determine_constrained_primitives_by_name(
     )  # type: MutableMapping[Identifier, Tuple[PrimitiveType, Identifier]]
 
     while len(stack) > 0 and len(errors) == 0:
-        # NOTE (mristin, 2021-12-23):
+        # NOTE (mristin):
         # Since we operate on the ontology, we know that the cycles in the inheritance
         # graph would have been already reported as errors, and we would not get
         # thus far.
@@ -1693,7 +1693,7 @@ def _extract_constructor(
         contracts=contracts,
         description=description,
         statements=constructor_statements,
-        # NOTE (mristin, 2022-03-19):
+        # NOTE (mristin):
         # We ignore the ``Final`` here for the moment and will later in-line
         # ``statements`` to ``inlined_statements`` in the
         # :py:func:`_second_pass_to_stack_constructors` only once we have the whole
@@ -1720,7 +1720,7 @@ def _to_class(
     """
     serialization = None  # type: Optional[Serialization]
     if parsed.serialization is not None:
-        # NOTE (mristin, 2022-03-19):
+        # NOTE (mristin):
         # The ``parsed.serialization.with_model_type`` might be None, but we have to
         # allow it here as we will apply a second pass and properly inherit the
         # with_model_type.
@@ -1922,7 +1922,7 @@ def _to_verification_function(
                 None,
             )
 
-        # NOTE (mristin, 2021-01-02):
+        # NOTE (mristin):
         # ``ok_error`` explains why we could not match the understood method against
         # more sophisticated functions. We check that we do not use ``re`` here as
         # the code using regular expressions can not be easily transpiled to *any*
@@ -2125,7 +2125,7 @@ def _to_constant_set_of_primitives(
             name=parsed.name,
             a_type=a_type,
             literals=literals,
-            # NOTE (mristin, 2022-07-06):
+            # NOTE (mristin):
             # The subsets will be resolved in the second pass as we want
             # to report as many errors as possible about all the constants
             subsets=subsets,  # type: ignore
@@ -2222,7 +2222,7 @@ def _to_constant_set_of_enumeration_literals(
             name=parsed.name,
             enumeration=enumeration,
             literals=literals,
-            # NOTE (mristin, 2022-07-06):
+            # NOTE (mristin):
             # The subsets will be resolved in the second pass as we want
             # to report as many errors as possible about all the constants
             subsets=subsets,  # type: ignore
@@ -2565,7 +2565,7 @@ def _second_pass_to_resolve_references_to_our_types_in_the_descriptions_in_place
     for ref_to_our_type_in_doc, description, _ in _find_all_in_descriptions(
         element_type=doc.ReferenceToOurType, symbol_table=symbol_table
     ):
-        # NOTE (mristin, 2021-12-27):
+        # NOTE (mristin):
         # References to our types can be repeated as docutils will cache them,
         # so we need to skip them, and translate only the placeholders.
         if not isinstance(ref_to_our_type_in_doc.our_type, _PlaceholderOurType):
@@ -2622,7 +2622,7 @@ def _second_pass_to_resolve_references_to_constants_in_the_descriptions_in_place
     for ref_to_constant_in_doc, description, _ in _find_all_in_descriptions(
         element_type=doc.ReferenceToConstant, symbol_table=symbol_table
     ):
-        # NOTE (mristin, 2022-07-06):
+        # NOTE (mristin):
         # References to constants can be repeated as docutils will cache them,
         # so we need to skip them, and translate only the placeholders.
         if not isinstance(
@@ -2760,7 +2760,7 @@ def _second_pass_to_resolve_default_argument_values_in_place(
         if error:
             errors.append(error)
         else:
-            # NOTE (mristin, 2021-12-26):
+            # NOTE (mristin):
             # We can only resolve the default values now since, for example, we would
             # not know how to resolve the references to enumeration literals.
             # The attribute ``default`` is marked final only for the users of the
@@ -2787,7 +2787,7 @@ def _second_pass_to_resolve_resulting_class_of_specified_for(
                 f"the property {prop} of {cls}, but got: {prop.specified_for}"
             )
 
-            # NOTE (mristin, 2022-01-02):
+            # NOTE (mristin):
             # We have to override the ``specified_for`` as we could not set it
             # during the first pass of the translation phase. The ``Final`` in
             # this context is meant for the users of the translation phase, not
@@ -2807,7 +2807,7 @@ def _second_pass_to_resolve_resulting_class_of_specified_for(
                 f"but got: {method.specified_for}"
             )
 
-            # NOTE (mristin, 2022-01-02):
+            # NOTE (mristin):
             # We have to override the ``specified_for`` as we could not set it
             # during the first pass of the translation phase. The ``Final`` in
             # this context is meant for the users of the translation phase, not
@@ -2829,7 +2829,7 @@ def _second_pass_to_resolve_specified_for_in_invariants(
         symbol_table.constrained_primitives, symbol_table.classes
     ):
         for invariant in our_type.invariants:
-            # NOTE (mristin, 2022-01-02):
+            # NOTE (mristin):
             # Since we stack invariants, it might be that we already resolved
             # the invariants coming from the parent. Hence, we need to check that
             # we haven't resolved ``specified_for`` here.
@@ -2839,7 +2839,7 @@ def _second_pass_to_resolve_specified_for_in_invariants(
                     Identifier(invariant.specified_for.name)
                 )
 
-                # NOTE (mristin, 2022-01-02):
+                # NOTE (mristin):
                 # We have to override the ``specified_for`` as we could not set it
                 # during the first pass of the translation phase. The ``Final`` in
                 # this context is meant for the users of the translation phase, not
@@ -2877,7 +2877,7 @@ def _second_pass_to_resolve_inheritances_in_place(symbol_table: SymbolTable) -> 
             )  # type: List[ConstrainedPrimitive]
 
             for inheritance_name in our_type.parsed.inheritances:
-                # NOTE (mristin, 2021-12-26):
+                # NOTE (mristin):
                 # The constrainee is stored at a different property and is not included
                 # in the inheritances. The inheritances refer only to ancestor
                 # constrained primitives.
@@ -3303,7 +3303,7 @@ def _second_pass_to_resolve_constant_subsets_in_place(
             if subsets_errors is not None:
                 errors.extend(subsets_errors)
             else:
-                # NOTE (mristin, 2022-07-06):
+                # NOTE (mristin):
                 # The attribute ``subsets`` is marked final only for the users of the
                 # ``intermediate`` module, not for the translation itself.
                 constant.subsets = subsets_of_primitives  # type: ignore
@@ -3320,7 +3320,7 @@ def _second_pass_to_resolve_constant_subsets_in_place(
             if subsets_errors is not None:
                 errors.extend(subsets_errors)
             else:
-                # NOTE (mristin, 2022-07-06):
+                # NOTE (mristin):
                 # The attribute ``subsets`` is marked final only for the users of the
                 # ``intermediate`` module, not for the translation itself.
                 constant.subsets = subsets_of_enum_literals  # type: ignore
@@ -3362,14 +3362,14 @@ def _second_pass_to_stack_serializations_in_place(
     errors = []  # type: List[Error]
 
     for our_type in symbol_table.our_types_topologically_sorted:
-        # NOTE (mristin, 2022-03-18):
+        # NOTE (mristin):
         # Assume that the parents have all the serializations resolved already due to
         # the topological order of the iteration.
 
         if isinstance(our_type, (Enumeration, NamedUnion, ConstrainedPrimitive)):
             continue
         elif isinstance(our_type, (AbstractClass, ConcreteClass)):
-            # NOTE (mristin, 2021-11-03):
+            # NOTE (mristin):
             # We do not abstract away different serialization settings at this point
             # as there is only a single one, ``with_model_type``. In the future,
             # if there are more settings, this function needs to be split into multiple
@@ -3444,7 +3444,7 @@ def _second_pass_to_stack_serializations_in_place(
     # region Set to default values wherever there was no serialization set
 
     for our_type in symbol_table.our_types_topologically_sorted:
-        # NOTE (mristin, 2022-03-18):
+        # NOTE (mristin):
         # Assume that the parents have all the serializations resolved already due to
         # the topological order of the iteration.
 
@@ -3467,7 +3467,7 @@ def _second_pass_to_stack_serializations_in_place(
 def _second_pass_to_stack_invariants_in_place(symbol_table: SymbolTable) -> None:
     """Pass on the invariants among the classes along the ontology."""
     for our_type in symbol_table.our_types_topologically_sorted:
-        # NOTE (mristin, 2022-03-18):
+        # NOTE (mristin):
         # Assume that the parents have all the invariants stacked already due to
         # the topological order of the iteration.
 
@@ -3477,7 +3477,7 @@ def _second_pass_to_stack_invariants_in_place(symbol_table: SymbolTable) -> None
         elif isinstance(our_type, (ConstrainedPrimitive, AbstractClass, ConcreteClass)):
             inherited_invariants = []  # type: List[Invariant]
 
-            # NOTE (mristin, 2022-03-18):
+            # NOTE (mristin):
             # Skip duplicates which might arise from the diamond inheritance
             observed_invariants = set()  # type: Set[int]
 
@@ -3498,7 +3498,7 @@ def _second_pass_to_stack_invariants_in_place(symbol_table: SymbolTable) -> None
 def _second_pass_to_stack_properties_in_place(symbol_table: SymbolTable) -> List[Error]:
     """Pass on the properties among the classes along the ontology."""
     for our_type in symbol_table.our_types_topologically_sorted:
-        # NOTE (mristin, 2022-03-18):
+        # NOTE (mristin):
         # Assume that the parents have all the invariants stacked already due to
         # the topological order of the iteration.
 
@@ -3508,7 +3508,7 @@ def _second_pass_to_stack_properties_in_place(symbol_table: SymbolTable) -> List
         elif isinstance(our_type, (AbstractClass, ConcreteClass)):
             inherited_properties = []  # type: List[Property]
 
-            # NOTE (mristin, 2023-03-25):
+            # NOTE (mristin):
             # Skip duplicates which might arise from the diamond inheritance.
             #
             # Mind that we track instances using the Python ``id(.)`` function,
@@ -3536,7 +3536,7 @@ def _second_pass_to_stack_methods_in_place(symbol_table: SymbolTable) -> List[Er
     """Pass on the methods among the classes along the ontology."""
     errors = []  # type: List[Error]
     for our_type in symbol_table.our_types_topologically_sorted:
-        # NOTE (mristin, 2022-03-18):
+        # NOTE (mristin):
         # Assume that the parents have all the invariants stacked already due to
         # the topological order of the iteration.
 
@@ -3546,7 +3546,7 @@ def _second_pass_to_stack_methods_in_place(symbol_table: SymbolTable) -> List[Er
         elif isinstance(our_type, (AbstractClass, ConcreteClass)):
             inherited_methods = []  # type: List[MethodUnion]
 
-            # NOTE (mristin, 2022-03-19):
+            # NOTE (mristin):
             # We have to disallow diamond inheritance of the methods, so we keep track
             # of the inherited methods and report an error in case of conflicts.
 
@@ -3570,7 +3570,7 @@ def _second_pass_to_stack_methods_in_place(symbol_table: SymbolTable) -> List[Er
                     inherited_methods.append(method)
                     method_specified_for[method.name] = inheritance.name
 
-            # NOTE (mristin, 2022-03-19):
+            # NOTE (mristin):
             # We still haven't updated the ``methods`` in our type, so it only
             # contains methods specified for that particular class and does not
             # include any inherited methods.
@@ -3611,7 +3611,7 @@ def _second_pass_to_stack_constructors_in_place(
     errors = []  # type: List[Error]
 
     for cls in symbol_table.classes:
-        # NOTE (mristin, 2022-03-18):
+        # NOTE (mristin):
         # Assume that the parents have all been processed already due to
         # the topological order of the iteration.
 
@@ -3674,11 +3674,11 @@ def _second_pass_to_stack_constructors_in_place(
             else:
                 in_lined.append(statement)
 
-        # NOTE (mristin, 2022-03-19):
+        # NOTE (mristin):
         # Restore the type safety at run-time
         assert all(isinstance(stmt, construction.AssignArgument) for stmt in in_lined)
 
-        # NOTE (mristin, 2022-03-18):
+        # NOTE (mristin):
         # The ``Final`` qualifier is meant for the external clients, not for the
         # internal clients in the submodules.
         # noinspection PyFinal,PyTypeHints
@@ -3688,7 +3688,7 @@ def _second_pass_to_stack_constructors_in_place(
 
         # region Stack contracts
 
-        # NOTE (mristin, 2022-03-19):
+        # NOTE (mristin):
         # The pre-conditions are not inherited in the constructors.
         # See a tutorial on design-by-contract. However, we do in-line
         # the calls to the super constructors. We leave it to the user to maintain
@@ -3698,7 +3698,7 @@ def _second_pass_to_stack_constructors_in_place(
         inherited_snapshots = []  # type: List[Snapshot]
         inherited_postconditions = []  # type: List[Contract]
 
-        # NOTE (mristin, 2022-03-19):
+        # NOTE (mristin):
         # We skip the duplicates since we have to deal with the diamond inheritance.
         observed_snapshots = set()  # type: Set[int]
         observed_postconditions = set()  # type: Set[int]
@@ -3716,7 +3716,7 @@ def _second_pass_to_stack_constructors_in_place(
                     inherited_postconditions.append(postcondition)
                     observed_postconditions.add(postcondition_id)
 
-        # NOTE (mristin, 2022-03-18):
+        # NOTE (mristin):
         # The ``Final`` qualifier is meant for the external clients, not for the
         # internal clients in the submodules.
 
@@ -4329,7 +4329,7 @@ def _verify_all_properties_are_initialized_in_the_constructor(
         prop_initialized = {prop.name: False for prop in cls.properties}
 
         for stmt in cls.constructor.inlined_statements:
-            # NOTE (mristin, 2021-12-19):
+            # NOTE (mristin):
             # Check for type here since it is very likely that we introduce more
             # statement types in the future. This assertion should warn us in that case.
             assert isinstance(stmt, construction.AssignArgument)
@@ -4481,7 +4481,7 @@ def _verify_constructor_arguments_and_properties_match(
         args_with_default = []  # type: List[Identifier]
         args_with_default_set = set()  # type: Set[Identifier]
 
-        # NOTE (mristin, 2022-03-25):
+        # NOTE (mristin):
         # This verification is only a heuristic since we do not really analyze
         # the code and only look into the names of the properties and arguments.
 
@@ -4985,7 +4985,7 @@ def _verify_patterns_anchored_at_start_and_end(
 def _assert_interfaces_defined_correctly(
     symbol_table: SymbolTable, ontology: _hierarchy.Ontology
 ) -> None:
-    # NOTE (mristin, 2021-12-15):
+    # NOTE (mristin):
     # We expect the interfaces of the classes to be defined only for abstract classes
     # and for the concrete classes with at least one descendant.
 
@@ -5365,7 +5365,7 @@ def translate(
 
     assert meta_model is not None
 
-    # NOTE (mristin, 2022-07-06):
+    # NOTE (mristin):
     # We reported as many errors as we could, and now we can be sure that the constants
     # can be translated as we have at least the mapping our type name 🠒 type class.
 
@@ -5468,7 +5468,7 @@ def translate(
 
     # endregion
 
-    # NOTE (mristin, 2021-12-14):
+    # NOTE (mristin):
     # At first we in-lined all these second-pass code. However, since Python keeps
     # all the variables in the function scope, the code became quite unreadable, and
     # we were never sure which variables are re-used between the passes.
@@ -5558,7 +5558,7 @@ def translate(
 
     # region Second passes which assume the inheritance of the heritage
 
-    # NOTE (mristin, 2022-03-18):
+    # NOTE (mristin):
     # We might reference inherited properties of our type, so we need to apply
     # this second pass only after the properties have been stacked.
     underlying_errors.extend(
@@ -5567,7 +5567,7 @@ def translate(
         )
     )
 
-    # NOTE (mristin, 2022-03-18):
+    # NOTE (mristin):
     # We need to include all the properties and methods in the interface, so they need
     # to be inherited first.
     _second_pass_to_resolve_interfaces_in_place(
@@ -5612,7 +5612,7 @@ def errors_if_contracts_for_functions_or_methods_defined(
             or len(signature_like.contracts.postconditions) > 0
             or len(signature_like.contracts.snapshots) > 0
         ):
-            # NOTE (mristin, 2022-05-18):
+            # NOTE (mristin):
             # We allow implementation-specific methods to have pre- and post-conditions
             # as they are used only for documentation, but are not transpiled.
             if isinstance(

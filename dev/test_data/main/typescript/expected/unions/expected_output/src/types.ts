@@ -28,7 +28,7 @@ export enum ModelType {
  */
 export function *overModelType (
 ): Iterable<ModelType> {
-  // NOTE (mristin, 2022-12-03):
+  // NOTE (mristin):
   // We yield numbers instead of literals to avoid name lookups on platforms
   // which do not provide JIT compilation of hot paths.
   yield <ModelType>0;  // StructuralFirst
@@ -109,7 +109,7 @@ export class StructuralFirst extends Class {
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>0;  // StructuralFirst
@@ -200,7 +200,7 @@ export class StructuralSecond extends Class {
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>1;  // StructuralSecond
@@ -300,7 +300,7 @@ export class MixedAbstractDescendantOne
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>2;  // MixedAbstractDescendantOne
@@ -393,7 +393,7 @@ export class MixedAbstractDescendantTwo
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>3;  // MixedAbstractDescendantTwo
@@ -490,7 +490,7 @@ export class MixedConcreteWithDescendants
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>4;  // MixedConcreteWithDescendants
@@ -583,7 +583,7 @@ export class MixedConcreteWithDescendantsChild
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>5;  // MixedConcreteWithDescendantsChild
@@ -680,7 +680,7 @@ export class MixedConcreteLeaf extends Class {
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>6;  // MixedConcreteLeaf
@@ -778,7 +778,7 @@ export class ModelTypedFirst extends Class {
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>7;  // ModelTypedFirst
@@ -869,7 +869,7 @@ export class ModelTypedSecond extends Class {
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>8;  // ModelTypedSecond
@@ -962,7 +962,7 @@ export class Something extends Class {
    * Indicate the runtime model type of the instance.
    */
   modelType(): ModelType {
-    // NOTE (mristin, 2022-12-03):
+    // NOTE (mristin):
     // We yield numbers instead of literals to avoid name lookups on platforms
     // which do not provide JIT compilation of hot paths.
     return <ModelType>9;  // Something

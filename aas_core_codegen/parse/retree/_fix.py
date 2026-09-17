@@ -65,7 +65,7 @@ class _FixForUTF16Regex(retree_visitor.PassThroughVisitor):
         term: retree_types.Term,
     ) -> List[retree_types.Term]:
         """Expand the character literal to two surrogate characters if necessary."""
-        # NOTE (mristin, 2022-06-10):
+        # NOTE (mristin):
         # This assertion is needed for mypy.
         assert isinstance(term.value, retree_types.Char)
 
@@ -76,7 +76,7 @@ class _FixForUTF16Regex(retree_visitor.PassThroughVisitor):
             code=ord(term.value.character)
         )
 
-        # NOTE (mristin, 2022-06-10):
+        # NOTE (mristin):
         # We explicitly encode the character since otherwise this split can not be
         # traced back meaningfully.
         high_surrogate_char = retree_types.Char(
@@ -89,7 +89,7 @@ class _FixForUTF16Regex(retree_visitor.PassThroughVisitor):
         output = []  # type: List[retree_types.Term]
 
         if term.quantifier is not None:
-            # NOTE (mristin, 2022-06-10):
+            # NOTE (mristin):
             # We need to put the surrogates in a group so that the quantifier
             # applies to both.
             value = retree_types.Group(
@@ -111,7 +111,7 @@ class _FixForUTF16Regex(retree_visitor.PassThroughVisitor):
 
             output.append(retree_types.Term(value=value, quantifier=term.quantifier))
         else:
-            # NOTE (mristin, 2022-06-10):
+            # NOTE (mristin):
             # When there is no quantifier, we can simply inject the surrogates
             # as character literals.
             output.append(retree_types.Term(value=high_surrogate_char, quantifier=None))
@@ -279,7 +279,7 @@ class _FixForUTF16Regex(retree_visitor.PassThroughVisitor):
             "This should have been detected before and returned as an error.",
         )
 
-        # NOTE (mristin, 2022-06-11):
+        # NOTE (mristin):
         # Expand the character set into a union of:
         # 1) A character set without any UTF-32 characters
         # 2) One or more character sets representing the ranges involving

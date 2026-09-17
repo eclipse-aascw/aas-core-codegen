@@ -80,7 +80,7 @@ def dump(stringifiable: Stringifiable) -> str:
         if "\n" not in stringifiable or "\r" in stringifiable or '"""' in stringifiable:
             return repr(stringifiable)
 
-        # NOTE (mristin, 2022-05-18):
+        # NOTE (mristin):
         # A multi-line string literal is much more readable when it comes to diffing.
 
         escaped = stringifiable.replace("\\", "\\\\")

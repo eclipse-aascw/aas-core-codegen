@@ -20,7 +20,7 @@ def _generate_ivisitor(symbol_table: intermediate.SymbolTable) -> Stripped:
     # Abstract classes have no particular implementation, so we do not visit
     # them.
     for cls in symbol_table.concrete_classes:
-        # NOTE (mristin, 2023-02-08): Operate on interfaces instead of classes
+        # NOTE (mristin): Operate on interfaces instead of classes
         # We operate on *interfaces* instead of concrete classes to allow for
         # custom extensions and wrappers around our model classes.
         #

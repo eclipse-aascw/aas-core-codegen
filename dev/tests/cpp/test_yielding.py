@@ -17,7 +17,7 @@ class TestExecuteBody(unittest.TestCase):
         self.assertEqual("// Intentionally empty.", code)
 
     def test_inspired_by_verificator(self) -> None:
-        # NOTE (mristin, 2023-10-22):
+        # NOTE (mristin):
         # We test inspired by a real-world example from C++ code generation so that
         # we can check whether the resulting code is readable.
         #

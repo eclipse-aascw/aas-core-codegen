@@ -675,7 +675,7 @@ func readTextAs_double(
 {II}return
 {I}}}
 
-{I}// NOTE (2023-06-14):
+{I}// NOTE:
 {I}// We explicitly do not check for loss of precision, as the majority of people will
 {I}// use string representation of the floating point numbers ignoring the precision
 {I}// issues. For example, the closest double-precision number to the number `359.9` is
@@ -3358,12 +3358,12 @@ const Namespace = {namespace_literal}"""
             blocks.append(_generate_write_enumeration_as_text(enumeration=our_type))
 
         elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-            # NOTE (mristin, 2023-06-18):
+            # NOTE (mristin):
             # We will serialize constrained primitives as primitives.
             pass
 
         elif isinstance(our_type, intermediate.AbstractClass):
-            # NOTE (mristin, 2023-06-18):
+            # NOTE (mristin):
             # We will use general ``write`` function.
             pass
 

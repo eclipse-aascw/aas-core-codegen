@@ -113,7 +113,7 @@ class OptionalInferrer(parse_tree.Transformer[Optional[Error]]):
     def transform_comparison(self, node: parse_tree.Comparison) -> Optional[Error]:
         last_error = None  # type: Optional[Error]
         for operand in (node.left, node.right):
-            # NOTE (mristin, 2023-05-24):
+            # NOTE (mristin):
             # Do not immediately return so that other arguments are processed as well.
             # This way we get a longer list of errors which the caller can report
             # using :py:prop:`errors`.
