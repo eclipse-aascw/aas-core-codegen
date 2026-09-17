@@ -9,6 +9,8 @@
 
 
 import json
+import math
+from typing import Any
 import unittest
 
 
@@ -115,6 +117,45 @@ class TestRoundTrips(unittest.TestCase):
                 another_jsonable
             )
             self.assertListEqual([], list(map(str, mismatches)))
+
+
+def _load_the_first_expected(model_type: str) -> Any:
+    """Load the first recorded example of the ``model_type``."""
+    paths = sorted(
+        (
+            tests.common.TEST_DATA_DIR
+            / "Json"
+            / "Expected"
+            / model_type
+        ).glob("**/*.json")
+    )
+
+    assert len(paths) > 0, (
+        f"Expected at least one recorded example of {model_type}, but got none"
+    )
+
+    with paths[0].open("rt") as fid:
+        return json.load(fid)
+
+
+class TestSerializationFailures(unittest.TestCase):
+    def test_another_item_serial_number_out_of_range(self) -> None:
+        for value in [9007199254740992, -9007199254740992]:
+            instance = aas_jsonization.another_item_from_jsonable(
+                _load_the_first_expected('AnotherItem')
+            )
+
+            instance.serial_number = value
+
+            with self.assertRaises(
+                aas_jsonization.SerializationException
+            ) as context_manager:
+                aas_jsonization.to_jsonable(instance)
+
+            self.assertEqual(
+                '.serial_number',
+                context_manager.exception.path
+            )
 
 
 if __name__ == "__main__":

@@ -271,6 +271,47 @@ def query_condition_from_jsonable(
 # region Serialization
 
 
+class SerializationException(Exception):
+    """Signal that the JSON serialization could not be performed."""
+
+    #: Human-readable explanation of the exception's cause
+    cause: Final[str]
+
+    def __init__(
+            self,
+            cause: str
+    ) -> None:
+        """Initialize with the given :paramref:`cause` and an empty path."""
+        self.cause = cause
+        self._segments = []  # type: List[str]
+
+    @property
+    def path(self) -> str:
+        """
+        Render the path to the erroneous value as a Python access expression.
+
+        The path points into the instance which you handed over for
+        the serialization, and *not* into a JSON document -- at the point of
+        the failure, there is no document yet. For example, ``.submodels[0].value``
+        tells you that the serialization broke on ``that.submodels[0].value``.
+        """
+        return ''.join(self._segments)
+
+    def _prepend_property(self, name: str) -> None:
+        """Insert the access to the property :paramref:`name` before the path."""
+        self._segments.insert(0, f'.{name}')
+
+    def _prepend_index(self, index: int) -> None:
+        """Insert the access to the item at :paramref:`index` before the path."""
+        self._segments.insert(0, f'[{index}]')
+
+    def __str__(self) -> str:
+        if len(self._segments) == 0:
+            return self.cause
+
+        return f'{self.path}: {self.cause}'
+
+
 def _query_condition_to_jsonable(
     that: aas_types.QueryCondition
 ) -> MutableMapping[str, MutableJsonable]:
@@ -311,6 +352,9 @@ def to_jsonable(that: aas_types.Class) -> MutableJsonable:
         AAS data to be recursively converted to a JSON-able structure
     :return:
         JSON-able structure which can be further encoded with, *e.g.*, :py:mod:`json`
+    :raise:
+        :py:class:`SerializationException` if :paramref:`that` contains a number
+        which JSON can not represent
     """
     return that.transform(_SERIALIZER)
 

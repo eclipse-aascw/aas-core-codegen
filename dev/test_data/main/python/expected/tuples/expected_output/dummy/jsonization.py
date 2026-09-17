@@ -784,6 +784,70 @@ _ABSTRACT_ITEM_FROM_JSONABLE_DISPATCH: Mapping[
 # region Serialization
 
 
+class SerializationException(Exception):
+    """Signal that the JSON serialization could not be performed."""
+
+    #: Human-readable explanation of the exception's cause
+    cause: Final[str]
+
+    def __init__(
+            self,
+            cause: str
+    ) -> None:
+        """Initialize with the given :paramref:`cause` and an empty path."""
+        self.cause = cause
+        self._segments = []  # type: List[str]
+
+    @property
+    def path(self) -> str:
+        """
+        Render the path to the erroneous value as a Python access expression.
+
+        The path points into the instance which you handed over for
+        the serialization, and *not* into a JSON document -- at the point of
+        the failure, there is no document yet. For example, ``.submodels[0].value``
+        tells you that the serialization broke on ``that.submodels[0].value``.
+        """
+        return ''.join(self._segments)
+
+    def _prepend_property(self, name: str) -> None:
+        """Insert the access to the property :paramref:`name` before the path."""
+        self._segments.insert(0, f'.{name}')
+
+    def _prepend_index(self, index: int) -> None:
+        """Insert the access to the item at :paramref:`index` before the path."""
+        self._segments.insert(0, f'[{index}]')
+
+    def __str__(self) -> str:
+        if len(self._segments) == 0:
+            return self.cause
+
+        return f'{self.path}: {self.cause}'
+
+
+def _int_to_jsonable(
+    that: int
+) -> int:
+    """
+    Serialize :paramref:`that` integer to a JSON-able value.
+
+    Only the integers in the range :math:`[-2^{53} + 1, 2^{53} - 1]` are
+    serialized. Outside of it, an integer can not be exactly represented as
+    a 64-bit floating-point number, which is what the JSON de-serializers of
+    the other languages read a number into.
+
+    :param that: integer to be serialized
+    :return: :paramref:`that`, unchanged
+    :raise: :py:class:`SerializationException` if outside the range
+    """
+    if that < -9007199254740991 or that > 9007199254740991:
+        raise SerializationException(
+            f"The integer can not be serialized to JSON as it is outside "
+            f"the range [-2^53 + 1, 2^53 - 1]: {that}"
+        )
+    return that
+
+
 def _tuple2_of__abstract_item__abstract_item_to_jsonable(
     that: Tuple[aas_types.AbstractItem, aas_types.AbstractItem]
 ) -> List[MutableJsonable]:
@@ -793,10 +857,22 @@ def _tuple2_of__abstract_item__abstract_item_to_jsonable(
     :param that: tuple to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        that[0].transform(_SERIALIZER),
-        that[1].transform(_SERIALIZER)
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    try:
+        jsonable.append(
+            that[0].transform(_SERIALIZER)
+        )
+    except SerializationException as exception:
+        exception._prepend_index(0)
+        raise
+    try:
+        jsonable.append(
+            that[1].transform(_SERIALIZER)
+        )
+    except SerializationException as exception:
+        exception._prepend_index(1)
+        raise
+    return jsonable
 
 
 def _tuple2_of__str__int_to_jsonable(
@@ -808,10 +884,20 @@ def _tuple2_of__str__int_to_jsonable(
     :param that: tuple to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        that[0],
-        that[1]
-    ]
+    jsonable = []  # type: List[MutableJsonable]
+    jsonable.append(
+        that[0]
+    )
+    try:
+        jsonable.append(
+            _int_to_jsonable(
+                that[1]
+            )
+        )
+    except SerializationException as exception:
+        exception._prepend_index(1)
+        raise
+    return jsonable
 
 
 def _tuple6_of__int__some_item__abstract_item__some_item__int__result_to_jsonable(
@@ -830,18 +916,46 @@ def _tuple6_of__int__some_item__abstract_item__some_item__int__result_to_jsonabl
     :param that: tuple to be serialized
     :return: JSON-able representation of :paramref:`that`
     """
-    return [
-        that[0],
+    jsonable = []  # type: List[MutableJsonable]
+    try:
+        jsonable.append(
+            _int_to_jsonable(
+                that[0]
+            )
+        )
+    except SerializationException as exception:
+        exception._prepend_index(0)
+        raise
+    jsonable.append(
         _some_item_to_jsonable(
             that[1]
-        ),
-        that[2].transform(_SERIALIZER),
+        )
+    )
+    try:
+        jsonable.append(
+            that[2].transform(_SERIALIZER)
+        )
+    except SerializationException as exception:
+        exception._prepend_index(2)
+        raise
+    jsonable.append(
         _some_item_to_jsonable(
             that[3]
-        ),
-        that[4],
+        )
+    )
+    try:
+        jsonable.append(
+            _int_to_jsonable(
+                that[4]
+            )
+        )
+    except SerializationException as exception:
+        exception._prepend_index(4)
+        raise
+    jsonable.append(
         that[5].value
-    ]
+    )
+    return jsonable
 
 
 def _some_item_to_jsonable(
@@ -859,7 +973,13 @@ def _another_item_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['serialNumber'] = that.serial_number
+    try:
+        jsonable['serialNumber'] = _int_to_jsonable(
+            that.serial_number
+        )
+    except SerializationException as exception:
+        exception._prepend_property('serial_number')
+        raise
     jsonable['modelType'] = 'AnotherItem'
     return jsonable
 
@@ -869,15 +989,27 @@ def _something_to_jsonable(
 ) -> MutableMapping[str, MutableJsonable]:
     """Serialize :paramref:`that` to a JSON-able representation."""
     jsonable: MutableMapping[str, MutableJsonable] = dict()
-    jsonable['pair'] = _tuple2_of__str__int_to_jsonable(
-        that.pair
-    )
-    jsonable['items'] = _tuple2_of__abstract_item__abstract_item_to_jsonable(
-        that.items
-    )
-    jsonable['tricky'] = _tuple6_of__int__some_item__abstract_item__some_item__int__result_to_jsonable(
-        that.tricky
-    )
+    try:
+        jsonable['pair'] = _tuple2_of__str__int_to_jsonable(
+            that.pair
+        )
+    except SerializationException as exception:
+        exception._prepend_property('pair')
+        raise
+    try:
+        jsonable['items'] = _tuple2_of__abstract_item__abstract_item_to_jsonable(
+            that.items
+        )
+    except SerializationException as exception:
+        exception._prepend_property('items')
+        raise
+    try:
+        jsonable['tricky'] = _tuple6_of__int__some_item__abstract_item__some_item__int__result_to_jsonable(
+            that.tricky
+        )
+    except SerializationException as exception:
+        exception._prepend_property('tricky')
+        raise
     return jsonable
 
 
@@ -915,6 +1047,9 @@ def to_jsonable(that: aas_types.Class) -> MutableJsonable:
         AAS data to be recursively converted to a JSON-able structure
     :return:
         JSON-able structure which can be further encoded with, *e.g.*, :py:mod:`json`
+    :raise:
+        :py:class:`SerializationException` if :paramref:`that` contains a number
+        which JSON can not represent
     """
     return that.transform(_SERIALIZER)
 
