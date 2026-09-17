@@ -6,6 +6,8 @@
 
 #include <dummy/jsonization.hpp>
 
+#include <limits>
+
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
@@ -129,6 +131,88 @@ const std::filesystem::path& DetermineErrorDir() {
   return *result;
 }
 
+template<class ClassT>
+std::shared_ptr<ClassT> MustDeserializeTheFirstExpected(
+  const std::string& model_type,
+  std::function<
+    aas::common::expected<
+      std::shared_ptr<ClassT>,
+      aas::jsonization::DeserializationError
+    >(const nlohmann::json&, bool)
+  > deserialization_function
+) {
+  const std::deque<std::filesystem::path> paths(
+    test::common::FindFilesBySuffixRecursively(
+      DetermineJsonDir() / "Expected" / model_type,
+      ".json"
+    )
+  );
+
+  INFO("We expect at least one recorded example of " + model_type)
+  REQUIRE(!paths.empty());
+
+  const nlohmann::json json = test::common::jsonization::MustReadJson(
+    paths.front()
+  );
+
+  aas::common::expected<
+    std::shared_ptr<ClassT>,
+    aas::jsonization::DeserializationError
+  > deserialized = deserialization_function(json, false);
+
+  INFO(
+    aas::common::Concat(
+      "Failed to de-serialize from ",
+      paths.front().string()
+    )
+  )
+  REQUIRE(deserialized.has_value());
+
+  return deserialized.value();
+}
+
+/**
+ * Assert that \p that instance can not be serialized to JSON, and that
+ * the failure is reported at \p expected_path.
+ */
+void AssertSerializationFailsAt(
+  const aas::types::IClass& that,
+  const std::string& expected_path
+) {
+  try {
+    aas::jsonization::Serialize(that);
+  } catch (const aas::jsonization::SerializationException& exception) {
+    const std::string observed_path(
+      aas::common::WstringToUtf8(
+        exception.path().ToWstring()
+      )
+    );
+
+    INFO(
+      aas::common::Concat(
+        "Expected the serialization to fail at ",
+        expected_path,
+        ", but it failed at ",
+        observed_path,
+        ": ",
+        aas::common::WstringToUtf8(exception.cause())
+      )
+    )
+    REQUIRE(observed_path == expected_path);
+
+    return;
+  }
+
+  INFO(
+    aas::common::Concat(
+      "Expected the serialization to fail at ",
+      expected_path,
+      ", but it succeeded"
+    )
+  )
+  REQUIRE(false);
+}
+
 TEST_CASE("Test the round-trip of an expected Something") {
   const std::deque<std::filesystem::path> paths(
     test::common::FindFilesBySuffixRecursively(
@@ -182,6 +266,61 @@ TEST_CASE("Test the de-serialization failure on an unexpected Something") {
         error_path
       );
     }
+  }
+}
+
+TEST_CASE(
+  "Test the serialization failure on an integer outside the range representable in JSON "
+  "at .some_int of Something"
+) {
+  for (
+    const int64_t value
+    : {
+      9007199254740992LL,
+      -9007199254740992LL
+    }
+  ) {
+    std::shared_ptr<aas::types::ISomething> instance(
+      MustDeserializeTheFirstExpected<aas::types::ISomething>(
+        "Something",
+        aas::jsonization::SomethingFrom
+      )
+    );
+
+    instance->set_some_int(value);
+
+    AssertSerializationFailsAt(
+      *instance,
+      ".some_int"
+    );
+  }
+}
+
+TEST_CASE(
+  "Test the serialization failure on a non-finite floating-point number "
+  "at .some_float of Something"
+) {
+  for (
+    const double value
+    : {
+      std::numeric_limits<double>::infinity(),
+      -std::numeric_limits<double>::infinity(),
+      std::numeric_limits<double>::quiet_NaN()
+    }
+  ) {
+    std::shared_ptr<aas::types::ISomething> instance(
+      MustDeserializeTheFirstExpected<aas::types::ISomething>(
+        "Something",
+        aas::jsonization::SomethingFrom
+      )
+    );
+
+    instance->set_some_float(value);
+
+    AssertSerializationFailsAt(
+      *instance,
+      ".some_float"
+    );
   }
 }
 

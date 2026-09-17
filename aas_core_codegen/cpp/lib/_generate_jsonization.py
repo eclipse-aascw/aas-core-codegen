@@ -645,11 +645,35 @@ std::pair<
 {II}"but it does not."
 {I});
 
+{I}const double value(json.get<double>());
+
+{I}// NOTE (mristin):
+{I}// JSON knows neither an infinity nor a not-a-number, so a conformant parser
+{I}// can never give us one. The caller can still hand us a JSON value which
+{I}// has been constructed programmatically, so we have to check here.
+
+{I}if (!std::isfinite(value)) {{
+{II}std::wstring message = common::Concat(
+{III}L"Expected a finite number, but got: ",
+{III}std::to_wstring(value)
+{II});
+
+{II}return std::make_pair<
+{III}common::optional<double>,
+{III}common::optional<DeserializationError>
+{II}>(
+{III}common::nullopt,
+{III}common::make_optional<DeserializationError>(
+{IIII}message
+{III})
+{II});
+{I}}}
+
 {I}return std::make_pair<
 {II}common::optional<double>,
 {II}common::optional<DeserializationError>
 {I}>(
-{II}json.get<double>(),
+{II}value,
 {II}common::nullopt
 {I});
 }}"""
@@ -2948,21 +2972,45 @@ nlohmann::json SerializeBool(
 
 
 def _generate_serialize_double() -> Stripped:
-    """
-    Generate the function to serialize a double to a JSON value.
-
-    Named to match ``DeserializeDouble``, even though converting a C++
-    ``double`` to a JSON value can not actually fail.
-    """
+    """Generate the function to serialize a double to a JSON value."""
     return Stripped(
         f"""\
 /**
- * Serialize the given floating-point number to a JSON value.
+ * \\brief Serialize the given floating-point number to a JSON value.
+ *
+ * JSON knows neither an infinity nor a not-a-number, so we refuse to serialize
+ * them instead of silently writing them out as ``null``.
  */
-nlohmann::json SerializeDouble(
-{I}double value
-) {{
-{I}return value;
+std::pair<
+{I}common::optional<nlohmann::json>,
+{I}common::optional<SerializationError>
+> SerializeDouble(double value) {{
+{I}if (!std::isfinite(value)) {{
+{II}const std::wstring message = common::Concat(
+{III}L"The floating-point number ",
+{III}std::to_wstring(value),
+{III}L" can not be serialized to JSON as JSON knows no infinity "
+{III}L"and no not-a-number."
+{II});
+
+{II}return std::make_pair<
+{III}common::optional<nlohmann::json>,
+{III}common::optional<SerializationError>
+{II}>(
+{III}common::nullopt,
+{III}common::make_optional<SerializationError>(
+{IIII}message
+{III})
+{II});
+{I}}}
+
+{I}return std::make_pair<
+{II}common::optional<nlohmann::json>,
+{II}common::optional<SerializationError>
+{I}>(
+{II}common::make_optional<nlohmann::json>(value),
+{II}common::nullopt
+{I});
 }}"""
     )
 
@@ -3228,6 +3276,54 @@ std::pair<
     ]
 
 
+def _generate_serialize_number_property(
+    serialize_function: Stripped,
+    getter_expr: Stripped,
+    property_name: Identifier,
+    json_name: str,
+) -> Stripped:
+    """
+    Generate the snippet to serialize a number property.
+
+    Both an integer and a floating-point number can fall outside what JSON can
+    represent, so ``serialize_function`` is fallible and the property segment
+    has to be prepended to the path of its error.
+    """
+    json_prop_name_literal = cpp_common.string_literal(json_name)
+
+    serialized_var = cpp_naming.variable_name(Identifier(f"json_{property_name}"))
+
+    return Stripped(
+        f"""\
+common::optional<nlohmann::json> {serialized_var};
+std::tie(
+{I}{serialized_var},
+{I}error
+) = {serialize_function}(
+{I}{indent_but_first_line(getter_expr, I)}
+);
+if (error.has_value()) {{
+{I}error->path.segments.emplace_front(
+{II}common::make_unique<iteration::PropertySegment>(
+{III}iteration::Property::{cpp_naming.enum_literal_name(property_name)}
+{II})
+{I});
+
+{I}return std::make_pair<
+{II}common::optional<nlohmann::json>,
+{II}common::optional<SerializationError>
+{I}>(
+{II}common::nullopt,
+{II}std::move(error)
+{I});
+}}
+
+result[{json_prop_name_literal}] = std::move(
+{I}{serialized_var}.value()
+);"""
+    )
+
+
 def _generate_serialize_primitive_property(
     getter_expr: Stripped,
     primitive_type: intermediate.PrimitiveType,
@@ -3254,42 +3350,19 @@ result[{json_prop_name_literal}] = SerializeBool(
         )
 
     elif primitive_type is intermediate.PrimitiveType.INT:
-        serialized_var = cpp_naming.variable_name(Identifier(f"json_{property_name}"))
-        return Stripped(
-            f"""\
-common::optional<nlohmann::json> {serialized_var};
-std::tie(
-{I}{serialized_var},
-{I}error
-) = SerializeInt64(
-{I}{indent_but_first_line(getter_expr, I)}
-);
-if (error.has_value()) {{
-{I}error->path.segments.emplace_front(
-{II}common::make_unique<iteration::PropertySegment>(
-{III}iteration::Property::{cpp_naming.enum_literal_name(property_name)}
-{II})
-{I});
-
-{I}return std::make_pair<
-{II}common::optional<nlohmann::json>,
-{II}common::optional<SerializationError>
-{I}>(
-{II}common::nullopt,
-{II}std::move(error)
-{I});
-}}
-
-result[{json_prop_name_literal}] = std::move(
-{I}{serialized_var}.value()
-);"""
+        return _generate_serialize_number_property(
+            serialize_function=Stripped("SerializeInt64"),
+            getter_expr=getter_expr,
+            property_name=property_name,
+            json_name=json_name,
         )
+
     elif primitive_type is intermediate.PrimitiveType.FLOAT:
-        return Stripped(
-            f"""\
-result[{json_prop_name_literal}] = SerializeDouble(
-{I}{getter_expr}
-);"""
+        return _generate_serialize_number_property(
+            serialize_function=Stripped("SerializeDouble"),
+            getter_expr=getter_expr,
+            property_name=property_name,
+            json_name=json_name,
         )
 
     elif primitive_type is intermediate.PrimitiveType.STR:
@@ -3347,7 +3420,7 @@ def _generate_serialize_list_property(
             serialize_item_expr = Stripped("SerializeInt64")
 
         elif items_primitive_type is intermediate.PrimitiveType.FLOAT:
-            serialize_list = "SerializeListWithInfallible"
+            serialize_list = "SerializeListWithFallible"
 
             serialize_item_expr = Stripped("SerializeDouble")
 
@@ -3520,17 +3593,7 @@ def _generate_serialize_tuple_property(
                 item_exprs.append(Stripped("SerializeInt64"))
 
             elif items_primitive_type is intermediate.PrimitiveType.FLOAT:
-                item_exprs.append(
-                    Stripped(
-                        f"""\
-[](double item) {{
-{I}return std::make_pair(
-{II}common::make_optional<nlohmann::json>(item),
-{II}common::nullopt
-{I});
-}}"""
-                    )
-                )
+                item_exprs.append(Stripped("SerializeDouble"))
 
             elif items_primitive_type is intermediate.PrimitiveType.STR:
                 item_exprs.append(
@@ -4171,6 +4234,7 @@ def generate_implementation(
 #include "{include_prefix_path}/wstringification.hpp"
 
 #pragma warning(push, 0)
+#include <cmath>
 #include <set>
 #include <sstream>
 #include <unordered_map>
