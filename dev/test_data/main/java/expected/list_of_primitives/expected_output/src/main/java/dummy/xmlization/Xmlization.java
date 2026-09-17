@@ -1009,61 +1009,13 @@ public class Xmlization {
         Base64.getEncoder().encodeToString(that));
     }
 
-    private static void writeListOf_bool(
-      List<Boolean> that,
+    private static void writeListOf_stringified(
+      List<?> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
-        for (Boolean item : that) {
-          writeAtV_bool(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_long(
-      List<Long> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (Long item : that) {
-          writeAtV_long(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_double(
-      List<Double> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (Double item : that) {
-          writeAtV_double(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_string(
-      List<String> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (String item : that) {
-          writeAtV_string(item, writer);
+        for (Object item : that) {
+          writeAtV_stringified(item, writer);
           index++;
         }
       } catch (_SerializeFailure failure) {
@@ -1089,38 +1041,8 @@ public class Xmlization {
       }
     }
 
-    private static void writeAtV_bool(
-      Boolean that,
-      XMLStreamWriter writer) {
-      writeElement(
-        "v",
-        that,
-        writer,
-        _VisitorWithWriter::writeStringifiedContent);
-    }
-
-    private static void writeAtV_long(
-      Long that,
-      XMLStreamWriter writer) {
-      writeElement(
-        "v",
-        that,
-        writer,
-        _VisitorWithWriter::writeStringifiedContent);
-    }
-
-    private static void writeAtV_double(
-      Double that,
-      XMLStreamWriter writer) {
-      writeElement(
-        "v",
-        that,
-        writer,
-        _VisitorWithWriter::writeStringifiedContent);
-    }
-
-    private static void writeAtV_string(
-      String that,
+    private static void writeAtV_stringified(
+      Object that,
       XMLStreamWriter writer) {
       writeElement(
         "v",
@@ -1146,25 +1068,25 @@ public class Xmlization {
         "someBools",
         that.getSomeBools(),
         writer,
-        _VisitorWithWriter::writeListOf_bool);
+        _VisitorWithWriter::writeListOf_stringified);
 
       writeProperty(
         "someInts",
         that.getSomeInts(),
         writer,
-        _VisitorWithWriter::writeListOf_long);
+        _VisitorWithWriter::writeListOf_stringified);
 
       writeProperty(
         "someFloats",
         that.getSomeFloats(),
         writer,
-        _VisitorWithWriter::writeListOf_double);
+        _VisitorWithWriter::writeListOf_stringified);
 
       writeProperty(
         "someStrings",
         that.getSomeStrings(),
         writer,
-        _VisitorWithWriter::writeListOf_string);
+        _VisitorWithWriter::writeListOf_stringified);
 
       writeProperty(
         "someBytes",

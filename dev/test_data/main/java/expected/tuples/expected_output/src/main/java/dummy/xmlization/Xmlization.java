@@ -1285,14 +1285,14 @@ public class Xmlization {
       writer.writeCharacters(that.literalText());
     }
 
-    private static void writeTupleOf2_string_long(
-      Tuple2<String, Long> that,
+    private static void writeTupleOf2_stringified_stringified(
+      Tuple2<?, ?> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
-        writeAtV1_string(that.item1(), writer);
+        writeAtV1_stringified(that.item1(), writer);
         index = 1;
-        writeAtV2_long(that.item2(), writer);
+        writeAtV2_stringified(that.item2(), writer);
       } catch (_SerializeFailure failure) {
         failure.getError().prependSegment(
           new Reporting.IndexSegment(index));
@@ -1300,8 +1300,8 @@ public class Xmlization {
       }
     }
 
-    private static void writeTupleOf2_IAbstractItem_IAbstractItem(
-      Tuple2<IAbstractItem, IAbstractItem> that,
+    private static void writeTupleOf2_IClass_IClass(
+      Tuple2<? extends IClass, ? extends IClass> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
@@ -1315,18 +1315,18 @@ public class Xmlization {
       }
     }
 
-    private static void writeTupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result(
+    private static void writeTupleOf6_stringified_IClass_IClass_IClass_stringified_IEnum(
       Tuple6<
-        Long,
-        ISomeItem,
-        IAbstractItem,
-        ISomeItem,
-        Long,
-        Result> that,
+        ?,
+        ? extends IClass,
+        ? extends IClass,
+        ? extends IClass,
+        ?,
+        ? extends IEnum> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
-        writeAtV1_long(that.item1(), writer);
+        writeAtV1_stringified(that.item1(), writer);
         index = 1;
         writeClass(that.item2(), writer);
         index = 2;
@@ -1334,9 +1334,9 @@ public class Xmlization {
         index = 3;
         writeClass(that.item4(), writer);
         index = 4;
-        writeAtV5_long(that.item5(), writer);
+        writeAtV5_stringified(that.item5(), writer);
         index = 5;
-        writeAtV6_Result(that.item6(), writer);
+        writeAtV6_IEnum(that.item6(), writer);
       } catch (_SerializeFailure failure) {
         failure.getError().prependSegment(
           new Reporting.IndexSegment(index));
@@ -1344,8 +1344,8 @@ public class Xmlization {
       }
     }
 
-    private static void writeAtV1_string(
-      String that,
+    private static void writeAtV1_stringified(
+      Object that,
       XMLStreamWriter writer) {
       writeElement(
         "v1",
@@ -1354,8 +1354,8 @@ public class Xmlization {
         _VisitorWithWriter::writeStringifiedContent);
     }
 
-    private static void writeAtV2_long(
-      Long that,
+    private static void writeAtV2_stringified(
+      Object that,
       XMLStreamWriter writer) {
       writeElement(
         "v2",
@@ -1364,18 +1364,8 @@ public class Xmlization {
         _VisitorWithWriter::writeStringifiedContent);
     }
 
-    private static void writeAtV1_long(
-      Long that,
-      XMLStreamWriter writer) {
-      writeElement(
-        "v1",
-        that,
-        writer,
-        _VisitorWithWriter::writeStringifiedContent);
-    }
-
-    private static void writeAtV5_long(
-      Long that,
+    private static void writeAtV5_stringified(
+      Object that,
       XMLStreamWriter writer) {
       writeElement(
         "v5",
@@ -1384,8 +1374,8 @@ public class Xmlization {
         _VisitorWithWriter::writeStringifiedContent);
     }
 
-    private static void writeAtV6_Result(
-      Result that,
+    private static void writeAtV6_IEnum(
+      IEnum that,
       XMLStreamWriter writer) {
       writeElement(
         "v6",
@@ -1445,19 +1435,19 @@ public class Xmlization {
         "pair",
         that.getPair(),
         writer,
-        _VisitorWithWriter::writeTupleOf2_string_long);
+        _VisitorWithWriter::writeTupleOf2_stringified_stringified);
 
       writeProperty(
         "items",
         that.getItems(),
         writer,
-        _VisitorWithWriter::writeTupleOf2_IAbstractItem_IAbstractItem);
+        _VisitorWithWriter::writeTupleOf2_IClass_IClass);
 
       writeProperty(
         "tricky",
         that.getTricky(),
         writer,
-        _VisitorWithWriter::writeTupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result);
+        _VisitorWithWriter::writeTupleOf6_stringified_IClass_IClass_IClass_stringified_IEnum);
     }
 
     @Override

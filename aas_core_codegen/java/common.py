@@ -83,6 +83,35 @@ PRIMITIVE_TYPE_MAP = {
 INDENT = "  "
 
 
+@require(lambda item_types: len(item_types) > 0)
+@require(lambda item_types: len(item_types) <= MAX_TUPLE_ARITY)
+def tuple_type(item_types: Sequence[Stripped]) -> Stripped:
+    """
+    Render the ``Tuple{N}`` type holding the items of ``item_types``.
+
+    The arguments are already-rendered Java types, since a tuple is written
+    both over the types of its very items (when the items are constructed)
+    and over the wider types they are written *through* (when they are only
+    handed on).
+    """
+    tuple_type_name = f"Tuple{len(item_types)}"
+
+    one_liner = f"{tuple_type_name}<{', '.join(item_types)}>"
+    if len(one_liner) <= 60:
+        return Stripped(one_liner)
+
+    # NOTE (mristin):
+    # The one-liner is too long to read comfortably (this happens in
+    # practice for tuples mixing several class-typed items), so we break
+    # after the opening ``<`` and put every item type on its own line.
+    joined_item_types = ",\n".join(item_types)
+    return Stripped(
+        f"""\
+{tuple_type_name}<
+{INDENT}{indent_but_first_line(joined_item_types, INDENT)}>"""
+    )
+
+
 # fmt: off
 @require(
     lambda our_type_qualifier:
@@ -150,32 +179,13 @@ def generate_type(
         # these records live in the ``common`` package regardless of the calling
         # context, so ``our_type_qualifier`` is *not* applied to the ``TupleN``
         # part itself -- only recursively to the item types.
-        item_types = [
-            generate_type(type_annotation=item, our_type_qualifier=our_type_qualifier)
-            for item in type_annotation.items
-        ]
-
-        assert len(item_types) <= MAX_TUPLE_ARITY, (
-            f"We only pre-generate Tuple1 .. Tuple{MAX_TUPLE_ARITY} "
-            f"in the common package, but got a tuple of arity {len(item_types)}. "
-            f"Please contact the developers if you need larger tuples."
-        )
-
-        tuple_type_name = f"Tuple{len(item_types)}"
-
-        one_liner = f"{tuple_type_name}<{', '.join(item_types)}>"
-        if len(one_liner) <= 60:
-            return Stripped(one_liner)
-
-        # NOTE (mristin):
-        # The one-liner is too long to read comfortably (this happens in
-        # practice for tuples mixing several class-typed items), so we break
-        # after the opening ``<`` and put every item type on its own line.
-        joined_item_types = ",\n".join(item_types)
-        return Stripped(
-            f"""\
-{tuple_type_name}<
-{INDENT}{indent_but_first_line(joined_item_types, INDENT)}>"""
+        return tuple_type(
+            [
+                generate_type(
+                    type_annotation=item, our_type_qualifier=our_type_qualifier
+                )
+                for item in type_annotation.items
+            ]
         )
 
     elif isinstance(type_annotation, intermediate.OptionalTypeAnnotation):
@@ -258,23 +268,51 @@ def leaf_moniker(type_anno: intermediate.TypeAnnotationUnion) -> str:
     return generate_type(type_anno)
 
 
+# NOTE (mristin):
+# The two functions which follow are the whole grammar of a compound moniker:
+# a Polish notation over ``_``-separated tokens, where ``ListOf`` takes
+# exactly one argument and ``TupleOf{N}`` exactly ``N`` of them. They take
+# the monikers of the items rather than the items themselves, because the two
+# sides of a de/serialization do not agree on what a leaf is: the reading
+# names a leaf by its very type (see :py:func:`leaf_moniker`), whereas
+# the writing names it by the *kind* it is written through, of which there
+# are only a handful. The grammar above the leaves is the same for both, and
+# lives here so that it is spelled exactly once.
+#
+# The arities are fixed, so the notation is self-delimiting and hence
+# injective -- as long as every leaf token is free of underscores, which is
+# what each side has to guarantee for the leaves it names.
+
+
+def list_moniker(item_moniker: str) -> str:
+    """Name a list whose item is named ``item_moniker``."""
+    return f"ListOf_{item_moniker}"
+
+
+@require(lambda item_monikers: len(item_monikers) > 0)
+def tuple_moniker(item_monikers: Sequence[str]) -> str:
+    """Name a tuple whose items are named ``item_monikers``, in that order."""
+    return f"TupleOf{len(item_monikers)}_{'_'.join(item_monikers)}"
+
+
 def type_moniker(type_anno: intermediate.TypeAnnotationUnion) -> str:
     """
     Name the type in a way usable as a part of a Java identifier.
 
-    The monikers are a Polish notation over ``_``-separated tokens: ``ListOf``
-    takes exactly one argument, ``TupleOf{N}`` exactly ``N`` of them, and
-    everything else is a leaf. A leaf token never contains an underscore
-    (see :py:func:`leaf_moniker`), so the encoding is injective -- two
-    different types can not be given the same moniker, and hence two different
-    de/serializers can not be given the same name.
+    The monikers follow the grammar of :py:func:`list_moniker` and
+    :py:func:`tuple_moniker` over the leaves named by
+    :py:func:`leaf_moniker`. A leaf token never contains an underscore, so
+    the encoding is injective -- two different types can not be given the same
+    moniker, and hence two different de/serializers can not be given the same
+    name.
     """
     if isinstance(type_anno, intermediate.ListTypeAnnotation):
-        return f"ListOf_{type_moniker(type_anno.items)}"
+        return list_moniker(type_moniker(type_anno.items))
 
     if isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        joined = "_".join(type_moniker(item) for item in type_anno.items)
-        return f"TupleOf{len(type_anno.items)}_{joined}"
+        return tuple_moniker(
+            [type_moniker(item_type_anno) for item_type_anno in type_anno.items]
+        )
 
     return leaf_moniker(type_anno)
 

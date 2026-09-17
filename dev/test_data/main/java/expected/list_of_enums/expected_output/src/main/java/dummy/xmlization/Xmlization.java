@@ -796,13 +796,13 @@ public class Xmlization {
       writer.writeCharacters(that.literalText());
     }
 
-    private static void writeListOf_Result(
-      List<Result> that,
+    private static void writeListOf_IEnum(
+      List<? extends IEnum> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
-        for (Result item : that) {
-          writeAtV_Result(item, writer);
+        for (IEnum item : that) {
+          writeAtV_IEnum(item, writer);
           index++;
         }
       } catch (_SerializeFailure failure) {
@@ -812,8 +812,8 @@ public class Xmlization {
       }
     }
 
-    private static void writeAtV_Result(
-      Result that,
+    private static void writeAtV_IEnum(
+      IEnum that,
       XMLStreamWriter writer) {
       writeElement(
         "v",
@@ -829,7 +829,7 @@ public class Xmlization {
         "someResults",
         that.getSomeResults(),
         writer,
-        _VisitorWithWriter::writeListOf_Result);
+        _VisitorWithWriter::writeListOf_IEnum);
     }
 
     @Override
