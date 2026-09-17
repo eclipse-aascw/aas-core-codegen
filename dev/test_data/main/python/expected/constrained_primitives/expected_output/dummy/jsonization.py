@@ -394,30 +394,36 @@ def _bytes_to_base64_str(
     return base64.b64encode(value).decode('ascii')
 
 
+def _something_to_jsonable(
+    that: aas_types.Something
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['someBool'] = that.some_bool
+    jsonable['someInt'] = that.some_int
+    jsonable['someFloat'] = that.some_float
+    jsonable['someString'] = that.some_string
+    jsonable['someBytes'] = _bytes_to_base64_str(
+        that.some_bytes
+    )
+    return jsonable
+
+
 class _Serializer(
         aas_types.AbstractTransformer[MutableJsonable]
 ):
-    """Transform the instance to its JSON-able representation."""
+    """
+    Dispatch on the class of an instance to serialize it.
 
-    # noinspection PyMethodMayBeStatic
-    def transform_something(
-        self,
-        that: aas_types.Something
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
+    The methods *are* the serializers, instead of forwarding to them, so that
+    a dispatch costs a single call. Wherever the class of a value is already
+    known -- which is every class without concrete descendants -- the serializer
+    is called directly and this transformer is not involved at all.
+    """
 
-        jsonable['someBool'] = that.some_bool
-
-        jsonable['someInt'] = that.some_int
-
-        jsonable['someFloat'] = that.some_float
-
-        jsonable['someString'] = that.some_string
-
-        jsonable['someBytes'] = _bytes_to_base64_str(that.some_bytes)
-
-        return jsonable
+    transform_something = staticmethod(
+        _something_to_jsonable
+    )
 
 
 _SERIALIZER = _Serializer()
@@ -432,7 +438,7 @@ def to_jsonable(that: aas_types.Class) -> MutableJsonable:
     :return:
         JSON-able structure which can be further encoded with, *e.g.*, :py:mod:`json`
     """
-    return _SERIALIZER.transform(that)
+    return that.transform(_SERIALIZER)
 
 
 # endregion

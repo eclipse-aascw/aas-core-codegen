@@ -11,7 +11,6 @@ properties do not have fixed order, and hence we can not read
 # Do NOT edit or append.
 
 
-import base64
 import collections.abc
 import sys
 from typing import (
@@ -1203,201 +1202,231 @@ _MODEL_TYPED_UNION_FROM_JSONABLE_DISPATCH: Mapping[
 # region Serialization
 
 
-def _bytes_to_base64_str(
-    value: bytes
-) -> str:
+def _list_of__mixed_union_to_jsonable(
+    that: List[aas_types.MixedUnion]
+) -> List[MutableJsonable]:
     """
-    Encode :paramref:`value` as a base64 string.
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.MixedUnion`.
 
-    :param value: to be encoded
-    :return: encoded :paramref:`value` in base64
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
     """
-    # We need to decode as ascii as ``base64.b64encode`` returns bytes,
-    # not a string!
-    return base64.b64encode(value).decode('ascii')
+    return [
+        item.transform(_SERIALIZER)
+        for item in that
+    ]
+
+
+def _list_of__model_typed_union_to_jsonable(
+    that: List[aas_types.ModelTypedUnion]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.ModelTypedUnion`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        item.transform(_SERIALIZER)
+        for item in that
+    ]
+
+
+def _list_of__structural_union_to_jsonable(
+    that: List[aas_types.StructuralUnion]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a list of
+    :py:class:`.types.StructuralUnion`.
+
+    :param that: list to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        item.transform(_SERIALIZER)
+        for item in that
+    ]
+
+
+def _tuple3_of__structural_union__mixed_union__model_typed_union_to_jsonable(
+    that: Tuple[
+        aas_types.StructuralUnion,
+        aas_types.MixedUnion,
+        aas_types.ModelTypedUnion,
+    ]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a tuple of 3 item(s).
+
+    :param that: tuple to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    return [
+        that[0].transform(_SERIALIZER),
+        that[1].transform(_SERIALIZER),
+        that[2].transform(_SERIALIZER)
+    ]
+
+
+def _structural_first_to_jsonable(
+    that: aas_types.StructuralFirst
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['uniqueToFirst'] = that.unique_to_first
+    return jsonable
+
+
+def _structural_second_to_jsonable(
+    that: aas_types.StructuralSecond
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['uniqueToSecond'] = that.unique_to_second
+    return jsonable
+
+
+def _mixed_abstract_descendant_one_to_jsonable(
+    that: aas_types.MixedAbstractDescendantOne
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['uniqueToAbstractDescendantOne'] = that.unique_to_abstract_descendant_one
+    return jsonable
+
+
+def _mixed_abstract_descendant_two_to_jsonable(
+    that: aas_types.MixedAbstractDescendantTwo
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['uniqueToAbstractDescendantTwo'] = that.unique_to_abstract_descendant_two
+    return jsonable
+
+
+def _mixed_concrete_with_descendants_to_jsonable(
+    that: aas_types.MixedConcreteWithDescendants
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['someBaseProperty'] = that.some_base_property
+    jsonable['modelType'] = 'MixedConcreteWithDescendants'
+    return jsonable
+
+
+def _mixed_concrete_with_descendants_child_to_jsonable(
+    that: aas_types.MixedConcreteWithDescendantsChild
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['someBaseProperty'] = that.some_base_property
+    jsonable['someChildProperty'] = that.some_child_property
+    jsonable['modelType'] = 'MixedConcreteWithDescendantsChild'
+    return jsonable
+
+
+def _mixed_concrete_leaf_to_jsonable(
+    that: aas_types.MixedConcreteLeaf
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['uniqueToConcreteLeaf'] = that.unique_to_concrete_leaf
+    return jsonable
+
+
+def _model_typed_first_to_jsonable(
+    that: aas_types.ModelTypedFirst
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['someProperty'] = that.some_property
+    jsonable['modelType'] = 'ModelTypedFirst'
+    return jsonable
+
+
+def _model_typed_second_to_jsonable(
+    that: aas_types.ModelTypedSecond
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['someProperty'] = that.some_property
+    jsonable['modelType'] = 'ModelTypedSecond'
+    return jsonable
+
+
+def _something_to_jsonable(
+    that: aas_types.Something
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['structuralProperty'] = that.structural_property.transform(_SERIALIZER)
+    jsonable['mixedProperty'] = that.mixed_property.transform(_SERIALIZER)
+    jsonable['modelTypedProperty'] = that.model_typed_property.transform(_SERIALIZER)
+    jsonable['listStructuralProperty'] = _list_of__structural_union_to_jsonable(
+        that.list_structural_property
+    )
+    jsonable['listMixedProperty'] = _list_of__mixed_union_to_jsonable(
+        that.list_mixed_property
+    )
+    jsonable['listModelTypedProperty'] = _list_of__model_typed_union_to_jsonable(
+        that.list_model_typed_property
+    )
+    jsonable['tupleProperty'] = _tuple3_of__structural_union__mixed_union__model_typed_union_to_jsonable(
+        that.tuple_property
+    )
+    if that.optional_structural_property is not None:
+        jsonable['optionalStructuralProperty'] = that.optional_structural_property.transform(_SERIALIZER)
+    if that.optional_mixed_property is not None:
+        jsonable['optionalMixedProperty'] = that.optional_mixed_property.transform(_SERIALIZER)
+    if that.optional_model_typed_property is not None:
+        jsonable['optionalModelTypedProperty'] = that.optional_model_typed_property.transform(_SERIALIZER)
+    return jsonable
 
 
 class _Serializer(
         aas_types.AbstractTransformer[MutableJsonable]
 ):
-    """Transform the instance to its JSON-able representation."""
+    """
+    Dispatch on the class of an instance to serialize it.
 
-    # noinspection PyMethodMayBeStatic
-    def transform_structural_first(
-        self,
-        that: aas_types.StructuralFirst
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
+    The methods *are* the serializers, instead of forwarding to them, so that
+    a dispatch costs a single call. Wherever the class of a value is already
+    known -- which is every class without concrete descendants -- the serializer
+    is called directly and this transformer is not involved at all.
+    """
 
-        jsonable['uniqueToFirst'] = that.unique_to_first
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_structural_second(
-        self,
-        that: aas_types.StructuralSecond
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['uniqueToSecond'] = that.unique_to_second
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_mixed_abstract_descendant_one(
-        self,
-        that: aas_types.MixedAbstractDescendantOne
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['uniqueToAbstractDescendantOne'] = (
-            that.unique_to_abstract_descendant_one
-        )
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_mixed_abstract_descendant_two(
-        self,
-        that: aas_types.MixedAbstractDescendantTwo
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['uniqueToAbstractDescendantTwo'] = (
-            that.unique_to_abstract_descendant_two
-        )
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_mixed_concrete_with_descendants(
-        self,
-        that: aas_types.MixedConcreteWithDescendants
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['someBaseProperty'] = that.some_base_property
-
-        jsonable["modelType"] = 'MixedConcreteWithDescendants'
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_mixed_concrete_with_descendants_child(
-        self,
-        that: aas_types.MixedConcreteWithDescendantsChild
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['someBaseProperty'] = that.some_base_property
-
-        jsonable['someChildProperty'] = that.some_child_property
-
-        jsonable["modelType"] = 'MixedConcreteWithDescendantsChild'
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_mixed_concrete_leaf(
-        self,
-        that: aas_types.MixedConcreteLeaf
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['uniqueToConcreteLeaf'] = that.unique_to_concrete_leaf
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_model_typed_first(
-        self,
-        that: aas_types.ModelTypedFirst
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['someProperty'] = that.some_property
-
-        jsonable["modelType"] = 'ModelTypedFirst'
-
-        return jsonable
-
-    # noinspection PyMethodMayBeStatic
-    def transform_model_typed_second(
-        self,
-        that: aas_types.ModelTypedSecond
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['someProperty'] = that.some_property
-
-        jsonable["modelType"] = 'ModelTypedSecond'
-
-        return jsonable
-
-    def transform_something(
-        self,
-        that: aas_types.Something
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
-
-        jsonable['structuralProperty'] = (
-            self.transform(that.structural_property)
-        )
-
-        jsonable['mixedProperty'] = self.transform(that.mixed_property)
-
-        jsonable['modelTypedProperty'] = (
-            self.transform(that.model_typed_property)
-        )
-
-        jsonable['listStructuralProperty'] = [
-            self.transform(item)
-            for item in that.list_structural_property
-        ]
-
-        jsonable['listMixedProperty'] = [
-            self.transform(item)
-            for item in that.list_mixed_property
-        ]
-
-        jsonable['listModelTypedProperty'] = [
-            self.transform(item)
-            for item in that.list_model_typed_property
-        ]
-
-        jsonable['tupleProperty'] = [
-            self.transform(that.tuple_property[0]),
-            self.transform(that.tuple_property[1]),
-            self.transform(that.tuple_property[2])
-        ]
-
-        if that.optional_structural_property is not None:
-            jsonable['optionalStructuralProperty'] = (
-                self.transform(that.optional_structural_property)
-            )
-
-        if that.optional_mixed_property is not None:
-            jsonable['optionalMixedProperty'] = (
-                self.transform(that.optional_mixed_property)
-            )
-
-        if that.optional_model_typed_property is not None:
-            jsonable['optionalModelTypedProperty'] = (
-                self.transform(that.optional_model_typed_property)
-            )
-
-        return jsonable
+    transform_structural_first = staticmethod(
+        _structural_first_to_jsonable
+    )
+    transform_structural_second = staticmethod(
+        _structural_second_to_jsonable
+    )
+    transform_mixed_abstract_descendant_one = staticmethod(
+        _mixed_abstract_descendant_one_to_jsonable
+    )
+    transform_mixed_abstract_descendant_two = staticmethod(
+        _mixed_abstract_descendant_two_to_jsonable
+    )
+    transform_mixed_concrete_with_descendants = staticmethod(
+        _mixed_concrete_with_descendants_to_jsonable
+    )
+    transform_mixed_concrete_with_descendants_child = staticmethod(
+        _mixed_concrete_with_descendants_child_to_jsonable
+    )
+    transform_mixed_concrete_leaf = staticmethod(
+        _mixed_concrete_leaf_to_jsonable
+    )
+    transform_model_typed_first = staticmethod(
+        _model_typed_first_to_jsonable
+    )
+    transform_model_typed_second = staticmethod(
+        _model_typed_second_to_jsonable
+    )
+    transform_something = staticmethod(
+        _something_to_jsonable
+    )
 
 
 _SERIALIZER = _Serializer()
@@ -1412,7 +1441,7 @@ def to_jsonable(that: aas_types.Class) -> MutableJsonable:
     :return:
         JSON-able structure which can be further encoded with, *e.g.*, :py:mod:`json`
     """
-    return _SERIALIZER.transform(that)
+    return that.transform(_SERIALIZER)
 
 
 # endregion
