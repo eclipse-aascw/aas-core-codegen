@@ -52,26 +52,45 @@ func (de *DeserializationError) PathString() string {
 	return aasreporting.ToJSONPath(de.Path)
 }
 
-// Prepend the `name` segment to the path of the `err`, if it is
-// a de-serialization error, and return the `err` back for chaining.
-func prependName(err error, name string) error {
-	if deseriaErr, ok := err.(*DeserializationError); ok {
-		deseriaErr.Path.PrependName(
-			&aasreporting.NameSegment{Name: name},
-		)
-	}
-	return err
+// Prepend the `name` segment to the path, and return the error back
+// for chaining.
+func (de *DeserializationError) prependName(
+	name string,
+) *DeserializationError {
+	de.Path.PrependName(
+		&aasreporting.NameSegment{Name: name},
+	)
+	return de
 }
 
-// Prepend the `index` segment to the path of the `err`, if it is
-// a de-serialization error, and return the `err` back for chaining.
-func prependIndex(err error, index int) error {
-	if deseriaErr, ok := err.(*DeserializationError); ok {
-		deseriaErr.Path.PrependIndex(
-			&aasreporting.IndexSegment{Index: index},
+// Prepend the `index` segment to the path, and return the error back
+// for chaining.
+func (de *DeserializationError) prependIndex(
+	index int,
+) *DeserializationError {
+	de.Path.PrependIndex(
+		&aasreporting.IndexSegment{Index: index},
+	)
+	return de
+}
+
+// Cast `err` to a de-serialization error, or panic.
+//
+// Every error which originates in this package is
+// a [DeserializationError], so the cast can only fail if a de-serialization
+// snippet specific to an implementation returned a foreign error.
+func mustDeserializationError(err error) *DeserializationError {
+	deseriaErr, ok := err.(*DeserializationError)
+	if !ok {
+		panic(
+			fmt.Sprintf(
+				"Expected a *DeserializationError, but got %T: %v",
+				err,
+				err,
+			),
 		)
 	}
-	return err
+	return deseriaErr
 }
 
 // Parse `jsonable` as a boolean, or return an error.
@@ -293,7 +312,7 @@ func modelTypeFromMap(
 
 	modelType, err = stringFromJsonable(jsonable)
 	if err != nil {
-		err = prependName(err, "modelType")
+		mustDeserializationError(err).prependName("modelType")
 	}
 	return
 }
@@ -310,16 +329,13 @@ func checkModelType(
 	}
 
 	if modelType != expected {
-		err = prependName(
-			newDeserializationError(
-				fmt.Sprintf(
-					"Expected the model type '%s', but got %s",
-					expected,
-					modelType,
-				),
+		err = newDeserializationError(
+			fmt.Sprintf(
+				"Expected the model type '%s', but got %s",
+				expected,
+				modelType,
 			),
-			"modelType",
-		)
+		).prependName("modelType")
 	}
 	return
 }
@@ -346,7 +362,7 @@ func parseArray[T any](
 		var item T
 		item, err = parseItem(itemJsonable)
 		if err != nil {
-			err = prependIndex(err, i)
+			mustDeserializationError(err).prependIndex(i)
 			return
 		}
 		result[i] = item
@@ -421,21 +437,21 @@ func parseTuple3[T0 any, T1 any, T2 any](
 	var item0 T0
 	item0, err = parseItem0(jsonableArray[0])
 	if err != nil {
-		err = prependIndex(err, 0)
+		mustDeserializationError(err).prependIndex(0)
 		return
 	}
 
 	var item1 T1
 	item1, err = parseItem1(jsonableArray[1])
 	if err != nil {
-		err = prependIndex(err, 1)
+		mustDeserializationError(err).prependIndex(1)
 		return
 	}
 
 	var item2 T2
 	item2, err = parseItem2(jsonableArray[2])
 	if err != nil {
-		err = prependIndex(err, 2)
+		mustDeserializationError(err).prependIndex(2)
 		return
 	}
 
@@ -493,7 +509,7 @@ func structuralFirstFromMapWithoutDispatch(
 		}
 
 		if err != nil {
-			err = prependName(err, k)
+			mustDeserializationError(err).prependName(k)
 			return
 		}
 	}
@@ -558,7 +574,7 @@ func structuralSecondFromMapWithoutDispatch(
 		}
 
 		if err != nil {
-			err = prependName(err, k)
+			mustDeserializationError(err).prependName(k)
 			return
 		}
 	}
@@ -677,7 +693,7 @@ func mixedAbstractDescendantOneFromMapWithoutDispatch(
 		}
 
 		if err != nil {
-			err = prependName(err, k)
+			mustDeserializationError(err).prependName(k)
 			return
 		}
 	}
@@ -742,7 +758,7 @@ func mixedAbstractDescendantTwoFromMapWithoutDispatch(
 		}
 
 		if err != nil {
-			err = prependName(err, k)
+			mustDeserializationError(err).prependName(k)
 			return
 		}
 	}
@@ -817,7 +833,7 @@ func mixedConcreteWithDescendantsFromMapWithoutDispatch(
 		}
 
 		if err != nil {
-			err = prependName(err, k)
+			mustDeserializationError(err).prependName(k)
 			return
 		}
 	}
@@ -896,7 +912,7 @@ func mixedConcreteWithDescendantsChildFromMapWithoutDispatch(
 		}
 
 		if err != nil {
-			err = prependName(err, k)
+			mustDeserializationError(err).prependName(k)
 			return
 		}
 	}
@@ -969,7 +985,7 @@ func mixedConcreteLeafFromMapWithoutDispatch(
 		}
 
 		if err != nil {
-			err = prependName(err, k)
+			mustDeserializationError(err).prependName(k)
 			return
 		}
 	}
@@ -1118,7 +1134,7 @@ func modelTypedFirstFromMapWithoutDispatch(
 		}
 
 		if err != nil {
-			err = prependName(err, k)
+			mustDeserializationError(err).prependName(k)
 			return
 		}
 	}
@@ -1191,7 +1207,7 @@ func modelTypedSecondFromMapWithoutDispatch(
 		}
 
 		if err != nil {
-			err = prependName(err, k)
+			mustDeserializationError(err).prependName(k)
 			return
 		}
 	}
@@ -1361,7 +1377,7 @@ func somethingFromMapWithoutDispatch(
 		}
 
 		if err != nil {
-			err = prependName(err, k)
+			mustDeserializationError(err).prependName(k)
 			return
 		}
 	}
@@ -1533,6 +1549,47 @@ func (se *SerializationError) PathString() string {
 	return aasreporting.ToGolangPath(se.Path)
 }
 
+// Prepend the `name` segment to the path, and return the error back
+// for chaining.
+func (se *SerializationError) prependName(
+	name string,
+) *SerializationError {
+	se.Path.PrependName(
+		&aasreporting.NameSegment{Name: name},
+	)
+	return se
+}
+
+// Prepend the `index` segment to the path, and return the error back
+// for chaining.
+func (se *SerializationError) prependIndex(
+	index int,
+) *SerializationError {
+	se.Path.PrependIndex(
+		&aasreporting.IndexSegment{Index: index},
+	)
+	return se
+}
+
+// Cast `err` to a serialization error, or panic.
+//
+// Every error which originates in this package is a [SerializationError],
+// so the cast can only fail if a serialization snippet specific to
+// an implementation returned a foreign error.
+func mustSerializationError(err error) *SerializationError {
+	seriaErr, ok := err.(*SerializationError)
+	if !ok {
+		panic(
+			fmt.Sprintf(
+				"Expected a *SerializationError, but got %T: %v",
+				err,
+				err,
+			),
+		)
+	}
+	return seriaErr
+}
+
 // Try to cast `that` to a float64 and box it as a JSON-able value, or
 // return an error.
 //
@@ -1588,41 +1645,13 @@ func serializeArray[T any](
 ) (result []interface{}, err error) {
 	result = make([]interface{}, len(items))
 	for i, item := range items {
-		var jsonable interface{}
-		jsonable, err = serializeItem(item)
+		result[i], err = serializeItem(item)
 		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependIndex(
-					&aasreporting.IndexSegment{Index: i},
-				)
-			}
+			mustSerializationError(err).prependIndex(i)
 			return
 		}
-		result[i] = jsonable
 	}
 	return
-}
-
-// Forward `item` as a JSON-able value, unconverted.
-func directToJsonable[T any](item T) (interface{}, error) {
-	return item, nil
-}
-
-// Serialize `that` to a JSON-able value, or return an error.
-//
-// `ToJsonable` takes an `aastypes.IClass`, but a tuple item's own
-// (more specific) interface type, e.g., `aastypes.ISomeItem`, can not be
-// unified with that when passing `ToJsonable` itself as a
-// `func(item T) (interface{}, error)` value -- Go function values are
-// invariant in their parameter type (no contravariance, unlike, say, a C#
-// delegate). Making this wrapper itself generic (instead of fixing its
-// parameter to `aastypes.IClass`) lets the very same one be passed on bare,
-// uninstantiated, for every class-typed tuple item regardless of its
-// concrete interface: Go infers both the tuple item's type and this
-// wrapper's own type parameter together from the context of the
-// `serializeTupleN` call.
-func classAsJsonableInterface[T aastypes.IClass](that T) (interface{}, error) {
-	return ToJsonable(that)
 }
 
 // Constrain a generic type to a named union, giving access to its
@@ -1646,41 +1675,23 @@ func serializeTuple3[T0 any, T1 any, T2 any](
 ) (result []interface{}, err error) {
 	result = make([]interface{}, 3)
 
-	var jsonable0 interface{}
-	jsonable0, err = serializeItem0(that.Item1)
+	result[0], err = serializeItem0(that.Item1)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependIndex(
-				&aasreporting.IndexSegment{Index: 0},
-			)
-		}
+		mustSerializationError(err).prependIndex(0)
 		return
 	}
-	result[0] = jsonable0
 
-	var jsonable1 interface{}
-	jsonable1, err = serializeItem1(that.Item2)
+	result[1], err = serializeItem1(that.Item2)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependIndex(
-				&aasreporting.IndexSegment{Index: 1},
-			)
-		}
+		mustSerializationError(err).prependIndex(1)
 		return
 	}
-	result[1] = jsonable1
 
-	var jsonable2 interface{}
-	jsonable2, err = serializeItem2(that.Item3)
+	result[2], err = serializeItem2(that.Item3)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependIndex(
-				&aasreporting.IndexSegment{Index: 2},
-			)
-		}
+		mustSerializationError(err).prependIndex(2)
 		return
 	}
-	result[2] = jsonable2
 
 	return
 }
@@ -1850,198 +1861,93 @@ func somethingToMap(
 ) (result map[string]interface{}, err error) {
 	result = make(map[string]interface{})
 
-	var jsonableStructuralProperty interface{}
-	jsonableStructuralProperty, err = ToJsonable(
+	result["structuralProperty"], err = ToJsonable(
 		that.StructuralProperty().Underlying(),
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "StructuralProperty()",
-				},
-			)
-		}
-
+		mustSerializationError(err).prependName("StructuralProperty()")
 		return
 	}
-	result["structuralProperty"] = jsonableStructuralProperty
 
-	var jsonableMixedProperty interface{}
-	jsonableMixedProperty, err = ToJsonable(
-		that.MixedProperty().Underlying(),
-	)
+	result["mixedProperty"], err = ToJsonable(that.MixedProperty().Underlying())
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "MixedProperty()",
-				},
-			)
-		}
-
+		mustSerializationError(err).prependName("MixedProperty()")
 		return
 	}
-	result["mixedProperty"] = jsonableMixedProperty
 
-	var jsonableModelTypedProperty interface{}
-	jsonableModelTypedProperty, err = ToJsonable(
+	result["modelTypedProperty"], err = ToJsonable(
 		that.ModelTypedProperty().Underlying(),
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "ModelTypedProperty()",
-				},
-			)
-		}
-
+		mustSerializationError(err).prependName("ModelTypedProperty()")
 		return
 	}
-	result["modelTypedProperty"] = jsonableModelTypedProperty
 
-	var jsonableListStructuralProperty []interface{}
-	jsonableListStructuralProperty, err = serializeArray(
+	result["listStructuralProperty"], err = serializeArray(
 		that.ListStructuralProperty(),
-		func(item *aastypes.StructuralUnion) (interface{}, error) {
-			return ToJsonable(
-				item.Underlying(),
-			)
-		},
+		unionAsJsonableInterface[*aastypes.StructuralUnion],
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "ListStructuralProperty()",
-				},
-			)
-		}
-
+		mustSerializationError(err).prependName("ListStructuralProperty()")
 		return
 	}
-	result["listStructuralProperty"] = jsonableListStructuralProperty
 
-	var jsonableListMixedProperty []interface{}
-	jsonableListMixedProperty, err = serializeArray(
-		that.ListMixedProperty(),
-		func(item *aastypes.MixedUnion) (interface{}, error) {
-			return ToJsonable(
-				item.Underlying(),
-			)
-		},
+	result["listMixedProperty"], err = serializeArray(
+		that.ListMixedProperty(), unionAsJsonableInterface[*aastypes.MixedUnion],
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "ListMixedProperty()",
-				},
-			)
-		}
-
+		mustSerializationError(err).prependName("ListMixedProperty()")
 		return
 	}
-	result["listMixedProperty"] = jsonableListMixedProperty
 
-	var jsonableListModelTypedProperty []interface{}
-	jsonableListModelTypedProperty, err = serializeArray(
+	result["listModelTypedProperty"], err = serializeArray(
 		that.ListModelTypedProperty(),
-		func(item *aastypes.ModelTypedUnion) (interface{}, error) {
-			return ToJsonable(
-				item.Underlying(),
-			)
-		},
+		unionAsJsonableInterface[*aastypes.ModelTypedUnion],
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "ListModelTypedProperty()",
-				},
-			)
-		}
-
+		mustSerializationError(err).prependName("ListModelTypedProperty()")
 		return
 	}
-	result["listModelTypedProperty"] = jsonableListModelTypedProperty
 
-	var jsonableTupleProperty []interface{}
-	jsonableTupleProperty, err = serializeTuple3(
+	result["tupleProperty"], err = serializeTuple3(
 		that.TupleProperty(),
 		unionAsJsonableInterface[*aastypes.StructuralUnion],
 		unionAsJsonableInterface[*aastypes.MixedUnion],
 		unionAsJsonableInterface[*aastypes.ModelTypedUnion],
 	)
 	if err != nil {
-		if seriaErr, ok := err.(*SerializationError); ok {
-			seriaErr.Path.PrependName(
-				&aasreporting.NameSegment{
-					Name: "TupleProperty()",
-				},
-			)
-		}
-
+		mustSerializationError(err).prependName("TupleProperty()")
 		return
 	}
-	result["tupleProperty"] = jsonableTupleProperty
 
 	if that.OptionalStructuralProperty() != nil {
-		var jsonableOptionalStructuralProperty interface{}
-		jsonableOptionalStructuralProperty, err = ToJsonable(
+		result["optionalStructuralProperty"], err = ToJsonable(
 			that.OptionalStructuralProperty().Underlying(),
 		)
 		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "OptionalStructuralProperty()",
-					},
-				)
-			}
-
+			mustSerializationError(err).prependName("OptionalStructuralProperty()")
 			return
 		}
-		result["optionalStructuralProperty"] = jsonableOptionalStructuralProperty
 	}
 
 	if that.OptionalMixedProperty() != nil {
-		var jsonableOptionalMixedProperty interface{}
-		jsonableOptionalMixedProperty, err = ToJsonable(
+		result["optionalMixedProperty"], err = ToJsonable(
 			that.OptionalMixedProperty().Underlying(),
 		)
 		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "OptionalMixedProperty()",
-					},
-				)
-			}
-
+			mustSerializationError(err).prependName("OptionalMixedProperty()")
 			return
 		}
-		result["optionalMixedProperty"] = jsonableOptionalMixedProperty
 	}
 
 	if that.OptionalModelTypedProperty() != nil {
-		var jsonableOptionalModelTypedProperty interface{}
-		jsonableOptionalModelTypedProperty, err = ToJsonable(
+		result["optionalModelTypedProperty"], err = ToJsonable(
 			that.OptionalModelTypedProperty().Underlying(),
 		)
 		if err != nil {
-			if seriaErr, ok := err.(*SerializationError); ok {
-				seriaErr.Path.PrependName(
-					&aasreporting.NameSegment{
-						Name: "OptionalModelTypedProperty()",
-					},
-				)
-			}
-
+			mustSerializationError(err).prependName("OptionalModelTypedProperty()")
 			return
 		}
-		result["optionalModelTypedProperty"] = jsonableOptionalModelTypedProperty
 	}
 
 	return
