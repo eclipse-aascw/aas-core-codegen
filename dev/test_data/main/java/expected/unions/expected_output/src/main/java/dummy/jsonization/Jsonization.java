@@ -40,6 +40,12 @@ public class Jsonization {
      * we distinguish the implementation, realized in
      * {@link _DeserializeImplementation}, and the facade given in
      * {@link Deserialize} class.
+     *
+     * <p>Every value is parsed through a function which takes a single
+     * {@link JsonNode} and gives back a {@link Reporting.Result}, so that a list
+     * and a tuple can be composed out of the parsers of their items. Only they
+     * need such a composition -- every other value already has a function named
+     * after its very type.
      */
     private static class _DeserializeImplementation {
       /** Convert {@code value} to a string.
@@ -112,34 +118,141 @@ public class Jsonization {
       }
 
       /**
-       * Parse every item of {@code array} with {@code parseItem}.
+       * Mark the error of {@code result} as coming from the property {@code name}.
        *
-       * @param array JSON array to be parsed
+       * <p>A {@code case} of a property loop is matched exactly when the key of
+       * the property equals its literal, so the key already names the property and
+       * no {@code case} has to spell it out a second time.
+       */
+      private static <T> Reporting.Result<T> prependName(
+        Reporting.Result<?> result, String name) {
+        final Reporting.Error error = result.getError();
+        error.prependSegment(new Reporting.NameSegment(name));
+        return Reporting.Result.failure(error);
+      }
+
+      /**
+       * Mark the error of {@code result} as coming from the item at {@code index}.
+       */
+      private static <T> Reporting.Result<T> prependIndex(
+        Reporting.Result<?> result, int index) {
+        final Reporting.Error error = result.getError();
+        error.prependSegment(new Reporting.IndexSegment(index));
+        return Reporting.Result.failure(error);
+      }
+
+      /**
+       * Report that {@code node} is no JSON object.
+       */
+      private static <T> Reporting.Result<T> notAJsonObject(JsonNode node) {
+        return Reporting.Result.failure(
+          new Reporting.Error(
+            "Expected a JsonObject, but got " +
+            (node == null ? "null" : node.getNodeType())));
+      }
+
+      /**
+       * Report that {@code node} is no JSON array.
+       */
+      private static <T> Reporting.Result<T> notAJsonArray(JsonNode node) {
+        return Reporting.Result.failure(
+          new Reporting.Error(
+            "Expected a JsonArray, but got " + node.getNodeType()));
+      }
+
+      /**
+       * Report a property which the class does not have.
+       */
+      private static <T> Reporting.Result<T> unexpectedProperty(String name) {
+        return Reporting.Result.failure(
+          new Reporting.Error("Unexpected property: " + name));
+      }
+
+      /**
+       * Report a required property which the JSON object did not give.
+       */
+      private static <T> Reporting.Result<T> missingRequiredProperty(String name) {
+        return Reporting.Result.failure(
+          new Reporting.Error(
+            "Required property \"" + name + "\" is missing"));
+      }
+
+      /**
+       * Extract the {@code modelType} property of {@code node} as a string.
+       *
+       * <p>This is the only place which knows how the model type is spelled on
+       * the wire. Both the dispatch on the model type and its check in a concrete
+       * class go through it.
+       *
+       * @param node JSON object to be inspected
+       */
+      private static Reporting.Result<String> tryModelTypeFrom(JsonNode node) {
+        final JsonNode modelTypeNode = node.get("modelType");
+        if (modelTypeNode == null) {
+          return missingRequiredProperty("modelType");
+        }
+
+        final Reporting.Result<String> result = tryStringFrom(modelTypeNode);
+        if (result.isError()) {
+          return prependName(result, "modelType");
+        }
+
+        return result;
+      }
+
+      /**
+       * Check that {@code node} gives the {@code expected} model type, and return
+       * the error if it does not.
+       *
+       * <p>The model type is checked before the properties are read, so that a wrong
+       * one is reported without de-serializing any of them first, and so that
+       * the property loop carries nothing but the properties.
+       *
+       * @param node JSON object to be inspected
+       * @param expected model type of the class being de-serialized
+       */
+      private static Reporting.Error checkModelType(JsonNode node, String expected) {
+        final Reporting.Result<String> result = tryModelTypeFrom(node);
+        if (result.isError()) {
+          return result.getError();
+        }
+
+        final String modelType = result.getResult();
+        if (!modelType.equals(expected)) {
+          final Reporting.Error error = new Reporting.Error(
+            "Expected the model type '" + expected + "', " +
+            "but got '" + modelType + "'");
+          error.prependSegment(new Reporting.NameSegment("modelType"));
+          return error;
+        }
+
+        return null;
+      }
+
+      /**
+       * Parse {@code node} as a JSON array, and every of its items with
+       * {@code parseItem}.
+       *
+       * @param node JSON node to be parsed
        * @param parseItem to parse a single item of the array
        */
       private static <T> Reporting.Result<List<T>> parseArray(
-        JsonNode array,
+        JsonNode node,
         Function<JsonNode, Reporting.Result<? extends T>> parseItem) {
-        final List<T> result = new ArrayList<>(array.size());
+        if (!node.isArray()) {
+          return notAJsonArray(node);
+        }
+
+        final List<T> result = new ArrayList<>(node.size());
+
         int index = 0;
-        for (JsonNode item : array) {
-          if (item == null) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected a non-null item, but got a null");
-            error.prependSegment(
-              new Reporting.IndexSegment(index));
-            return Reporting.Result.failure(error);
+        for (JsonNode item : node) {
+          final Reporting.Result<? extends T> parsedItem = parseItem.apply(item);
+          if (parsedItem.isError()) {
+            return prependIndex(parsedItem, index);
           }
 
-          final Reporting.Result<? extends T> parsedItemResult = parseItem.apply(item);
-          if (parsedItemResult.isError()) {
-            parsedItemResult.getError()
-              .prependSegment(
-              new Reporting.IndexSegment(index));
-            return Reporting.Result.failure(parsedItemResult.getError());
-          }
-
-          result.add(parsedItemResult.getResult());
+          result.add(parsedItem.getResult());
           index++;
         }
 
@@ -147,98 +260,124 @@ public class Jsonization {
       }
 
       /**
-       * Parse {@code array} as a tuple of 3 item(s), each de-serialized
-       * with the corresponding {@code parseItemI}.
+       * Parse {@code node} as a JSON array of exactly 3 item(s), each
+       * de-serialized with the corresponding {@code parseItemI}.
        *
-       * @param array JSON array to be parsed
+       * @param node JSON node to be parsed
        */
       private static <T1, T2, T3> Reporting.Result<Tuple3<T1, T2, T3>> parseTuple3(
-        JsonNode array,
+        JsonNode node,
         Function<JsonNode, Reporting.Result<? extends T1>> parseItem1,
         Function<JsonNode, Reporting.Result<? extends T2>> parseItem2,
         Function<JsonNode, Reporting.Result<? extends T3>> parseItem3) {
-        if (array.size() != 3) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected exactly 3 item(s), but got " + array.size());
-          return Reporting.Result.failure(error);
+        if (!node.isArray()) {
+          return notAJsonArray(node);
         }
 
-        final Reporting.Result<? extends T1> item1Result =
-          parseItem1.apply(array.get(0));
-        if (item1Result.isError()) {
-          item1Result.getError()
-            .prependSegment(new Reporting.IndexSegment(0));
-          return Reporting.Result.failure(item1Result.getError());
+        if (node.size() != 3) {
+          return Reporting.Result.failure(
+            new Reporting.Error(
+              "Expected exactly 3 item(s), but got " + node.size()));
         }
 
-        final Reporting.Result<? extends T2> item2Result =
-          parseItem2.apply(array.get(1));
-        if (item2Result.isError()) {
-          item2Result.getError()
-            .prependSegment(new Reporting.IndexSegment(1));
-          return Reporting.Result.failure(item2Result.getError());
+        final Reporting.Result<? extends T1> item1 =
+          parseItem1.apply(node.get(0));
+        if (item1.isError()) {
+          return prependIndex(item1, 0);
         }
 
-        final Reporting.Result<? extends T3> item3Result =
-          parseItem3.apply(array.get(2));
-        if (item3Result.isError()) {
-          item3Result.getError()
-            .prependSegment(new Reporting.IndexSegment(2));
-          return Reporting.Result.failure(item3Result.getError());
+        final Reporting.Result<? extends T2> item2 =
+          parseItem2.apply(node.get(1));
+        if (item2.isError()) {
+          return prependIndex(item2, 1);
+        }
+
+        final Reporting.Result<? extends T3> item3 =
+          parseItem3.apply(node.get(2));
+        if (item3.isError()) {
+          return prependIndex(item3, 2);
         }
 
         return Reporting.Result.success(
           new Tuple3<>(
-            item1Result.getResult(),
-            item2Result.getResult(),
-            item3Result.getResult()));
+            item1.getResult(),
+            item2.getResult(),
+            item3.getResult()));
       }
 
       /**
-       * Deserialize an instance of StructuralFirst from {@param node}.
+       * Parse {@code node} as a list of {@code StructuralUnion}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
+       */
+      private static Reporting.Result<List<StructuralUnion>> parseListOf_StructuralUnion(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryStructuralUnionFrom);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code MixedUnion}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<MixedUnion>> parseListOf_MixedUnion(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryMixedUnionFrom);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code ModelTypedUnion}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<ModelTypedUnion>> parseListOf_ModelTypedUnion(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryModelTypedUnionFrom);
+      }
+
+      /**
+       * Parse {@code node} as a tuple of 3 item(s).
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<Tuple3<StructuralUnion, MixedUnion, ModelTypedUnion>> parseTupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(JsonNode node) {
+        return parseTuple3(
+          node,
+          _DeserializeImplementation::tryStructuralUnionFrom,
+          _DeserializeImplementation::tryMixedUnionFrom,
+          _DeserializeImplementation::tryModelTypedUnionFrom);
+      }
+
+      /**
+       * Deserialize an instance of StructuralFirst from {@code node}.
+       *
+       * @param node JSON node to be parsed
        */
       private static Reporting.Result<StructuralFirst> tryStructuralFirstFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         String theUniqueToFirst = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "uniqueToFirst": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theUniqueToFirstResult = tryStringFrom(currentNode.getValue());
-              if (theUniqueToFirstResult.isError()) {
-                theUniqueToFirstResult.getError()
-                  .prependSegment(new Reporting.NameSegment("uniqueToFirst"));
-                return theUniqueToFirstResult.castTo(StructuralFirst.class);
-              }
-              theUniqueToFirst = theUniqueToFirstResult.getResult();
+              theUniqueToFirst = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theUniqueToFirst == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"uniqueToFirst\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("uniqueToFirst");
         }
 
         return Reporting.Result.success(new StructuralFirst(
@@ -246,50 +385,38 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of StructuralSecond from {@param node}.
+       * Deserialize an instance of StructuralSecond from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<StructuralSecond> tryStructuralSecondFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         String theUniqueToSecond = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "uniqueToSecond": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theUniqueToSecondResult = tryStringFrom(currentNode.getValue());
-              if (theUniqueToSecondResult.isError()) {
-                theUniqueToSecondResult.getError()
-                  .prependSegment(new Reporting.NameSegment("uniqueToSecond"));
-                return theUniqueToSecondResult.castTo(StructuralSecond.class);
-              }
-              theUniqueToSecond = theUniqueToSecondResult.getResult();
+              theUniqueToSecond = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theUniqueToSecond == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"uniqueToSecond\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("uniqueToSecond");
         }
 
         return Reporting.Result.success(new StructuralSecond(
@@ -303,9 +430,7 @@ public class Jsonization {
        */
       public static Reporting.Result<StructuralUnion> tryStructuralUnionFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         if (node.get("uniqueToFirst") != null) {
@@ -337,29 +462,20 @@ public class Jsonization {
        */
       public static Reporting.Result<? extends IMixedAbstractMember> tryIMixedAbstractMemberFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
-        final JsonNode modelTypeNode = node.get("modelType");
-        if (modelTypeNode == null) {
-          final Reporting.Error error = new Reporting.Error(
-              "Expected a model type, but none is present");
-          return Reporting.Result.failure(error);
-        }
-        final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
+        final Reporting.Result<String> modelTypeResult = tryModelTypeFrom(node);
         if (modelTypeResult.isError()) {
           return modelTypeResult.castTo(IMixedAbstractMember.class);
         }
 
-        switch (modelTypeResult.getResult())
-        {
-          case "MixedAbstractDescendantOne": {
+        switch (modelTypeResult.getResult()) {
+          case "MixedAbstractDescendantOne":
             return tryMixedAbstractDescendantOneFrom(node);
-        }  case "MixedAbstractDescendantTwo": {
+          case "MixedAbstractDescendantTwo":
             return tryMixedAbstractDescendantTwoFrom(node);
-        }  default: {
+          default: {
             final Reporting.Error error = new Reporting.Error(
               "Unexpected model type for IMixedAbstractMember: " + modelTypeResult.getResult());
             return Reporting.Result.failure(error);
@@ -368,50 +484,38 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of MixedAbstractDescendantOne from {@param node}.
+       * Deserialize an instance of MixedAbstractDescendantOne from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<MixedAbstractDescendantOne> tryMixedAbstractDescendantOneFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         String theUniqueToAbstractDescendantOne = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "uniqueToAbstractDescendantOne": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theUniqueToAbstractDescendantOneResult = tryStringFrom(currentNode.getValue());
-              if (theUniqueToAbstractDescendantOneResult.isError()) {
-                theUniqueToAbstractDescendantOneResult.getError()
-                  .prependSegment(new Reporting.NameSegment("uniqueToAbstractDescendantOne"));
-                return theUniqueToAbstractDescendantOneResult.castTo(MixedAbstractDescendantOne.class);
-              }
-              theUniqueToAbstractDescendantOne = theUniqueToAbstractDescendantOneResult.getResult();
+              theUniqueToAbstractDescendantOne = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theUniqueToAbstractDescendantOne == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"uniqueToAbstractDescendantOne\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("uniqueToAbstractDescendantOne");
         }
 
         return Reporting.Result.success(new MixedAbstractDescendantOne(
@@ -419,50 +523,38 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of MixedAbstractDescendantTwo from {@param node}.
+       * Deserialize an instance of MixedAbstractDescendantTwo from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<MixedAbstractDescendantTwo> tryMixedAbstractDescendantTwoFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         String theUniqueToAbstractDescendantTwo = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "uniqueToAbstractDescendantTwo": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theUniqueToAbstractDescendantTwoResult = tryStringFrom(currentNode.getValue());
-              if (theUniqueToAbstractDescendantTwoResult.isError()) {
-                theUniqueToAbstractDescendantTwoResult.getError()
-                  .prependSegment(new Reporting.NameSegment("uniqueToAbstractDescendantTwo"));
-                return theUniqueToAbstractDescendantTwoResult.castTo(MixedAbstractDescendantTwo.class);
-              }
-              theUniqueToAbstractDescendantTwo = theUniqueToAbstractDescendantTwoResult.getResult();
+              theUniqueToAbstractDescendantTwo = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theUniqueToAbstractDescendantTwo == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"uniqueToAbstractDescendantTwo\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("uniqueToAbstractDescendantTwo");
         }
 
         return Reporting.Result.success(new MixedAbstractDescendantTwo(
@@ -477,29 +569,20 @@ public class Jsonization {
        */
       public static Reporting.Result<? extends IMixedConcreteWithDescendants> tryIMixedConcreteWithDescendantsFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
-        final JsonNode modelTypeNode = node.get("modelType");
-        if (modelTypeNode == null) {
-          final Reporting.Error error = new Reporting.Error(
-              "Expected a model type, but none is present");
-          return Reporting.Result.failure(error);
-        }
-        final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
+        final Reporting.Result<String> modelTypeResult = tryModelTypeFrom(node);
         if (modelTypeResult.isError()) {
           return modelTypeResult.castTo(IMixedConcreteWithDescendants.class);
         }
 
-        switch (modelTypeResult.getResult())
-        {
-          case "MixedConcreteWithDescendantsChild": {
-            return tryMixedConcreteWithDescendantsChildFrom(node);
-        }  case "MixedConcreteWithDescendants": {
-            return tryMixedConcreteWithDescendantsFrom(node);
-        }  default: {
+        switch (modelTypeResult.getResult()) {
+          case "MixedConcreteWithDescendantsChild":
+            return tryMixedConcreteWithDescendantsChildFromObject(node);
+          case "MixedConcreteWithDescendants":
+            return tryMixedConcreteWithDescendantsFromObject(node);
+          default: {
             final Reporting.Error error = new Reporting.Error(
               "Unexpected model type for IMixedConcreteWithDescendants: " + modelTypeResult.getResult());
             return Reporting.Result.failure(error);
@@ -508,82 +591,56 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of MixedConcreteWithDescendants from {@param node}.
+       * Deserialize an instance of MixedConcreteWithDescendants from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<MixedConcreteWithDescendants> tryMixedConcreteWithDescendantsFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "MixedConcreteWithDescendants");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryMixedConcreteWithDescendantsFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of MixedConcreteWithDescendants from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<MixedConcreteWithDescendants> tryMixedConcreteWithDescendantsFromObject(JsonNode node) {
         String theSomeBaseProperty = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "someBaseProperty": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theSomeBasePropertyResult = tryStringFrom(currentNode.getValue());
-              if (theSomeBasePropertyResult.isError()) {
-                theSomeBasePropertyResult.getError()
-                  .prependSegment(new Reporting.NameSegment("someBaseProperty"));
-                return theSomeBasePropertyResult.castTo(MixedConcreteWithDescendants.class);
-              }
-              theSomeBaseProperty = theSomeBasePropertyResult.getResult();
+              theSomeBaseProperty = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(MixedConcreteWithDescendants.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("MixedConcreteWithDescendants")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'MixedConcreteWithDescendants', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
         if (theSomeBaseProperty == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"someBaseProperty\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("someBaseProperty");
         }
 
         return Reporting.Result.success(new MixedConcreteWithDescendants(
@@ -591,103 +648,70 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of MixedConcreteWithDescendantsChild from {@param node}.
+       * Deserialize an instance of MixedConcreteWithDescendantsChild from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<MixedConcreteWithDescendantsChild> tryMixedConcreteWithDescendantsChildFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(
+          node, "MixedConcreteWithDescendantsChild");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryMixedConcreteWithDescendantsChildFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of MixedConcreteWithDescendantsChild from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<MixedConcreteWithDescendantsChild> tryMixedConcreteWithDescendantsChildFromObject(JsonNode node) {
         String theSomeBaseProperty = null;
         String theSomeChildProperty = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "someBaseProperty": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theSomeBasePropertyResult = tryStringFrom(currentNode.getValue());
-              if (theSomeBasePropertyResult.isError()) {
-                theSomeBasePropertyResult.getError()
-                  .prependSegment(new Reporting.NameSegment("someBaseProperty"));
-                return theSomeBasePropertyResult.castTo(MixedConcreteWithDescendantsChild.class);
-              }
-              theSomeBaseProperty = theSomeBasePropertyResult.getResult();
+              theSomeBaseProperty = parsed.getResult();
               break;
             }
             case "someChildProperty": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theSomeChildPropertyResult = tryStringFrom(currentNode.getValue());
-              if (theSomeChildPropertyResult.isError()) {
-                theSomeChildPropertyResult.getError()
-                  .prependSegment(new Reporting.NameSegment("someChildProperty"));
-                return theSomeChildPropertyResult.castTo(MixedConcreteWithDescendantsChild.class);
-              }
-              theSomeChildProperty = theSomeChildPropertyResult.getResult();
+              theSomeChildProperty = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(MixedConcreteWithDescendantsChild.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("MixedConcreteWithDescendantsChild")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'MixedConcreteWithDescendantsChild', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
         if (theSomeBaseProperty == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"someBaseProperty\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("someBaseProperty");
         }
 
         if (theSomeChildProperty == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"someChildProperty\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("someChildProperty");
         }
 
         return Reporting.Result.success(new MixedConcreteWithDescendantsChild(
@@ -696,50 +720,38 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of MixedConcreteLeaf from {@param node}.
+       * Deserialize an instance of MixedConcreteLeaf from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<MixedConcreteLeaf> tryMixedConcreteLeafFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         String theUniqueToConcreteLeaf = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "uniqueToConcreteLeaf": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theUniqueToConcreteLeafResult = tryStringFrom(currentNode.getValue());
-              if (theUniqueToConcreteLeafResult.isError()) {
-                theUniqueToConcreteLeafResult.getError()
-                  .prependSegment(new Reporting.NameSegment("uniqueToConcreteLeaf"));
-                return theUniqueToConcreteLeafResult.castTo(MixedConcreteLeaf.class);
-              }
-              theUniqueToConcreteLeaf = theUniqueToConcreteLeafResult.getResult();
+              theUniqueToConcreteLeaf = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theUniqueToConcreteLeaf == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"uniqueToConcreteLeaf\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("uniqueToConcreteLeaf");
         }
 
         return Reporting.Result.success(new MixedConcreteLeaf(
@@ -753,27 +765,27 @@ public class Jsonization {
        */
       public static Reporting.Result<MixedUnion> tryMixedUnionFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         final JsonNode modelTypeNode = node.get("modelType");
         if (modelTypeNode != null) {
           final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
           if (modelTypeResult.isError()) {
-            return modelTypeResult.castTo(MixedUnion.class);
+            return prependName(modelTypeResult, "modelType");
           }
           switch (modelTypeResult.getResult()) {
             case "MixedConcreteWithDescendantsChild": {
-              final Reporting.Result<MixedConcreteWithDescendantsChild> result = tryMixedConcreteWithDescendantsChildFrom(node);
+              final Reporting.Result<MixedConcreteWithDescendantsChild> result =
+                tryMixedConcreteWithDescendantsChildFromObject(node);
               if (result.isError()) {
                 return result.castTo(MixedUnion.class);
               }
               return Reporting.Result.success(MixedUnion.fromMixedConcreteWithDescendantsChild(result.getResult()));
             }
             case "MixedConcreteWithDescendants": {
-              final Reporting.Result<MixedConcreteWithDescendants> result = tryMixedConcreteWithDescendantsFrom(node);
+              final Reporting.Result<MixedConcreteWithDescendants> result =
+                tryMixedConcreteWithDescendantsFromObject(node);
               if (result.isError()) {
                 return result.castTo(MixedUnion.class);
               }
@@ -817,82 +829,56 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of ModelTypedFirst from {@param node}.
+       * Deserialize an instance of ModelTypedFirst from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<ModelTypedFirst> tryModelTypedFirstFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "ModelTypedFirst");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryModelTypedFirstFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of ModelTypedFirst from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<ModelTypedFirst> tryModelTypedFirstFromObject(JsonNode node) {
         String theSomeProperty = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "someProperty": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theSomePropertyResult = tryStringFrom(currentNode.getValue());
-              if (theSomePropertyResult.isError()) {
-                theSomePropertyResult.getError()
-                  .prependSegment(new Reporting.NameSegment("someProperty"));
-                return theSomePropertyResult.castTo(ModelTypedFirst.class);
-              }
-              theSomeProperty = theSomePropertyResult.getResult();
+              theSomeProperty = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(ModelTypedFirst.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("ModelTypedFirst")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'ModelTypedFirst', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
         if (theSomeProperty == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"someProperty\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("someProperty");
         }
 
         return Reporting.Result.success(new ModelTypedFirst(
@@ -900,82 +886,56 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of ModelTypedSecond from {@param node}.
+       * Deserialize an instance of ModelTypedSecond from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<ModelTypedSecond> tryModelTypedSecondFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "ModelTypedSecond");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryModelTypedSecondFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of ModelTypedSecond from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<ModelTypedSecond> tryModelTypedSecondFromObject(JsonNode node) {
         String theSomeProperty = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "someProperty": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theSomePropertyResult = tryStringFrom(currentNode.getValue());
-              if (theSomePropertyResult.isError()) {
-                theSomePropertyResult.getError()
-                  .prependSegment(new Reporting.NameSegment("someProperty"));
-                return theSomePropertyResult.castTo(ModelTypedSecond.class);
-              }
-              theSomeProperty = theSomePropertyResult.getResult();
+              theSomeProperty = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(ModelTypedSecond.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("ModelTypedSecond")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'ModelTypedSecond', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
         if (theSomeProperty == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"someProperty\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("someProperty");
         }
 
         return Reporting.Result.success(new ModelTypedSecond(
@@ -989,27 +949,27 @@ public class Jsonization {
        */
       public static Reporting.Result<ModelTypedUnion> tryModelTypedUnionFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         final JsonNode modelTypeNode = node.get("modelType");
         if (modelTypeNode != null) {
           final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
           if (modelTypeResult.isError()) {
-            return modelTypeResult.castTo(ModelTypedUnion.class);
+            return prependName(modelTypeResult, "modelType");
           }
           switch (modelTypeResult.getResult()) {
             case "ModelTypedFirst": {
-              final Reporting.Result<ModelTypedFirst> result = tryModelTypedFirstFrom(node);
+              final Reporting.Result<ModelTypedFirst> result =
+                tryModelTypedFirstFromObject(node);
               if (result.isError()) {
                 return result.castTo(ModelTypedUnion.class);
               }
               return Reporting.Result.success(ModelTypedUnion.fromModelTypedFirst(result.getResult()));
             }
             case "ModelTypedSecond": {
-              final Reporting.Result<ModelTypedSecond> result = tryModelTypedSecondFrom(node);
+              final Reporting.Result<ModelTypedSecond> result =
+                tryModelTypedSecondFromObject(node);
               if (result.isError()) {
                 return result.castTo(ModelTypedUnion.class);
               }
@@ -1029,16 +989,13 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of Something from {@param node}.
+       * Deserialize an instance of Something from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<Something> trySomethingFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         StructuralUnion theStructuralProperty = null;
@@ -1053,251 +1010,129 @@ public class Jsonization {
         ModelTypedUnion theOptionalModelTypedProperty = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "structuralProperty": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends StructuralUnion> parsed =
+                tryStructuralUnionFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends StructuralUnion> theStructuralPropertyResult = tryStructuralUnionFrom(currentNode.getValue());
-              if (theStructuralPropertyResult.isError()) {
-                theStructuralPropertyResult.getError()
-                  .prependSegment(new Reporting.NameSegment("structuralProperty"));
-                return theStructuralPropertyResult.castTo(Something.class);
-              }
-              theStructuralProperty = theStructuralPropertyResult.getResult();
+              theStructuralProperty = parsed.getResult();
               break;
             }
             case "mixedProperty": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends MixedUnion> parsed = tryMixedUnionFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends MixedUnion> theMixedPropertyResult = tryMixedUnionFrom(currentNode.getValue());
-              if (theMixedPropertyResult.isError()) {
-                theMixedPropertyResult.getError()
-                  .prependSegment(new Reporting.NameSegment("mixedProperty"));
-                return theMixedPropertyResult.castTo(Something.class);
-              }
-              theMixedProperty = theMixedPropertyResult.getResult();
+              theMixedProperty = parsed.getResult();
               break;
             }
             case "modelTypedProperty": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends ModelTypedUnion> parsed =
+                tryModelTypedUnionFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends ModelTypedUnion> theModelTypedPropertyResult = tryModelTypedUnionFrom(currentNode.getValue());
-              if (theModelTypedPropertyResult.isError()) {
-                theModelTypedPropertyResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelTypedProperty"));
-                return theModelTypedPropertyResult.castTo(Something.class);
-              }
-              theModelTypedProperty = theModelTypedPropertyResult.getResult();
+              theModelTypedProperty = parsed.getResult();
               break;
             }
             case "listStructuralProperty": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<StructuralUnion>> parsed =
+                parseListOf_StructuralUnion(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayListStructuralProperty = currentNode.getValue();
-              if (!arrayListStructuralProperty.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayListStructuralProperty.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "listStructuralProperty"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<StructuralUnion>> theListStructuralPropertyResult = parseArray(
-                arrayListStructuralProperty,
-                _DeserializeImplementation::tryStructuralUnionFrom);
-              if (theListStructuralPropertyResult.isError()) {
-                theListStructuralPropertyResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "listStructuralProperty"));
-                return theListStructuralPropertyResult.castTo(Something.class);
-              }
-              theListStructuralProperty = theListStructuralPropertyResult.getResult();
+              theListStructuralProperty = parsed.getResult();
               break;
             }
             case "listMixedProperty": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<MixedUnion>> parsed = parseListOf_MixedUnion(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayListMixedProperty = currentNode.getValue();
-              if (!arrayListMixedProperty.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayListMixedProperty.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "listMixedProperty"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<MixedUnion>> theListMixedPropertyResult = parseArray(
-                arrayListMixedProperty,
-                _DeserializeImplementation::tryMixedUnionFrom);
-              if (theListMixedPropertyResult.isError()) {
-                theListMixedPropertyResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "listMixedProperty"));
-                return theListMixedPropertyResult.castTo(Something.class);
-              }
-              theListMixedProperty = theListMixedPropertyResult.getResult();
+              theListMixedProperty = parsed.getResult();
               break;
             }
             case "listModelTypedProperty": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ModelTypedUnion>> parsed =
+                parseListOf_ModelTypedUnion(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayListModelTypedProperty = currentNode.getValue();
-              if (!arrayListModelTypedProperty.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayListModelTypedProperty.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "listModelTypedProperty"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ModelTypedUnion>> theListModelTypedPropertyResult = parseArray(
-                arrayListModelTypedProperty,
-                _DeserializeImplementation::tryModelTypedUnionFrom);
-              if (theListModelTypedPropertyResult.isError()) {
-                theListModelTypedPropertyResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "listModelTypedProperty"));
-                return theListModelTypedPropertyResult.castTo(Something.class);
-              }
-              theListModelTypedProperty = theListModelTypedPropertyResult.getResult();
+              theListModelTypedProperty = parsed.getResult();
               break;
             }
             case "tupleProperty": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<Tuple3<StructuralUnion, MixedUnion, ModelTypedUnion>> parsed =
+                parseTupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayTupleProperty = currentNode.getValue();
-              if (!arrayTupleProperty.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayTupleProperty.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "tupleProperty"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<Tuple3<StructuralUnion, MixedUnion, ModelTypedUnion>> theTuplePropertyResult = parseTuple3(
-                arrayTupleProperty,
-                _DeserializeImplementation::tryStructuralUnionFrom,
-                _DeserializeImplementation::tryMixedUnionFrom,
-                _DeserializeImplementation::tryModelTypedUnionFrom);
-              if (theTuplePropertyResult.isError()) {
-                theTuplePropertyResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "tupleProperty"));
-                return theTuplePropertyResult.castTo(Something.class);
-              }
-              theTupleProperty = theTuplePropertyResult.getResult();
+              theTupleProperty = parsed.getResult();
               break;
             }
             case "optionalStructuralProperty": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends StructuralUnion> parsed =
+                tryStructuralUnionFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends StructuralUnion> theOptionalStructuralPropertyResult = tryStructuralUnionFrom(currentNode.getValue());
-              if (theOptionalStructuralPropertyResult.isError()) {
-                theOptionalStructuralPropertyResult.getError()
-                  .prependSegment(new Reporting.NameSegment("optionalStructuralProperty"));
-                return theOptionalStructuralPropertyResult.castTo(Something.class);
-              }
-              theOptionalStructuralProperty = theOptionalStructuralPropertyResult.getResult();
+              theOptionalStructuralProperty = parsed.getResult();
               break;
             }
             case "optionalMixedProperty": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends MixedUnion> parsed = tryMixedUnionFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends MixedUnion> theOptionalMixedPropertyResult = tryMixedUnionFrom(currentNode.getValue());
-              if (theOptionalMixedPropertyResult.isError()) {
-                theOptionalMixedPropertyResult.getError()
-                  .prependSegment(new Reporting.NameSegment("optionalMixedProperty"));
-                return theOptionalMixedPropertyResult.castTo(Something.class);
-              }
-              theOptionalMixedProperty = theOptionalMixedPropertyResult.getResult();
+              theOptionalMixedProperty = parsed.getResult();
               break;
             }
             case "optionalModelTypedProperty": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends ModelTypedUnion> parsed =
+                tryModelTypedUnionFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends ModelTypedUnion> theOptionalModelTypedPropertyResult = tryModelTypedUnionFrom(currentNode.getValue());
-              if (theOptionalModelTypedPropertyResult.isError()) {
-                theOptionalModelTypedPropertyResult.getError()
-                  .prependSegment(new Reporting.NameSegment("optionalModelTypedProperty"));
-                return theOptionalModelTypedPropertyResult.castTo(Something.class);
-              }
-              theOptionalModelTypedProperty = theOptionalModelTypedPropertyResult.getResult();
+              theOptionalModelTypedProperty = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theStructuralProperty == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"structuralProperty\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("structuralProperty");
         }
 
         if (theMixedProperty == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"mixedProperty\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("mixedProperty");
         }
 
         if (theModelTypedProperty == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelTypedProperty\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("modelTypedProperty");
         }
 
         if (theListStructuralProperty == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"listStructuralProperty\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("listStructuralProperty");
         }
 
         if (theListMixedProperty == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"listMixedProperty\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("listMixedProperty");
         }
 
         if (theListModelTypedProperty == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"listModelTypedProperty\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("listModelTypedProperty");
         }
 
         if (theTupleProperty == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"tupleProperty\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("tupleProperty");
         }
 
         return Reporting.Result.success(new Something(

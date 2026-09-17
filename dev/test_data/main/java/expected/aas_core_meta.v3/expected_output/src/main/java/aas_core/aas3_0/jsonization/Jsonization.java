@@ -40,6 +40,12 @@ public class Jsonization {
      * we distinguish the implementation, realized in
      * {@link _DeserializeImplementation}, and the facade given in
      * {@link Deserialize} class.
+     *
+     * <p>Every value is parsed through a function which takes a single
+     * {@link JsonNode} and gives back a {@link Reporting.Result}, so that a list
+     * and a tuple can be composed out of the parsers of their items. Only they
+     * need such a composition -- every other value already has a function named
+     * after its very type.
      */
     private static class _DeserializeImplementation {
       /** Convert {@code value} to a string.
@@ -112,38 +118,343 @@ public class Jsonization {
       }
 
       /**
-       * Parse every item of {@code array} with {@code parseItem}.
+       * Mark the error of {@code result} as coming from the property {@code name}.
        *
-       * @param array JSON array to be parsed
+       * <p>A {@code case} of a property loop is matched exactly when the key of
+       * the property equals its literal, so the key already names the property and
+       * no {@code case} has to spell it out a second time.
+       */
+      private static <T> Reporting.Result<T> prependName(
+        Reporting.Result<?> result, String name) {
+        final Reporting.Error error = result.getError();
+        error.prependSegment(new Reporting.NameSegment(name));
+        return Reporting.Result.failure(error);
+      }
+
+      /**
+       * Mark the error of {@code result} as coming from the item at {@code index}.
+       */
+      private static <T> Reporting.Result<T> prependIndex(
+        Reporting.Result<?> result, int index) {
+        final Reporting.Error error = result.getError();
+        error.prependSegment(new Reporting.IndexSegment(index));
+        return Reporting.Result.failure(error);
+      }
+
+      /**
+       * Report that {@code node} is no JSON object.
+       */
+      private static <T> Reporting.Result<T> notAJsonObject(JsonNode node) {
+        return Reporting.Result.failure(
+          new Reporting.Error(
+            "Expected a JsonObject, but got " +
+            (node == null ? "null" : node.getNodeType())));
+      }
+
+      /**
+       * Report that {@code node} is no JSON array.
+       */
+      private static <T> Reporting.Result<T> notAJsonArray(JsonNode node) {
+        return Reporting.Result.failure(
+          new Reporting.Error(
+            "Expected a JsonArray, but got " + node.getNodeType()));
+      }
+
+      /**
+       * Report a property which the class does not have.
+       */
+      private static <T> Reporting.Result<T> unexpectedProperty(String name) {
+        return Reporting.Result.failure(
+          new Reporting.Error("Unexpected property: " + name));
+      }
+
+      /**
+       * Report a required property which the JSON object did not give.
+       */
+      private static <T> Reporting.Result<T> missingRequiredProperty(String name) {
+        return Reporting.Result.failure(
+          new Reporting.Error(
+            "Required property \"" + name + "\" is missing"));
+      }
+
+      /**
+       * Extract the {@code modelType} property of {@code node} as a string.
+       *
+       * <p>This is the only place which knows how the model type is spelled on
+       * the wire. Both the dispatch on the model type and its check in a concrete
+       * class go through it.
+       *
+       * @param node JSON object to be inspected
+       */
+      private static Reporting.Result<String> tryModelTypeFrom(JsonNode node) {
+        final JsonNode modelTypeNode = node.get("modelType");
+        if (modelTypeNode == null) {
+          return missingRequiredProperty("modelType");
+        }
+
+        final Reporting.Result<String> result = tryStringFrom(modelTypeNode);
+        if (result.isError()) {
+          return prependName(result, "modelType");
+        }
+
+        return result;
+      }
+
+      /**
+       * Check that {@code node} gives the {@code expected} model type, and return
+       * the error if it does not.
+       *
+       * <p>The model type is checked before the properties are read, so that a wrong
+       * one is reported without de-serializing any of them first, and so that
+       * the property loop carries nothing but the properties.
+       *
+       * @param node JSON object to be inspected
+       * @param expected model type of the class being de-serialized
+       */
+      private static Reporting.Error checkModelType(JsonNode node, String expected) {
+        final Reporting.Result<String> result = tryModelTypeFrom(node);
+        if (result.isError()) {
+          return result.getError();
+        }
+
+        final String modelType = result.getResult();
+        if (!modelType.equals(expected)) {
+          final Reporting.Error error = new Reporting.Error(
+            "Expected the model type '" + expected + "', " +
+            "but got '" + modelType + "'");
+          error.prependSegment(new Reporting.NameSegment("modelType"));
+          return error;
+        }
+
+        return null;
+      }
+
+      /**
+       * Parse {@code node} as a literal of the enumeration {@code enumType},
+       * converted from its text by {@code fromString}.
+       *
+       * <p>The stringification is passed in as a function value so that this one
+       * helper does the whole plumbing for every enumeration, and a single statement
+       * parses one. The literal and the class constrain each other, so the name in
+       * the error message can not drift from the type of the literal.
+       *
+       * @param node JSON node to be parsed
+       * @param fromString to convert the text into a literal
+       * @param enumType enumeration whose literal is expected
+       */
+      private static <T> Reporting.Result<T> tryEnumFrom(
+        JsonNode node,
+        Function<String, Optional<T>> fromString,
+        Class<T> enumType) {
+        final Reporting.Result<String> text = tryStringFrom(node);
+        if (text.isError()) {
+          return text.castTo(enumType);
+        }
+
+        final Optional<T> parsed = fromString.apply(text.getResult());
+        if (!parsed.isPresent()) {
+          return Reporting.Result.failure(
+            new Reporting.Error(
+              "Not a valid JSON representation of " + enumType.getSimpleName()));
+        }
+
+        return Reporting.Result.success(parsed.get());
+      }
+
+      /**
+       * Parse {@code node} as a JSON array, and every of its items with
+       * {@code parseItem}.
+       *
+       * @param node JSON node to be parsed
        * @param parseItem to parse a single item of the array
        */
       private static <T> Reporting.Result<List<T>> parseArray(
-        JsonNode array,
+        JsonNode node,
         Function<JsonNode, Reporting.Result<? extends T>> parseItem) {
-        final List<T> result = new ArrayList<>(array.size());
+        if (!node.isArray()) {
+          return notAJsonArray(node);
+        }
+
+        final List<T> result = new ArrayList<>(node.size());
+
         int index = 0;
-        for (JsonNode item : array) {
-          if (item == null) {
-            final Reporting.Error error = new Reporting.Error(
-              "Expected a non-null item, but got a null");
-            error.prependSegment(
-              new Reporting.IndexSegment(index));
-            return Reporting.Result.failure(error);
+        for (JsonNode item : node) {
+          final Reporting.Result<? extends T> parsedItem = parseItem.apply(item);
+          if (parsedItem.isError()) {
+            return prependIndex(parsedItem, index);
           }
 
-          final Reporting.Result<? extends T> parsedItemResult = parseItem.apply(item);
-          if (parsedItemResult.isError()) {
-            parsedItemResult.getError()
-              .prependSegment(
-              new Reporting.IndexSegment(index));
-            return Reporting.Result.failure(parsedItemResult.getError());
-          }
-
-          result.add(parsedItemResult.getResult());
+          result.add(parsedItem.getResult());
           index++;
         }
 
         return Reporting.Result.success(result);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code IReference}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<IReference>> parseListOf_IReference(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryReferenceFrom);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code IEmbeddedDataSpecification}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<IEmbeddedDataSpecification>> parseListOf_IEmbeddedDataSpecification(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryEmbeddedDataSpecificationFrom);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code IExtension}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<IExtension>> parseListOf_IExtension(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryExtensionFrom);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code ILangStringNameType}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<ILangStringNameType>> parseListOf_ILangStringNameType(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryLangStringNameTypeFrom);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code ILangStringTextType}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<ILangStringTextType>> parseListOf_ILangStringTextType(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryLangStringTextTypeFrom);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code ISpecificAssetId}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<ISpecificAssetId>> parseListOf_ISpecificAssetId(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::trySpecificAssetIdFrom);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code IQualifier}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<IQualifier>> parseListOf_IQualifier(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryQualifierFrom);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code ISubmodelElement}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<ISubmodelElement>> parseListOf_ISubmodelElement(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryISubmodelElementFrom);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code IDataElement}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<IDataElement>> parseListOf_IDataElement(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryIDataElementFrom);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code IOperationVariable}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<IOperationVariable>> parseListOf_IOperationVariable(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryOperationVariableFrom);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code IKey}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<IKey>> parseListOf_IKey(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryKeyFrom);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code IAssetAdministrationShell}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<IAssetAdministrationShell>> parseListOf_IAssetAdministrationShell(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryAssetAdministrationShellFrom);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code ISubmodel}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<ISubmodel>> parseListOf_ISubmodel(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::trySubmodelFrom);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code IConceptDescription}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<IConceptDescription>> parseListOf_IConceptDescription(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryConceptDescriptionFrom);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code IValueReferencePair}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<IValueReferencePair>> parseListOf_IValueReferencePair(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryValueReferencePairFrom);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code ILangStringPreferredNameTypeIec61360}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<ILangStringPreferredNameTypeIec61360>> parseListOf_ILangStringPreferredNameTypeIec61360(JsonNode node) {
+        return parseArray(
+          node,
+          _DeserializeImplementation::tryLangStringPreferredNameTypeIec61360From);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code ILangStringShortNameTypeIec61360}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<ILangStringShortNameTypeIec61360>> parseListOf_ILangStringShortNameTypeIec61360(JsonNode node) {
+        return parseArray(node, _DeserializeImplementation::tryLangStringShortNameTypeIec61360From);
+      }
+
+      /**
+       * Parse {@code node} as a list of {@code ILangStringDefinitionTypeIec61360}.
+       *
+       * @param node JSON node to be parsed
+       */
+      private static Reporting.Result<List<ILangStringDefinitionTypeIec61360>> parseListOf_ILangStringDefinitionTypeIec61360(JsonNode node) {
+        return parseArray(
+          node,
+          _DeserializeImplementation::tryLangStringDefinitionTypeIec61360From);
       }
 
       /**
@@ -154,61 +465,52 @@ public class Jsonization {
        */
       public static Reporting.Result<? extends IHasSemantics> tryIHasSemanticsFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
-        final JsonNode modelTypeNode = node.get("modelType");
-        if (modelTypeNode == null) {
-          final Reporting.Error error = new Reporting.Error(
-              "Expected a model type, but none is present");
-          return Reporting.Result.failure(error);
-        }
-        final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
+        final Reporting.Result<String> modelTypeResult = tryModelTypeFrom(node);
         if (modelTypeResult.isError()) {
           return modelTypeResult.castTo(IHasSemantics.class);
         }
 
-        switch (modelTypeResult.getResult())
-        {
-          case "RelationshipElement": {
-            return tryRelationshipElementFrom(node);
-        }  case "AnnotatedRelationshipElement": {
-            return tryAnnotatedRelationshipElementFrom(node);
-        }  case "BasicEventElement": {
-            return tryBasicEventElementFrom(node);
-        }  case "Blob": {
-            return tryBlobFrom(node);
-        }  case "Capability": {
-            return tryCapabilityFrom(node);
-        }  case "Entity": {
-            return tryEntityFrom(node);
-        }  case "Extension": {
+        switch (modelTypeResult.getResult()) {
+          case "RelationshipElement":
+            return tryRelationshipElementFromObject(node);
+          case "AnnotatedRelationshipElement":
+            return tryAnnotatedRelationshipElementFromObject(node);
+          case "BasicEventElement":
+            return tryBasicEventElementFromObject(node);
+          case "Blob":
+            return tryBlobFromObject(node);
+          case "Capability":
+            return tryCapabilityFromObject(node);
+          case "Entity":
+            return tryEntityFromObject(node);
+          case "Extension":
             return tryExtensionFrom(node);
-        }  case "File": {
-            return tryFileFrom(node);
-        }  case "MultiLanguageProperty": {
-            return tryMultiLanguagePropertyFrom(node);
-        }  case "Operation": {
-            return tryOperationFrom(node);
-        }  case "Property": {
-            return tryPropertyFrom(node);
-        }  case "Qualifier": {
+          case "File":
+            return tryFileFromObject(node);
+          case "MultiLanguageProperty":
+            return tryMultiLanguagePropertyFromObject(node);
+          case "Operation":
+            return tryOperationFromObject(node);
+          case "Property":
+            return tryPropertyFromObject(node);
+          case "Qualifier":
             return tryQualifierFrom(node);
-        }  case "Range": {
-            return tryRangeFrom(node);
-        }  case "ReferenceElement": {
-            return tryReferenceElementFrom(node);
-        }  case "SpecificAssetId": {
+          case "Range":
+            return tryRangeFromObject(node);
+          case "ReferenceElement":
+            return tryReferenceElementFromObject(node);
+          case "SpecificAssetId":
             return trySpecificAssetIdFrom(node);
-        }  case "Submodel": {
-            return trySubmodelFrom(node);
-        }  case "SubmodelElementCollection": {
-            return trySubmodelElementCollectionFrom(node);
-        }  case "SubmodelElementList": {
-            return trySubmodelElementListFrom(node);
-        }  default: {
+          case "Submodel":
+            return trySubmodelFromObject(node);
+          case "SubmodelElementCollection":
+            return trySubmodelElementCollectionFromObject(node);
+          case "SubmodelElementList":
+            return trySubmodelElementListFromObject(node);
+          default: {
             final Reporting.Error error = new Reporting.Error(
               "Unexpected model type for IHasSemantics: " + modelTypeResult.getResult());
             return Reporting.Result.failure(error);
@@ -217,16 +519,13 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of Extension from {@param node}.
+       * Deserialize an instance of Extension from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<Extension> tryExtensionFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         String theName = null;
@@ -237,131 +536,67 @@ public class Jsonization {
         List<IReference> theRefersTo = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "name": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theNameResult = tryStringFrom(currentNode.getValue());
-              if (theNameResult.isError()) {
-                theNameResult.getError()
-                  .prependSegment(new Reporting.NameSegment("name"));
-                return theNameResult.castTo(Extension.class);
-              }
-              theName = theNameResult.getResult();
+              theName = parsed.getResult();
               break;
             }
             case "semanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSemanticIdResult.isError()) {
-                theSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("semanticId"));
-                return theSemanticIdResult.castTo(Extension.class);
-              }
-              theSemanticId = theSemanticIdResult.getResult();
+              theSemanticId = parsed.getResult();
               break;
             }
             case "supplementalSemanticIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySupplementalSemanticIds = currentNode.getValue();
-              if (!arraySupplementalSemanticIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySupplementalSemanticIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "supplementalSemanticIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theSupplementalSemanticIdsResult = parseArray(
-                arraySupplementalSemanticIds,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theSupplementalSemanticIdsResult.isError()) {
-                theSupplementalSemanticIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return theSupplementalSemanticIdsResult.castTo(Extension.class);
-              }
-              theSupplementalSemanticIds = theSupplementalSemanticIdsResult.getResult();
+              theSupplementalSemanticIds = parsed.getResult();
               break;
             }
             case "valueType": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends DataTypeDefXsd> parsed =
+                tryDataTypeDefXsdFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends DataTypeDefXsd> theValueTypeResult = tryDataTypeDefXsdFrom(currentNode.getValue());
-              if (theValueTypeResult.isError()) {
-                theValueTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("valueType"));
-                return theValueTypeResult.castTo(Extension.class);
-              }
-              theValueType = theValueTypeResult.getResult();
+              theValueType = parsed.getResult();
               break;
             }
             case "value": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theValueResult = tryStringFrom(currentNode.getValue());
-              if (theValueResult.isError()) {
-                theValueResult.getError()
-                  .prependSegment(new Reporting.NameSegment("value"));
-                return theValueResult.castTo(Extension.class);
-              }
-              theValue = theValueResult.getResult();
+              theValue = parsed.getResult();
               break;
             }
             case "refersTo": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayRefersTo = currentNode.getValue();
-              if (!arrayRefersTo.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayRefersTo.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "refersTo"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theRefersToResult = parseArray(
-                arrayRefersTo,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theRefersToResult.isError()) {
-                theRefersToResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "refersTo"));
-                return theRefersToResult.castTo(Extension.class);
-              }
-              theRefersTo = theRefersToResult.getResult();
+              theRefersTo = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theName == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"name\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("name");
         }
 
         return Reporting.Result.success(new Extension(
@@ -381,59 +616,50 @@ public class Jsonization {
        */
       public static Reporting.Result<? extends IHasExtensions> tryIHasExtensionsFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
-        final JsonNode modelTypeNode = node.get("modelType");
-        if (modelTypeNode == null) {
-          final Reporting.Error error = new Reporting.Error(
-              "Expected a model type, but none is present");
-          return Reporting.Result.failure(error);
-        }
-        final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
+        final Reporting.Result<String> modelTypeResult = tryModelTypeFrom(node);
         if (modelTypeResult.isError()) {
           return modelTypeResult.castTo(IHasExtensions.class);
         }
 
-        switch (modelTypeResult.getResult())
-        {
-          case "RelationshipElement": {
-            return tryRelationshipElementFrom(node);
-        }  case "AnnotatedRelationshipElement": {
-            return tryAnnotatedRelationshipElementFrom(node);
-        }  case "AssetAdministrationShell": {
-            return tryAssetAdministrationShellFrom(node);
-        }  case "BasicEventElement": {
-            return tryBasicEventElementFrom(node);
-        }  case "Blob": {
-            return tryBlobFrom(node);
-        }  case "Capability": {
-            return tryCapabilityFrom(node);
-        }  case "ConceptDescription": {
-            return tryConceptDescriptionFrom(node);
-        }  case "Entity": {
-            return tryEntityFrom(node);
-        }  case "File": {
-            return tryFileFrom(node);
-        }  case "MultiLanguageProperty": {
-            return tryMultiLanguagePropertyFrom(node);
-        }  case "Operation": {
-            return tryOperationFrom(node);
-        }  case "Property": {
-            return tryPropertyFrom(node);
-        }  case "Range": {
-            return tryRangeFrom(node);
-        }  case "ReferenceElement": {
-            return tryReferenceElementFrom(node);
-        }  case "Submodel": {
-            return trySubmodelFrom(node);
-        }  case "SubmodelElementCollection": {
-            return trySubmodelElementCollectionFrom(node);
-        }  case "SubmodelElementList": {
-            return trySubmodelElementListFrom(node);
-        }  default: {
+        switch (modelTypeResult.getResult()) {
+          case "RelationshipElement":
+            return tryRelationshipElementFromObject(node);
+          case "AnnotatedRelationshipElement":
+            return tryAnnotatedRelationshipElementFromObject(node);
+          case "AssetAdministrationShell":
+            return tryAssetAdministrationShellFromObject(node);
+          case "BasicEventElement":
+            return tryBasicEventElementFromObject(node);
+          case "Blob":
+            return tryBlobFromObject(node);
+          case "Capability":
+            return tryCapabilityFromObject(node);
+          case "ConceptDescription":
+            return tryConceptDescriptionFromObject(node);
+          case "Entity":
+            return tryEntityFromObject(node);
+          case "File":
+            return tryFileFromObject(node);
+          case "MultiLanguageProperty":
+            return tryMultiLanguagePropertyFromObject(node);
+          case "Operation":
+            return tryOperationFromObject(node);
+          case "Property":
+            return tryPropertyFromObject(node);
+          case "Range":
+            return tryRangeFromObject(node);
+          case "ReferenceElement":
+            return tryReferenceElementFromObject(node);
+          case "Submodel":
+            return trySubmodelFromObject(node);
+          case "SubmodelElementCollection":
+            return trySubmodelElementCollectionFromObject(node);
+          case "SubmodelElementList":
+            return trySubmodelElementListFromObject(node);
+          default: {
             final Reporting.Error error = new Reporting.Error(
               "Unexpected model type for IHasExtensions: " + modelTypeResult.getResult());
             return Reporting.Result.failure(error);
@@ -449,59 +675,50 @@ public class Jsonization {
        */
       public static Reporting.Result<? extends IReferable> tryIReferableFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
-        final JsonNode modelTypeNode = node.get("modelType");
-        if (modelTypeNode == null) {
-          final Reporting.Error error = new Reporting.Error(
-              "Expected a model type, but none is present");
-          return Reporting.Result.failure(error);
-        }
-        final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
+        final Reporting.Result<String> modelTypeResult = tryModelTypeFrom(node);
         if (modelTypeResult.isError()) {
           return modelTypeResult.castTo(IReferable.class);
         }
 
-        switch (modelTypeResult.getResult())
-        {
-          case "RelationshipElement": {
-            return tryRelationshipElementFrom(node);
-        }  case "AnnotatedRelationshipElement": {
-            return tryAnnotatedRelationshipElementFrom(node);
-        }  case "AssetAdministrationShell": {
-            return tryAssetAdministrationShellFrom(node);
-        }  case "BasicEventElement": {
-            return tryBasicEventElementFrom(node);
-        }  case "Blob": {
-            return tryBlobFrom(node);
-        }  case "Capability": {
-            return tryCapabilityFrom(node);
-        }  case "ConceptDescription": {
-            return tryConceptDescriptionFrom(node);
-        }  case "Entity": {
-            return tryEntityFrom(node);
-        }  case "File": {
-            return tryFileFrom(node);
-        }  case "MultiLanguageProperty": {
-            return tryMultiLanguagePropertyFrom(node);
-        }  case "Operation": {
-            return tryOperationFrom(node);
-        }  case "Property": {
-            return tryPropertyFrom(node);
-        }  case "Range": {
-            return tryRangeFrom(node);
-        }  case "ReferenceElement": {
-            return tryReferenceElementFrom(node);
-        }  case "Submodel": {
-            return trySubmodelFrom(node);
-        }  case "SubmodelElementCollection": {
-            return trySubmodelElementCollectionFrom(node);
-        }  case "SubmodelElementList": {
-            return trySubmodelElementListFrom(node);
-        }  default: {
+        switch (modelTypeResult.getResult()) {
+          case "RelationshipElement":
+            return tryRelationshipElementFromObject(node);
+          case "AnnotatedRelationshipElement":
+            return tryAnnotatedRelationshipElementFromObject(node);
+          case "AssetAdministrationShell":
+            return tryAssetAdministrationShellFromObject(node);
+          case "BasicEventElement":
+            return tryBasicEventElementFromObject(node);
+          case "Blob":
+            return tryBlobFromObject(node);
+          case "Capability":
+            return tryCapabilityFromObject(node);
+          case "ConceptDescription":
+            return tryConceptDescriptionFromObject(node);
+          case "Entity":
+            return tryEntityFromObject(node);
+          case "File":
+            return tryFileFromObject(node);
+          case "MultiLanguageProperty":
+            return tryMultiLanguagePropertyFromObject(node);
+          case "Operation":
+            return tryOperationFromObject(node);
+          case "Property":
+            return tryPropertyFromObject(node);
+          case "Range":
+            return tryRangeFromObject(node);
+          case "ReferenceElement":
+            return tryReferenceElementFromObject(node);
+          case "Submodel":
+            return trySubmodelFromObject(node);
+          case "SubmodelElementCollection":
+            return trySubmodelElementCollectionFromObject(node);
+          case "SubmodelElementList":
+            return trySubmodelElementListFromObject(node);
+          default: {
             final Reporting.Error error = new Reporting.Error(
               "Unexpected model type for IReferable: " + modelTypeResult.getResult());
             return Reporting.Result.failure(error);
@@ -517,31 +734,22 @@ public class Jsonization {
        */
       public static Reporting.Result<? extends IIdentifiable> tryIIdentifiableFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
-        final JsonNode modelTypeNode = node.get("modelType");
-        if (modelTypeNode == null) {
-          final Reporting.Error error = new Reporting.Error(
-              "Expected a model type, but none is present");
-          return Reporting.Result.failure(error);
-        }
-        final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
+        final Reporting.Result<String> modelTypeResult = tryModelTypeFrom(node);
         if (modelTypeResult.isError()) {
           return modelTypeResult.castTo(IIdentifiable.class);
         }
 
-        switch (modelTypeResult.getResult())
-        {
-          case "AssetAdministrationShell": {
-            return tryAssetAdministrationShellFrom(node);
-        }  case "ConceptDescription": {
-            return tryConceptDescriptionFrom(node);
-        }  case "Submodel": {
-            return trySubmodelFrom(node);
-        }  default: {
+        switch (modelTypeResult.getResult()) {
+          case "AssetAdministrationShell":
+            return tryAssetAdministrationShellFromObject(node);
+          case "ConceptDescription":
+            return tryConceptDescriptionFromObject(node);
+          case "Submodel":
+            return trySubmodelFromObject(node);
+          default: {
             final Reporting.Error error = new Reporting.Error(
               "Unexpected model type for IIdentifiable: " + modelTypeResult.getResult());
             return Reporting.Result.failure(error);
@@ -555,16 +763,7 @@ public class Jsonization {
        * @param node JSON node to be parsed
        */
       private static Reporting.Result<ModellingKind> tryModellingKindFrom(JsonNode node) {
-        final Reporting.Result<String> textResult = tryStringFrom(node);
-        if (textResult.isError()) {
-          return textResult.castTo(ModellingKind.class);
-        }
-        final Optional<ModellingKind> modellingKind = Stringification.modellingKindFromString(textResult.getResult());
-        if (!modellingKind.isPresent()) {
-          final Reporting.Error error = new Reporting.Error("Not a valid JSON representation of ModellingKind");
-          return Reporting.Result.failure(error);
-        }
-        return Reporting.Result.success(modellingKind.get());
+        return tryEnumFrom(node, Stringification::modellingKindFromString, ModellingKind.class);
       }
 
       /**
@@ -575,27 +774,18 @@ public class Jsonization {
        */
       public static Reporting.Result<? extends IHasKind> tryIHasKindFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
-        final JsonNode modelTypeNode = node.get("modelType");
-        if (modelTypeNode == null) {
-          final Reporting.Error error = new Reporting.Error(
-              "Expected a model type, but none is present");
-          return Reporting.Result.failure(error);
-        }
-        final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
+        final Reporting.Result<String> modelTypeResult = tryModelTypeFrom(node);
         if (modelTypeResult.isError()) {
           return modelTypeResult.castTo(IHasKind.class);
         }
 
-        switch (modelTypeResult.getResult())
-        {
-          case "Submodel": {
-            return trySubmodelFrom(node);
-        }  default: {
+        switch (modelTypeResult.getResult()) {
+          case "Submodel":
+            return trySubmodelFromObject(node);
+          default: {
             final Reporting.Error error = new Reporting.Error(
               "Unexpected model type for IHasKind: " + modelTypeResult.getResult());
             return Reporting.Result.failure(error);
@@ -611,61 +801,52 @@ public class Jsonization {
        */
       public static Reporting.Result<? extends IHasDataSpecification> tryIHasDataSpecificationFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
-        final JsonNode modelTypeNode = node.get("modelType");
-        if (modelTypeNode == null) {
-          final Reporting.Error error = new Reporting.Error(
-              "Expected a model type, but none is present");
-          return Reporting.Result.failure(error);
-        }
-        final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
+        final Reporting.Result<String> modelTypeResult = tryModelTypeFrom(node);
         if (modelTypeResult.isError()) {
           return modelTypeResult.castTo(IHasDataSpecification.class);
         }
 
-        switch (modelTypeResult.getResult())
-        {
-          case "AdministrativeInformation": {
+        switch (modelTypeResult.getResult()) {
+          case "AdministrativeInformation":
             return tryAdministrativeInformationFrom(node);
-        }  case "RelationshipElement": {
-            return tryRelationshipElementFrom(node);
-        }  case "AnnotatedRelationshipElement": {
-            return tryAnnotatedRelationshipElementFrom(node);
-        }  case "AssetAdministrationShell": {
-            return tryAssetAdministrationShellFrom(node);
-        }  case "BasicEventElement": {
-            return tryBasicEventElementFrom(node);
-        }  case "Blob": {
-            return tryBlobFrom(node);
-        }  case "Capability": {
-            return tryCapabilityFrom(node);
-        }  case "ConceptDescription": {
-            return tryConceptDescriptionFrom(node);
-        }  case "Entity": {
-            return tryEntityFrom(node);
-        }  case "File": {
-            return tryFileFrom(node);
-        }  case "MultiLanguageProperty": {
-            return tryMultiLanguagePropertyFrom(node);
-        }  case "Operation": {
-            return tryOperationFrom(node);
-        }  case "Property": {
-            return tryPropertyFrom(node);
-        }  case "Range": {
-            return tryRangeFrom(node);
-        }  case "ReferenceElement": {
-            return tryReferenceElementFrom(node);
-        }  case "Submodel": {
-            return trySubmodelFrom(node);
-        }  case "SubmodelElementCollection": {
-            return trySubmodelElementCollectionFrom(node);
-        }  case "SubmodelElementList": {
-            return trySubmodelElementListFrom(node);
-        }  default: {
+          case "RelationshipElement":
+            return tryRelationshipElementFromObject(node);
+          case "AnnotatedRelationshipElement":
+            return tryAnnotatedRelationshipElementFromObject(node);
+          case "AssetAdministrationShell":
+            return tryAssetAdministrationShellFromObject(node);
+          case "BasicEventElement":
+            return tryBasicEventElementFromObject(node);
+          case "Blob":
+            return tryBlobFromObject(node);
+          case "Capability":
+            return tryCapabilityFromObject(node);
+          case "ConceptDescription":
+            return tryConceptDescriptionFromObject(node);
+          case "Entity":
+            return tryEntityFromObject(node);
+          case "File":
+            return tryFileFromObject(node);
+          case "MultiLanguageProperty":
+            return tryMultiLanguagePropertyFromObject(node);
+          case "Operation":
+            return tryOperationFromObject(node);
+          case "Property":
+            return tryPropertyFromObject(node);
+          case "Range":
+            return tryRangeFromObject(node);
+          case "ReferenceElement":
+            return tryReferenceElementFromObject(node);
+          case "Submodel":
+            return trySubmodelFromObject(node);
+          case "SubmodelElementCollection":
+            return trySubmodelElementCollectionFromObject(node);
+          case "SubmodelElementList":
+            return trySubmodelElementListFromObject(node);
+          default: {
             final Reporting.Error error = new Reporting.Error(
               "Unexpected model type for IHasDataSpecification: " + modelTypeResult.getResult());
             return Reporting.Result.failure(error);
@@ -674,16 +855,13 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of AdministrativeInformation from {@param node}.
+       * Deserialize an instance of AdministrativeInformation from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<AdministrativeInformation> tryAdministrativeInformationFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
@@ -693,101 +871,56 @@ public class Jsonization {
         String theTemplateId = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "embeddedDataSpecifications": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IEmbeddedDataSpecification>> parsed =
+                parseListOf_IEmbeddedDataSpecification(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayEmbeddedDataSpecifications = currentNode.getValue();
-              if (!arrayEmbeddedDataSpecifications.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayEmbeddedDataSpecifications.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "embeddedDataSpecifications"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IEmbeddedDataSpecification>> theEmbeddedDataSpecificationsResult = parseArray(
-                arrayEmbeddedDataSpecifications,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFrom);
-              if (theEmbeddedDataSpecificationsResult.isError()) {
-                theEmbeddedDataSpecificationsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return theEmbeddedDataSpecificationsResult.castTo(AdministrativeInformation.class);
-              }
-              theEmbeddedDataSpecifications = theEmbeddedDataSpecificationsResult.getResult();
+              theEmbeddedDataSpecifications = parsed.getResult();
               break;
             }
             case "version": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theVersionResult = tryStringFrom(currentNode.getValue());
-              if (theVersionResult.isError()) {
-                theVersionResult.getError()
-                  .prependSegment(new Reporting.NameSegment("version"));
-                return theVersionResult.castTo(AdministrativeInformation.class);
-              }
-              theVersion = theVersionResult.getResult();
+              theVersion = parsed.getResult();
               break;
             }
             case "revision": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theRevisionResult = tryStringFrom(currentNode.getValue());
-              if (theRevisionResult.isError()) {
-                theRevisionResult.getError()
-                  .prependSegment(new Reporting.NameSegment("revision"));
-                return theRevisionResult.castTo(AdministrativeInformation.class);
-              }
-              theRevision = theRevisionResult.getResult();
+              theRevision = parsed.getResult();
               break;
             }
             case "creator": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theCreatorResult = tryReferenceFrom(currentNode.getValue());
-              if (theCreatorResult.isError()) {
-                theCreatorResult.getError()
-                  .prependSegment(new Reporting.NameSegment("creator"));
-                return theCreatorResult.castTo(AdministrativeInformation.class);
-              }
-              theCreator = theCreatorResult.getResult();
+              theCreator = parsed.getResult();
               break;
             }
             case "templateId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theTemplateIdResult = tryStringFrom(currentNode.getValue());
-              if (theTemplateIdResult.isError()) {
-                theTemplateIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("templateId"));
-                return theTemplateIdResult.castTo(AdministrativeInformation.class);
-              }
-              theTemplateId = theTemplateIdResult.getResult();
+              theTemplateId = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
-
-
 
         return Reporting.Result.success(new AdministrativeInformation(
           theEmbeddedDataSpecifications,
@@ -805,55 +938,46 @@ public class Jsonization {
        */
       public static Reporting.Result<? extends IQualifiable> tryIQualifiableFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
-        final JsonNode modelTypeNode = node.get("modelType");
-        if (modelTypeNode == null) {
-          final Reporting.Error error = new Reporting.Error(
-              "Expected a model type, but none is present");
-          return Reporting.Result.failure(error);
-        }
-        final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
+        final Reporting.Result<String> modelTypeResult = tryModelTypeFrom(node);
         if (modelTypeResult.isError()) {
           return modelTypeResult.castTo(IQualifiable.class);
         }
 
-        switch (modelTypeResult.getResult())
-        {
-          case "RelationshipElement": {
-            return tryRelationshipElementFrom(node);
-        }  case "AnnotatedRelationshipElement": {
-            return tryAnnotatedRelationshipElementFrom(node);
-        }  case "BasicEventElement": {
-            return tryBasicEventElementFrom(node);
-        }  case "Blob": {
-            return tryBlobFrom(node);
-        }  case "Capability": {
-            return tryCapabilityFrom(node);
-        }  case "Entity": {
-            return tryEntityFrom(node);
-        }  case "File": {
-            return tryFileFrom(node);
-        }  case "MultiLanguageProperty": {
-            return tryMultiLanguagePropertyFrom(node);
-        }  case "Operation": {
-            return tryOperationFrom(node);
-        }  case "Property": {
-            return tryPropertyFrom(node);
-        }  case "Range": {
-            return tryRangeFrom(node);
-        }  case "ReferenceElement": {
-            return tryReferenceElementFrom(node);
-        }  case "Submodel": {
-            return trySubmodelFrom(node);
-        }  case "SubmodelElementCollection": {
-            return trySubmodelElementCollectionFrom(node);
-        }  case "SubmodelElementList": {
-            return trySubmodelElementListFrom(node);
-        }  default: {
+        switch (modelTypeResult.getResult()) {
+          case "RelationshipElement":
+            return tryRelationshipElementFromObject(node);
+          case "AnnotatedRelationshipElement":
+            return tryAnnotatedRelationshipElementFromObject(node);
+          case "BasicEventElement":
+            return tryBasicEventElementFromObject(node);
+          case "Blob":
+            return tryBlobFromObject(node);
+          case "Capability":
+            return tryCapabilityFromObject(node);
+          case "Entity":
+            return tryEntityFromObject(node);
+          case "File":
+            return tryFileFromObject(node);
+          case "MultiLanguageProperty":
+            return tryMultiLanguagePropertyFromObject(node);
+          case "Operation":
+            return tryOperationFromObject(node);
+          case "Property":
+            return tryPropertyFromObject(node);
+          case "Range":
+            return tryRangeFromObject(node);
+          case "ReferenceElement":
+            return tryReferenceElementFromObject(node);
+          case "Submodel":
+            return trySubmodelFromObject(node);
+          case "SubmodelElementCollection":
+            return trySubmodelElementCollectionFromObject(node);
+          case "SubmodelElementList":
+            return trySubmodelElementListFromObject(node);
+          default: {
             final Reporting.Error error = new Reporting.Error(
               "Unexpected model type for IQualifiable: " + modelTypeResult.getResult());
             return Reporting.Result.failure(error);
@@ -867,29 +991,17 @@ public class Jsonization {
        * @param node JSON node to be parsed
        */
       private static Reporting.Result<QualifierKind> tryQualifierKindFrom(JsonNode node) {
-        final Reporting.Result<String> textResult = tryStringFrom(node);
-        if (textResult.isError()) {
-          return textResult.castTo(QualifierKind.class);
-        }
-        final Optional<QualifierKind> qualifierKind = Stringification.qualifierKindFromString(textResult.getResult());
-        if (!qualifierKind.isPresent()) {
-          final Reporting.Error error = new Reporting.Error("Not a valid JSON representation of QualifierKind");
-          return Reporting.Result.failure(error);
-        }
-        return Reporting.Result.success(qualifierKind.get());
+        return tryEnumFrom(node, Stringification::qualifierKindFromString, QualifierKind.class);
       }
 
       /**
-       * Deserialize an instance of Qualifier from {@param node}.
+       * Deserialize an instance of Qualifier from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<Qualifier> tryQualifierFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         String theType = null;
@@ -901,138 +1013,79 @@ public class Jsonization {
         IReference theValueId = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "type": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theTypeResult = tryStringFrom(currentNode.getValue());
-              if (theTypeResult.isError()) {
-                theTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("type"));
-                return theTypeResult.castTo(Qualifier.class);
-              }
-              theType = theTypeResult.getResult();
+              theType = parsed.getResult();
               break;
             }
             case "valueType": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends DataTypeDefXsd> parsed =
+                tryDataTypeDefXsdFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends DataTypeDefXsd> theValueTypeResult = tryDataTypeDefXsdFrom(currentNode.getValue());
-              if (theValueTypeResult.isError()) {
-                theValueTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("valueType"));
-                return theValueTypeResult.castTo(Qualifier.class);
-              }
-              theValueType = theValueTypeResult.getResult();
+              theValueType = parsed.getResult();
               break;
             }
             case "semanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSemanticIdResult.isError()) {
-                theSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("semanticId"));
-                return theSemanticIdResult.castTo(Qualifier.class);
-              }
-              theSemanticId = theSemanticIdResult.getResult();
+              theSemanticId = parsed.getResult();
               break;
             }
             case "supplementalSemanticIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySupplementalSemanticIds = currentNode.getValue();
-              if (!arraySupplementalSemanticIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySupplementalSemanticIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "supplementalSemanticIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theSupplementalSemanticIdsResult = parseArray(
-                arraySupplementalSemanticIds,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theSupplementalSemanticIdsResult.isError()) {
-                theSupplementalSemanticIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return theSupplementalSemanticIdsResult.castTo(Qualifier.class);
-              }
-              theSupplementalSemanticIds = theSupplementalSemanticIdsResult.getResult();
+              theSupplementalSemanticIds = parsed.getResult();
               break;
             }
             case "kind": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends QualifierKind> parsed = tryQualifierKindFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends QualifierKind> theKindResult = tryQualifierKindFrom(currentNode.getValue());
-              if (theKindResult.isError()) {
-                theKindResult.getError()
-                  .prependSegment(new Reporting.NameSegment("kind"));
-                return theKindResult.castTo(Qualifier.class);
-              }
-              theKind = theKindResult.getResult();
+              theKind = parsed.getResult();
               break;
             }
             case "value": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theValueResult = tryStringFrom(currentNode.getValue());
-              if (theValueResult.isError()) {
-                theValueResult.getError()
-                  .prependSegment(new Reporting.NameSegment("value"));
-                return theValueResult.castTo(Qualifier.class);
-              }
-              theValue = theValueResult.getResult();
+              theValue = parsed.getResult();
               break;
             }
             case "valueId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theValueIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theValueIdResult.isError()) {
-                theValueIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("valueId"));
-                return theValueIdResult.castTo(Qualifier.class);
-              }
-              theValueId = theValueIdResult.getResult();
+              theValueId = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"type\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("type");
         }
 
         if (theValueType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"valueType\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("valueType");
         }
 
         return Reporting.Result.success(new Qualifier(
@@ -1046,18 +1099,30 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of AssetAdministrationShell from {@param node}.
+       * Deserialize an instance of AssetAdministrationShell from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<AssetAdministrationShell> tryAssetAdministrationShellFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "AssetAdministrationShell");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryAssetAdministrationShellFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of AssetAdministrationShell from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<AssetAdministrationShell> tryAssetAdministrationShellFromObject(JsonNode node) {
         String theId = null;
         IAssetInformation theAssetInformation = null;
         List<IExtension> theExtensions = null;
@@ -1070,279 +1135,119 @@ public class Jsonization {
         IReference theDerivedFrom = null;
         List<IReference> theSubmodels = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "id": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdResult = tryStringFrom(currentNode.getValue());
-              if (theIdResult.isError()) {
-                theIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("id"));
-                return theIdResult.castTo(AssetAdministrationShell.class);
-              }
-              theId = theIdResult.getResult();
+              theId = parsed.getResult();
               break;
             }
             case "assetInformation": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IAssetInformation> parsed =
+                tryAssetInformationFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IAssetInformation> theAssetInformationResult = tryAssetInformationFrom(currentNode.getValue());
-              if (theAssetInformationResult.isError()) {
-                theAssetInformationResult.getError()
-                  .prependSegment(new Reporting.NameSegment("assetInformation"));
-                return theAssetInformationResult.castTo(AssetAdministrationShell.class);
-              }
-              theAssetInformation = theAssetInformationResult.getResult();
+              theAssetInformation = parsed.getResult();
               break;
             }
             case "extensions": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IExtension>> parsed = parseListOf_IExtension(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayExtensions = currentNode.getValue();
-              if (!arrayExtensions.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayExtensions.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "extensions"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IExtension>> theExtensionsResult = parseArray(
-                arrayExtensions,
-                _DeserializeImplementation::tryExtensionFrom);
-              if (theExtensionsResult.isError()) {
-                theExtensionsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return theExtensionsResult.castTo(AssetAdministrationShell.class);
-              }
-              theExtensions = theExtensionsResult.getResult();
+              theExtensions = parsed.getResult();
               break;
             }
             case "category": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theCategoryResult = tryStringFrom(currentNode.getValue());
-              if (theCategoryResult.isError()) {
-                theCategoryResult.getError()
-                  .prependSegment(new Reporting.NameSegment("category"));
-                return theCategoryResult.castTo(AssetAdministrationShell.class);
-              }
-              theCategory = theCategoryResult.getResult();
+              theCategory = parsed.getResult();
               break;
             }
             case "idShort": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdShortResult = tryStringFrom(currentNode.getValue());
-              if (theIdShortResult.isError()) {
-                theIdShortResult.getError()
-                  .prependSegment(new Reporting.NameSegment("idShort"));
-                return theIdShortResult.castTo(AssetAdministrationShell.class);
-              }
-              theIdShort = theIdShortResult.getResult();
+              theIdShort = parsed.getResult();
               break;
             }
             case "displayName": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringNameType>> parsed =
+                parseListOf_ILangStringNameType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDisplayName = currentNode.getValue();
-              if (!arrayDisplayName.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDisplayName.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "displayName"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringNameType>> theDisplayNameResult = parseArray(
-                arrayDisplayName,
-                _DeserializeImplementation::tryLangStringNameTypeFrom);
-              if (theDisplayNameResult.isError()) {
-                theDisplayNameResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return theDisplayNameResult.castTo(AssetAdministrationShell.class);
-              }
-              theDisplayName = theDisplayNameResult.getResult();
+              theDisplayName = parsed.getResult();
               break;
             }
             case "description": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringTextType>> parsed =
+                parseListOf_ILangStringTextType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDescription = currentNode.getValue();
-              if (!arrayDescription.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDescription.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "description"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringTextType>> theDescriptionResult = parseArray(
-                arrayDescription,
-                _DeserializeImplementation::tryLangStringTextTypeFrom);
-              if (theDescriptionResult.isError()) {
-                theDescriptionResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return theDescriptionResult.castTo(AssetAdministrationShell.class);
-              }
-              theDescription = theDescriptionResult.getResult();
+              theDescription = parsed.getResult();
               break;
             }
             case "administration": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IAdministrativeInformation> parsed =
+                tryAdministrativeInformationFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IAdministrativeInformation> theAdministrationResult = tryAdministrativeInformationFrom(currentNode.getValue());
-              if (theAdministrationResult.isError()) {
-                theAdministrationResult.getError()
-                  .prependSegment(new Reporting.NameSegment("administration"));
-                return theAdministrationResult.castTo(AssetAdministrationShell.class);
-              }
-              theAdministration = theAdministrationResult.getResult();
+              theAdministration = parsed.getResult();
               break;
             }
             case "embeddedDataSpecifications": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IEmbeddedDataSpecification>> parsed =
+                parseListOf_IEmbeddedDataSpecification(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayEmbeddedDataSpecifications = currentNode.getValue();
-              if (!arrayEmbeddedDataSpecifications.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayEmbeddedDataSpecifications.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "embeddedDataSpecifications"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IEmbeddedDataSpecification>> theEmbeddedDataSpecificationsResult = parseArray(
-                arrayEmbeddedDataSpecifications,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFrom);
-              if (theEmbeddedDataSpecificationsResult.isError()) {
-                theEmbeddedDataSpecificationsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return theEmbeddedDataSpecificationsResult.castTo(AssetAdministrationShell.class);
-              }
-              theEmbeddedDataSpecifications = theEmbeddedDataSpecificationsResult.getResult();
+              theEmbeddedDataSpecifications = parsed.getResult();
               break;
             }
             case "derivedFrom": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theDerivedFromResult = tryReferenceFrom(currentNode.getValue());
-              if (theDerivedFromResult.isError()) {
-                theDerivedFromResult.getError()
-                  .prependSegment(new Reporting.NameSegment("derivedFrom"));
-                return theDerivedFromResult.castTo(AssetAdministrationShell.class);
-              }
-              theDerivedFrom = theDerivedFromResult.getResult();
+              theDerivedFrom = parsed.getResult();
               break;
             }
             case "submodels": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySubmodels = currentNode.getValue();
-              if (!arraySubmodels.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySubmodels.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "submodels"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theSubmodelsResult = parseArray(
-                arraySubmodels,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theSubmodelsResult.isError()) {
-                theSubmodelsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "submodels"));
-                return theSubmodelsResult.castTo(AssetAdministrationShell.class);
-              }
-              theSubmodels = theSubmodelsResult.getResult();
+              theSubmodels = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(AssetAdministrationShell.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("AssetAdministrationShell")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'AssetAdministrationShell', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
         if (theId == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"id\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("id");
         }
 
         if (theAssetInformation == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"assetInformation\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("assetInformation");
         }
 
         return Reporting.Result.success(new AssetAdministrationShell(
@@ -1360,16 +1265,13 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of AssetInformation from {@param node}.
+       * Deserialize an instance of AssetInformation from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<AssetInformation> tryAssetInformationFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         AssetKind theAssetKind = null;
@@ -1379,104 +1281,59 @@ public class Jsonization {
         IResource theDefaultThumbnail = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "assetKind": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends AssetKind> parsed = tryAssetKindFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends AssetKind> theAssetKindResult = tryAssetKindFrom(currentNode.getValue());
-              if (theAssetKindResult.isError()) {
-                theAssetKindResult.getError()
-                  .prependSegment(new Reporting.NameSegment("assetKind"));
-                return theAssetKindResult.castTo(AssetInformation.class);
-              }
-              theAssetKind = theAssetKindResult.getResult();
+              theAssetKind = parsed.getResult();
               break;
             }
             case "globalAssetId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theGlobalAssetIdResult = tryStringFrom(currentNode.getValue());
-              if (theGlobalAssetIdResult.isError()) {
-                theGlobalAssetIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("globalAssetId"));
-                return theGlobalAssetIdResult.castTo(AssetInformation.class);
-              }
-              theGlobalAssetId = theGlobalAssetIdResult.getResult();
+              theGlobalAssetId = parsed.getResult();
               break;
             }
             case "specificAssetIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ISpecificAssetId>> parsed =
+                parseListOf_ISpecificAssetId(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySpecificAssetIds = currentNode.getValue();
-              if (!arraySpecificAssetIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySpecificAssetIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "specificAssetIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ISpecificAssetId>> theSpecificAssetIdsResult = parseArray(
-                arraySpecificAssetIds,
-                _DeserializeImplementation::trySpecificAssetIdFrom);
-              if (theSpecificAssetIdsResult.isError()) {
-                theSpecificAssetIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "specificAssetIds"));
-                return theSpecificAssetIdsResult.castTo(AssetInformation.class);
-              }
-              theSpecificAssetIds = theSpecificAssetIdsResult.getResult();
+              theSpecificAssetIds = parsed.getResult();
               break;
             }
             case "assetType": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theAssetTypeResult = tryStringFrom(currentNode.getValue());
-              if (theAssetTypeResult.isError()) {
-                theAssetTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("assetType"));
-                return theAssetTypeResult.castTo(AssetInformation.class);
-              }
-              theAssetType = theAssetTypeResult.getResult();
+              theAssetType = parsed.getResult();
               break;
             }
             case "defaultThumbnail": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IResource> parsed = tryResourceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IResource> theDefaultThumbnailResult = tryResourceFrom(currentNode.getValue());
-              if (theDefaultThumbnailResult.isError()) {
-                theDefaultThumbnailResult.getError()
-                  .prependSegment(new Reporting.NameSegment("defaultThumbnail"));
-                return theDefaultThumbnailResult.castTo(AssetInformation.class);
-              }
-              theDefaultThumbnail = theDefaultThumbnailResult.getResult();
+              theDefaultThumbnail = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theAssetKind == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"assetKind\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("assetKind");
         }
 
         return Reporting.Result.success(new AssetInformation(
@@ -1488,65 +1345,47 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of Resource from {@param node}.
+       * Deserialize an instance of Resource from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<Resource> tryResourceFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         String thePath = null;
         String theContentType = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "path": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> thePathResult = tryStringFrom(currentNode.getValue());
-              if (thePathResult.isError()) {
-                thePathResult.getError()
-                  .prependSegment(new Reporting.NameSegment("path"));
-                return thePathResult.castTo(Resource.class);
-              }
-              thePath = thePathResult.getResult();
+              thePath = parsed.getResult();
               break;
             }
             case "contentType": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theContentTypeResult = tryStringFrom(currentNode.getValue());
-              if (theContentTypeResult.isError()) {
-                theContentTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("contentType"));
-                return theContentTypeResult.castTo(Resource.class);
-              }
-              theContentType = theContentTypeResult.getResult();
+              theContentType = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (thePath == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"path\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("path");
         }
 
         return Reporting.Result.success(new Resource(
@@ -1560,29 +1399,17 @@ public class Jsonization {
        * @param node JSON node to be parsed
        */
       private static Reporting.Result<AssetKind> tryAssetKindFrom(JsonNode node) {
-        final Reporting.Result<String> textResult = tryStringFrom(node);
-        if (textResult.isError()) {
-          return textResult.castTo(AssetKind.class);
-        }
-        final Optional<AssetKind> assetKind = Stringification.assetKindFromString(textResult.getResult());
-        if (!assetKind.isPresent()) {
-          final Reporting.Error error = new Reporting.Error("Not a valid JSON representation of AssetKind");
-          return Reporting.Result.failure(error);
-        }
-        return Reporting.Result.success(assetKind.get());
+        return tryEnumFrom(node, Stringification::assetKindFromString, AssetKind.class);
       }
 
       /**
-       * Deserialize an instance of SpecificAssetId from {@param node}.
+       * Deserialize an instance of SpecificAssetId from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<SpecificAssetId> trySpecificAssetIdFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         String theName = null;
@@ -1592,110 +1419,62 @@ public class Jsonization {
         IReference theExternalSubjectId = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "name": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theNameResult = tryStringFrom(currentNode.getValue());
-              if (theNameResult.isError()) {
-                theNameResult.getError()
-                  .prependSegment(new Reporting.NameSegment("name"));
-                return theNameResult.castTo(SpecificAssetId.class);
-              }
-              theName = theNameResult.getResult();
+              theName = parsed.getResult();
               break;
             }
             case "value": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theValueResult = tryStringFrom(currentNode.getValue());
-              if (theValueResult.isError()) {
-                theValueResult.getError()
-                  .prependSegment(new Reporting.NameSegment("value"));
-                return theValueResult.castTo(SpecificAssetId.class);
-              }
-              theValue = theValueResult.getResult();
+              theValue = parsed.getResult();
               break;
             }
             case "semanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSemanticIdResult.isError()) {
-                theSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("semanticId"));
-                return theSemanticIdResult.castTo(SpecificAssetId.class);
-              }
-              theSemanticId = theSemanticIdResult.getResult();
+              theSemanticId = parsed.getResult();
               break;
             }
             case "supplementalSemanticIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySupplementalSemanticIds = currentNode.getValue();
-              if (!arraySupplementalSemanticIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySupplementalSemanticIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "supplementalSemanticIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theSupplementalSemanticIdsResult = parseArray(
-                arraySupplementalSemanticIds,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theSupplementalSemanticIdsResult.isError()) {
-                theSupplementalSemanticIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return theSupplementalSemanticIdsResult.castTo(SpecificAssetId.class);
-              }
-              theSupplementalSemanticIds = theSupplementalSemanticIdsResult.getResult();
+              theSupplementalSemanticIds = parsed.getResult();
               break;
             }
             case "externalSubjectId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theExternalSubjectIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theExternalSubjectIdResult.isError()) {
-                theExternalSubjectIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("externalSubjectId"));
-                return theExternalSubjectIdResult.castTo(SpecificAssetId.class);
-              }
-              theExternalSubjectId = theExternalSubjectIdResult.getResult();
+              theExternalSubjectId = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theName == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"name\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("name");
         }
 
         if (theValue == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"value\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("value");
         }
 
         return Reporting.Result.success(new SpecificAssetId(
@@ -1707,18 +1486,30 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of Submodel from {@param node}.
+       * Deserialize an instance of Submodel from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<Submodel> trySubmodelFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "Submodel");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return trySubmodelFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of Submodel from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<Submodel> trySubmodelFromObject(JsonNode node) {
         String theId = null;
         List<IExtension> theExtensions = null;
         String theCategory = null;
@@ -1733,327 +1524,131 @@ public class Jsonization {
         List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
         List<ISubmodelElement> theSubmodelElements = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "id": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdResult = tryStringFrom(currentNode.getValue());
-              if (theIdResult.isError()) {
-                theIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("id"));
-                return theIdResult.castTo(Submodel.class);
-              }
-              theId = theIdResult.getResult();
+              theId = parsed.getResult();
               break;
             }
             case "extensions": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IExtension>> parsed = parseListOf_IExtension(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayExtensions = currentNode.getValue();
-              if (!arrayExtensions.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayExtensions.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "extensions"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IExtension>> theExtensionsResult = parseArray(
-                arrayExtensions,
-                _DeserializeImplementation::tryExtensionFrom);
-              if (theExtensionsResult.isError()) {
-                theExtensionsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return theExtensionsResult.castTo(Submodel.class);
-              }
-              theExtensions = theExtensionsResult.getResult();
+              theExtensions = parsed.getResult();
               break;
             }
             case "category": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theCategoryResult = tryStringFrom(currentNode.getValue());
-              if (theCategoryResult.isError()) {
-                theCategoryResult.getError()
-                  .prependSegment(new Reporting.NameSegment("category"));
-                return theCategoryResult.castTo(Submodel.class);
-              }
-              theCategory = theCategoryResult.getResult();
+              theCategory = parsed.getResult();
               break;
             }
             case "idShort": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdShortResult = tryStringFrom(currentNode.getValue());
-              if (theIdShortResult.isError()) {
-                theIdShortResult.getError()
-                  .prependSegment(new Reporting.NameSegment("idShort"));
-                return theIdShortResult.castTo(Submodel.class);
-              }
-              theIdShort = theIdShortResult.getResult();
+              theIdShort = parsed.getResult();
               break;
             }
             case "displayName": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringNameType>> parsed =
+                parseListOf_ILangStringNameType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDisplayName = currentNode.getValue();
-              if (!arrayDisplayName.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDisplayName.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "displayName"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringNameType>> theDisplayNameResult = parseArray(
-                arrayDisplayName,
-                _DeserializeImplementation::tryLangStringNameTypeFrom);
-              if (theDisplayNameResult.isError()) {
-                theDisplayNameResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return theDisplayNameResult.castTo(Submodel.class);
-              }
-              theDisplayName = theDisplayNameResult.getResult();
+              theDisplayName = parsed.getResult();
               break;
             }
             case "description": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringTextType>> parsed =
+                parseListOf_ILangStringTextType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDescription = currentNode.getValue();
-              if (!arrayDescription.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDescription.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "description"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringTextType>> theDescriptionResult = parseArray(
-                arrayDescription,
-                _DeserializeImplementation::tryLangStringTextTypeFrom);
-              if (theDescriptionResult.isError()) {
-                theDescriptionResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return theDescriptionResult.castTo(Submodel.class);
-              }
-              theDescription = theDescriptionResult.getResult();
+              theDescription = parsed.getResult();
               break;
             }
             case "administration": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IAdministrativeInformation> parsed =
+                tryAdministrativeInformationFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IAdministrativeInformation> theAdministrationResult = tryAdministrativeInformationFrom(currentNode.getValue());
-              if (theAdministrationResult.isError()) {
-                theAdministrationResult.getError()
-                  .prependSegment(new Reporting.NameSegment("administration"));
-                return theAdministrationResult.castTo(Submodel.class);
-              }
-              theAdministration = theAdministrationResult.getResult();
+              theAdministration = parsed.getResult();
               break;
             }
             case "kind": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends ModellingKind> parsed = tryModellingKindFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends ModellingKind> theKindResult = tryModellingKindFrom(currentNode.getValue());
-              if (theKindResult.isError()) {
-                theKindResult.getError()
-                  .prependSegment(new Reporting.NameSegment("kind"));
-                return theKindResult.castTo(Submodel.class);
-              }
-              theKind = theKindResult.getResult();
+              theKind = parsed.getResult();
               break;
             }
             case "semanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSemanticIdResult.isError()) {
-                theSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("semanticId"));
-                return theSemanticIdResult.castTo(Submodel.class);
-              }
-              theSemanticId = theSemanticIdResult.getResult();
+              theSemanticId = parsed.getResult();
               break;
             }
             case "supplementalSemanticIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySupplementalSemanticIds = currentNode.getValue();
-              if (!arraySupplementalSemanticIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySupplementalSemanticIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "supplementalSemanticIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theSupplementalSemanticIdsResult = parseArray(
-                arraySupplementalSemanticIds,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theSupplementalSemanticIdsResult.isError()) {
-                theSupplementalSemanticIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return theSupplementalSemanticIdsResult.castTo(Submodel.class);
-              }
-              theSupplementalSemanticIds = theSupplementalSemanticIdsResult.getResult();
+              theSupplementalSemanticIds = parsed.getResult();
               break;
             }
             case "qualifiers": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IQualifier>> parsed = parseListOf_IQualifier(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayQualifiers = currentNode.getValue();
-              if (!arrayQualifiers.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayQualifiers.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "qualifiers"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IQualifier>> theQualifiersResult = parseArray(
-                arrayQualifiers,
-                _DeserializeImplementation::tryQualifierFrom);
-              if (theQualifiersResult.isError()) {
-                theQualifiersResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return theQualifiersResult.castTo(Submodel.class);
-              }
-              theQualifiers = theQualifiersResult.getResult();
+              theQualifiers = parsed.getResult();
               break;
             }
             case "embeddedDataSpecifications": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IEmbeddedDataSpecification>> parsed =
+                parseListOf_IEmbeddedDataSpecification(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayEmbeddedDataSpecifications = currentNode.getValue();
-              if (!arrayEmbeddedDataSpecifications.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayEmbeddedDataSpecifications.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "embeddedDataSpecifications"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IEmbeddedDataSpecification>> theEmbeddedDataSpecificationsResult = parseArray(
-                arrayEmbeddedDataSpecifications,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFrom);
-              if (theEmbeddedDataSpecificationsResult.isError()) {
-                theEmbeddedDataSpecificationsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return theEmbeddedDataSpecificationsResult.castTo(Submodel.class);
-              }
-              theEmbeddedDataSpecifications = theEmbeddedDataSpecificationsResult.getResult();
+              theEmbeddedDataSpecifications = parsed.getResult();
               break;
             }
             case "submodelElements": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ISubmodelElement>> parsed =
+                parseListOf_ISubmodelElement(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySubmodelElements = currentNode.getValue();
-              if (!arraySubmodelElements.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySubmodelElements.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "submodelElements"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ISubmodelElement>> theSubmodelElementsResult = parseArray(
-                arraySubmodelElements,
-                _DeserializeImplementation::tryISubmodelElementFrom);
-              if (theSubmodelElementsResult.isError()) {
-                theSubmodelElementsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "submodelElements"));
-                return theSubmodelElementsResult.castTo(Submodel.class);
-              }
-              theSubmodelElements = theSubmodelElementsResult.getResult();
+              theSubmodelElements = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(Submodel.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("Submodel")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'Submodel', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
         if (theId == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"id\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("id");
         }
 
         return Reporting.Result.success(new Submodel(
@@ -2080,53 +1675,44 @@ public class Jsonization {
        */
       public static Reporting.Result<? extends ISubmodelElement> tryISubmodelElementFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
-        final JsonNode modelTypeNode = node.get("modelType");
-        if (modelTypeNode == null) {
-          final Reporting.Error error = new Reporting.Error(
-              "Expected a model type, but none is present");
-          return Reporting.Result.failure(error);
-        }
-        final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
+        final Reporting.Result<String> modelTypeResult = tryModelTypeFrom(node);
         if (modelTypeResult.isError()) {
           return modelTypeResult.castTo(ISubmodelElement.class);
         }
 
-        switch (modelTypeResult.getResult())
-        {
-          case "RelationshipElement": {
-            return tryRelationshipElementFrom(node);
-        }  case "AnnotatedRelationshipElement": {
-            return tryAnnotatedRelationshipElementFrom(node);
-        }  case "BasicEventElement": {
-            return tryBasicEventElementFrom(node);
-        }  case "Blob": {
-            return tryBlobFrom(node);
-        }  case "Capability": {
-            return tryCapabilityFrom(node);
-        }  case "Entity": {
-            return tryEntityFrom(node);
-        }  case "File": {
-            return tryFileFrom(node);
-        }  case "MultiLanguageProperty": {
-            return tryMultiLanguagePropertyFrom(node);
-        }  case "Operation": {
-            return tryOperationFrom(node);
-        }  case "Property": {
-            return tryPropertyFrom(node);
-        }  case "Range": {
-            return tryRangeFrom(node);
-        }  case "ReferenceElement": {
-            return tryReferenceElementFrom(node);
-        }  case "SubmodelElementCollection": {
-            return trySubmodelElementCollectionFrom(node);
-        }  case "SubmodelElementList": {
-            return trySubmodelElementListFrom(node);
-        }  default: {
+        switch (modelTypeResult.getResult()) {
+          case "RelationshipElement":
+            return tryRelationshipElementFromObject(node);
+          case "AnnotatedRelationshipElement":
+            return tryAnnotatedRelationshipElementFromObject(node);
+          case "BasicEventElement":
+            return tryBasicEventElementFromObject(node);
+          case "Blob":
+            return tryBlobFromObject(node);
+          case "Capability":
+            return tryCapabilityFromObject(node);
+          case "Entity":
+            return tryEntityFromObject(node);
+          case "File":
+            return tryFileFromObject(node);
+          case "MultiLanguageProperty":
+            return tryMultiLanguagePropertyFromObject(node);
+          case "Operation":
+            return tryOperationFromObject(node);
+          case "Property":
+            return tryPropertyFromObject(node);
+          case "Range":
+            return tryRangeFromObject(node);
+          case "ReferenceElement":
+            return tryReferenceElementFromObject(node);
+          case "SubmodelElementCollection":
+            return trySubmodelElementCollectionFromObject(node);
+          case "SubmodelElementList":
+            return trySubmodelElementListFromObject(node);
+          default: {
             final Reporting.Error error = new Reporting.Error(
               "Unexpected model type for ISubmodelElement: " + modelTypeResult.getResult());
             return Reporting.Result.failure(error);
@@ -2142,29 +1728,20 @@ public class Jsonization {
        */
       public static Reporting.Result<? extends IRelationshipElement> tryIRelationshipElementFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
-        final JsonNode modelTypeNode = node.get("modelType");
-        if (modelTypeNode == null) {
-          final Reporting.Error error = new Reporting.Error(
-              "Expected a model type, but none is present");
-          return Reporting.Result.failure(error);
-        }
-        final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
+        final Reporting.Result<String> modelTypeResult = tryModelTypeFrom(node);
         if (modelTypeResult.isError()) {
           return modelTypeResult.castTo(IRelationshipElement.class);
         }
 
-        switch (modelTypeResult.getResult())
-        {
-          case "AnnotatedRelationshipElement": {
-            return tryAnnotatedRelationshipElementFrom(node);
-        }  case "RelationshipElement": {
-            return tryRelationshipElementFrom(node);
-        }  default: {
+        switch (modelTypeResult.getResult()) {
+          case "AnnotatedRelationshipElement":
+            return tryAnnotatedRelationshipElementFromObject(node);
+          case "RelationshipElement":
+            return tryRelationshipElementFromObject(node);
+          default: {
             final Reporting.Error error = new Reporting.Error(
               "Unexpected model type for IRelationshipElement: " + modelTypeResult.getResult());
             return Reporting.Result.failure(error);
@@ -2173,18 +1750,30 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of RelationshipElement from {@param node}.
+       * Deserialize an instance of RelationshipElement from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<RelationshipElement> tryRelationshipElementFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "RelationshipElement");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryRelationshipElementFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of RelationshipElement from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<RelationshipElement> tryRelationshipElementFromObject(JsonNode node) {
         IReference theFirst = null;
         IReference theSecond = null;
         List<IExtension> theExtensions = null;
@@ -2197,292 +1786,117 @@ public class Jsonization {
         List<IQualifier> theQualifiers = null;
         List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "first": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theFirstResult = tryReferenceFrom(currentNode.getValue());
-              if (theFirstResult.isError()) {
-                theFirstResult.getError()
-                  .prependSegment(new Reporting.NameSegment("first"));
-                return theFirstResult.castTo(RelationshipElement.class);
-              }
-              theFirst = theFirstResult.getResult();
+              theFirst = parsed.getResult();
               break;
             }
             case "second": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSecondResult = tryReferenceFrom(currentNode.getValue());
-              if (theSecondResult.isError()) {
-                theSecondResult.getError()
-                  .prependSegment(new Reporting.NameSegment("second"));
-                return theSecondResult.castTo(RelationshipElement.class);
-              }
-              theSecond = theSecondResult.getResult();
+              theSecond = parsed.getResult();
               break;
             }
             case "extensions": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IExtension>> parsed = parseListOf_IExtension(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayExtensions = currentNode.getValue();
-              if (!arrayExtensions.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayExtensions.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "extensions"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IExtension>> theExtensionsResult = parseArray(
-                arrayExtensions,
-                _DeserializeImplementation::tryExtensionFrom);
-              if (theExtensionsResult.isError()) {
-                theExtensionsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return theExtensionsResult.castTo(RelationshipElement.class);
-              }
-              theExtensions = theExtensionsResult.getResult();
+              theExtensions = parsed.getResult();
               break;
             }
             case "category": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theCategoryResult = tryStringFrom(currentNode.getValue());
-              if (theCategoryResult.isError()) {
-                theCategoryResult.getError()
-                  .prependSegment(new Reporting.NameSegment("category"));
-                return theCategoryResult.castTo(RelationshipElement.class);
-              }
-              theCategory = theCategoryResult.getResult();
+              theCategory = parsed.getResult();
               break;
             }
             case "idShort": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdShortResult = tryStringFrom(currentNode.getValue());
-              if (theIdShortResult.isError()) {
-                theIdShortResult.getError()
-                  .prependSegment(new Reporting.NameSegment("idShort"));
-                return theIdShortResult.castTo(RelationshipElement.class);
-              }
-              theIdShort = theIdShortResult.getResult();
+              theIdShort = parsed.getResult();
               break;
             }
             case "displayName": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringNameType>> parsed =
+                parseListOf_ILangStringNameType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDisplayName = currentNode.getValue();
-              if (!arrayDisplayName.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDisplayName.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "displayName"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringNameType>> theDisplayNameResult = parseArray(
-                arrayDisplayName,
-                _DeserializeImplementation::tryLangStringNameTypeFrom);
-              if (theDisplayNameResult.isError()) {
-                theDisplayNameResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return theDisplayNameResult.castTo(RelationshipElement.class);
-              }
-              theDisplayName = theDisplayNameResult.getResult();
+              theDisplayName = parsed.getResult();
               break;
             }
             case "description": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringTextType>> parsed =
+                parseListOf_ILangStringTextType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDescription = currentNode.getValue();
-              if (!arrayDescription.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDescription.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "description"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringTextType>> theDescriptionResult = parseArray(
-                arrayDescription,
-                _DeserializeImplementation::tryLangStringTextTypeFrom);
-              if (theDescriptionResult.isError()) {
-                theDescriptionResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return theDescriptionResult.castTo(RelationshipElement.class);
-              }
-              theDescription = theDescriptionResult.getResult();
+              theDescription = parsed.getResult();
               break;
             }
             case "semanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSemanticIdResult.isError()) {
-                theSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("semanticId"));
-                return theSemanticIdResult.castTo(RelationshipElement.class);
-              }
-              theSemanticId = theSemanticIdResult.getResult();
+              theSemanticId = parsed.getResult();
               break;
             }
             case "supplementalSemanticIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySupplementalSemanticIds = currentNode.getValue();
-              if (!arraySupplementalSemanticIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySupplementalSemanticIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "supplementalSemanticIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theSupplementalSemanticIdsResult = parseArray(
-                arraySupplementalSemanticIds,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theSupplementalSemanticIdsResult.isError()) {
-                theSupplementalSemanticIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return theSupplementalSemanticIdsResult.castTo(RelationshipElement.class);
-              }
-              theSupplementalSemanticIds = theSupplementalSemanticIdsResult.getResult();
+              theSupplementalSemanticIds = parsed.getResult();
               break;
             }
             case "qualifiers": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IQualifier>> parsed = parseListOf_IQualifier(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayQualifiers = currentNode.getValue();
-              if (!arrayQualifiers.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayQualifiers.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "qualifiers"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IQualifier>> theQualifiersResult = parseArray(
-                arrayQualifiers,
-                _DeserializeImplementation::tryQualifierFrom);
-              if (theQualifiersResult.isError()) {
-                theQualifiersResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return theQualifiersResult.castTo(RelationshipElement.class);
-              }
-              theQualifiers = theQualifiersResult.getResult();
+              theQualifiers = parsed.getResult();
               break;
             }
             case "embeddedDataSpecifications": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IEmbeddedDataSpecification>> parsed =
+                parseListOf_IEmbeddedDataSpecification(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayEmbeddedDataSpecifications = currentNode.getValue();
-              if (!arrayEmbeddedDataSpecifications.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayEmbeddedDataSpecifications.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "embeddedDataSpecifications"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IEmbeddedDataSpecification>> theEmbeddedDataSpecificationsResult = parseArray(
-                arrayEmbeddedDataSpecifications,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFrom);
-              if (theEmbeddedDataSpecificationsResult.isError()) {
-                theEmbeddedDataSpecificationsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return theEmbeddedDataSpecificationsResult.castTo(RelationshipElement.class);
-              }
-              theEmbeddedDataSpecifications = theEmbeddedDataSpecificationsResult.getResult();
+              theEmbeddedDataSpecifications = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(RelationshipElement.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("RelationshipElement")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'RelationshipElement', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
         if (theFirst == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"first\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("first");
         }
 
         if (theSecond == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"second\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("second");
         }
 
         return Reporting.Result.success(new RelationshipElement(
@@ -2505,31 +1919,37 @@ public class Jsonization {
        * @param node JSON node to be parsed
        */
       private static Reporting.Result<AasSubmodelElements> tryAasSubmodelElementsFrom(JsonNode node) {
-        final Reporting.Result<String> textResult = tryStringFrom(node);
-        if (textResult.isError()) {
-          return textResult.castTo(AasSubmodelElements.class);
-        }
-        final Optional<AasSubmodelElements> aasSubmodelElements = Stringification.aasSubmodelElementsFromString(textResult.getResult());
-        if (!aasSubmodelElements.isPresent()) {
-          final Reporting.Error error = new Reporting.Error("Not a valid JSON representation of AasSubmodelElements");
-          return Reporting.Result.failure(error);
-        }
-        return Reporting.Result.success(aasSubmodelElements.get());
+        return tryEnumFrom(
+          node,
+          Stringification::aasSubmodelElementsFromString,
+          AasSubmodelElements.class);
       }
 
       /**
-       * Deserialize an instance of SubmodelElementList from {@param node}.
+       * Deserialize an instance of SubmodelElementList from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<SubmodelElementList> trySubmodelElementListFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "SubmodelElementList");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return trySubmodelElementListFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of SubmodelElementList from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<SubmodelElementList> trySubmodelElementListFromObject(JsonNode node) {
         AasSubmodelElements theTypeValueListElement = null;
         List<IExtension> theExtensions = null;
         String theCategory = null;
@@ -2545,341 +1965,140 @@ public class Jsonization {
         DataTypeDefXsd theValueTypeListElement = null;
         List<ISubmodelElement> theValue = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "typeValueListElement": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends AasSubmodelElements> parsed =
+                tryAasSubmodelElementsFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends AasSubmodelElements> theTypeValueListElementResult = tryAasSubmodelElementsFrom(currentNode.getValue());
-              if (theTypeValueListElementResult.isError()) {
-                theTypeValueListElementResult.getError()
-                  .prependSegment(new Reporting.NameSegment("typeValueListElement"));
-                return theTypeValueListElementResult.castTo(SubmodelElementList.class);
-              }
-              theTypeValueListElement = theTypeValueListElementResult.getResult();
+              theTypeValueListElement = parsed.getResult();
               break;
             }
             case "extensions": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IExtension>> parsed = parseListOf_IExtension(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayExtensions = currentNode.getValue();
-              if (!arrayExtensions.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayExtensions.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "extensions"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IExtension>> theExtensionsResult = parseArray(
-                arrayExtensions,
-                _DeserializeImplementation::tryExtensionFrom);
-              if (theExtensionsResult.isError()) {
-                theExtensionsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return theExtensionsResult.castTo(SubmodelElementList.class);
-              }
-              theExtensions = theExtensionsResult.getResult();
+              theExtensions = parsed.getResult();
               break;
             }
             case "category": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theCategoryResult = tryStringFrom(currentNode.getValue());
-              if (theCategoryResult.isError()) {
-                theCategoryResult.getError()
-                  .prependSegment(new Reporting.NameSegment("category"));
-                return theCategoryResult.castTo(SubmodelElementList.class);
-              }
-              theCategory = theCategoryResult.getResult();
+              theCategory = parsed.getResult();
               break;
             }
             case "idShort": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdShortResult = tryStringFrom(currentNode.getValue());
-              if (theIdShortResult.isError()) {
-                theIdShortResult.getError()
-                  .prependSegment(new Reporting.NameSegment("idShort"));
-                return theIdShortResult.castTo(SubmodelElementList.class);
-              }
-              theIdShort = theIdShortResult.getResult();
+              theIdShort = parsed.getResult();
               break;
             }
             case "displayName": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringNameType>> parsed =
+                parseListOf_ILangStringNameType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDisplayName = currentNode.getValue();
-              if (!arrayDisplayName.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDisplayName.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "displayName"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringNameType>> theDisplayNameResult = parseArray(
-                arrayDisplayName,
-                _DeserializeImplementation::tryLangStringNameTypeFrom);
-              if (theDisplayNameResult.isError()) {
-                theDisplayNameResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return theDisplayNameResult.castTo(SubmodelElementList.class);
-              }
-              theDisplayName = theDisplayNameResult.getResult();
+              theDisplayName = parsed.getResult();
               break;
             }
             case "description": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringTextType>> parsed =
+                parseListOf_ILangStringTextType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDescription = currentNode.getValue();
-              if (!arrayDescription.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDescription.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "description"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringTextType>> theDescriptionResult = parseArray(
-                arrayDescription,
-                _DeserializeImplementation::tryLangStringTextTypeFrom);
-              if (theDescriptionResult.isError()) {
-                theDescriptionResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return theDescriptionResult.castTo(SubmodelElementList.class);
-              }
-              theDescription = theDescriptionResult.getResult();
+              theDescription = parsed.getResult();
               break;
             }
             case "semanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSemanticIdResult.isError()) {
-                theSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("semanticId"));
-                return theSemanticIdResult.castTo(SubmodelElementList.class);
-              }
-              theSemanticId = theSemanticIdResult.getResult();
+              theSemanticId = parsed.getResult();
               break;
             }
             case "supplementalSemanticIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySupplementalSemanticIds = currentNode.getValue();
-              if (!arraySupplementalSemanticIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySupplementalSemanticIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "supplementalSemanticIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theSupplementalSemanticIdsResult = parseArray(
-                arraySupplementalSemanticIds,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theSupplementalSemanticIdsResult.isError()) {
-                theSupplementalSemanticIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return theSupplementalSemanticIdsResult.castTo(SubmodelElementList.class);
-              }
-              theSupplementalSemanticIds = theSupplementalSemanticIdsResult.getResult();
+              theSupplementalSemanticIds = parsed.getResult();
               break;
             }
             case "qualifiers": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IQualifier>> parsed = parseListOf_IQualifier(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayQualifiers = currentNode.getValue();
-              if (!arrayQualifiers.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayQualifiers.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "qualifiers"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IQualifier>> theQualifiersResult = parseArray(
-                arrayQualifiers,
-                _DeserializeImplementation::tryQualifierFrom);
-              if (theQualifiersResult.isError()) {
-                theQualifiersResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return theQualifiersResult.castTo(SubmodelElementList.class);
-              }
-              theQualifiers = theQualifiersResult.getResult();
+              theQualifiers = parsed.getResult();
               break;
             }
             case "embeddedDataSpecifications": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IEmbeddedDataSpecification>> parsed =
+                parseListOf_IEmbeddedDataSpecification(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayEmbeddedDataSpecifications = currentNode.getValue();
-              if (!arrayEmbeddedDataSpecifications.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayEmbeddedDataSpecifications.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "embeddedDataSpecifications"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IEmbeddedDataSpecification>> theEmbeddedDataSpecificationsResult = parseArray(
-                arrayEmbeddedDataSpecifications,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFrom);
-              if (theEmbeddedDataSpecificationsResult.isError()) {
-                theEmbeddedDataSpecificationsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return theEmbeddedDataSpecificationsResult.castTo(SubmodelElementList.class);
-              }
-              theEmbeddedDataSpecifications = theEmbeddedDataSpecificationsResult.getResult();
+              theEmbeddedDataSpecifications = parsed.getResult();
               break;
             }
             case "orderRelevant": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends Boolean> parsed = tryBooleanFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends Boolean> theOrderRelevantResult = tryBooleanFrom(currentNode.getValue());
-              if (theOrderRelevantResult.isError()) {
-                theOrderRelevantResult.getError()
-                  .prependSegment(new Reporting.NameSegment("orderRelevant"));
-                return theOrderRelevantResult.castTo(SubmodelElementList.class);
-              }
-              theOrderRelevant = theOrderRelevantResult.getResult();
+              theOrderRelevant = parsed.getResult();
               break;
             }
             case "semanticIdListElement": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSemanticIdListElementResult = tryReferenceFrom(currentNode.getValue());
-              if (theSemanticIdListElementResult.isError()) {
-                theSemanticIdListElementResult.getError()
-                  .prependSegment(new Reporting.NameSegment("semanticIdListElement"));
-                return theSemanticIdListElementResult.castTo(SubmodelElementList.class);
-              }
-              theSemanticIdListElement = theSemanticIdListElementResult.getResult();
+              theSemanticIdListElement = parsed.getResult();
               break;
             }
             case "valueTypeListElement": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends DataTypeDefXsd> parsed =
+                tryDataTypeDefXsdFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends DataTypeDefXsd> theValueTypeListElementResult = tryDataTypeDefXsdFrom(currentNode.getValue());
-              if (theValueTypeListElementResult.isError()) {
-                theValueTypeListElementResult.getError()
-                  .prependSegment(new Reporting.NameSegment("valueTypeListElement"));
-                return theValueTypeListElementResult.castTo(SubmodelElementList.class);
-              }
-              theValueTypeListElement = theValueTypeListElementResult.getResult();
+              theValueTypeListElement = parsed.getResult();
               break;
             }
             case "value": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ISubmodelElement>> parsed =
+                parseListOf_ISubmodelElement(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayValue = currentNode.getValue();
-              if (!arrayValue.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayValue.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "value"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ISubmodelElement>> theValueResult = parseArray(
-                arrayValue,
-                _DeserializeImplementation::tryISubmodelElementFrom);
-              if (theValueResult.isError()) {
-                theValueResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "value"));
-                return theValueResult.castTo(SubmodelElementList.class);
-              }
-              theValue = theValueResult.getResult();
+              theValue = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(SubmodelElementList.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("SubmodelElementList")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'SubmodelElementList', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
         if (theTypeValueListElement == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"typeValueListElement\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("typeValueListElement");
         }
 
         return Reporting.Result.success(new SubmodelElementList(
@@ -2900,18 +2119,30 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of SubmodelElementCollection from {@param node}.
+       * Deserialize an instance of SubmodelElementCollection from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<SubmodelElementCollection> trySubmodelElementCollectionFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "SubmodelElementCollection");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return trySubmodelElementCollectionFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of SubmodelElementCollection from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<SubmodelElementCollection> trySubmodelElementCollectionFromObject(JsonNode node) {
         List<IExtension> theExtensions = null;
         String theCategory = null;
         String theIdShort = null;
@@ -2923,282 +2154,103 @@ public class Jsonization {
         List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
         List<ISubmodelElement> theValue = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "extensions": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IExtension>> parsed = parseListOf_IExtension(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayExtensions = currentNode.getValue();
-              if (!arrayExtensions.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayExtensions.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "extensions"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IExtension>> theExtensionsResult = parseArray(
-                arrayExtensions,
-                _DeserializeImplementation::tryExtensionFrom);
-              if (theExtensionsResult.isError()) {
-                theExtensionsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return theExtensionsResult.castTo(SubmodelElementCollection.class);
-              }
-              theExtensions = theExtensionsResult.getResult();
+              theExtensions = parsed.getResult();
               break;
             }
             case "category": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theCategoryResult = tryStringFrom(currentNode.getValue());
-              if (theCategoryResult.isError()) {
-                theCategoryResult.getError()
-                  .prependSegment(new Reporting.NameSegment("category"));
-                return theCategoryResult.castTo(SubmodelElementCollection.class);
-              }
-              theCategory = theCategoryResult.getResult();
+              theCategory = parsed.getResult();
               break;
             }
             case "idShort": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdShortResult = tryStringFrom(currentNode.getValue());
-              if (theIdShortResult.isError()) {
-                theIdShortResult.getError()
-                  .prependSegment(new Reporting.NameSegment("idShort"));
-                return theIdShortResult.castTo(SubmodelElementCollection.class);
-              }
-              theIdShort = theIdShortResult.getResult();
+              theIdShort = parsed.getResult();
               break;
             }
             case "displayName": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringNameType>> parsed =
+                parseListOf_ILangStringNameType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDisplayName = currentNode.getValue();
-              if (!arrayDisplayName.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDisplayName.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "displayName"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringNameType>> theDisplayNameResult = parseArray(
-                arrayDisplayName,
-                _DeserializeImplementation::tryLangStringNameTypeFrom);
-              if (theDisplayNameResult.isError()) {
-                theDisplayNameResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return theDisplayNameResult.castTo(SubmodelElementCollection.class);
-              }
-              theDisplayName = theDisplayNameResult.getResult();
+              theDisplayName = parsed.getResult();
               break;
             }
             case "description": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringTextType>> parsed =
+                parseListOf_ILangStringTextType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDescription = currentNode.getValue();
-              if (!arrayDescription.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDescription.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "description"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringTextType>> theDescriptionResult = parseArray(
-                arrayDescription,
-                _DeserializeImplementation::tryLangStringTextTypeFrom);
-              if (theDescriptionResult.isError()) {
-                theDescriptionResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return theDescriptionResult.castTo(SubmodelElementCollection.class);
-              }
-              theDescription = theDescriptionResult.getResult();
+              theDescription = parsed.getResult();
               break;
             }
             case "semanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSemanticIdResult.isError()) {
-                theSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("semanticId"));
-                return theSemanticIdResult.castTo(SubmodelElementCollection.class);
-              }
-              theSemanticId = theSemanticIdResult.getResult();
+              theSemanticId = parsed.getResult();
               break;
             }
             case "supplementalSemanticIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySupplementalSemanticIds = currentNode.getValue();
-              if (!arraySupplementalSemanticIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySupplementalSemanticIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "supplementalSemanticIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theSupplementalSemanticIdsResult = parseArray(
-                arraySupplementalSemanticIds,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theSupplementalSemanticIdsResult.isError()) {
-                theSupplementalSemanticIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return theSupplementalSemanticIdsResult.castTo(SubmodelElementCollection.class);
-              }
-              theSupplementalSemanticIds = theSupplementalSemanticIdsResult.getResult();
+              theSupplementalSemanticIds = parsed.getResult();
               break;
             }
             case "qualifiers": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IQualifier>> parsed = parseListOf_IQualifier(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayQualifiers = currentNode.getValue();
-              if (!arrayQualifiers.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayQualifiers.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "qualifiers"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IQualifier>> theQualifiersResult = parseArray(
-                arrayQualifiers,
-                _DeserializeImplementation::tryQualifierFrom);
-              if (theQualifiersResult.isError()) {
-                theQualifiersResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return theQualifiersResult.castTo(SubmodelElementCollection.class);
-              }
-              theQualifiers = theQualifiersResult.getResult();
+              theQualifiers = parsed.getResult();
               break;
             }
             case "embeddedDataSpecifications": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IEmbeddedDataSpecification>> parsed =
+                parseListOf_IEmbeddedDataSpecification(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayEmbeddedDataSpecifications = currentNode.getValue();
-              if (!arrayEmbeddedDataSpecifications.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayEmbeddedDataSpecifications.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "embeddedDataSpecifications"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IEmbeddedDataSpecification>> theEmbeddedDataSpecificationsResult = parseArray(
-                arrayEmbeddedDataSpecifications,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFrom);
-              if (theEmbeddedDataSpecificationsResult.isError()) {
-                theEmbeddedDataSpecificationsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return theEmbeddedDataSpecificationsResult.castTo(SubmodelElementCollection.class);
-              }
-              theEmbeddedDataSpecifications = theEmbeddedDataSpecificationsResult.getResult();
+              theEmbeddedDataSpecifications = parsed.getResult();
               break;
             }
             case "value": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ISubmodelElement>> parsed =
+                parseListOf_ISubmodelElement(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayValue = currentNode.getValue();
-              if (!arrayValue.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayValue.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "value"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ISubmodelElement>> theValueResult = parseArray(
-                arrayValue,
-                _DeserializeImplementation::tryISubmodelElementFrom);
-              if (theValueResult.isError()) {
-                theValueResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "value"));
-                return theValueResult.castTo(SubmodelElementCollection.class);
-              }
-              theValue = theValueResult.getResult();
+              theValue = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(SubmodelElementCollection.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("SubmodelElementCollection")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'SubmodelElementCollection', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
-
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
-
 
         return Reporting.Result.success(new SubmodelElementCollection(
           theExtensions,
@@ -3221,37 +2273,28 @@ public class Jsonization {
        */
       public static Reporting.Result<? extends IDataElement> tryIDataElementFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
-        final JsonNode modelTypeNode = node.get("modelType");
-        if (modelTypeNode == null) {
-          final Reporting.Error error = new Reporting.Error(
-              "Expected a model type, but none is present");
-          return Reporting.Result.failure(error);
-        }
-        final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
+        final Reporting.Result<String> modelTypeResult = tryModelTypeFrom(node);
         if (modelTypeResult.isError()) {
           return modelTypeResult.castTo(IDataElement.class);
         }
 
-        switch (modelTypeResult.getResult())
-        {
-          case "Blob": {
-            return tryBlobFrom(node);
-        }  case "File": {
-            return tryFileFrom(node);
-        }  case "MultiLanguageProperty": {
-            return tryMultiLanguagePropertyFrom(node);
-        }  case "Property": {
-            return tryPropertyFrom(node);
-        }  case "Range": {
-            return tryRangeFrom(node);
-        }  case "ReferenceElement": {
-            return tryReferenceElementFrom(node);
-        }  default: {
+        switch (modelTypeResult.getResult()) {
+          case "Blob":
+            return tryBlobFromObject(node);
+          case "File":
+            return tryFileFromObject(node);
+          case "MultiLanguageProperty":
+            return tryMultiLanguagePropertyFromObject(node);
+          case "Property":
+            return tryPropertyFromObject(node);
+          case "Range":
+            return tryRangeFromObject(node);
+          case "ReferenceElement":
+            return tryReferenceElementFromObject(node);
+          default: {
             final Reporting.Error error = new Reporting.Error(
               "Unexpected model type for IDataElement: " + modelTypeResult.getResult());
             return Reporting.Result.failure(error);
@@ -3260,18 +2303,30 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of Property from {@param node}.
+       * Deserialize an instance of Property from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<Property> tryPropertyFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "Property");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryPropertyFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of Property from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<Property> tryPropertyFromObject(JsonNode node) {
         DataTypeDefXsd theValueType = null;
         List<IExtension> theExtensions = null;
         String theCategory = null;
@@ -3285,300 +2340,122 @@ public class Jsonization {
         String theValue = null;
         IReference theValueId = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "valueType": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends DataTypeDefXsd> parsed =
+                tryDataTypeDefXsdFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends DataTypeDefXsd> theValueTypeResult = tryDataTypeDefXsdFrom(currentNode.getValue());
-              if (theValueTypeResult.isError()) {
-                theValueTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("valueType"));
-                return theValueTypeResult.castTo(Property.class);
-              }
-              theValueType = theValueTypeResult.getResult();
+              theValueType = parsed.getResult();
               break;
             }
             case "extensions": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IExtension>> parsed = parseListOf_IExtension(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayExtensions = currentNode.getValue();
-              if (!arrayExtensions.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayExtensions.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "extensions"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IExtension>> theExtensionsResult = parseArray(
-                arrayExtensions,
-                _DeserializeImplementation::tryExtensionFrom);
-              if (theExtensionsResult.isError()) {
-                theExtensionsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return theExtensionsResult.castTo(Property.class);
-              }
-              theExtensions = theExtensionsResult.getResult();
+              theExtensions = parsed.getResult();
               break;
             }
             case "category": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theCategoryResult = tryStringFrom(currentNode.getValue());
-              if (theCategoryResult.isError()) {
-                theCategoryResult.getError()
-                  .prependSegment(new Reporting.NameSegment("category"));
-                return theCategoryResult.castTo(Property.class);
-              }
-              theCategory = theCategoryResult.getResult();
+              theCategory = parsed.getResult();
               break;
             }
             case "idShort": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdShortResult = tryStringFrom(currentNode.getValue());
-              if (theIdShortResult.isError()) {
-                theIdShortResult.getError()
-                  .prependSegment(new Reporting.NameSegment("idShort"));
-                return theIdShortResult.castTo(Property.class);
-              }
-              theIdShort = theIdShortResult.getResult();
+              theIdShort = parsed.getResult();
               break;
             }
             case "displayName": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringNameType>> parsed =
+                parseListOf_ILangStringNameType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDisplayName = currentNode.getValue();
-              if (!arrayDisplayName.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDisplayName.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "displayName"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringNameType>> theDisplayNameResult = parseArray(
-                arrayDisplayName,
-                _DeserializeImplementation::tryLangStringNameTypeFrom);
-              if (theDisplayNameResult.isError()) {
-                theDisplayNameResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return theDisplayNameResult.castTo(Property.class);
-              }
-              theDisplayName = theDisplayNameResult.getResult();
+              theDisplayName = parsed.getResult();
               break;
             }
             case "description": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringTextType>> parsed =
+                parseListOf_ILangStringTextType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDescription = currentNode.getValue();
-              if (!arrayDescription.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDescription.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "description"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringTextType>> theDescriptionResult = parseArray(
-                arrayDescription,
-                _DeserializeImplementation::tryLangStringTextTypeFrom);
-              if (theDescriptionResult.isError()) {
-                theDescriptionResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return theDescriptionResult.castTo(Property.class);
-              }
-              theDescription = theDescriptionResult.getResult();
+              theDescription = parsed.getResult();
               break;
             }
             case "semanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSemanticIdResult.isError()) {
-                theSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("semanticId"));
-                return theSemanticIdResult.castTo(Property.class);
-              }
-              theSemanticId = theSemanticIdResult.getResult();
+              theSemanticId = parsed.getResult();
               break;
             }
             case "supplementalSemanticIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySupplementalSemanticIds = currentNode.getValue();
-              if (!arraySupplementalSemanticIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySupplementalSemanticIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "supplementalSemanticIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theSupplementalSemanticIdsResult = parseArray(
-                arraySupplementalSemanticIds,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theSupplementalSemanticIdsResult.isError()) {
-                theSupplementalSemanticIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return theSupplementalSemanticIdsResult.castTo(Property.class);
-              }
-              theSupplementalSemanticIds = theSupplementalSemanticIdsResult.getResult();
+              theSupplementalSemanticIds = parsed.getResult();
               break;
             }
             case "qualifiers": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IQualifier>> parsed = parseListOf_IQualifier(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayQualifiers = currentNode.getValue();
-              if (!arrayQualifiers.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayQualifiers.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "qualifiers"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IQualifier>> theQualifiersResult = parseArray(
-                arrayQualifiers,
-                _DeserializeImplementation::tryQualifierFrom);
-              if (theQualifiersResult.isError()) {
-                theQualifiersResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return theQualifiersResult.castTo(Property.class);
-              }
-              theQualifiers = theQualifiersResult.getResult();
+              theQualifiers = parsed.getResult();
               break;
             }
             case "embeddedDataSpecifications": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IEmbeddedDataSpecification>> parsed =
+                parseListOf_IEmbeddedDataSpecification(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayEmbeddedDataSpecifications = currentNode.getValue();
-              if (!arrayEmbeddedDataSpecifications.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayEmbeddedDataSpecifications.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "embeddedDataSpecifications"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IEmbeddedDataSpecification>> theEmbeddedDataSpecificationsResult = parseArray(
-                arrayEmbeddedDataSpecifications,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFrom);
-              if (theEmbeddedDataSpecificationsResult.isError()) {
-                theEmbeddedDataSpecificationsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return theEmbeddedDataSpecificationsResult.castTo(Property.class);
-              }
-              theEmbeddedDataSpecifications = theEmbeddedDataSpecificationsResult.getResult();
+              theEmbeddedDataSpecifications = parsed.getResult();
               break;
             }
             case "value": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theValueResult = tryStringFrom(currentNode.getValue());
-              if (theValueResult.isError()) {
-                theValueResult.getError()
-                  .prependSegment(new Reporting.NameSegment("value"));
-                return theValueResult.castTo(Property.class);
-              }
-              theValue = theValueResult.getResult();
+              theValue = parsed.getResult();
               break;
             }
             case "valueId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theValueIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theValueIdResult.isError()) {
-                theValueIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("valueId"));
-                return theValueIdResult.castTo(Property.class);
-              }
-              theValueId = theValueIdResult.getResult();
+              theValueId = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(Property.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("Property")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'Property', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
         if (theValueType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"valueType\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("valueType");
         }
 
         return Reporting.Result.success(new Property(
@@ -3597,18 +2474,30 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of MultiLanguageProperty from {@param node}.
+       * Deserialize an instance of MultiLanguageProperty from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<MultiLanguageProperty> tryMultiLanguagePropertyFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "MultiLanguageProperty");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryMultiLanguagePropertyFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of MultiLanguageProperty from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<MultiLanguageProperty> tryMultiLanguagePropertyFromObject(JsonNode node) {
         List<IExtension> theExtensions = null;
         String theCategory = null;
         String theIdShort = null;
@@ -3621,296 +2510,111 @@ public class Jsonization {
         List<ILangStringTextType> theValue = null;
         IReference theValueId = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "extensions": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IExtension>> parsed = parseListOf_IExtension(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayExtensions = currentNode.getValue();
-              if (!arrayExtensions.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayExtensions.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "extensions"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IExtension>> theExtensionsResult = parseArray(
-                arrayExtensions,
-                _DeserializeImplementation::tryExtensionFrom);
-              if (theExtensionsResult.isError()) {
-                theExtensionsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return theExtensionsResult.castTo(MultiLanguageProperty.class);
-              }
-              theExtensions = theExtensionsResult.getResult();
+              theExtensions = parsed.getResult();
               break;
             }
             case "category": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theCategoryResult = tryStringFrom(currentNode.getValue());
-              if (theCategoryResult.isError()) {
-                theCategoryResult.getError()
-                  .prependSegment(new Reporting.NameSegment("category"));
-                return theCategoryResult.castTo(MultiLanguageProperty.class);
-              }
-              theCategory = theCategoryResult.getResult();
+              theCategory = parsed.getResult();
               break;
             }
             case "idShort": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdShortResult = tryStringFrom(currentNode.getValue());
-              if (theIdShortResult.isError()) {
-                theIdShortResult.getError()
-                  .prependSegment(new Reporting.NameSegment("idShort"));
-                return theIdShortResult.castTo(MultiLanguageProperty.class);
-              }
-              theIdShort = theIdShortResult.getResult();
+              theIdShort = parsed.getResult();
               break;
             }
             case "displayName": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringNameType>> parsed =
+                parseListOf_ILangStringNameType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDisplayName = currentNode.getValue();
-              if (!arrayDisplayName.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDisplayName.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "displayName"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringNameType>> theDisplayNameResult = parseArray(
-                arrayDisplayName,
-                _DeserializeImplementation::tryLangStringNameTypeFrom);
-              if (theDisplayNameResult.isError()) {
-                theDisplayNameResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return theDisplayNameResult.castTo(MultiLanguageProperty.class);
-              }
-              theDisplayName = theDisplayNameResult.getResult();
+              theDisplayName = parsed.getResult();
               break;
             }
             case "description": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringTextType>> parsed =
+                parseListOf_ILangStringTextType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDescription = currentNode.getValue();
-              if (!arrayDescription.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDescription.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "description"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringTextType>> theDescriptionResult = parseArray(
-                arrayDescription,
-                _DeserializeImplementation::tryLangStringTextTypeFrom);
-              if (theDescriptionResult.isError()) {
-                theDescriptionResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return theDescriptionResult.castTo(MultiLanguageProperty.class);
-              }
-              theDescription = theDescriptionResult.getResult();
+              theDescription = parsed.getResult();
               break;
             }
             case "semanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSemanticIdResult.isError()) {
-                theSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("semanticId"));
-                return theSemanticIdResult.castTo(MultiLanguageProperty.class);
-              }
-              theSemanticId = theSemanticIdResult.getResult();
+              theSemanticId = parsed.getResult();
               break;
             }
             case "supplementalSemanticIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySupplementalSemanticIds = currentNode.getValue();
-              if (!arraySupplementalSemanticIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySupplementalSemanticIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "supplementalSemanticIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theSupplementalSemanticIdsResult = parseArray(
-                arraySupplementalSemanticIds,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theSupplementalSemanticIdsResult.isError()) {
-                theSupplementalSemanticIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return theSupplementalSemanticIdsResult.castTo(MultiLanguageProperty.class);
-              }
-              theSupplementalSemanticIds = theSupplementalSemanticIdsResult.getResult();
+              theSupplementalSemanticIds = parsed.getResult();
               break;
             }
             case "qualifiers": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IQualifier>> parsed = parseListOf_IQualifier(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayQualifiers = currentNode.getValue();
-              if (!arrayQualifiers.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayQualifiers.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "qualifiers"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IQualifier>> theQualifiersResult = parseArray(
-                arrayQualifiers,
-                _DeserializeImplementation::tryQualifierFrom);
-              if (theQualifiersResult.isError()) {
-                theQualifiersResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return theQualifiersResult.castTo(MultiLanguageProperty.class);
-              }
-              theQualifiers = theQualifiersResult.getResult();
+              theQualifiers = parsed.getResult();
               break;
             }
             case "embeddedDataSpecifications": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IEmbeddedDataSpecification>> parsed =
+                parseListOf_IEmbeddedDataSpecification(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayEmbeddedDataSpecifications = currentNode.getValue();
-              if (!arrayEmbeddedDataSpecifications.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayEmbeddedDataSpecifications.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "embeddedDataSpecifications"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IEmbeddedDataSpecification>> theEmbeddedDataSpecificationsResult = parseArray(
-                arrayEmbeddedDataSpecifications,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFrom);
-              if (theEmbeddedDataSpecificationsResult.isError()) {
-                theEmbeddedDataSpecificationsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return theEmbeddedDataSpecificationsResult.castTo(MultiLanguageProperty.class);
-              }
-              theEmbeddedDataSpecifications = theEmbeddedDataSpecificationsResult.getResult();
+              theEmbeddedDataSpecifications = parsed.getResult();
               break;
             }
             case "value": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringTextType>> parsed =
+                parseListOf_ILangStringTextType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayValue = currentNode.getValue();
-              if (!arrayValue.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayValue.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "value"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringTextType>> theValueResult = parseArray(
-                arrayValue,
-                _DeserializeImplementation::tryLangStringTextTypeFrom);
-              if (theValueResult.isError()) {
-                theValueResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "value"));
-                return theValueResult.castTo(MultiLanguageProperty.class);
-              }
-              theValue = theValueResult.getResult();
+              theValue = parsed.getResult();
               break;
             }
             case "valueId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theValueIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theValueIdResult.isError()) {
-                theValueIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("valueId"));
-                return theValueIdResult.castTo(MultiLanguageProperty.class);
-              }
-              theValueId = theValueIdResult.getResult();
+              theValueId = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(MultiLanguageProperty.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("MultiLanguageProperty")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'MultiLanguageProperty', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
-
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
-
 
         return Reporting.Result.success(new MultiLanguageProperty(
           theExtensions,
@@ -3927,18 +2631,30 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of Range from {@param node}.
+       * Deserialize an instance of Range from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<Range> tryRangeFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "Range");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryRangeFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of Range from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<Range> tryRangeFromObject(JsonNode node) {
         DataTypeDefXsd theValueType = null;
         List<IExtension> theExtensions = null;
         String theCategory = null;
@@ -3952,300 +2668,122 @@ public class Jsonization {
         String theMin = null;
         String theMax = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "valueType": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends DataTypeDefXsd> parsed =
+                tryDataTypeDefXsdFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends DataTypeDefXsd> theValueTypeResult = tryDataTypeDefXsdFrom(currentNode.getValue());
-              if (theValueTypeResult.isError()) {
-                theValueTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("valueType"));
-                return theValueTypeResult.castTo(Range.class);
-              }
-              theValueType = theValueTypeResult.getResult();
+              theValueType = parsed.getResult();
               break;
             }
             case "extensions": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IExtension>> parsed = parseListOf_IExtension(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayExtensions = currentNode.getValue();
-              if (!arrayExtensions.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayExtensions.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "extensions"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IExtension>> theExtensionsResult = parseArray(
-                arrayExtensions,
-                _DeserializeImplementation::tryExtensionFrom);
-              if (theExtensionsResult.isError()) {
-                theExtensionsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return theExtensionsResult.castTo(Range.class);
-              }
-              theExtensions = theExtensionsResult.getResult();
+              theExtensions = parsed.getResult();
               break;
             }
             case "category": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theCategoryResult = tryStringFrom(currentNode.getValue());
-              if (theCategoryResult.isError()) {
-                theCategoryResult.getError()
-                  .prependSegment(new Reporting.NameSegment("category"));
-                return theCategoryResult.castTo(Range.class);
-              }
-              theCategory = theCategoryResult.getResult();
+              theCategory = parsed.getResult();
               break;
             }
             case "idShort": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdShortResult = tryStringFrom(currentNode.getValue());
-              if (theIdShortResult.isError()) {
-                theIdShortResult.getError()
-                  .prependSegment(new Reporting.NameSegment("idShort"));
-                return theIdShortResult.castTo(Range.class);
-              }
-              theIdShort = theIdShortResult.getResult();
+              theIdShort = parsed.getResult();
               break;
             }
             case "displayName": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringNameType>> parsed =
+                parseListOf_ILangStringNameType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDisplayName = currentNode.getValue();
-              if (!arrayDisplayName.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDisplayName.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "displayName"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringNameType>> theDisplayNameResult = parseArray(
-                arrayDisplayName,
-                _DeserializeImplementation::tryLangStringNameTypeFrom);
-              if (theDisplayNameResult.isError()) {
-                theDisplayNameResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return theDisplayNameResult.castTo(Range.class);
-              }
-              theDisplayName = theDisplayNameResult.getResult();
+              theDisplayName = parsed.getResult();
               break;
             }
             case "description": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringTextType>> parsed =
+                parseListOf_ILangStringTextType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDescription = currentNode.getValue();
-              if (!arrayDescription.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDescription.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "description"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringTextType>> theDescriptionResult = parseArray(
-                arrayDescription,
-                _DeserializeImplementation::tryLangStringTextTypeFrom);
-              if (theDescriptionResult.isError()) {
-                theDescriptionResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return theDescriptionResult.castTo(Range.class);
-              }
-              theDescription = theDescriptionResult.getResult();
+              theDescription = parsed.getResult();
               break;
             }
             case "semanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSemanticIdResult.isError()) {
-                theSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("semanticId"));
-                return theSemanticIdResult.castTo(Range.class);
-              }
-              theSemanticId = theSemanticIdResult.getResult();
+              theSemanticId = parsed.getResult();
               break;
             }
             case "supplementalSemanticIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySupplementalSemanticIds = currentNode.getValue();
-              if (!arraySupplementalSemanticIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySupplementalSemanticIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "supplementalSemanticIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theSupplementalSemanticIdsResult = parseArray(
-                arraySupplementalSemanticIds,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theSupplementalSemanticIdsResult.isError()) {
-                theSupplementalSemanticIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return theSupplementalSemanticIdsResult.castTo(Range.class);
-              }
-              theSupplementalSemanticIds = theSupplementalSemanticIdsResult.getResult();
+              theSupplementalSemanticIds = parsed.getResult();
               break;
             }
             case "qualifiers": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IQualifier>> parsed = parseListOf_IQualifier(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayQualifiers = currentNode.getValue();
-              if (!arrayQualifiers.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayQualifiers.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "qualifiers"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IQualifier>> theQualifiersResult = parseArray(
-                arrayQualifiers,
-                _DeserializeImplementation::tryQualifierFrom);
-              if (theQualifiersResult.isError()) {
-                theQualifiersResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return theQualifiersResult.castTo(Range.class);
-              }
-              theQualifiers = theQualifiersResult.getResult();
+              theQualifiers = parsed.getResult();
               break;
             }
             case "embeddedDataSpecifications": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IEmbeddedDataSpecification>> parsed =
+                parseListOf_IEmbeddedDataSpecification(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayEmbeddedDataSpecifications = currentNode.getValue();
-              if (!arrayEmbeddedDataSpecifications.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayEmbeddedDataSpecifications.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "embeddedDataSpecifications"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IEmbeddedDataSpecification>> theEmbeddedDataSpecificationsResult = parseArray(
-                arrayEmbeddedDataSpecifications,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFrom);
-              if (theEmbeddedDataSpecificationsResult.isError()) {
-                theEmbeddedDataSpecificationsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return theEmbeddedDataSpecificationsResult.castTo(Range.class);
-              }
-              theEmbeddedDataSpecifications = theEmbeddedDataSpecificationsResult.getResult();
+              theEmbeddedDataSpecifications = parsed.getResult();
               break;
             }
             case "min": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theMinResult = tryStringFrom(currentNode.getValue());
-              if (theMinResult.isError()) {
-                theMinResult.getError()
-                  .prependSegment(new Reporting.NameSegment("min"));
-                return theMinResult.castTo(Range.class);
-              }
-              theMin = theMinResult.getResult();
+              theMin = parsed.getResult();
               break;
             }
             case "max": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theMaxResult = tryStringFrom(currentNode.getValue());
-              if (theMaxResult.isError()) {
-                theMaxResult.getError()
-                  .prependSegment(new Reporting.NameSegment("max"));
-                return theMaxResult.castTo(Range.class);
-              }
-              theMax = theMaxResult.getResult();
+              theMax = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(Range.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("Range")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'Range', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
         if (theValueType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"valueType\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("valueType");
         }
 
         return Reporting.Result.success(new Range(
@@ -4264,18 +2802,30 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of ReferenceElement from {@param node}.
+       * Deserialize an instance of ReferenceElement from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<ReferenceElement> tryReferenceElementFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "ReferenceElement");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryReferenceElementFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of ReferenceElement from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<ReferenceElement> tryReferenceElementFromObject(JsonNode node) {
         List<IExtension> theExtensions = null;
         String theCategory = null;
         String theIdShort = null;
@@ -4287,269 +2837,102 @@ public class Jsonization {
         List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
         IReference theValue = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "extensions": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IExtension>> parsed = parseListOf_IExtension(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayExtensions = currentNode.getValue();
-              if (!arrayExtensions.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayExtensions.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "extensions"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IExtension>> theExtensionsResult = parseArray(
-                arrayExtensions,
-                _DeserializeImplementation::tryExtensionFrom);
-              if (theExtensionsResult.isError()) {
-                theExtensionsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return theExtensionsResult.castTo(ReferenceElement.class);
-              }
-              theExtensions = theExtensionsResult.getResult();
+              theExtensions = parsed.getResult();
               break;
             }
             case "category": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theCategoryResult = tryStringFrom(currentNode.getValue());
-              if (theCategoryResult.isError()) {
-                theCategoryResult.getError()
-                  .prependSegment(new Reporting.NameSegment("category"));
-                return theCategoryResult.castTo(ReferenceElement.class);
-              }
-              theCategory = theCategoryResult.getResult();
+              theCategory = parsed.getResult();
               break;
             }
             case "idShort": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdShortResult = tryStringFrom(currentNode.getValue());
-              if (theIdShortResult.isError()) {
-                theIdShortResult.getError()
-                  .prependSegment(new Reporting.NameSegment("idShort"));
-                return theIdShortResult.castTo(ReferenceElement.class);
-              }
-              theIdShort = theIdShortResult.getResult();
+              theIdShort = parsed.getResult();
               break;
             }
             case "displayName": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringNameType>> parsed =
+                parseListOf_ILangStringNameType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDisplayName = currentNode.getValue();
-              if (!arrayDisplayName.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDisplayName.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "displayName"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringNameType>> theDisplayNameResult = parseArray(
-                arrayDisplayName,
-                _DeserializeImplementation::tryLangStringNameTypeFrom);
-              if (theDisplayNameResult.isError()) {
-                theDisplayNameResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return theDisplayNameResult.castTo(ReferenceElement.class);
-              }
-              theDisplayName = theDisplayNameResult.getResult();
+              theDisplayName = parsed.getResult();
               break;
             }
             case "description": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringTextType>> parsed =
+                parseListOf_ILangStringTextType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDescription = currentNode.getValue();
-              if (!arrayDescription.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDescription.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "description"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringTextType>> theDescriptionResult = parseArray(
-                arrayDescription,
-                _DeserializeImplementation::tryLangStringTextTypeFrom);
-              if (theDescriptionResult.isError()) {
-                theDescriptionResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return theDescriptionResult.castTo(ReferenceElement.class);
-              }
-              theDescription = theDescriptionResult.getResult();
+              theDescription = parsed.getResult();
               break;
             }
             case "semanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSemanticIdResult.isError()) {
-                theSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("semanticId"));
-                return theSemanticIdResult.castTo(ReferenceElement.class);
-              }
-              theSemanticId = theSemanticIdResult.getResult();
+              theSemanticId = parsed.getResult();
               break;
             }
             case "supplementalSemanticIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySupplementalSemanticIds = currentNode.getValue();
-              if (!arraySupplementalSemanticIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySupplementalSemanticIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "supplementalSemanticIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theSupplementalSemanticIdsResult = parseArray(
-                arraySupplementalSemanticIds,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theSupplementalSemanticIdsResult.isError()) {
-                theSupplementalSemanticIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return theSupplementalSemanticIdsResult.castTo(ReferenceElement.class);
-              }
-              theSupplementalSemanticIds = theSupplementalSemanticIdsResult.getResult();
+              theSupplementalSemanticIds = parsed.getResult();
               break;
             }
             case "qualifiers": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IQualifier>> parsed = parseListOf_IQualifier(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayQualifiers = currentNode.getValue();
-              if (!arrayQualifiers.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayQualifiers.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "qualifiers"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IQualifier>> theQualifiersResult = parseArray(
-                arrayQualifiers,
-                _DeserializeImplementation::tryQualifierFrom);
-              if (theQualifiersResult.isError()) {
-                theQualifiersResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return theQualifiersResult.castTo(ReferenceElement.class);
-              }
-              theQualifiers = theQualifiersResult.getResult();
+              theQualifiers = parsed.getResult();
               break;
             }
             case "embeddedDataSpecifications": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IEmbeddedDataSpecification>> parsed =
+                parseListOf_IEmbeddedDataSpecification(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayEmbeddedDataSpecifications = currentNode.getValue();
-              if (!arrayEmbeddedDataSpecifications.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayEmbeddedDataSpecifications.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "embeddedDataSpecifications"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IEmbeddedDataSpecification>> theEmbeddedDataSpecificationsResult = parseArray(
-                arrayEmbeddedDataSpecifications,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFrom);
-              if (theEmbeddedDataSpecificationsResult.isError()) {
-                theEmbeddedDataSpecificationsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return theEmbeddedDataSpecificationsResult.castTo(ReferenceElement.class);
-              }
-              theEmbeddedDataSpecifications = theEmbeddedDataSpecificationsResult.getResult();
+              theEmbeddedDataSpecifications = parsed.getResult();
               break;
             }
             case "value": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theValueResult = tryReferenceFrom(currentNode.getValue());
-              if (theValueResult.isError()) {
-                theValueResult.getError()
-                  .prependSegment(new Reporting.NameSegment("value"));
-                return theValueResult.castTo(ReferenceElement.class);
-              }
-              theValue = theValueResult.getResult();
+              theValue = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(ReferenceElement.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("ReferenceElement")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'ReferenceElement', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
-
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
-
 
         return Reporting.Result.success(new ReferenceElement(
           theExtensions,
@@ -4565,18 +2948,30 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of Blob from {@param node}.
+       * Deserialize an instance of Blob from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<Blob> tryBlobFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "Blob");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryBlobFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of Blob from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<Blob> tryBlobFromObject(JsonNode node) {
         String theContentType = null;
         List<IExtension> theExtensions = null;
         String theCategory = null;
@@ -4589,286 +2984,113 @@ public class Jsonization {
         List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
         byte[] theValue = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "contentType": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theContentTypeResult = tryStringFrom(currentNode.getValue());
-              if (theContentTypeResult.isError()) {
-                theContentTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("contentType"));
-                return theContentTypeResult.castTo(Blob.class);
-              }
-              theContentType = theContentTypeResult.getResult();
+              theContentType = parsed.getResult();
               break;
             }
             case "extensions": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IExtension>> parsed = parseListOf_IExtension(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayExtensions = currentNode.getValue();
-              if (!arrayExtensions.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayExtensions.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "extensions"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IExtension>> theExtensionsResult = parseArray(
-                arrayExtensions,
-                _DeserializeImplementation::tryExtensionFrom);
-              if (theExtensionsResult.isError()) {
-                theExtensionsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return theExtensionsResult.castTo(Blob.class);
-              }
-              theExtensions = theExtensionsResult.getResult();
+              theExtensions = parsed.getResult();
               break;
             }
             case "category": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theCategoryResult = tryStringFrom(currentNode.getValue());
-              if (theCategoryResult.isError()) {
-                theCategoryResult.getError()
-                  .prependSegment(new Reporting.NameSegment("category"));
-                return theCategoryResult.castTo(Blob.class);
-              }
-              theCategory = theCategoryResult.getResult();
+              theCategory = parsed.getResult();
               break;
             }
             case "idShort": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdShortResult = tryStringFrom(currentNode.getValue());
-              if (theIdShortResult.isError()) {
-                theIdShortResult.getError()
-                  .prependSegment(new Reporting.NameSegment("idShort"));
-                return theIdShortResult.castTo(Blob.class);
-              }
-              theIdShort = theIdShortResult.getResult();
+              theIdShort = parsed.getResult();
               break;
             }
             case "displayName": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringNameType>> parsed =
+                parseListOf_ILangStringNameType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDisplayName = currentNode.getValue();
-              if (!arrayDisplayName.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDisplayName.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "displayName"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringNameType>> theDisplayNameResult = parseArray(
-                arrayDisplayName,
-                _DeserializeImplementation::tryLangStringNameTypeFrom);
-              if (theDisplayNameResult.isError()) {
-                theDisplayNameResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return theDisplayNameResult.castTo(Blob.class);
-              }
-              theDisplayName = theDisplayNameResult.getResult();
+              theDisplayName = parsed.getResult();
               break;
             }
             case "description": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringTextType>> parsed =
+                parseListOf_ILangStringTextType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDescription = currentNode.getValue();
-              if (!arrayDescription.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDescription.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "description"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringTextType>> theDescriptionResult = parseArray(
-                arrayDescription,
-                _DeserializeImplementation::tryLangStringTextTypeFrom);
-              if (theDescriptionResult.isError()) {
-                theDescriptionResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return theDescriptionResult.castTo(Blob.class);
-              }
-              theDescription = theDescriptionResult.getResult();
+              theDescription = parsed.getResult();
               break;
             }
             case "semanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSemanticIdResult.isError()) {
-                theSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("semanticId"));
-                return theSemanticIdResult.castTo(Blob.class);
-              }
-              theSemanticId = theSemanticIdResult.getResult();
+              theSemanticId = parsed.getResult();
               break;
             }
             case "supplementalSemanticIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySupplementalSemanticIds = currentNode.getValue();
-              if (!arraySupplementalSemanticIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySupplementalSemanticIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "supplementalSemanticIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theSupplementalSemanticIdsResult = parseArray(
-                arraySupplementalSemanticIds,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theSupplementalSemanticIdsResult.isError()) {
-                theSupplementalSemanticIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return theSupplementalSemanticIdsResult.castTo(Blob.class);
-              }
-              theSupplementalSemanticIds = theSupplementalSemanticIdsResult.getResult();
+              theSupplementalSemanticIds = parsed.getResult();
               break;
             }
             case "qualifiers": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IQualifier>> parsed = parseListOf_IQualifier(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayQualifiers = currentNode.getValue();
-              if (!arrayQualifiers.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayQualifiers.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "qualifiers"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IQualifier>> theQualifiersResult = parseArray(
-                arrayQualifiers,
-                _DeserializeImplementation::tryQualifierFrom);
-              if (theQualifiersResult.isError()) {
-                theQualifiersResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return theQualifiersResult.castTo(Blob.class);
-              }
-              theQualifiers = theQualifiersResult.getResult();
+              theQualifiers = parsed.getResult();
               break;
             }
             case "embeddedDataSpecifications": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IEmbeddedDataSpecification>> parsed =
+                parseListOf_IEmbeddedDataSpecification(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayEmbeddedDataSpecifications = currentNode.getValue();
-              if (!arrayEmbeddedDataSpecifications.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayEmbeddedDataSpecifications.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "embeddedDataSpecifications"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IEmbeddedDataSpecification>> theEmbeddedDataSpecificationsResult = parseArray(
-                arrayEmbeddedDataSpecifications,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFrom);
-              if (theEmbeddedDataSpecificationsResult.isError()) {
-                theEmbeddedDataSpecificationsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return theEmbeddedDataSpecificationsResult.castTo(Blob.class);
-              }
-              theEmbeddedDataSpecifications = theEmbeddedDataSpecificationsResult.getResult();
+              theEmbeddedDataSpecifications = parsed.getResult();
               break;
             }
             case "value": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends byte[]> parsed = tryBytesFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends byte[]> theValueResult = tryBytesFrom(currentNode.getValue());
-              if (theValueResult.isError()) {
-                theValueResult.getError()
-                  .prependSegment(new Reporting.NameSegment("value"));
-                return theValueResult.castTo(Blob.class);
-              }
-              theValue = theValueResult.getResult();
+              theValue = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(Blob.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("Blob")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'Blob', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
         if (theContentType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"contentType\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("contentType");
         }
 
         return Reporting.Result.success(new Blob(
@@ -4886,18 +3108,30 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of File from {@param node}.
+       * Deserialize an instance of File from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<File> tryFileFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "File");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryFileFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of File from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<File> tryFileFromObject(JsonNode node) {
         String theContentType = null;
         List<IExtension> theExtensions = null;
         String theCategory = null;
@@ -4910,286 +3144,113 @@ public class Jsonization {
         List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
         String theValue = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "contentType": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theContentTypeResult = tryStringFrom(currentNode.getValue());
-              if (theContentTypeResult.isError()) {
-                theContentTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("contentType"));
-                return theContentTypeResult.castTo(File.class);
-              }
-              theContentType = theContentTypeResult.getResult();
+              theContentType = parsed.getResult();
               break;
             }
             case "extensions": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IExtension>> parsed = parseListOf_IExtension(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayExtensions = currentNode.getValue();
-              if (!arrayExtensions.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayExtensions.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "extensions"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IExtension>> theExtensionsResult = parseArray(
-                arrayExtensions,
-                _DeserializeImplementation::tryExtensionFrom);
-              if (theExtensionsResult.isError()) {
-                theExtensionsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return theExtensionsResult.castTo(File.class);
-              }
-              theExtensions = theExtensionsResult.getResult();
+              theExtensions = parsed.getResult();
               break;
             }
             case "category": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theCategoryResult = tryStringFrom(currentNode.getValue());
-              if (theCategoryResult.isError()) {
-                theCategoryResult.getError()
-                  .prependSegment(new Reporting.NameSegment("category"));
-                return theCategoryResult.castTo(File.class);
-              }
-              theCategory = theCategoryResult.getResult();
+              theCategory = parsed.getResult();
               break;
             }
             case "idShort": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdShortResult = tryStringFrom(currentNode.getValue());
-              if (theIdShortResult.isError()) {
-                theIdShortResult.getError()
-                  .prependSegment(new Reporting.NameSegment("idShort"));
-                return theIdShortResult.castTo(File.class);
-              }
-              theIdShort = theIdShortResult.getResult();
+              theIdShort = parsed.getResult();
               break;
             }
             case "displayName": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringNameType>> parsed =
+                parseListOf_ILangStringNameType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDisplayName = currentNode.getValue();
-              if (!arrayDisplayName.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDisplayName.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "displayName"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringNameType>> theDisplayNameResult = parseArray(
-                arrayDisplayName,
-                _DeserializeImplementation::tryLangStringNameTypeFrom);
-              if (theDisplayNameResult.isError()) {
-                theDisplayNameResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return theDisplayNameResult.castTo(File.class);
-              }
-              theDisplayName = theDisplayNameResult.getResult();
+              theDisplayName = parsed.getResult();
               break;
             }
             case "description": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringTextType>> parsed =
+                parseListOf_ILangStringTextType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDescription = currentNode.getValue();
-              if (!arrayDescription.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDescription.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "description"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringTextType>> theDescriptionResult = parseArray(
-                arrayDescription,
-                _DeserializeImplementation::tryLangStringTextTypeFrom);
-              if (theDescriptionResult.isError()) {
-                theDescriptionResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return theDescriptionResult.castTo(File.class);
-              }
-              theDescription = theDescriptionResult.getResult();
+              theDescription = parsed.getResult();
               break;
             }
             case "semanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSemanticIdResult.isError()) {
-                theSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("semanticId"));
-                return theSemanticIdResult.castTo(File.class);
-              }
-              theSemanticId = theSemanticIdResult.getResult();
+              theSemanticId = parsed.getResult();
               break;
             }
             case "supplementalSemanticIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySupplementalSemanticIds = currentNode.getValue();
-              if (!arraySupplementalSemanticIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySupplementalSemanticIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "supplementalSemanticIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theSupplementalSemanticIdsResult = parseArray(
-                arraySupplementalSemanticIds,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theSupplementalSemanticIdsResult.isError()) {
-                theSupplementalSemanticIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return theSupplementalSemanticIdsResult.castTo(File.class);
-              }
-              theSupplementalSemanticIds = theSupplementalSemanticIdsResult.getResult();
+              theSupplementalSemanticIds = parsed.getResult();
               break;
             }
             case "qualifiers": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IQualifier>> parsed = parseListOf_IQualifier(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayQualifiers = currentNode.getValue();
-              if (!arrayQualifiers.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayQualifiers.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "qualifiers"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IQualifier>> theQualifiersResult = parseArray(
-                arrayQualifiers,
-                _DeserializeImplementation::tryQualifierFrom);
-              if (theQualifiersResult.isError()) {
-                theQualifiersResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return theQualifiersResult.castTo(File.class);
-              }
-              theQualifiers = theQualifiersResult.getResult();
+              theQualifiers = parsed.getResult();
               break;
             }
             case "embeddedDataSpecifications": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IEmbeddedDataSpecification>> parsed =
+                parseListOf_IEmbeddedDataSpecification(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayEmbeddedDataSpecifications = currentNode.getValue();
-              if (!arrayEmbeddedDataSpecifications.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayEmbeddedDataSpecifications.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "embeddedDataSpecifications"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IEmbeddedDataSpecification>> theEmbeddedDataSpecificationsResult = parseArray(
-                arrayEmbeddedDataSpecifications,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFrom);
-              if (theEmbeddedDataSpecificationsResult.isError()) {
-                theEmbeddedDataSpecificationsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return theEmbeddedDataSpecificationsResult.castTo(File.class);
-              }
-              theEmbeddedDataSpecifications = theEmbeddedDataSpecificationsResult.getResult();
+              theEmbeddedDataSpecifications = parsed.getResult();
               break;
             }
             case "value": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theValueResult = tryStringFrom(currentNode.getValue());
-              if (theValueResult.isError()) {
-                theValueResult.getError()
-                  .prependSegment(new Reporting.NameSegment("value"));
-                return theValueResult.castTo(File.class);
-              }
-              theValue = theValueResult.getResult();
+              theValue = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(File.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("File")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'File', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
         if (theContentType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"contentType\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("contentType");
         }
 
         return Reporting.Result.success(new File(
@@ -5207,18 +3268,30 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of AnnotatedRelationshipElement from {@param node}.
+       * Deserialize an instance of AnnotatedRelationshipElement from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<AnnotatedRelationshipElement> tryAnnotatedRelationshipElementFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "AnnotatedRelationshipElement");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryAnnotatedRelationshipElementFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of AnnotatedRelationshipElement from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<AnnotatedRelationshipElement> tryAnnotatedRelationshipElementFromObject(JsonNode node) {
         IReference theFirst = null;
         IReference theSecond = null;
         List<IExtension> theExtensions = null;
@@ -5232,319 +3305,125 @@ public class Jsonization {
         List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
         List<IDataElement> theAnnotations = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "first": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theFirstResult = tryReferenceFrom(currentNode.getValue());
-              if (theFirstResult.isError()) {
-                theFirstResult.getError()
-                  .prependSegment(new Reporting.NameSegment("first"));
-                return theFirstResult.castTo(AnnotatedRelationshipElement.class);
-              }
-              theFirst = theFirstResult.getResult();
+              theFirst = parsed.getResult();
               break;
             }
             case "second": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSecondResult = tryReferenceFrom(currentNode.getValue());
-              if (theSecondResult.isError()) {
-                theSecondResult.getError()
-                  .prependSegment(new Reporting.NameSegment("second"));
-                return theSecondResult.castTo(AnnotatedRelationshipElement.class);
-              }
-              theSecond = theSecondResult.getResult();
+              theSecond = parsed.getResult();
               break;
             }
             case "extensions": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IExtension>> parsed = parseListOf_IExtension(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayExtensions = currentNode.getValue();
-              if (!arrayExtensions.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayExtensions.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "extensions"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IExtension>> theExtensionsResult = parseArray(
-                arrayExtensions,
-                _DeserializeImplementation::tryExtensionFrom);
-              if (theExtensionsResult.isError()) {
-                theExtensionsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return theExtensionsResult.castTo(AnnotatedRelationshipElement.class);
-              }
-              theExtensions = theExtensionsResult.getResult();
+              theExtensions = parsed.getResult();
               break;
             }
             case "category": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theCategoryResult = tryStringFrom(currentNode.getValue());
-              if (theCategoryResult.isError()) {
-                theCategoryResult.getError()
-                  .prependSegment(new Reporting.NameSegment("category"));
-                return theCategoryResult.castTo(AnnotatedRelationshipElement.class);
-              }
-              theCategory = theCategoryResult.getResult();
+              theCategory = parsed.getResult();
               break;
             }
             case "idShort": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdShortResult = tryStringFrom(currentNode.getValue());
-              if (theIdShortResult.isError()) {
-                theIdShortResult.getError()
-                  .prependSegment(new Reporting.NameSegment("idShort"));
-                return theIdShortResult.castTo(AnnotatedRelationshipElement.class);
-              }
-              theIdShort = theIdShortResult.getResult();
+              theIdShort = parsed.getResult();
               break;
             }
             case "displayName": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringNameType>> parsed =
+                parseListOf_ILangStringNameType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDisplayName = currentNode.getValue();
-              if (!arrayDisplayName.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDisplayName.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "displayName"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringNameType>> theDisplayNameResult = parseArray(
-                arrayDisplayName,
-                _DeserializeImplementation::tryLangStringNameTypeFrom);
-              if (theDisplayNameResult.isError()) {
-                theDisplayNameResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return theDisplayNameResult.castTo(AnnotatedRelationshipElement.class);
-              }
-              theDisplayName = theDisplayNameResult.getResult();
+              theDisplayName = parsed.getResult();
               break;
             }
             case "description": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringTextType>> parsed =
+                parseListOf_ILangStringTextType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDescription = currentNode.getValue();
-              if (!arrayDescription.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDescription.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "description"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringTextType>> theDescriptionResult = parseArray(
-                arrayDescription,
-                _DeserializeImplementation::tryLangStringTextTypeFrom);
-              if (theDescriptionResult.isError()) {
-                theDescriptionResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return theDescriptionResult.castTo(AnnotatedRelationshipElement.class);
-              }
-              theDescription = theDescriptionResult.getResult();
+              theDescription = parsed.getResult();
               break;
             }
             case "semanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSemanticIdResult.isError()) {
-                theSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("semanticId"));
-                return theSemanticIdResult.castTo(AnnotatedRelationshipElement.class);
-              }
-              theSemanticId = theSemanticIdResult.getResult();
+              theSemanticId = parsed.getResult();
               break;
             }
             case "supplementalSemanticIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySupplementalSemanticIds = currentNode.getValue();
-              if (!arraySupplementalSemanticIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySupplementalSemanticIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "supplementalSemanticIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theSupplementalSemanticIdsResult = parseArray(
-                arraySupplementalSemanticIds,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theSupplementalSemanticIdsResult.isError()) {
-                theSupplementalSemanticIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return theSupplementalSemanticIdsResult.castTo(AnnotatedRelationshipElement.class);
-              }
-              theSupplementalSemanticIds = theSupplementalSemanticIdsResult.getResult();
+              theSupplementalSemanticIds = parsed.getResult();
               break;
             }
             case "qualifiers": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IQualifier>> parsed = parseListOf_IQualifier(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayQualifiers = currentNode.getValue();
-              if (!arrayQualifiers.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayQualifiers.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "qualifiers"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IQualifier>> theQualifiersResult = parseArray(
-                arrayQualifiers,
-                _DeserializeImplementation::tryQualifierFrom);
-              if (theQualifiersResult.isError()) {
-                theQualifiersResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return theQualifiersResult.castTo(AnnotatedRelationshipElement.class);
-              }
-              theQualifiers = theQualifiersResult.getResult();
+              theQualifiers = parsed.getResult();
               break;
             }
             case "embeddedDataSpecifications": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IEmbeddedDataSpecification>> parsed =
+                parseListOf_IEmbeddedDataSpecification(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayEmbeddedDataSpecifications = currentNode.getValue();
-              if (!arrayEmbeddedDataSpecifications.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayEmbeddedDataSpecifications.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "embeddedDataSpecifications"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IEmbeddedDataSpecification>> theEmbeddedDataSpecificationsResult = parseArray(
-                arrayEmbeddedDataSpecifications,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFrom);
-              if (theEmbeddedDataSpecificationsResult.isError()) {
-                theEmbeddedDataSpecificationsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return theEmbeddedDataSpecificationsResult.castTo(AnnotatedRelationshipElement.class);
-              }
-              theEmbeddedDataSpecifications = theEmbeddedDataSpecificationsResult.getResult();
+              theEmbeddedDataSpecifications = parsed.getResult();
               break;
             }
             case "annotations": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IDataElement>> parsed = parseListOf_IDataElement(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayAnnotations = currentNode.getValue();
-              if (!arrayAnnotations.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayAnnotations.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "annotations"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IDataElement>> theAnnotationsResult = parseArray(
-                arrayAnnotations,
-                _DeserializeImplementation::tryIDataElementFrom);
-              if (theAnnotationsResult.isError()) {
-                theAnnotationsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "annotations"));
-                return theAnnotationsResult.castTo(AnnotatedRelationshipElement.class);
-              }
-              theAnnotations = theAnnotationsResult.getResult();
+              theAnnotations = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(AnnotatedRelationshipElement.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("AnnotatedRelationshipElement")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'AnnotatedRelationshipElement', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
         if (theFirst == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"first\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("first");
         }
 
         if (theSecond == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"second\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("second");
         }
 
         return Reporting.Result.success(new AnnotatedRelationshipElement(
@@ -5563,18 +3442,30 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of Entity from {@param node}.
+       * Deserialize an instance of Entity from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<Entity> tryEntityFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "Entity");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryEntityFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of Entity from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<Entity> tryEntityFromObject(JsonNode node) {
         EntityType theEntityType = null;
         List<IExtension> theExtensions = null;
         String theCategory = null;
@@ -5589,340 +3480,131 @@ public class Jsonization {
         String theGlobalAssetId = null;
         List<ISpecificAssetId> theSpecificAssetIds = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "entityType": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends EntityType> parsed = tryEntityTypeFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends EntityType> theEntityTypeResult = tryEntityTypeFrom(currentNode.getValue());
-              if (theEntityTypeResult.isError()) {
-                theEntityTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("entityType"));
-                return theEntityTypeResult.castTo(Entity.class);
-              }
-              theEntityType = theEntityTypeResult.getResult();
+              theEntityType = parsed.getResult();
               break;
             }
             case "extensions": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IExtension>> parsed = parseListOf_IExtension(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayExtensions = currentNode.getValue();
-              if (!arrayExtensions.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayExtensions.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "extensions"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IExtension>> theExtensionsResult = parseArray(
-                arrayExtensions,
-                _DeserializeImplementation::tryExtensionFrom);
-              if (theExtensionsResult.isError()) {
-                theExtensionsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return theExtensionsResult.castTo(Entity.class);
-              }
-              theExtensions = theExtensionsResult.getResult();
+              theExtensions = parsed.getResult();
               break;
             }
             case "category": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theCategoryResult = tryStringFrom(currentNode.getValue());
-              if (theCategoryResult.isError()) {
-                theCategoryResult.getError()
-                  .prependSegment(new Reporting.NameSegment("category"));
-                return theCategoryResult.castTo(Entity.class);
-              }
-              theCategory = theCategoryResult.getResult();
+              theCategory = parsed.getResult();
               break;
             }
             case "idShort": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdShortResult = tryStringFrom(currentNode.getValue());
-              if (theIdShortResult.isError()) {
-                theIdShortResult.getError()
-                  .prependSegment(new Reporting.NameSegment("idShort"));
-                return theIdShortResult.castTo(Entity.class);
-              }
-              theIdShort = theIdShortResult.getResult();
+              theIdShort = parsed.getResult();
               break;
             }
             case "displayName": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringNameType>> parsed =
+                parseListOf_ILangStringNameType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDisplayName = currentNode.getValue();
-              if (!arrayDisplayName.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDisplayName.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "displayName"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringNameType>> theDisplayNameResult = parseArray(
-                arrayDisplayName,
-                _DeserializeImplementation::tryLangStringNameTypeFrom);
-              if (theDisplayNameResult.isError()) {
-                theDisplayNameResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return theDisplayNameResult.castTo(Entity.class);
-              }
-              theDisplayName = theDisplayNameResult.getResult();
+              theDisplayName = parsed.getResult();
               break;
             }
             case "description": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringTextType>> parsed =
+                parseListOf_ILangStringTextType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDescription = currentNode.getValue();
-              if (!arrayDescription.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDescription.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "description"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringTextType>> theDescriptionResult = parseArray(
-                arrayDescription,
-                _DeserializeImplementation::tryLangStringTextTypeFrom);
-              if (theDescriptionResult.isError()) {
-                theDescriptionResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return theDescriptionResult.castTo(Entity.class);
-              }
-              theDescription = theDescriptionResult.getResult();
+              theDescription = parsed.getResult();
               break;
             }
             case "semanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSemanticIdResult.isError()) {
-                theSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("semanticId"));
-                return theSemanticIdResult.castTo(Entity.class);
-              }
-              theSemanticId = theSemanticIdResult.getResult();
+              theSemanticId = parsed.getResult();
               break;
             }
             case "supplementalSemanticIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySupplementalSemanticIds = currentNode.getValue();
-              if (!arraySupplementalSemanticIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySupplementalSemanticIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "supplementalSemanticIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theSupplementalSemanticIdsResult = parseArray(
-                arraySupplementalSemanticIds,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theSupplementalSemanticIdsResult.isError()) {
-                theSupplementalSemanticIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return theSupplementalSemanticIdsResult.castTo(Entity.class);
-              }
-              theSupplementalSemanticIds = theSupplementalSemanticIdsResult.getResult();
+              theSupplementalSemanticIds = parsed.getResult();
               break;
             }
             case "qualifiers": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IQualifier>> parsed = parseListOf_IQualifier(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayQualifiers = currentNode.getValue();
-              if (!arrayQualifiers.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayQualifiers.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "qualifiers"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IQualifier>> theQualifiersResult = parseArray(
-                arrayQualifiers,
-                _DeserializeImplementation::tryQualifierFrom);
-              if (theQualifiersResult.isError()) {
-                theQualifiersResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return theQualifiersResult.castTo(Entity.class);
-              }
-              theQualifiers = theQualifiersResult.getResult();
+              theQualifiers = parsed.getResult();
               break;
             }
             case "embeddedDataSpecifications": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IEmbeddedDataSpecification>> parsed =
+                parseListOf_IEmbeddedDataSpecification(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayEmbeddedDataSpecifications = currentNode.getValue();
-              if (!arrayEmbeddedDataSpecifications.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayEmbeddedDataSpecifications.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "embeddedDataSpecifications"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IEmbeddedDataSpecification>> theEmbeddedDataSpecificationsResult = parseArray(
-                arrayEmbeddedDataSpecifications,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFrom);
-              if (theEmbeddedDataSpecificationsResult.isError()) {
-                theEmbeddedDataSpecificationsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return theEmbeddedDataSpecificationsResult.castTo(Entity.class);
-              }
-              theEmbeddedDataSpecifications = theEmbeddedDataSpecificationsResult.getResult();
+              theEmbeddedDataSpecifications = parsed.getResult();
               break;
             }
             case "statements": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ISubmodelElement>> parsed =
+                parseListOf_ISubmodelElement(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayStatements = currentNode.getValue();
-              if (!arrayStatements.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayStatements.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "statements"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ISubmodelElement>> theStatementsResult = parseArray(
-                arrayStatements,
-                _DeserializeImplementation::tryISubmodelElementFrom);
-              if (theStatementsResult.isError()) {
-                theStatementsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "statements"));
-                return theStatementsResult.castTo(Entity.class);
-              }
-              theStatements = theStatementsResult.getResult();
+              theStatements = parsed.getResult();
               break;
             }
             case "globalAssetId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theGlobalAssetIdResult = tryStringFrom(currentNode.getValue());
-              if (theGlobalAssetIdResult.isError()) {
-                theGlobalAssetIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("globalAssetId"));
-                return theGlobalAssetIdResult.castTo(Entity.class);
-              }
-              theGlobalAssetId = theGlobalAssetIdResult.getResult();
+              theGlobalAssetId = parsed.getResult();
               break;
             }
             case "specificAssetIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ISpecificAssetId>> parsed =
+                parseListOf_ISpecificAssetId(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySpecificAssetIds = currentNode.getValue();
-              if (!arraySpecificAssetIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySpecificAssetIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "specificAssetIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ISpecificAssetId>> theSpecificAssetIdsResult = parseArray(
-                arraySpecificAssetIds,
-                _DeserializeImplementation::trySpecificAssetIdFrom);
-              if (theSpecificAssetIdsResult.isError()) {
-                theSpecificAssetIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "specificAssetIds"));
-                return theSpecificAssetIdsResult.castTo(Entity.class);
-              }
-              theSpecificAssetIds = theSpecificAssetIdsResult.getResult();
+              theSpecificAssetIds = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(Entity.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("Entity")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'Entity', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
         if (theEntityType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"entityType\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("entityType");
         }
 
         return Reporting.Result.success(new Entity(
@@ -5947,16 +3629,7 @@ public class Jsonization {
        * @param node JSON node to be parsed
        */
       private static Reporting.Result<EntityType> tryEntityTypeFrom(JsonNode node) {
-        final Reporting.Result<String> textResult = tryStringFrom(node);
-        if (textResult.isError()) {
-          return textResult.castTo(EntityType.class);
-        }
-        final Optional<EntityType> entityType = Stringification.entityTypeFromString(textResult.getResult());
-        if (!entityType.isPresent()) {
-          final Reporting.Error error = new Reporting.Error("Not a valid JSON representation of EntityType");
-          return Reporting.Result.failure(error);
-        }
-        return Reporting.Result.success(entityType.get());
+        return tryEnumFrom(node, Stringification::entityTypeFromString, EntityType.class);
       }
 
       /**
@@ -5965,16 +3638,7 @@ public class Jsonization {
        * @param node JSON node to be parsed
        */
       private static Reporting.Result<Direction> tryDirectionFrom(JsonNode node) {
-        final Reporting.Result<String> textResult = tryStringFrom(node);
-        if (textResult.isError()) {
-          return textResult.castTo(Direction.class);
-        }
-        final Optional<Direction> direction = Stringification.directionFromString(textResult.getResult());
-        if (!direction.isPresent()) {
-          final Reporting.Error error = new Reporting.Error("Not a valid JSON representation of Direction");
-          return Reporting.Result.failure(error);
-        }
-        return Reporting.Result.success(direction.get());
+        return tryEnumFrom(node, Stringification::directionFromString, Direction.class);
       }
 
       /**
@@ -5983,29 +3647,17 @@ public class Jsonization {
        * @param node JSON node to be parsed
        */
       private static Reporting.Result<StateOfEvent> tryStateOfEventFrom(JsonNode node) {
-        final Reporting.Result<String> textResult = tryStringFrom(node);
-        if (textResult.isError()) {
-          return textResult.castTo(StateOfEvent.class);
-        }
-        final Optional<StateOfEvent> stateOfEvent = Stringification.stateOfEventFromString(textResult.getResult());
-        if (!stateOfEvent.isPresent()) {
-          final Reporting.Error error = new Reporting.Error("Not a valid JSON representation of StateOfEvent");
-          return Reporting.Result.failure(error);
-        }
-        return Reporting.Result.success(stateOfEvent.get());
+        return tryEnumFrom(node, Stringification::stateOfEventFromString, StateOfEvent.class);
       }
 
       /**
-       * Deserialize an instance of EventPayload from {@param node}.
+       * Deserialize an instance of EventPayload from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<EventPayload> tryEventPayloadFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         IReference theSource = null;
@@ -6018,145 +3670,90 @@ public class Jsonization {
         byte[] thePayload = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "source": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSourceResult = tryReferenceFrom(currentNode.getValue());
-              if (theSourceResult.isError()) {
-                theSourceResult.getError()
-                  .prependSegment(new Reporting.NameSegment("source"));
-                return theSourceResult.castTo(EventPayload.class);
-              }
-              theSource = theSourceResult.getResult();
+              theSource = parsed.getResult();
               break;
             }
             case "observableReference": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theObservableReferenceResult = tryReferenceFrom(currentNode.getValue());
-              if (theObservableReferenceResult.isError()) {
-                theObservableReferenceResult.getError()
-                  .prependSegment(new Reporting.NameSegment("observableReference"));
-                return theObservableReferenceResult.castTo(EventPayload.class);
-              }
-              theObservableReference = theObservableReferenceResult.getResult();
+              theObservableReference = parsed.getResult();
               break;
             }
             case "timeStamp": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theTimeStampResult = tryStringFrom(currentNode.getValue());
-              if (theTimeStampResult.isError()) {
-                theTimeStampResult.getError()
-                  .prependSegment(new Reporting.NameSegment("timeStamp"));
-                return theTimeStampResult.castTo(EventPayload.class);
-              }
-              theTimeStamp = theTimeStampResult.getResult();
+              theTimeStamp = parsed.getResult();
               break;
             }
             case "sourceSemanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSourceSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSourceSemanticIdResult.isError()) {
-                theSourceSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("sourceSemanticId"));
-                return theSourceSemanticIdResult.castTo(EventPayload.class);
-              }
-              theSourceSemanticId = theSourceSemanticIdResult.getResult();
+              theSourceSemanticId = parsed.getResult();
               break;
             }
             case "observableSemanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theObservableSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theObservableSemanticIdResult.isError()) {
-                theObservableSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("observableSemanticId"));
-                return theObservableSemanticIdResult.castTo(EventPayload.class);
-              }
-              theObservableSemanticId = theObservableSemanticIdResult.getResult();
+              theObservableSemanticId = parsed.getResult();
               break;
             }
             case "topic": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theTopicResult = tryStringFrom(currentNode.getValue());
-              if (theTopicResult.isError()) {
-                theTopicResult.getError()
-                  .prependSegment(new Reporting.NameSegment("topic"));
-                return theTopicResult.castTo(EventPayload.class);
-              }
-              theTopic = theTopicResult.getResult();
+              theTopic = parsed.getResult();
               break;
             }
             case "subjectId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSubjectIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSubjectIdResult.isError()) {
-                theSubjectIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("subjectId"));
-                return theSubjectIdResult.castTo(EventPayload.class);
-              }
-              theSubjectId = theSubjectIdResult.getResult();
+              theSubjectId = parsed.getResult();
               break;
             }
             case "payload": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends byte[]> parsed = tryBytesFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends byte[]> thePayloadResult = tryBytesFrom(currentNode.getValue());
-              if (thePayloadResult.isError()) {
-                thePayloadResult.getError()
-                  .prependSegment(new Reporting.NameSegment("payload"));
-                return thePayloadResult.castTo(EventPayload.class);
-              }
-              thePayload = thePayloadResult.getResult();
+              thePayload = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theSource == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"source\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("source");
         }
 
         if (theObservableReference == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"observableReference\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("observableReference");
         }
 
         if (theTimeStamp == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"timeStamp\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("timeStamp");
         }
 
         return Reporting.Result.success(new EventPayload(
@@ -6178,27 +3775,18 @@ public class Jsonization {
        */
       public static Reporting.Result<? extends IEventElement> tryIEventElementFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
-        final JsonNode modelTypeNode = node.get("modelType");
-        if (modelTypeNode == null) {
-          final Reporting.Error error = new Reporting.Error(
-              "Expected a model type, but none is present");
-          return Reporting.Result.failure(error);
-        }
-        final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
+        final Reporting.Result<String> modelTypeResult = tryModelTypeFrom(node);
         if (modelTypeResult.isError()) {
           return modelTypeResult.castTo(IEventElement.class);
         }
 
-        switch (modelTypeResult.getResult())
-        {
-          case "BasicEventElement": {
-            return tryBasicEventElementFrom(node);
-        }  default: {
+        switch (modelTypeResult.getResult()) {
+          case "BasicEventElement":
+            return tryBasicEventElementFromObject(node);
+          default: {
             final Reporting.Error error = new Reporting.Error(
               "Unexpected model type for IEventElement: " + modelTypeResult.getResult());
             return Reporting.Result.failure(error);
@@ -6207,18 +3795,30 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of BasicEventElement from {@param node}.
+       * Deserialize an instance of BasicEventElement from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<BasicEventElement> tryBasicEventElementFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "BasicEventElement");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryBasicEventElementFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of BasicEventElement from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<BasicEventElement> tryBasicEventElementFromObject(JsonNode node) {
         IReference theObserved = null;
         Direction theDirection = null;
         StateOfEvent theState = null;
@@ -6237,382 +3837,169 @@ public class Jsonization {
         String theMinInterval = null;
         String theMaxInterval = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "observed": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theObservedResult = tryReferenceFrom(currentNode.getValue());
-              if (theObservedResult.isError()) {
-                theObservedResult.getError()
-                  .prependSegment(new Reporting.NameSegment("observed"));
-                return theObservedResult.castTo(BasicEventElement.class);
-              }
-              theObserved = theObservedResult.getResult();
+              theObserved = parsed.getResult();
               break;
             }
             case "direction": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends Direction> parsed = tryDirectionFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends Direction> theDirectionResult = tryDirectionFrom(currentNode.getValue());
-              if (theDirectionResult.isError()) {
-                theDirectionResult.getError()
-                  .prependSegment(new Reporting.NameSegment("direction"));
-                return theDirectionResult.castTo(BasicEventElement.class);
-              }
-              theDirection = theDirectionResult.getResult();
+              theDirection = parsed.getResult();
               break;
             }
             case "state": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends StateOfEvent> parsed = tryStateOfEventFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends StateOfEvent> theStateResult = tryStateOfEventFrom(currentNode.getValue());
-              if (theStateResult.isError()) {
-                theStateResult.getError()
-                  .prependSegment(new Reporting.NameSegment("state"));
-                return theStateResult.castTo(BasicEventElement.class);
-              }
-              theState = theStateResult.getResult();
+              theState = parsed.getResult();
               break;
             }
             case "extensions": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IExtension>> parsed = parseListOf_IExtension(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayExtensions = currentNode.getValue();
-              if (!arrayExtensions.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayExtensions.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "extensions"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IExtension>> theExtensionsResult = parseArray(
-                arrayExtensions,
-                _DeserializeImplementation::tryExtensionFrom);
-              if (theExtensionsResult.isError()) {
-                theExtensionsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return theExtensionsResult.castTo(BasicEventElement.class);
-              }
-              theExtensions = theExtensionsResult.getResult();
+              theExtensions = parsed.getResult();
               break;
             }
             case "category": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theCategoryResult = tryStringFrom(currentNode.getValue());
-              if (theCategoryResult.isError()) {
-                theCategoryResult.getError()
-                  .prependSegment(new Reporting.NameSegment("category"));
-                return theCategoryResult.castTo(BasicEventElement.class);
-              }
-              theCategory = theCategoryResult.getResult();
+              theCategory = parsed.getResult();
               break;
             }
             case "idShort": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdShortResult = tryStringFrom(currentNode.getValue());
-              if (theIdShortResult.isError()) {
-                theIdShortResult.getError()
-                  .prependSegment(new Reporting.NameSegment("idShort"));
-                return theIdShortResult.castTo(BasicEventElement.class);
-              }
-              theIdShort = theIdShortResult.getResult();
+              theIdShort = parsed.getResult();
               break;
             }
             case "displayName": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringNameType>> parsed =
+                parseListOf_ILangStringNameType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDisplayName = currentNode.getValue();
-              if (!arrayDisplayName.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDisplayName.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "displayName"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringNameType>> theDisplayNameResult = parseArray(
-                arrayDisplayName,
-                _DeserializeImplementation::tryLangStringNameTypeFrom);
-              if (theDisplayNameResult.isError()) {
-                theDisplayNameResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return theDisplayNameResult.castTo(BasicEventElement.class);
-              }
-              theDisplayName = theDisplayNameResult.getResult();
+              theDisplayName = parsed.getResult();
               break;
             }
             case "description": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringTextType>> parsed =
+                parseListOf_ILangStringTextType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDescription = currentNode.getValue();
-              if (!arrayDescription.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDescription.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "description"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringTextType>> theDescriptionResult = parseArray(
-                arrayDescription,
-                _DeserializeImplementation::tryLangStringTextTypeFrom);
-              if (theDescriptionResult.isError()) {
-                theDescriptionResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return theDescriptionResult.castTo(BasicEventElement.class);
-              }
-              theDescription = theDescriptionResult.getResult();
+              theDescription = parsed.getResult();
               break;
             }
             case "semanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSemanticIdResult.isError()) {
-                theSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("semanticId"));
-                return theSemanticIdResult.castTo(BasicEventElement.class);
-              }
-              theSemanticId = theSemanticIdResult.getResult();
+              theSemanticId = parsed.getResult();
               break;
             }
             case "supplementalSemanticIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySupplementalSemanticIds = currentNode.getValue();
-              if (!arraySupplementalSemanticIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySupplementalSemanticIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "supplementalSemanticIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theSupplementalSemanticIdsResult = parseArray(
-                arraySupplementalSemanticIds,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theSupplementalSemanticIdsResult.isError()) {
-                theSupplementalSemanticIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return theSupplementalSemanticIdsResult.castTo(BasicEventElement.class);
-              }
-              theSupplementalSemanticIds = theSupplementalSemanticIdsResult.getResult();
+              theSupplementalSemanticIds = parsed.getResult();
               break;
             }
             case "qualifiers": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IQualifier>> parsed = parseListOf_IQualifier(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayQualifiers = currentNode.getValue();
-              if (!arrayQualifiers.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayQualifiers.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "qualifiers"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IQualifier>> theQualifiersResult = parseArray(
-                arrayQualifiers,
-                _DeserializeImplementation::tryQualifierFrom);
-              if (theQualifiersResult.isError()) {
-                theQualifiersResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return theQualifiersResult.castTo(BasicEventElement.class);
-              }
-              theQualifiers = theQualifiersResult.getResult();
+              theQualifiers = parsed.getResult();
               break;
             }
             case "embeddedDataSpecifications": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IEmbeddedDataSpecification>> parsed =
+                parseListOf_IEmbeddedDataSpecification(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayEmbeddedDataSpecifications = currentNode.getValue();
-              if (!arrayEmbeddedDataSpecifications.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayEmbeddedDataSpecifications.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "embeddedDataSpecifications"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IEmbeddedDataSpecification>> theEmbeddedDataSpecificationsResult = parseArray(
-                arrayEmbeddedDataSpecifications,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFrom);
-              if (theEmbeddedDataSpecificationsResult.isError()) {
-                theEmbeddedDataSpecificationsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return theEmbeddedDataSpecificationsResult.castTo(BasicEventElement.class);
-              }
-              theEmbeddedDataSpecifications = theEmbeddedDataSpecificationsResult.getResult();
+              theEmbeddedDataSpecifications = parsed.getResult();
               break;
             }
             case "messageTopic": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theMessageTopicResult = tryStringFrom(currentNode.getValue());
-              if (theMessageTopicResult.isError()) {
-                theMessageTopicResult.getError()
-                  .prependSegment(new Reporting.NameSegment("messageTopic"));
-                return theMessageTopicResult.castTo(BasicEventElement.class);
-              }
-              theMessageTopic = theMessageTopicResult.getResult();
+              theMessageTopic = parsed.getResult();
               break;
             }
             case "messageBroker": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theMessageBrokerResult = tryReferenceFrom(currentNode.getValue());
-              if (theMessageBrokerResult.isError()) {
-                theMessageBrokerResult.getError()
-                  .prependSegment(new Reporting.NameSegment("messageBroker"));
-                return theMessageBrokerResult.castTo(BasicEventElement.class);
-              }
-              theMessageBroker = theMessageBrokerResult.getResult();
+              theMessageBroker = parsed.getResult();
               break;
             }
             case "lastUpdate": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theLastUpdateResult = tryStringFrom(currentNode.getValue());
-              if (theLastUpdateResult.isError()) {
-                theLastUpdateResult.getError()
-                  .prependSegment(new Reporting.NameSegment("lastUpdate"));
-                return theLastUpdateResult.castTo(BasicEventElement.class);
-              }
-              theLastUpdate = theLastUpdateResult.getResult();
+              theLastUpdate = parsed.getResult();
               break;
             }
             case "minInterval": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theMinIntervalResult = tryStringFrom(currentNode.getValue());
-              if (theMinIntervalResult.isError()) {
-                theMinIntervalResult.getError()
-                  .prependSegment(new Reporting.NameSegment("minInterval"));
-                return theMinIntervalResult.castTo(BasicEventElement.class);
-              }
-              theMinInterval = theMinIntervalResult.getResult();
+              theMinInterval = parsed.getResult();
               break;
             }
             case "maxInterval": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theMaxIntervalResult = tryStringFrom(currentNode.getValue());
-              if (theMaxIntervalResult.isError()) {
-                theMaxIntervalResult.getError()
-                  .prependSegment(new Reporting.NameSegment("maxInterval"));
-                return theMaxIntervalResult.castTo(BasicEventElement.class);
-              }
-              theMaxInterval = theMaxIntervalResult.getResult();
+              theMaxInterval = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(BasicEventElement.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("BasicEventElement")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'BasicEventElement', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
         if (theObserved == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"observed\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("observed");
         }
 
         if (theDirection == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"direction\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("direction");
         }
 
         if (theState == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"state\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("state");
         }
 
         return Reporting.Result.success(new BasicEventElement(
@@ -6636,18 +4023,30 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of Operation from {@param node}.
+       * Deserialize an instance of Operation from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<Operation> tryOperationFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "Operation");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryOperationFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of Operation from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<Operation> tryOperationFromObject(JsonNode node) {
         List<IExtension> theExtensions = null;
         String theCategory = null;
         String theIdShort = null;
@@ -6661,336 +4060,121 @@ public class Jsonization {
         List<IOperationVariable> theOutputVariables = null;
         List<IOperationVariable> theInoutputVariables = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "extensions": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IExtension>> parsed = parseListOf_IExtension(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayExtensions = currentNode.getValue();
-              if (!arrayExtensions.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayExtensions.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "extensions"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IExtension>> theExtensionsResult = parseArray(
-                arrayExtensions,
-                _DeserializeImplementation::tryExtensionFrom);
-              if (theExtensionsResult.isError()) {
-                theExtensionsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return theExtensionsResult.castTo(Operation.class);
-              }
-              theExtensions = theExtensionsResult.getResult();
+              theExtensions = parsed.getResult();
               break;
             }
             case "category": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theCategoryResult = tryStringFrom(currentNode.getValue());
-              if (theCategoryResult.isError()) {
-                theCategoryResult.getError()
-                  .prependSegment(new Reporting.NameSegment("category"));
-                return theCategoryResult.castTo(Operation.class);
-              }
-              theCategory = theCategoryResult.getResult();
+              theCategory = parsed.getResult();
               break;
             }
             case "idShort": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdShortResult = tryStringFrom(currentNode.getValue());
-              if (theIdShortResult.isError()) {
-                theIdShortResult.getError()
-                  .prependSegment(new Reporting.NameSegment("idShort"));
-                return theIdShortResult.castTo(Operation.class);
-              }
-              theIdShort = theIdShortResult.getResult();
+              theIdShort = parsed.getResult();
               break;
             }
             case "displayName": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringNameType>> parsed =
+                parseListOf_ILangStringNameType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDisplayName = currentNode.getValue();
-              if (!arrayDisplayName.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDisplayName.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "displayName"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringNameType>> theDisplayNameResult = parseArray(
-                arrayDisplayName,
-                _DeserializeImplementation::tryLangStringNameTypeFrom);
-              if (theDisplayNameResult.isError()) {
-                theDisplayNameResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return theDisplayNameResult.castTo(Operation.class);
-              }
-              theDisplayName = theDisplayNameResult.getResult();
+              theDisplayName = parsed.getResult();
               break;
             }
             case "description": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringTextType>> parsed =
+                parseListOf_ILangStringTextType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDescription = currentNode.getValue();
-              if (!arrayDescription.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDescription.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "description"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringTextType>> theDescriptionResult = parseArray(
-                arrayDescription,
-                _DeserializeImplementation::tryLangStringTextTypeFrom);
-              if (theDescriptionResult.isError()) {
-                theDescriptionResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return theDescriptionResult.castTo(Operation.class);
-              }
-              theDescription = theDescriptionResult.getResult();
+              theDescription = parsed.getResult();
               break;
             }
             case "semanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSemanticIdResult.isError()) {
-                theSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("semanticId"));
-                return theSemanticIdResult.castTo(Operation.class);
-              }
-              theSemanticId = theSemanticIdResult.getResult();
+              theSemanticId = parsed.getResult();
               break;
             }
             case "supplementalSemanticIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySupplementalSemanticIds = currentNode.getValue();
-              if (!arraySupplementalSemanticIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySupplementalSemanticIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "supplementalSemanticIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theSupplementalSemanticIdsResult = parseArray(
-                arraySupplementalSemanticIds,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theSupplementalSemanticIdsResult.isError()) {
-                theSupplementalSemanticIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return theSupplementalSemanticIdsResult.castTo(Operation.class);
-              }
-              theSupplementalSemanticIds = theSupplementalSemanticIdsResult.getResult();
+              theSupplementalSemanticIds = parsed.getResult();
               break;
             }
             case "qualifiers": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IQualifier>> parsed = parseListOf_IQualifier(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayQualifiers = currentNode.getValue();
-              if (!arrayQualifiers.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayQualifiers.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "qualifiers"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IQualifier>> theQualifiersResult = parseArray(
-                arrayQualifiers,
-                _DeserializeImplementation::tryQualifierFrom);
-              if (theQualifiersResult.isError()) {
-                theQualifiersResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return theQualifiersResult.castTo(Operation.class);
-              }
-              theQualifiers = theQualifiersResult.getResult();
+              theQualifiers = parsed.getResult();
               break;
             }
             case "embeddedDataSpecifications": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IEmbeddedDataSpecification>> parsed =
+                parseListOf_IEmbeddedDataSpecification(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayEmbeddedDataSpecifications = currentNode.getValue();
-              if (!arrayEmbeddedDataSpecifications.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayEmbeddedDataSpecifications.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "embeddedDataSpecifications"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IEmbeddedDataSpecification>> theEmbeddedDataSpecificationsResult = parseArray(
-                arrayEmbeddedDataSpecifications,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFrom);
-              if (theEmbeddedDataSpecificationsResult.isError()) {
-                theEmbeddedDataSpecificationsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return theEmbeddedDataSpecificationsResult.castTo(Operation.class);
-              }
-              theEmbeddedDataSpecifications = theEmbeddedDataSpecificationsResult.getResult();
+              theEmbeddedDataSpecifications = parsed.getResult();
               break;
             }
             case "inputVariables": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IOperationVariable>> parsed =
+                parseListOf_IOperationVariable(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayInputVariables = currentNode.getValue();
-              if (!arrayInputVariables.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayInputVariables.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "inputVariables"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IOperationVariable>> theInputVariablesResult = parseArray(
-                arrayInputVariables,
-                _DeserializeImplementation::tryOperationVariableFrom);
-              if (theInputVariablesResult.isError()) {
-                theInputVariablesResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "inputVariables"));
-                return theInputVariablesResult.castTo(Operation.class);
-              }
-              theInputVariables = theInputVariablesResult.getResult();
+              theInputVariables = parsed.getResult();
               break;
             }
             case "outputVariables": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IOperationVariable>> parsed =
+                parseListOf_IOperationVariable(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayOutputVariables = currentNode.getValue();
-              if (!arrayOutputVariables.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayOutputVariables.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "outputVariables"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IOperationVariable>> theOutputVariablesResult = parseArray(
-                arrayOutputVariables,
-                _DeserializeImplementation::tryOperationVariableFrom);
-              if (theOutputVariablesResult.isError()) {
-                theOutputVariablesResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "outputVariables"));
-                return theOutputVariablesResult.castTo(Operation.class);
-              }
-              theOutputVariables = theOutputVariablesResult.getResult();
+              theOutputVariables = parsed.getResult();
               break;
             }
             case "inoutputVariables": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IOperationVariable>> parsed =
+                parseListOf_IOperationVariable(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayInoutputVariables = currentNode.getValue();
-              if (!arrayInoutputVariables.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayInoutputVariables.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "inoutputVariables"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IOperationVariable>> theInoutputVariablesResult = parseArray(
-                arrayInoutputVariables,
-                _DeserializeImplementation::tryOperationVariableFrom);
-              if (theInoutputVariablesResult.isError()) {
-                theInoutputVariablesResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "inoutputVariables"));
-                return theInoutputVariablesResult.castTo(Operation.class);
-              }
-              theInoutputVariables = theInoutputVariablesResult.getResult();
+              theInoutputVariables = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(Operation.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("Operation")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'Operation', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
-
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
-
 
         return Reporting.Result.success(new Operation(
           theExtensions,
@@ -7008,50 +4192,39 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of OperationVariable from {@param node}.
+       * Deserialize an instance of OperationVariable from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<OperationVariable> tryOperationVariableFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         ISubmodelElement theValue = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "value": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends ISubmodelElement> parsed =
+                tryISubmodelElementFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends ISubmodelElement> theValueResult = tryISubmodelElementFrom(currentNode.getValue());
-              if (theValueResult.isError()) {
-                theValueResult.getError()
-                  .prependSegment(new Reporting.NameSegment("value"));
-                return theValueResult.castTo(OperationVariable.class);
-              }
-              theValue = theValueResult.getResult();
+              theValue = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theValue == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"value\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("value");
         }
 
         return Reporting.Result.success(new OperationVariable(
@@ -7059,18 +4232,30 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of Capability from {@param node}.
+       * Deserialize an instance of Capability from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<Capability> tryCapabilityFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "Capability");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryCapabilityFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of Capability from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<Capability> tryCapabilityFromObject(JsonNode node) {
         List<IExtension> theExtensions = null;
         String theCategory = null;
         String theIdShort = null;
@@ -7081,255 +4266,94 @@ public class Jsonization {
         List<IQualifier> theQualifiers = null;
         List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "extensions": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IExtension>> parsed = parseListOf_IExtension(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayExtensions = currentNode.getValue();
-              if (!arrayExtensions.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayExtensions.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "extensions"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IExtension>> theExtensionsResult = parseArray(
-                arrayExtensions,
-                _DeserializeImplementation::tryExtensionFrom);
-              if (theExtensionsResult.isError()) {
-                theExtensionsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return theExtensionsResult.castTo(Capability.class);
-              }
-              theExtensions = theExtensionsResult.getResult();
+              theExtensions = parsed.getResult();
               break;
             }
             case "category": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theCategoryResult = tryStringFrom(currentNode.getValue());
-              if (theCategoryResult.isError()) {
-                theCategoryResult.getError()
-                  .prependSegment(new Reporting.NameSegment("category"));
-                return theCategoryResult.castTo(Capability.class);
-              }
-              theCategory = theCategoryResult.getResult();
+              theCategory = parsed.getResult();
               break;
             }
             case "idShort": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdShortResult = tryStringFrom(currentNode.getValue());
-              if (theIdShortResult.isError()) {
-                theIdShortResult.getError()
-                  .prependSegment(new Reporting.NameSegment("idShort"));
-                return theIdShortResult.castTo(Capability.class);
-              }
-              theIdShort = theIdShortResult.getResult();
+              theIdShort = parsed.getResult();
               break;
             }
             case "displayName": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringNameType>> parsed =
+                parseListOf_ILangStringNameType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDisplayName = currentNode.getValue();
-              if (!arrayDisplayName.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDisplayName.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "displayName"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringNameType>> theDisplayNameResult = parseArray(
-                arrayDisplayName,
-                _DeserializeImplementation::tryLangStringNameTypeFrom);
-              if (theDisplayNameResult.isError()) {
-                theDisplayNameResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return theDisplayNameResult.castTo(Capability.class);
-              }
-              theDisplayName = theDisplayNameResult.getResult();
+              theDisplayName = parsed.getResult();
               break;
             }
             case "description": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringTextType>> parsed =
+                parseListOf_ILangStringTextType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDescription = currentNode.getValue();
-              if (!arrayDescription.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDescription.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "description"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringTextType>> theDescriptionResult = parseArray(
-                arrayDescription,
-                _DeserializeImplementation::tryLangStringTextTypeFrom);
-              if (theDescriptionResult.isError()) {
-                theDescriptionResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return theDescriptionResult.castTo(Capability.class);
-              }
-              theDescription = theDescriptionResult.getResult();
+              theDescription = parsed.getResult();
               break;
             }
             case "semanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theSemanticIdResult.isError()) {
-                theSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("semanticId"));
-                return theSemanticIdResult.castTo(Capability.class);
-              }
-              theSemanticId = theSemanticIdResult.getResult();
+              theSemanticId = parsed.getResult();
               break;
             }
             case "supplementalSemanticIds": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySupplementalSemanticIds = currentNode.getValue();
-              if (!arraySupplementalSemanticIds.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySupplementalSemanticIds.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "supplementalSemanticIds"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theSupplementalSemanticIdsResult = parseArray(
-                arraySupplementalSemanticIds,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theSupplementalSemanticIdsResult.isError()) {
-                theSupplementalSemanticIdsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "supplementalSemanticIds"));
-                return theSupplementalSemanticIdsResult.castTo(Capability.class);
-              }
-              theSupplementalSemanticIds = theSupplementalSemanticIdsResult.getResult();
+              theSupplementalSemanticIds = parsed.getResult();
               break;
             }
             case "qualifiers": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IQualifier>> parsed = parseListOf_IQualifier(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayQualifiers = currentNode.getValue();
-              if (!arrayQualifiers.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayQualifiers.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "qualifiers"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IQualifier>> theQualifiersResult = parseArray(
-                arrayQualifiers,
-                _DeserializeImplementation::tryQualifierFrom);
-              if (theQualifiersResult.isError()) {
-                theQualifiersResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "qualifiers"));
-                return theQualifiersResult.castTo(Capability.class);
-              }
-              theQualifiers = theQualifiersResult.getResult();
+              theQualifiers = parsed.getResult();
               break;
             }
             case "embeddedDataSpecifications": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IEmbeddedDataSpecification>> parsed =
+                parseListOf_IEmbeddedDataSpecification(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayEmbeddedDataSpecifications = currentNode.getValue();
-              if (!arrayEmbeddedDataSpecifications.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayEmbeddedDataSpecifications.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "embeddedDataSpecifications"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IEmbeddedDataSpecification>> theEmbeddedDataSpecificationsResult = parseArray(
-                arrayEmbeddedDataSpecifications,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFrom);
-              if (theEmbeddedDataSpecificationsResult.isError()) {
-                theEmbeddedDataSpecificationsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return theEmbeddedDataSpecificationsResult.castTo(Capability.class);
-              }
-              theEmbeddedDataSpecifications = theEmbeddedDataSpecificationsResult.getResult();
+              theEmbeddedDataSpecifications = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(Capability.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("Capability")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'Capability', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
-
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
-
 
         return Reporting.Result.success(new Capability(
           theExtensions,
@@ -7344,18 +4368,30 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of ConceptDescription from {@param node}.
+       * Deserialize an instance of ConceptDescription from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<ConceptDescription> tryConceptDescriptionFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "ConceptDescription");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryConceptDescriptionFromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of ConceptDescription from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<ConceptDescription> tryConceptDescriptionFromObject(JsonNode node) {
         String theId = null;
         List<IExtension> theExtensions = null;
         String theCategory = null;
@@ -7366,245 +4402,98 @@ public class Jsonization {
         List<IEmbeddedDataSpecification> theEmbeddedDataSpecifications = null;
         List<IReference> theIsCaseOf = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "id": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdResult = tryStringFrom(currentNode.getValue());
-              if (theIdResult.isError()) {
-                theIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("id"));
-                return theIdResult.castTo(ConceptDescription.class);
-              }
-              theId = theIdResult.getResult();
+              theId = parsed.getResult();
               break;
             }
             case "extensions": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IExtension>> parsed = parseListOf_IExtension(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayExtensions = currentNode.getValue();
-              if (!arrayExtensions.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayExtensions.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "extensions"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IExtension>> theExtensionsResult = parseArray(
-                arrayExtensions,
-                _DeserializeImplementation::tryExtensionFrom);
-              if (theExtensionsResult.isError()) {
-                theExtensionsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "extensions"));
-                return theExtensionsResult.castTo(ConceptDescription.class);
-              }
-              theExtensions = theExtensionsResult.getResult();
+              theExtensions = parsed.getResult();
               break;
             }
             case "category": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theCategoryResult = tryStringFrom(currentNode.getValue());
-              if (theCategoryResult.isError()) {
-                theCategoryResult.getError()
-                  .prependSegment(new Reporting.NameSegment("category"));
-                return theCategoryResult.castTo(ConceptDescription.class);
-              }
-              theCategory = theCategoryResult.getResult();
+              theCategory = parsed.getResult();
               break;
             }
             case "idShort": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theIdShortResult = tryStringFrom(currentNode.getValue());
-              if (theIdShortResult.isError()) {
-                theIdShortResult.getError()
-                  .prependSegment(new Reporting.NameSegment("idShort"));
-                return theIdShortResult.castTo(ConceptDescription.class);
-              }
-              theIdShort = theIdShortResult.getResult();
+              theIdShort = parsed.getResult();
               break;
             }
             case "displayName": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringNameType>> parsed =
+                parseListOf_ILangStringNameType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDisplayName = currentNode.getValue();
-              if (!arrayDisplayName.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDisplayName.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "displayName"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringNameType>> theDisplayNameResult = parseArray(
-                arrayDisplayName,
-                _DeserializeImplementation::tryLangStringNameTypeFrom);
-              if (theDisplayNameResult.isError()) {
-                theDisplayNameResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "displayName"));
-                return theDisplayNameResult.castTo(ConceptDescription.class);
-              }
-              theDisplayName = theDisplayNameResult.getResult();
+              theDisplayName = parsed.getResult();
               break;
             }
             case "description": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringTextType>> parsed =
+                parseListOf_ILangStringTextType(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDescription = currentNode.getValue();
-              if (!arrayDescription.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDescription.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "description"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringTextType>> theDescriptionResult = parseArray(
-                arrayDescription,
-                _DeserializeImplementation::tryLangStringTextTypeFrom);
-              if (theDescriptionResult.isError()) {
-                theDescriptionResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "description"));
-                return theDescriptionResult.castTo(ConceptDescription.class);
-              }
-              theDescription = theDescriptionResult.getResult();
+              theDescription = parsed.getResult();
               break;
             }
             case "administration": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IAdministrativeInformation> parsed =
+                tryAdministrativeInformationFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IAdministrativeInformation> theAdministrationResult = tryAdministrativeInformationFrom(currentNode.getValue());
-              if (theAdministrationResult.isError()) {
-                theAdministrationResult.getError()
-                  .prependSegment(new Reporting.NameSegment("administration"));
-                return theAdministrationResult.castTo(ConceptDescription.class);
-              }
-              theAdministration = theAdministrationResult.getResult();
+              theAdministration = parsed.getResult();
               break;
             }
             case "embeddedDataSpecifications": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IEmbeddedDataSpecification>> parsed =
+                parseListOf_IEmbeddedDataSpecification(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayEmbeddedDataSpecifications = currentNode.getValue();
-              if (!arrayEmbeddedDataSpecifications.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayEmbeddedDataSpecifications.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "embeddedDataSpecifications"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IEmbeddedDataSpecification>> theEmbeddedDataSpecificationsResult = parseArray(
-                arrayEmbeddedDataSpecifications,
-                _DeserializeImplementation::tryEmbeddedDataSpecificationFrom);
-              if (theEmbeddedDataSpecificationsResult.isError()) {
-                theEmbeddedDataSpecificationsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "embeddedDataSpecifications"));
-                return theEmbeddedDataSpecificationsResult.castTo(ConceptDescription.class);
-              }
-              theEmbeddedDataSpecifications = theEmbeddedDataSpecificationsResult.getResult();
+              theEmbeddedDataSpecifications = parsed.getResult();
               break;
             }
             case "isCaseOf": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IReference>> parsed = parseListOf_IReference(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayIsCaseOf = currentNode.getValue();
-              if (!arrayIsCaseOf.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayIsCaseOf.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "isCaseOf"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IReference>> theIsCaseOfResult = parseArray(
-                arrayIsCaseOf,
-                _DeserializeImplementation::tryReferenceFrom);
-              if (theIsCaseOfResult.isError()) {
-                theIsCaseOfResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "isCaseOf"));
-                return theIsCaseOfResult.castTo(ConceptDescription.class);
-              }
-              theIsCaseOf = theIsCaseOfResult.getResult();
+              theIsCaseOf = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(ConceptDescription.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("ConceptDescription")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'ConceptDescription', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
         if (theId == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"id\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("id");
         }
 
         return Reporting.Result.success(new ConceptDescription(
@@ -7625,29 +4514,17 @@ public class Jsonization {
        * @param node JSON node to be parsed
        */
       private static Reporting.Result<ReferenceTypes> tryReferenceTypesFrom(JsonNode node) {
-        final Reporting.Result<String> textResult = tryStringFrom(node);
-        if (textResult.isError()) {
-          return textResult.castTo(ReferenceTypes.class);
-        }
-        final Optional<ReferenceTypes> referenceTypes = Stringification.referenceTypesFromString(textResult.getResult());
-        if (!referenceTypes.isPresent()) {
-          final Reporting.Error error = new Reporting.Error("Not a valid JSON representation of ReferenceTypes");
-          return Reporting.Result.failure(error);
-        }
-        return Reporting.Result.success(referenceTypes.get());
+        return tryEnumFrom(node, Stringification::referenceTypesFromString, ReferenceTypes.class);
       }
 
       /**
-       * Deserialize an instance of Reference from {@param node}.
+       * Deserialize an instance of Reference from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<Reference> tryReferenceFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         ReferenceTypes theType = null;
@@ -7655,82 +4532,47 @@ public class Jsonization {
         IReference theReferredSemanticId = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "type": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends ReferenceTypes> parsed =
+                tryReferenceTypesFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends ReferenceTypes> theTypeResult = tryReferenceTypesFrom(currentNode.getValue());
-              if (theTypeResult.isError()) {
-                theTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("type"));
-                return theTypeResult.castTo(Reference.class);
-              }
-              theType = theTypeResult.getResult();
+              theType = parsed.getResult();
               break;
             }
             case "keys": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IKey>> parsed = parseListOf_IKey(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayKeys = currentNode.getValue();
-              if (!arrayKeys.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayKeys.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "keys"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IKey>> theKeysResult = parseArray(
-                arrayKeys,
-                _DeserializeImplementation::tryKeyFrom);
-              if (theKeysResult.isError()) {
-                theKeysResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "keys"));
-                return theKeysResult.castTo(Reference.class);
-              }
-              theKeys = theKeysResult.getResult();
+              theKeys = parsed.getResult();
               break;
             }
             case "referredSemanticId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theReferredSemanticIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theReferredSemanticIdResult.isError()) {
-                theReferredSemanticIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("referredSemanticId"));
-                return theReferredSemanticIdResult.castTo(Reference.class);
-              }
-              theReferredSemanticId = theReferredSemanticIdResult.getResult();
+              theReferredSemanticId = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"type\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("type");
         }
 
         if (theKeys == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"keys\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("keys");
         }
 
         return Reporting.Result.success(new Reference(
@@ -7740,71 +4582,51 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of Key from {@param node}.
+       * Deserialize an instance of Key from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<Key> tryKeyFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         KeyTypes theType = null;
         String theValue = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "type": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends KeyTypes> parsed = tryKeyTypesFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends KeyTypes> theTypeResult = tryKeyTypesFrom(currentNode.getValue());
-              if (theTypeResult.isError()) {
-                theTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("type"));
-                return theTypeResult.castTo(Key.class);
-              }
-              theType = theTypeResult.getResult();
+              theType = parsed.getResult();
               break;
             }
             case "value": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theValueResult = tryStringFrom(currentNode.getValue());
-              if (theValueResult.isError()) {
-                theValueResult.getError()
-                  .prependSegment(new Reporting.NameSegment("value"));
-                return theValueResult.castTo(Key.class);
-              }
-              theValue = theValueResult.getResult();
+              theValue = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"type\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("type");
         }
 
         if (theValue == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"value\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("value");
         }
 
         return Reporting.Result.success(new Key(
@@ -7818,16 +4640,7 @@ public class Jsonization {
        * @param node JSON node to be parsed
        */
       private static Reporting.Result<KeyTypes> tryKeyTypesFrom(JsonNode node) {
-        final Reporting.Result<String> textResult = tryStringFrom(node);
-        if (textResult.isError()) {
-          return textResult.castTo(KeyTypes.class);
-        }
-        final Optional<KeyTypes> keyTypes = Stringification.keyTypesFromString(textResult.getResult());
-        if (!keyTypes.isPresent()) {
-          final Reporting.Error error = new Reporting.Error("Not a valid JSON representation of KeyTypes");
-          return Reporting.Result.failure(error);
-        }
-        return Reporting.Result.success(keyTypes.get());
+        return tryEnumFrom(node, Stringification::keyTypesFromString, KeyTypes.class);
       }
 
       /**
@@ -7836,16 +4649,7 @@ public class Jsonization {
        * @param node JSON node to be parsed
        */
       private static Reporting.Result<DataTypeDefXsd> tryDataTypeDefXsdFrom(JsonNode node) {
-        final Reporting.Result<String> textResult = tryStringFrom(node);
-        if (textResult.isError()) {
-          return textResult.castTo(DataTypeDefXsd.class);
-        }
-        final Optional<DataTypeDefXsd> dataTypeDefXsd = Stringification.dataTypeDefXsdFromString(textResult.getResult());
-        if (!dataTypeDefXsd.isPresent()) {
-          final Reporting.Error error = new Reporting.Error("Not a valid JSON representation of DataTypeDefXsd");
-          return Reporting.Result.failure(error);
-        }
-        return Reporting.Result.success(dataTypeDefXsd.get());
+        return tryEnumFrom(node, Stringification::dataTypeDefXsdFromString, DataTypeDefXsd.class);
       }
 
       /**
@@ -7856,35 +4660,26 @@ public class Jsonization {
        */
       public static Reporting.Result<? extends IAbstractLangString> tryIAbstractLangStringFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
-        final JsonNode modelTypeNode = node.get("modelType");
-        if (modelTypeNode == null) {
-          final Reporting.Error error = new Reporting.Error(
-              "Expected a model type, but none is present");
-          return Reporting.Result.failure(error);
-        }
-        final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
+        final Reporting.Result<String> modelTypeResult = tryModelTypeFrom(node);
         if (modelTypeResult.isError()) {
           return modelTypeResult.castTo(IAbstractLangString.class);
         }
 
-        switch (modelTypeResult.getResult())
-        {
-          case "LangStringDefinitionTypeIec61360": {
+        switch (modelTypeResult.getResult()) {
+          case "LangStringDefinitionTypeIec61360":
             return tryLangStringDefinitionTypeIec61360From(node);
-        }  case "LangStringNameType": {
+          case "LangStringNameType":
             return tryLangStringNameTypeFrom(node);
-        }  case "LangStringPreferredNameTypeIec61360": {
+          case "LangStringPreferredNameTypeIec61360":
             return tryLangStringPreferredNameTypeIec61360From(node);
-        }  case "LangStringShortNameTypeIec61360": {
+          case "LangStringShortNameTypeIec61360":
             return tryLangStringShortNameTypeIec61360From(node);
-        }  case "LangStringTextType": {
+          case "LangStringTextType":
             return tryLangStringTextTypeFrom(node);
-        }  default: {
+          default: {
             final Reporting.Error error = new Reporting.Error(
               "Unexpected model type for IAbstractLangString: " + modelTypeResult.getResult());
             return Reporting.Result.failure(error);
@@ -7893,71 +4688,51 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of LangStringNameType from {@param node}.
+       * Deserialize an instance of LangStringNameType from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<LangStringNameType> tryLangStringNameTypeFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         String theLanguage = null;
         String theText = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "language": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theLanguageResult = tryStringFrom(currentNode.getValue());
-              if (theLanguageResult.isError()) {
-                theLanguageResult.getError()
-                  .prependSegment(new Reporting.NameSegment("language"));
-                return theLanguageResult.castTo(LangStringNameType.class);
-              }
-              theLanguage = theLanguageResult.getResult();
+              theLanguage = parsed.getResult();
               break;
             }
             case "text": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theTextResult = tryStringFrom(currentNode.getValue());
-              if (theTextResult.isError()) {
-                theTextResult.getError()
-                  .prependSegment(new Reporting.NameSegment("text"));
-                return theTextResult.castTo(LangStringNameType.class);
-              }
-              theText = theTextResult.getResult();
+              theText = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theLanguage == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"language\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("language");
         }
 
         if (theText == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"text\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("text");
         }
 
         return Reporting.Result.success(new LangStringNameType(
@@ -7966,71 +4741,51 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of LangStringTextType from {@param node}.
+       * Deserialize an instance of LangStringTextType from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<LangStringTextType> tryLangStringTextTypeFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         String theLanguage = null;
         String theText = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "language": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theLanguageResult = tryStringFrom(currentNode.getValue());
-              if (theLanguageResult.isError()) {
-                theLanguageResult.getError()
-                  .prependSegment(new Reporting.NameSegment("language"));
-                return theLanguageResult.castTo(LangStringTextType.class);
-              }
-              theLanguage = theLanguageResult.getResult();
+              theLanguage = parsed.getResult();
               break;
             }
             case "text": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theTextResult = tryStringFrom(currentNode.getValue());
-              if (theTextResult.isError()) {
-                theTextResult.getError()
-                  .prependSegment(new Reporting.NameSegment("text"));
-                return theTextResult.castTo(LangStringTextType.class);
-              }
-              theText = theTextResult.getResult();
+              theText = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theLanguage == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"language\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("language");
         }
 
         if (theText == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"text\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("text");
         }
 
         return Reporting.Result.success(new LangStringTextType(
@@ -8039,16 +4794,13 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of Environment from {@param node}.
+       * Deserialize an instance of Environment from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<Environment> tryEnvironmentFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         List<IAssetAdministrationShell> theAssetAdministrationShells = null;
@@ -8056,99 +4808,41 @@ public class Jsonization {
         List<IConceptDescription> theConceptDescriptions = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "assetAdministrationShells": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IAssetAdministrationShell>> parsed =
+                parseListOf_IAssetAdministrationShell(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayAssetAdministrationShells = currentNode.getValue();
-              if (!arrayAssetAdministrationShells.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayAssetAdministrationShells.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "assetAdministrationShells"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IAssetAdministrationShell>> theAssetAdministrationShellsResult = parseArray(
-                arrayAssetAdministrationShells,
-                _DeserializeImplementation::tryAssetAdministrationShellFrom);
-              if (theAssetAdministrationShellsResult.isError()) {
-                theAssetAdministrationShellsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "assetAdministrationShells"));
-                return theAssetAdministrationShellsResult.castTo(Environment.class);
-              }
-              theAssetAdministrationShells = theAssetAdministrationShellsResult.getResult();
+              theAssetAdministrationShells = parsed.getResult();
               break;
             }
             case "submodels": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ISubmodel>> parsed = parseListOf_ISubmodel(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arraySubmodels = currentNode.getValue();
-              if (!arraySubmodels.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arraySubmodels.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "submodels"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ISubmodel>> theSubmodelsResult = parseArray(
-                arraySubmodels,
-                _DeserializeImplementation::trySubmodelFrom);
-              if (theSubmodelsResult.isError()) {
-                theSubmodelsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "submodels"));
-                return theSubmodelsResult.castTo(Environment.class);
-              }
-              theSubmodels = theSubmodelsResult.getResult();
+              theSubmodels = parsed.getResult();
               break;
             }
             case "conceptDescriptions": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IConceptDescription>> parsed =
+                parseListOf_IConceptDescription(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayConceptDescriptions = currentNode.getValue();
-              if (!arrayConceptDescriptions.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayConceptDescriptions.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "conceptDescriptions"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IConceptDescription>> theConceptDescriptionsResult = parseArray(
-                arrayConceptDescriptions,
-                _DeserializeImplementation::tryConceptDescriptionFrom);
-              if (theConceptDescriptionsResult.isError()) {
-                theConceptDescriptionsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "conceptDescriptions"));
-                return theConceptDescriptionsResult.castTo(Environment.class);
-              }
-              theConceptDescriptions = theConceptDescriptionsResult.getResult();
+              theConceptDescriptions = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
-
-
 
         return Reporting.Result.success(new Environment(
           theAssetAdministrationShells,
@@ -8164,27 +4858,18 @@ public class Jsonization {
        */
       public static Reporting.Result<? extends IDataSpecificationContent> tryIDataSpecificationContentFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
-        final JsonNode modelTypeNode = node.get("modelType");
-        if (modelTypeNode == null) {
-          final Reporting.Error error = new Reporting.Error(
-              "Expected a model type, but none is present");
-          return Reporting.Result.failure(error);
-        }
-        final Reporting.Result<String> modelTypeResult = tryStringFrom(modelTypeNode);
+        final Reporting.Result<String> modelTypeResult = tryModelTypeFrom(node);
         if (modelTypeResult.isError()) {
           return modelTypeResult.castTo(IDataSpecificationContent.class);
         }
 
-        switch (modelTypeResult.getResult())
-        {
-          case "DataSpecificationIec61360": {
-            return tryDataSpecificationIec61360From(node);
-        }  default: {
+        switch (modelTypeResult.getResult()) {
+          case "DataSpecificationIec61360":
+            return tryDataSpecificationIec61360FromObject(node);
+          default: {
             final Reporting.Error error = new Reporting.Error(
               "Unexpected model type for IDataSpecificationContent: " + modelTypeResult.getResult());
             return Reporting.Result.failure(error);
@@ -8193,71 +4878,52 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of EmbeddedDataSpecification from {@param node}.
+       * Deserialize an instance of EmbeddedDataSpecification from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<EmbeddedDataSpecification> tryEmbeddedDataSpecificationFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         IReference theDataSpecification = null;
         IDataSpecificationContent theDataSpecificationContent = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "dataSpecification": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theDataSpecificationResult = tryReferenceFrom(currentNode.getValue());
-              if (theDataSpecificationResult.isError()) {
-                theDataSpecificationResult.getError()
-                  .prependSegment(new Reporting.NameSegment("dataSpecification"));
-                return theDataSpecificationResult.castTo(EmbeddedDataSpecification.class);
-              }
-              theDataSpecification = theDataSpecificationResult.getResult();
+              theDataSpecification = parsed.getResult();
               break;
             }
             case "dataSpecificationContent": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IDataSpecificationContent> parsed =
+                tryIDataSpecificationContentFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IDataSpecificationContent> theDataSpecificationContentResult = tryIDataSpecificationContentFrom(currentNode.getValue());
-              if (theDataSpecificationContentResult.isError()) {
-                theDataSpecificationContentResult.getError()
-                  .prependSegment(new Reporting.NameSegment("dataSpecificationContent"));
-                return theDataSpecificationContentResult.castTo(EmbeddedDataSpecification.class);
-              }
-              theDataSpecificationContent = theDataSpecificationContentResult.getResult();
+              theDataSpecificationContent = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theDataSpecification == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"dataSpecification\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("dataSpecification");
         }
 
         if (theDataSpecificationContent == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"dataSpecificationContent\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("dataSpecificationContent");
         }
 
         return Reporting.Result.success(new EmbeddedDataSpecification(
@@ -8271,29 +4937,20 @@ public class Jsonization {
        * @param node JSON node to be parsed
        */
       private static Reporting.Result<DataTypeIec61360> tryDataTypeIec61360From(JsonNode node) {
-        final Reporting.Result<String> textResult = tryStringFrom(node);
-        if (textResult.isError()) {
-          return textResult.castTo(DataTypeIec61360.class);
-        }
-        final Optional<DataTypeIec61360> dataTypeIec61360 = Stringification.dataTypeIec61360FromString(textResult.getResult());
-        if (!dataTypeIec61360.isPresent()) {
-          final Reporting.Error error = new Reporting.Error("Not a valid JSON representation of DataTypeIec61360");
-          return Reporting.Result.failure(error);
-        }
-        return Reporting.Result.success(dataTypeIec61360.get());
+        return tryEnumFrom(
+          node,
+          Stringification::dataTypeIec61360FromString,
+          DataTypeIec61360.class);
       }
 
       /**
-       * Deserialize an instance of LevelType from {@param node}.
+       * Deserialize an instance of LevelType from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<LevelType> tryLevelTypeFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         Boolean theMin = null;
@@ -8302,95 +4959,62 @@ public class Jsonization {
         Boolean theMax = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "min": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends Boolean> parsed = tryBooleanFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends Boolean> theMinResult = tryBooleanFrom(currentNode.getValue());
-              if (theMinResult.isError()) {
-                theMinResult.getError()
-                  .prependSegment(new Reporting.NameSegment("min"));
-                return theMinResult.castTo(LevelType.class);
-              }
-              theMin = theMinResult.getResult();
+              theMin = parsed.getResult();
               break;
             }
             case "nom": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends Boolean> parsed = tryBooleanFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends Boolean> theNomResult = tryBooleanFrom(currentNode.getValue());
-              if (theNomResult.isError()) {
-                theNomResult.getError()
-                  .prependSegment(new Reporting.NameSegment("nom"));
-                return theNomResult.castTo(LevelType.class);
-              }
-              theNom = theNomResult.getResult();
+              theNom = parsed.getResult();
               break;
             }
             case "typ": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends Boolean> parsed = tryBooleanFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends Boolean> theTypResult = tryBooleanFrom(currentNode.getValue());
-              if (theTypResult.isError()) {
-                theTypResult.getError()
-                  .prependSegment(new Reporting.NameSegment("typ"));
-                return theTypResult.castTo(LevelType.class);
-              }
-              theTyp = theTypResult.getResult();
+              theTyp = parsed.getResult();
               break;
             }
             case "max": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends Boolean> parsed = tryBooleanFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends Boolean> theMaxResult = tryBooleanFrom(currentNode.getValue());
-              if (theMaxResult.isError()) {
-                theMaxResult.getError()
-                  .prependSegment(new Reporting.NameSegment("max"));
-                return theMaxResult.castTo(LevelType.class);
-              }
-              theMax = theMaxResult.getResult();
+              theMax = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theMin == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"min\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("min");
         }
 
         if (theNom == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"nom\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("nom");
         }
 
         if (theTyp == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"typ\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("typ");
         }
 
         if (theMax == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"max\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("max");
         }
 
         return Reporting.Result.success(new LevelType(
@@ -8401,71 +5025,51 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of ValueReferencePair from {@param node}.
+       * Deserialize an instance of ValueReferencePair from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<ValueReferencePair> tryValueReferencePairFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         String theValue = null;
         IReference theValueId = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "value": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theValueResult = tryStringFrom(currentNode.getValue());
-              if (theValueResult.isError()) {
-                theValueResult.getError()
-                  .prependSegment(new Reporting.NameSegment("value"));
-                return theValueResult.castTo(ValueReferencePair.class);
-              }
-              theValue = theValueResult.getResult();
+              theValue = parsed.getResult();
               break;
             }
             case "valueId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theValueIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theValueIdResult.isError()) {
-                theValueIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("valueId"));
-                return theValueIdResult.castTo(ValueReferencePair.class);
-              }
-              theValueId = theValueIdResult.getResult();
+              theValueId = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theValue == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"value\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("value");
         }
 
         if (theValueId == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"valueId\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("valueId");
         }
 
         return Reporting.Result.success(new ValueReferencePair(
@@ -8474,63 +5078,39 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of ValueList from {@param node}.
+       * Deserialize an instance of ValueList from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<ValueList> tryValueListFrom(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         List<IValueReferencePair> theValueReferencePairs = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "valueReferencePairs": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<IValueReferencePair>> parsed =
+                parseListOf_IValueReferencePair(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayValueReferencePairs = currentNode.getValue();
-              if (!arrayValueReferencePairs.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayValueReferencePairs.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "valueReferencePairs"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<IValueReferencePair>> theValueReferencePairsResult = parseArray(
-                arrayValueReferencePairs,
-                _DeserializeImplementation::tryValueReferencePairFrom);
-              if (theValueReferencePairsResult.isError()) {
-                theValueReferencePairsResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "valueReferencePairs"));
-                return theValueReferencePairsResult.castTo(ValueList.class);
-              }
-              theValueReferencePairs = theValueReferencePairsResult.getResult();
+              theValueReferencePairs = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theValueReferencePairs == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"valueReferencePairs\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("valueReferencePairs");
         }
 
         return Reporting.Result.success(new ValueList(
@@ -8538,71 +5118,51 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of LangStringPreferredNameTypeIec61360 from {@param node}.
+       * Deserialize an instance of LangStringPreferredNameTypeIec61360 from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<LangStringPreferredNameTypeIec61360> tryLangStringPreferredNameTypeIec61360From(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         String theLanguage = null;
         String theText = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "language": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theLanguageResult = tryStringFrom(currentNode.getValue());
-              if (theLanguageResult.isError()) {
-                theLanguageResult.getError()
-                  .prependSegment(new Reporting.NameSegment("language"));
-                return theLanguageResult.castTo(LangStringPreferredNameTypeIec61360.class);
-              }
-              theLanguage = theLanguageResult.getResult();
+              theLanguage = parsed.getResult();
               break;
             }
             case "text": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theTextResult = tryStringFrom(currentNode.getValue());
-              if (theTextResult.isError()) {
-                theTextResult.getError()
-                  .prependSegment(new Reporting.NameSegment("text"));
-                return theTextResult.castTo(LangStringPreferredNameTypeIec61360.class);
-              }
-              theText = theTextResult.getResult();
+              theText = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theLanguage == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"language\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("language");
         }
 
         if (theText == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"text\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("text");
         }
 
         return Reporting.Result.success(new LangStringPreferredNameTypeIec61360(
@@ -8611,71 +5171,51 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of LangStringShortNameTypeIec61360 from {@param node}.
+       * Deserialize an instance of LangStringShortNameTypeIec61360 from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<LangStringShortNameTypeIec61360> tryLangStringShortNameTypeIec61360From(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         String theLanguage = null;
         String theText = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "language": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theLanguageResult = tryStringFrom(currentNode.getValue());
-              if (theLanguageResult.isError()) {
-                theLanguageResult.getError()
-                  .prependSegment(new Reporting.NameSegment("language"));
-                return theLanguageResult.castTo(LangStringShortNameTypeIec61360.class);
-              }
-              theLanguage = theLanguageResult.getResult();
+              theLanguage = parsed.getResult();
               break;
             }
             case "text": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theTextResult = tryStringFrom(currentNode.getValue());
-              if (theTextResult.isError()) {
-                theTextResult.getError()
-                  .prependSegment(new Reporting.NameSegment("text"));
-                return theTextResult.castTo(LangStringShortNameTypeIec61360.class);
-              }
-              theText = theTextResult.getResult();
+              theText = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theLanguage == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"language\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("language");
         }
 
         if (theText == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"text\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("text");
         }
 
         return Reporting.Result.success(new LangStringShortNameTypeIec61360(
@@ -8684,71 +5224,51 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of LangStringDefinitionTypeIec61360 from {@param node}.
+       * Deserialize an instance of LangStringDefinitionTypeIec61360 from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<LangStringDefinitionTypeIec61360> tryLangStringDefinitionTypeIec61360From(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
         String theLanguage = null;
         String theText = null;
 
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "language": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theLanguageResult = tryStringFrom(currentNode.getValue());
-              if (theLanguageResult.isError()) {
-                theLanguageResult.getError()
-                  .prependSegment(new Reporting.NameSegment("language"));
-                return theLanguageResult.castTo(LangStringDefinitionTypeIec61360.class);
-              }
-              theLanguage = theLanguageResult.getResult();
+              theLanguage = parsed.getResult();
               break;
             }
             case "text": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theTextResult = tryStringFrom(currentNode.getValue());
-              if (theTextResult.isError()) {
-                theTextResult.getError()
-                  .prependSegment(new Reporting.NameSegment("text"));
-                return theTextResult.castTo(LangStringDefinitionTypeIec61360.class);
-              }
-              theText = theTextResult.getResult();
+              theText = parsed.getResult();
               break;
             }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
         if (theLanguage == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"language\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("language");
         }
 
         if (theText == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"text\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("text");
         }
 
         return Reporting.Result.success(new LangStringDefinitionTypeIec61360(
@@ -8757,18 +5277,30 @@ public class Jsonization {
       }
 
       /**
-       * Deserialize an instance of DataSpecificationIec61360 from {@param node}.
+       * Deserialize an instance of DataSpecificationIec61360 from {@code node}.
        *
        * @param node JSON node to be parsed
-       * @param elem Error, if any, during the deserialization
        */
       private static Reporting.Result<DataSpecificationIec61360> tryDataSpecificationIec61360From(JsonNode node) {
         if (node == null || !node.isObject()) {
-          final Reporting.Error error = new Reporting.Error(
-            "Expected a JsonObject, but got " + (node == null ? "null" : node.getNodeType()));
-          return Reporting.Result.failure(error);
+          return notAJsonObject(node);
         }
 
+        final Reporting.Error modelTypeError = checkModelType(node, "DataSpecificationIec61360");
+        if (modelTypeError != null) {
+          return Reporting.Result.failure(modelTypeError);
+        }
+
+        return tryDataSpecificationIec61360FromObject(node);
+      }
+
+      /**
+       * Deserialize an instance of DataSpecificationIec61360 from the JSON object {@code node} whose
+       * model type has already been checked.
+       *
+       * @param node JSON object to be parsed
+       */
+      private static Reporting.Result<DataSpecificationIec61360> tryDataSpecificationIec61360FromObject(JsonNode node) {
         List<ILangStringPreferredNameTypeIec61360> thePreferredName = null;
         List<ILangStringShortNameTypeIec61360> theShortName = null;
         String theUnit = null;
@@ -8782,261 +5314,122 @@ public class Jsonization {
         String theValue = null;
         ILevelType theLevelType = null;
 
-        String modelType = null;
-
         for (Iterator<Map.Entry<String, JsonNode>> iterator = node.fields(); iterator.hasNext(); ) {
-          Map.Entry<String, JsonNode> currentNode = iterator.next();
+          final Map.Entry<String, JsonNode> keyValue = iterator.next();
+          final String key = keyValue.getKey();
+          final JsonNode value = keyValue.getValue();
 
-          switch (currentNode.getKey()) {
+          switch (key) {
             case "preferredName": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringPreferredNameTypeIec61360>> parsed =
+                parseListOf_ILangStringPreferredNameTypeIec61360(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayPreferredName = currentNode.getValue();
-              if (!arrayPreferredName.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayPreferredName.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "preferredName"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringPreferredNameTypeIec61360>> thePreferredNameResult = parseArray(
-                arrayPreferredName,
-                _DeserializeImplementation::tryLangStringPreferredNameTypeIec61360From);
-              if (thePreferredNameResult.isError()) {
-                thePreferredNameResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "preferredName"));
-                return thePreferredNameResult.castTo(DataSpecificationIec61360.class);
-              }
-              thePreferredName = thePreferredNameResult.getResult();
+              thePreferredName = parsed.getResult();
               break;
             }
             case "shortName": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringShortNameTypeIec61360>> parsed =
+                parseListOf_ILangStringShortNameTypeIec61360(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayShortName = currentNode.getValue();
-              if (!arrayShortName.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayShortName.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "shortName"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringShortNameTypeIec61360>> theShortNameResult = parseArray(
-                arrayShortName,
-                _DeserializeImplementation::tryLangStringShortNameTypeIec61360From);
-              if (theShortNameResult.isError()) {
-                theShortNameResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "shortName"));
-                return theShortNameResult.castTo(DataSpecificationIec61360.class);
-              }
-              theShortName = theShortNameResult.getResult();
+              theShortName = parsed.getResult();
               break;
             }
             case "unit": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theUnitResult = tryStringFrom(currentNode.getValue());
-              if (theUnitResult.isError()) {
-                theUnitResult.getError()
-                  .prependSegment(new Reporting.NameSegment("unit"));
-                return theUnitResult.castTo(DataSpecificationIec61360.class);
-              }
-              theUnit = theUnitResult.getResult();
+              theUnit = parsed.getResult();
               break;
             }
             case "unitId": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IReference> parsed = tryReferenceFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IReference> theUnitIdResult = tryReferenceFrom(currentNode.getValue());
-              if (theUnitIdResult.isError()) {
-                theUnitIdResult.getError()
-                  .prependSegment(new Reporting.NameSegment("unitId"));
-                return theUnitIdResult.castTo(DataSpecificationIec61360.class);
-              }
-              theUnitId = theUnitIdResult.getResult();
+              theUnitId = parsed.getResult();
               break;
             }
             case "sourceOfDefinition": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theSourceOfDefinitionResult = tryStringFrom(currentNode.getValue());
-              if (theSourceOfDefinitionResult.isError()) {
-                theSourceOfDefinitionResult.getError()
-                  .prependSegment(new Reporting.NameSegment("sourceOfDefinition"));
-                return theSourceOfDefinitionResult.castTo(DataSpecificationIec61360.class);
-              }
-              theSourceOfDefinition = theSourceOfDefinitionResult.getResult();
+              theSourceOfDefinition = parsed.getResult();
               break;
             }
             case "symbol": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theSymbolResult = tryStringFrom(currentNode.getValue());
-              if (theSymbolResult.isError()) {
-                theSymbolResult.getError()
-                  .prependSegment(new Reporting.NameSegment("symbol"));
-                return theSymbolResult.castTo(DataSpecificationIec61360.class);
-              }
-              theSymbol = theSymbolResult.getResult();
+              theSymbol = parsed.getResult();
               break;
             }
             case "dataType": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends DataTypeIec61360> parsed =
+                tryDataTypeIec61360From(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends DataTypeIec61360> theDataTypeResult = tryDataTypeIec61360From(currentNode.getValue());
-              if (theDataTypeResult.isError()) {
-                theDataTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("dataType"));
-                return theDataTypeResult.castTo(DataSpecificationIec61360.class);
-              }
-              theDataType = theDataTypeResult.getResult();
+              theDataType = parsed.getResult();
               break;
             }
             case "definition": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<List<ILangStringDefinitionTypeIec61360>> parsed =
+                parseListOf_ILangStringDefinitionTypeIec61360(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final JsonNode arrayDefinition = currentNode.getValue();
-              if (!arrayDefinition.isArray()) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a JsonArray, but got " + arrayDefinition.getNodeType());
-                error.prependSegment(
-                  new Reporting.NameSegment(
-                    "definition"));
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<List<ILangStringDefinitionTypeIec61360>> theDefinitionResult = parseArray(
-                arrayDefinition,
-                _DeserializeImplementation::tryLangStringDefinitionTypeIec61360From);
-              if (theDefinitionResult.isError()) {
-                theDefinitionResult.getError()
-                  .prependSegment(
-                    new Reporting.NameSegment(
-                      "definition"));
-                return theDefinitionResult.castTo(DataSpecificationIec61360.class);
-              }
-              theDefinition = theDefinitionResult.getResult();
+              theDefinition = parsed.getResult();
               break;
             }
             case "valueFormat": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theValueFormatResult = tryStringFrom(currentNode.getValue());
-              if (theValueFormatResult.isError()) {
-                theValueFormatResult.getError()
-                  .prependSegment(new Reporting.NameSegment("valueFormat"));
-                return theValueFormatResult.castTo(DataSpecificationIec61360.class);
-              }
-              theValueFormat = theValueFormatResult.getResult();
+              theValueFormat = parsed.getResult();
               break;
             }
             case "valueList": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends IValueList> parsed = tryValueListFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends IValueList> theValueListResult = tryValueListFrom(currentNode.getValue());
-              if (theValueListResult.isError()) {
-                theValueListResult.getError()
-                  .prependSegment(new Reporting.NameSegment("valueList"));
-                return theValueListResult.castTo(DataSpecificationIec61360.class);
-              }
-              theValueList = theValueListResult.getResult();
+              theValueList = parsed.getResult();
               break;
             }
             case "value": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends String> parsed = tryStringFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends String> theValueResult = tryStringFrom(currentNode.getValue());
-              if (theValueResult.isError()) {
-                theValueResult.getError()
-                  .prependSegment(new Reporting.NameSegment("value"));
-                return theValueResult.castTo(DataSpecificationIec61360.class);
-              }
-              theValue = theValueResult.getResult();
+              theValue = parsed.getResult();
               break;
             }
             case "levelType": {
-              if (currentNode.getValue() == null) {
-                continue;
+              final Reporting.Result<? extends ILevelType> parsed = tryLevelTypeFrom(value);
+              if (parsed.isError()) {
+                return prependName(parsed, key);
               }
-
-              final Reporting.Result<? extends ILevelType> theLevelTypeResult = tryLevelTypeFrom(currentNode.getValue());
-              if (theLevelTypeResult.isError()) {
-                theLevelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("levelType"));
-                return theLevelTypeResult.castTo(DataSpecificationIec61360.class);
-              }
-              theLevelType = theLevelTypeResult.getResult();
+              theLevelType = parsed.getResult();
               break;
             }
-            case "modelType": {
-              if (currentNode.getValue() == null) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected a model type, but got null");
-                return Reporting.Result.failure(error);
-              }
-              final Reporting.Result<? extends String> modelTypeResult =
-                _DeserializeImplementation.tryStringFrom(currentNode.getValue());
-              if (modelTypeResult.isError()) {
-                modelTypeResult.getError()
-                  .prependSegment(new Reporting.NameSegment("modelType"));
-                return modelTypeResult.castTo(DataSpecificationIec61360.class);
-              }
-              modelType = modelTypeResult.getResult();
-
-              if (!modelType.equals("DataSpecificationIec61360")) {
-                final Reporting.Error error = new Reporting.Error(
-                  "Expected the model type 'DataSpecificationIec61360', " +
-                  "but got '" + modelType + "'");
-                  error.prependSegment(new Reporting.NameSegment("modelType"));
-                  return Reporting.Result.failure(error);
-              }
+            case "modelType":
+              // The model type has already been checked before the loop.
               break;
-            }
-            default: {
-              final Reporting.Error error = new Reporting.Error(
-                "Unexpected property: " + currentNode.getKey());
-              return Reporting.Result.failure(error);
-            }
+            default:
+              return unexpectedProperty(key);
           }
         }
 
-        if (modelType == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"modelType\" is missing");
-          return Reporting.Result.failure(error);
-        }
-
         if (thePreferredName == null) {
-          final Reporting.Error error = new Reporting.Error(
-            "Required property \"preferredName\" is missing");
-          return Reporting.Result.failure(error);
+          return missingRequiredProperty("preferredName");
         }
 
         return Reporting.Result.success(new DataSpecificationIec61360(

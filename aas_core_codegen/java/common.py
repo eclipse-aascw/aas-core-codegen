@@ -1,6 +1,6 @@
 """Provide common functions shared among different Java code generation modules."""
 
-from typing import List, cast, Optional, Sequence
+from typing import Final, List, Mapping, cast, Optional, Sequence
 import re
 
 from icontract import ensure, require
@@ -208,6 +208,75 @@ def generate_tuple_literal(item_exprs: Sequence[Stripped]) -> Stripped:
 new {tuple_type_name}<>(
 {INDENT}{indent_but_first_line(joined_item_exprs, INDENT)})"""
     )
+
+
+# NOTE (mristin):
+# A Java primitive is not a valid part of an identifier as it is spelled
+# (``byte[]``), so the primitives need monikers of their own. The monikers are
+# *lower-case* on purpose: every one of our types is named through
+# :py:func:`aas_core_codegen.naming.capitalized_camel_case`, which always
+# yields an upper-case initial, so a primitive moniker can never be confused
+# for one of our types -- not even for an enumeration which somebody named
+# ``String``. They are keyed by the meta-model primitive rather than by
+# the Java spelling, so that the mapping is total by construction.
+PRIMITIVE_TYPE_TO_MONIKER: Final[Mapping[intermediate.PrimitiveType, str]] = {
+    intermediate.PrimitiveType.BOOL: "bool",
+    intermediate.PrimitiveType.INT: "long",
+    intermediate.PrimitiveType.FLOAT: "double",
+    intermediate.PrimitiveType.STR: "string",
+    intermediate.PrimitiveType.BYTEARRAY: "bytes",
+}
+assert all(
+    primitive_type in PRIMITIVE_TYPE_TO_MONIKER
+    for primitive_type in intermediate.PrimitiveType
+)
+assert all(
+    moniker.islower() for moniker in PRIMITIVE_TYPE_TO_MONIKER.values()
+), "The primitive monikers have to be lower-case, see the note above"
+
+
+@ensure(lambda result: "_" not in result)
+def leaf_moniker(type_anno: intermediate.TypeAnnotationUnion) -> str:
+    """
+    Name a type which is neither a list nor a tuple.
+
+    The result must not contain an underscore, since the underscore is what
+    separates the tokens of a compound moniker. See :py:func:`type_moniker`.
+    """
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        return PRIMITIVE_TYPE_TO_MONIKER[primitive_type]
+
+    assert isinstance(type_anno, intermediate.OurTypeAnnotation), (
+        f"Expected a primitive, a constrained primitive or one of our types, "
+        f"but got: {type_anno}"
+    )
+
+    # NOTE (mristin):
+    # We name our types by ``generate_type`` so that the name of a de/serializer
+    # can not drift apart from the type of that very de/serializer.
+    return generate_type(type_anno)
+
+
+def type_moniker(type_anno: intermediate.TypeAnnotationUnion) -> str:
+    """
+    Name the type in a way usable as a part of a Java identifier.
+
+    The monikers are a Polish notation over ``_``-separated tokens: ``ListOf``
+    takes exactly one argument, ``TupleOf{N}`` exactly ``N`` of them, and
+    everything else is a leaf. A leaf token never contains an underscore
+    (see :py:func:`leaf_moniker`), so the encoding is injective -- two
+    different types can not be given the same moniker, and hence two different
+    de/serializers can not be given the same name.
+    """
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        return f"ListOf_{type_moniker(type_anno.items)}"
+
+    if isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        joined = "_".join(type_moniker(item) for item in type_anno.items)
+        return f"TupleOf{len(type_anno.items)}_{joined}"
+
+    return leaf_moniker(type_anno)
 
 
 INDENT2 = INDENT * 2
