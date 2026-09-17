@@ -1,1 +1,1 @@
-We currently support only a limited set of type annotation patterns. At the moment, we handle only lists non-optionals, but the property 'maybe_positives' of the class 'Something' has type: List[Optional[Positive]]. Please contact the developers if you need this functionality
+We currently support only a limited set of type annotation patterns. At the moment, we handle only lists of non-optionals, but the property 'maybe_positives' of the class 'Something' has type: List[Optional[Positive]]. Please contact the developers if you need this functionality
