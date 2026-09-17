@@ -200,6 +200,22 @@ func float64FromJsonable(
 		return
 	}
 
+	// NOTE (mristin):
+	// JSON knows neither an infinity nor a not-a-number, so a conformant parser
+	// can never give us one. The caller can still hand us a JSON-able which has
+	// been constructed programmatically, so we have to check here.
+
+	if math.IsNaN(result) || math.IsInf(result, 0) {
+		err = newDeserializationError(
+			fmt.Sprintf(
+				"Expected a finite number, but got: %v",
+				result,
+			),
+		)
+		result = 0
+		return
+	}
+
 	return
 }
 
@@ -588,6 +604,40 @@ func int64ToJsonable(
 	return
 }
 
+// Box `that` as a JSON-able value, or return an error.
+//
+// JSON knows neither an infinity nor a not-a-number, so we refuse to
+// serialize them instead of leaving it to `json.Marshal` to fail much later,
+// with no path to the culprit.
+//
+// The result is returned as `interface{}`, not the more specific
+// `float64`, so that this function itself can be passed on as a bare
+// reference wherever a `func(float64) (interface{}, error)` is expected,
+// e.g. as an item (de)serializer in a list or a tuple.
+func float64ToJsonable(
+	that float64,
+) (result interface{}, err error) {
+	if math.IsNaN(that) {
+		err = newSerializationError(
+			"A not-a-number can not be serialized to JSON",
+		)
+		return
+	}
+
+	if math.IsInf(that, 0) {
+		err = newSerializationError(
+			fmt.Sprintf(
+				"An infinity can not be serialized to JSON: %v",
+				that,
+			),
+		)
+		return
+	}
+
+	result = that
+	return
+}
+
 // Encode `bytes` to a base64 string and box it as a JSON-able value, or
 // return an error.
 //
@@ -656,9 +706,7 @@ func somethingToMap(
 		return
 	}
 
-	result["someFloats"], err = serializeArray(
-		that.SomeFloats(), directToJsonable[float64],
-	)
+	result["someFloats"], err = serializeArray(that.SomeFloats(), float64ToJsonable)
 	if err != nil {
 		mustSerializationError(err).prependName("SomeFloats()")
 		return

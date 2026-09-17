@@ -154,6 +154,22 @@ func float64FromJsonable(
 {II}return
 {I}}}
 
+{I}// NOTE (mristin):
+{I}// JSON knows neither an infinity nor a not-a-number, so a conformant parser
+{I}// can never give us one. The caller can still hand us a JSON-able which has
+{I}// been constructed programmatically, so we have to check here.
+
+{I}if math.IsNaN(result) || math.IsInf(result, 0) {{
+{II}err = newDeserializationError(
+{III}fmt.Sprintf(
+{IIII}"Expected a finite number, but got: %v",
+{IIII}result,
+{III}),
+{II})
+{II}result = 0
+{II}return
+{I}}}
+
 {I}return
 }}"""
     )
@@ -1470,6 +1486,46 @@ func int64ToJsonable(
     )
 
 
+def _generate_float64_to_jsonable() -> Stripped:
+    """Generate the function to encode a ``float64`` to a JSON-able."""
+    return Stripped(
+        f"""\
+// Box `that` as a JSON-able value, or return an error.
+//
+// JSON knows neither an infinity nor a not-a-number, so we refuse to
+// serialize them instead of leaving it to `json.Marshal` to fail much later,
+// with no path to the culprit.
+//
+// The result is returned as `interface{{}}`, not the more specific
+// `float64`, so that this function itself can be passed on as a bare
+// reference wherever a `func(float64) (interface{{}}, error)` is expected,
+// e.g. as an item (de)serializer in a list or a tuple.
+func float64ToJsonable(
+{I}that float64,
+) (result interface{{}}, err error) {{
+{I}if math.IsNaN(that) {{
+{II}err = newSerializationError(
+{III}"A not-a-number can not be serialized to JSON",
+{II})
+{II}return
+{I}}}
+
+{I}if math.IsInf(that, 0) {{
+{II}err = newSerializationError(
+{III}fmt.Sprintf(
+{IIII}"An infinity can not be serialized to JSON: %v",
+{IIII}that,
+{III}),
+{II})
+{II}return
+{I}}}
+
+{I}result = that
+{I}return
+}}"""
+    )
+
+
 def _generate_bytes_to_jsonable() -> Stripped:
     """Generate the function to encode ``[]byte`` to a string."""
     return Stripped(
@@ -1662,11 +1718,13 @@ def _item_serializer_function(
     if primitive_type is not None:
         if primitive_type is intermediate.PrimitiveType.INT:
             return Stripped("int64ToJsonable")
+        elif primitive_type is intermediate.PrimitiveType.FLOAT:
+            return Stripped("float64ToJsonable")
         elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
             return Stripped("bytesToJsonable")
         else:
             # NOTE (mristin):
-            # The remaining primitive types (BOOL, FLOAT, STR) all share the
+            # The remaining primitive types (BOOL, STR) both share the
             # same ``directToJsonable`` reference -- we deliberately do
             # not enumerate them explicitly with ``assert_never`` at the end,
             # since mypy can not narrow a literal type through ``in``
@@ -1750,11 +1808,13 @@ def _determine_item_serializer_wrappers(
         if primitive_type is not None:
             if primitive_type not in (
                 intermediate.PrimitiveType.INT,
+                intermediate.PrimitiveType.FLOAT,
                 intermediate.PrimitiveType.BYTEARRAY,
             ):
                 # NOTE (mristin):
-                # ``int64ToJsonable`` and ``bytesToJsonable`` are generated
-                # unconditionally, and already have the expected signature.
+                # ``int64ToJsonable``, ``float64ToJsonable`` and
+                # ``bytesToJsonable`` are generated unconditionally, and already
+                # have the expected signature.
                 result.direct = True
 
             continue
@@ -1939,6 +1999,9 @@ def _determine_serialization_of_atomic_value(
 
         if primitive_type is intermediate.PrimitiveType.INT:
             return Stripped("int64ToJsonable"), dereferenced
+
+        elif primitive_type is intermediate.PrimitiveType.FLOAT:
+            return Stripped("float64ToJsonable"), dereferenced
 
         elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
             # NOTE (mristin):
@@ -2530,6 +2593,7 @@ func mustSerializationError(err error) *SerializationError {{
     )
 
     blocks.append(_generate_int64_to_jsonable())
+    blocks.append(_generate_float64_to_jsonable())
     blocks.append(_generate_bytes_to_jsonable())
     blocks.append(_generate_serialize_array())
 
