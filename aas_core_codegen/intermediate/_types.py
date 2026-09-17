@@ -253,6 +253,20 @@ assert_union_without_excluded(
     excluded=[ListTypeAnnotation, TupleTypeAnnotation, OptionalTypeAnnotation],
 )
 
+#: A type annotation which holds other values, and hence has to be de/serialized
+#: out of the de/serialization of its items. It is the complement of
+#: :py:data:`AtomicTypeAnnotation` beneath an optional.
+ContainerTypeAnnotation = Union[ListTypeAnnotation, TupleTypeAnnotation]
+
+ContainerTypeAnnotationAsTuple = (ListTypeAnnotation, TupleTypeAnnotation)
+assert ContainerTypeAnnotationAsTuple == get_args(ContainerTypeAnnotation)
+
+assert_union_without_excluded(
+    original_union=TypeAnnotationUnion,
+    subset_union=ContainerTypeAnnotation,
+    excluded=[PrimitiveTypeAnnotation, OurTypeAnnotation, OptionalTypeAnnotation],
+)
+
 
 def type_annotations_equal(
     that: TypeAnnotationUnion, other: TypeAnnotationUnion

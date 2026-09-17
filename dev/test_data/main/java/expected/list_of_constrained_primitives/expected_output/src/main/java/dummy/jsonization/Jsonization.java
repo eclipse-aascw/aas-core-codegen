@@ -313,44 +313,40 @@ public class Jsonization {
 
     private static class _Transformer extends AbstractTransformer<JsonNode> {
       /**
-       * Convert {@code that} 64-bit long integer to a JSON value.
+       * Dispatch the serialization over the run-time type of an instance.
        *
-       * @param that value to be converted
+       * <p>The transformer carries no state, so a single instance serves
+       * the whole program.
        */
-      private static JsonNode toJsonNode(Long that) {
-        // We need to check that we can perform a lossless conversion.
-        long primitiveThat = that.longValue();
-        if ((long)((double)primitiveThat) != primitiveThat) {
-          throw new IllegalArgumentException(
-            "The number can not be losslessly represented in JSON: " + that);
-        }
-        return JsonNodeFactory.instance.numberNode(that);
+      private static final _Transformer INSTANCE = new _Transformer();
+
+      /**
+       * Serialize {@code that} into a JSON object.
+       *
+       * <p>Which JSON object that is, is decided by the run-time type of
+       * {@code that}, so this one serializer serves every abstract class, every
+       * concrete class with descendants, and the item of a list or of a tuple of
+       * any class at all. The de-serialization, which has to decide what to
+       * construct before it has read anything, needs a dispatcher per interface
+       * instead.
+       *
+       * <p>It is static, so that a composed serializer -- which is static as well,
+       * since it carries no state either -- can reach it.
+       */
+      static JsonNode transformClass(IClass that) {
+        return INSTANCE.transform(that);
       }
 
       /**
-       * Convert {@code that} byte array to a JSON value.
+       * Serialize every item of {@code that} into a JSON array.
        *
-       * @param that value to be converted
+       * @param that to be serialized
        */
-      private static JsonNode bytesToJsonNode(byte[] that) {
-        return JsonNodeFactory.instance.textNode(
-          Base64.getEncoder().encodeToString(that));
-      }
-
-      /**
-       * Serialize every item of {@code items} with {@code serializeItem} into
-       * a JSON array.
-       *
-       * @param items to be serialized
-       * @param serializeItem to serialize a single item of {@code items}
-       */
-      private static <T> ArrayNode serializeArray(
-        Iterable<T> items,
-        Function<T, JsonNode> serializeItem) {
+      private static ArrayNode serializeListOf_string(
+        List<String> that) {
         final ArrayNode result = JsonNodeFactory.instance.arrayNode();
-        for (T item : items) {
-          result.add(
-            serializeItem.apply(item));
+        for (String item : that) {
+          result.add(JsonNodeFactory.instance.textNode(item));
         }
         return result;
       }
@@ -361,10 +357,7 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        final ArrayNode arraySomeNames = serializeArray(
-          that.getSomeNames(),
-          JsonNodeFactory.instance::textNode);
-        result.set("someNames", arraySomeNames);
+        result.set("someNames", serializeListOf_string(that.getSomeNames()));
 
         return result;
       }
@@ -384,13 +377,11 @@ public class Jsonization {
      */
     public static class Serialize
     {
-      private static final _Transformer transformer = new _Transformer();
-
       /**
        * Serialize an instance of the meta-model into a JSON object.
        */
       public static JsonNode toJsonObject(IClass that) {
-        return transformer.transform(that);
+        return _Transformer.transformClass(that);
       }
     }
 }

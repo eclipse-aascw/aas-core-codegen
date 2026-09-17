@@ -13,11 +13,9 @@ import dummy.types.model.*;
 import dummy.stringification.Stringification;
 import dummy.visitation.AbstractTransformer;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.*;
-import java.util.function.Function;
 
 /**
  * Provide de/serialization of meta-model classes to/from JSON.
@@ -297,46 +295,28 @@ public class Jsonization {
 
     private static class _Transformer extends AbstractTransformer<JsonNode> {
       /**
-       * Convert {@code that} 64-bit long integer to a JSON value.
+       * Dispatch the serialization over the run-time type of an instance.
        *
-       * @param that value to be converted
+       * <p>The transformer carries no state, so a single instance serves
+       * the whole program.
        */
-      private static JsonNode toJsonNode(Long that) {
-        // We need to check that we can perform a lossless conversion.
-        long primitiveThat = that.longValue();
-        if ((long)((double)primitiveThat) != primitiveThat) {
-          throw new IllegalArgumentException(
-            "The number can not be losslessly represented in JSON: " + that);
-        }
-        return JsonNodeFactory.instance.numberNode(that);
-      }
+      private static final _Transformer INSTANCE = new _Transformer();
 
       /**
-       * Convert {@code that} byte array to a JSON value.
+       * Serialize {@code that} into a JSON object.
        *
-       * @param that value to be converted
-       */
-      private static JsonNode bytesToJsonNode(byte[] that) {
-        return JsonNodeFactory.instance.textNode(
-          Base64.getEncoder().encodeToString(that));
-      }
-
-      /**
-       * Serialize every item of {@code items} with {@code serializeItem} into
-       * a JSON array.
+       * <p>Which JSON object that is, is decided by the run-time type of
+       * {@code that}, so this one serializer serves every abstract class, every
+       * concrete class with descendants, and the item of a list or of a tuple of
+       * any class at all. The de-serialization, which has to decide what to
+       * construct before it has read anything, needs a dispatcher per interface
+       * instead.
        *
-       * @param items to be serialized
-       * @param serializeItem to serialize a single item of {@code items}
+       * <p>It is static, so that a composed serializer -- which is static as well,
+       * since it carries no state either -- can reach it.
        */
-      private static <T> ArrayNode serializeArray(
-        Iterable<T> items,
-        Function<T, JsonNode> serializeItem) {
-        final ArrayNode result = JsonNodeFactory.instance.arrayNode();
-        for (T item : items) {
-          result.add(
-            serializeItem.apply(item));
-        }
-        return result;
+      static JsonNode transformClass(IClass that) {
+        return INSTANCE.transform(that);
       }
 
       @Override
@@ -345,17 +325,13 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.put("interface", JsonNodeFactory.instance.textNode(
-          that.getInterface()));
+        result.set("interface", JsonNodeFactory.instance.textNode(that.getInterface()));
 
-        result.put("type", JsonNodeFactory.instance.textNode(
-          that.getType()));
+        result.set("type", JsonNodeFactory.instance.textNode(that.getType()));
 
-        result.put("range", JsonNodeFactory.instance.textNode(
-          that.getRange()));
+        result.set("range", JsonNodeFactory.instance.textNode(that.getRange()));
 
-        result.put("void", JsonNodeFactory.instance.textNode(
-          that.getVoid()));
+        result.set("void", JsonNodeFactory.instance.textNode(that.getVoid()));
 
         return result;
       }
@@ -375,13 +351,11 @@ public class Jsonization {
      */
     public static class Serialize
     {
-      private static final _Transformer transformer = new _Transformer();
-
       /**
        * Serialize an instance of the meta-model into a JSON object.
        */
       public static JsonNode toJsonObject(IClass that) {
-        return transformer.transform(that);
+        return _Transformer.transformClass(that);
       }
     }
 }

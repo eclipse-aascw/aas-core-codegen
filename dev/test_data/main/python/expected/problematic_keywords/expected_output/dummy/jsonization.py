@@ -11,7 +11,6 @@ properties do not have fixed order, and hence we can not read
 # Do NOT edit or append.
 
 
-import base64
 import collections.abc
 import sys
 from typing import (
@@ -300,42 +299,33 @@ def something_from_jsonable(
 # region Serialization
 
 
-def _bytes_to_base64_str(
-    value: bytes
-) -> str:
-    """
-    Encode :paramref:`value` as a base64 string.
-
-    :param value: to be encoded
-    :return: encoded :paramref:`value` in base64
-    """
-    # We need to decode as ascii as ``base64.b64encode`` returns bytes,
-    # not a string!
-    return base64.b64encode(value).decode('ascii')
+def _something_to_jsonable(
+    that: aas_types.Something
+) -> MutableMapping[str, MutableJsonable]:
+    """Serialize :paramref:`that` to a JSON-able representation."""
+    jsonable: MutableMapping[str, MutableJsonable] = dict()
+    jsonable['interface'] = that.interface
+    jsonable['type'] = that.type
+    jsonable['range'] = that.range
+    jsonable['void'] = that.void
+    return jsonable
 
 
 class _Serializer(
         aas_types.AbstractTransformer[MutableJsonable]
 ):
-    """Transform the instance to its JSON-able representation."""
+    """
+    Dispatch on the class of an instance to serialize it.
 
-    # noinspection PyMethodMayBeStatic
-    def transform_something(
-        self,
-        that: aas_types.Something
-    ) -> MutableJsonable:
-        """Serialize :paramref:`that` to a JSON-able representation."""
-        jsonable: MutableMapping[str, MutableJsonable] = dict()
+    The methods *are* the serializers, instead of forwarding to them, so that
+    a dispatch costs a single call. Wherever the class of a value is already
+    known -- which is every class without concrete descendants -- the serializer
+    is called directly and this transformer is not involved at all.
+    """
 
-        jsonable['interface'] = that.interface
-
-        jsonable['type'] = that.type
-
-        jsonable['range'] = that.range
-
-        jsonable['void'] = that.void
-
-        return jsonable
+    transform_something = staticmethod(
+        _something_to_jsonable
+    )
 
 
 _SERIALIZER = _Serializer()
@@ -350,7 +340,7 @@ def to_jsonable(that: aas_types.Class) -> MutableJsonable:
     :return:
         JSON-able structure which can be further encoded with, *e.g.*, :py:mod:`json`
     """
-    return _SERIALIZER.transform(that)
+    return that.transform(_SERIALIZER)
 
 
 # endregion

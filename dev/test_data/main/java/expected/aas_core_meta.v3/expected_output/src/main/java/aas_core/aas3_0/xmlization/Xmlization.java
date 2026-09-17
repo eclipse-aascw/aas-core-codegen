@@ -8400,284 +8400,12 @@ public class Xmlization {
       writer.writeCharacters(that.literalText());
     }
 
-    private static void writeListOf_IReference(
-      List<IReference> that,
+    private static void writeListOf_IClass(
+      List<? extends IClass> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
-        for (IReference item : that) {
-          writeClass(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_IEmbeddedDataSpecification(
-      List<IEmbeddedDataSpecification> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (IEmbeddedDataSpecification item : that) {
-          writeClass(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_IExtension(
-      List<IExtension> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (IExtension item : that) {
-          writeClass(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_ILangStringNameType(
-      List<ILangStringNameType> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (ILangStringNameType item : that) {
-          writeClass(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_ILangStringTextType(
-      List<ILangStringTextType> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (ILangStringTextType item : that) {
-          writeClass(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_ISpecificAssetId(
-      List<ISpecificAssetId> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (ISpecificAssetId item : that) {
-          writeClass(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_IQualifier(
-      List<IQualifier> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (IQualifier item : that) {
-          writeClass(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_ISubmodelElement(
-      List<ISubmodelElement> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (ISubmodelElement item : that) {
-          writeClass(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_IDataElement(
-      List<IDataElement> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (IDataElement item : that) {
-          writeClass(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_IOperationVariable(
-      List<IOperationVariable> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (IOperationVariable item : that) {
-          writeClass(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_IKey(
-      List<IKey> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (IKey item : that) {
-          writeClass(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_IAssetAdministrationShell(
-      List<IAssetAdministrationShell> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (IAssetAdministrationShell item : that) {
-          writeClass(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_ISubmodel(
-      List<ISubmodel> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (ISubmodel item : that) {
-          writeClass(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_IConceptDescription(
-      List<IConceptDescription> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (IConceptDescription item : that) {
-          writeClass(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_IValueReferencePair(
-      List<IValueReferencePair> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (IValueReferencePair item : that) {
-          writeClass(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_ILangStringPreferredNameTypeIec61360(
-      List<ILangStringPreferredNameTypeIec61360> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (ILangStringPreferredNameTypeIec61360 item : that) {
-          writeClass(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_ILangStringShortNameTypeIec61360(
-      List<ILangStringShortNameTypeIec61360> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (ILangStringShortNameTypeIec61360 item : that) {
-          writeClass(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_ILangStringDefinitionTypeIec61360(
-      List<ILangStringDefinitionTypeIec61360> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (ILangStringDefinitionTypeIec61360 item : that) {
+        for (IClass item : that) {
           writeClass(item, writer);
           index++;
         }
@@ -8701,7 +8429,7 @@ public class Xmlization {
         "supplementalSemanticIds",
         that.getSupplementalSemanticIds(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeProperty(
         "name",
@@ -8725,7 +8453,7 @@ public class Xmlization {
         "refersTo",
         that.getRefersTo(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
     }
 
     @Override
@@ -8747,7 +8475,7 @@ public class Xmlization {
         "embeddedDataSpecifications",
         that.getEmbeddedDataSpecifications(),
         writer,
-        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "version",
@@ -8799,7 +8527,7 @@ public class Xmlization {
         "supplementalSemanticIds",
         that.getSupplementalSemanticIds(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "kind",
@@ -8851,7 +8579,7 @@ public class Xmlization {
         "extensions",
         that.getExtensions(),
         writer,
-        _VisitorWithWriter::writeListOf_IExtension);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
@@ -8869,13 +8597,13 @@ public class Xmlization {
         "displayName",
         that.getDisplayName(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringNameType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringTextType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "administration",
@@ -8893,7 +8621,7 @@ public class Xmlization {
         "embeddedDataSpecifications",
         that.getEmbeddedDataSpecifications(),
         writer,
-        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "derivedFrom",
@@ -8911,7 +8639,7 @@ public class Xmlization {
         "submodels",
         that.getSubmodels(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
     }
 
     @Override
@@ -8945,7 +8673,7 @@ public class Xmlization {
         "specificAssetIds",
         that.getSpecificAssetIds(),
         writer,
-        _VisitorWithWriter::writeListOf_ISpecificAssetId);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "assetType",
@@ -9013,7 +8741,7 @@ public class Xmlization {
         "supplementalSemanticIds",
         that.getSupplementalSemanticIds(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeProperty(
         "name",
@@ -9053,7 +8781,7 @@ public class Xmlization {
         "extensions",
         that.getExtensions(),
         writer,
-        _VisitorWithWriter::writeListOf_IExtension);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
@@ -9071,13 +8799,13 @@ public class Xmlization {
         "displayName",
         that.getDisplayName(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringNameType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringTextType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "administration",
@@ -9107,25 +8835,25 @@ public class Xmlization {
         "supplementalSemanticIds",
         that.getSupplementalSemanticIds(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
         that.getQualifiers(),
         writer,
-        _VisitorWithWriter::writeListOf_IQualifier);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
         that.getEmbeddedDataSpecifications(),
         writer,
-        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "submodelElements",
         that.getSubmodelElements(),
         writer,
-        _VisitorWithWriter::writeListOf_ISubmodelElement);
+        _VisitorWithWriter::writeListOf_IClass);
     }
 
     @Override
@@ -9147,7 +8875,7 @@ public class Xmlization {
         "extensions",
         that.getExtensions(),
         writer,
-        _VisitorWithWriter::writeListOf_IExtension);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
@@ -9165,13 +8893,13 @@ public class Xmlization {
         "displayName",
         that.getDisplayName(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringNameType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringTextType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
@@ -9183,19 +8911,19 @@ public class Xmlization {
         "supplementalSemanticIds",
         that.getSupplementalSemanticIds(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
         that.getQualifiers(),
         writer,
-        _VisitorWithWriter::writeListOf_IQualifier);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
         that.getEmbeddedDataSpecifications(),
         writer,
-        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeProperty(
         "first",
@@ -9229,7 +8957,7 @@ public class Xmlization {
         "extensions",
         that.getExtensions(),
         writer,
-        _VisitorWithWriter::writeListOf_IExtension);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
@@ -9247,13 +8975,13 @@ public class Xmlization {
         "displayName",
         that.getDisplayName(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringNameType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringTextType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
@@ -9265,19 +8993,19 @@ public class Xmlization {
         "supplementalSemanticIds",
         that.getSupplementalSemanticIds(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
         that.getQualifiers(),
         writer,
-        _VisitorWithWriter::writeListOf_IQualifier);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
         that.getEmbeddedDataSpecifications(),
         writer,
-        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "orderRelevant",
@@ -9307,7 +9035,7 @@ public class Xmlization {
         "value",
         that.getValue(),
         writer,
-        _VisitorWithWriter::writeListOf_ISubmodelElement);
+        _VisitorWithWriter::writeListOf_IClass);
     }
 
     @Override
@@ -9329,7 +9057,7 @@ public class Xmlization {
         "extensions",
         that.getExtensions(),
         writer,
-        _VisitorWithWriter::writeListOf_IExtension);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
@@ -9347,13 +9075,13 @@ public class Xmlization {
         "displayName",
         that.getDisplayName(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringNameType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringTextType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
@@ -9365,25 +9093,25 @@ public class Xmlization {
         "supplementalSemanticIds",
         that.getSupplementalSemanticIds(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
         that.getQualifiers(),
         writer,
-        _VisitorWithWriter::writeListOf_IQualifier);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
         that.getEmbeddedDataSpecifications(),
         writer,
-        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "value",
         that.getValue(),
         writer,
-        _VisitorWithWriter::writeListOf_ISubmodelElement);
+        _VisitorWithWriter::writeListOf_IClass);
     }
 
     @Override
@@ -9405,7 +9133,7 @@ public class Xmlization {
         "extensions",
         that.getExtensions(),
         writer,
-        _VisitorWithWriter::writeListOf_IExtension);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
@@ -9423,13 +9151,13 @@ public class Xmlization {
         "displayName",
         that.getDisplayName(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringNameType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringTextType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
@@ -9441,19 +9169,19 @@ public class Xmlization {
         "supplementalSemanticIds",
         that.getSupplementalSemanticIds(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
         that.getQualifiers(),
         writer,
-        _VisitorWithWriter::writeListOf_IQualifier);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
         that.getEmbeddedDataSpecifications(),
         writer,
-        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeProperty(
         "valueType",
@@ -9493,7 +9221,7 @@ public class Xmlization {
         "extensions",
         that.getExtensions(),
         writer,
-        _VisitorWithWriter::writeListOf_IExtension);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
@@ -9511,13 +9239,13 @@ public class Xmlization {
         "displayName",
         that.getDisplayName(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringNameType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringTextType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
@@ -9529,25 +9257,25 @@ public class Xmlization {
         "supplementalSemanticIds",
         that.getSupplementalSemanticIds(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
         that.getQualifiers(),
         writer,
-        _VisitorWithWriter::writeListOf_IQualifier);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
         that.getEmbeddedDataSpecifications(),
         writer,
-        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "value",
         that.getValue(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringTextType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "valueId",
@@ -9575,7 +9303,7 @@ public class Xmlization {
         "extensions",
         that.getExtensions(),
         writer,
-        _VisitorWithWriter::writeListOf_IExtension);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
@@ -9593,13 +9321,13 @@ public class Xmlization {
         "displayName",
         that.getDisplayName(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringNameType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringTextType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
@@ -9611,19 +9339,19 @@ public class Xmlization {
         "supplementalSemanticIds",
         that.getSupplementalSemanticIds(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
         that.getQualifiers(),
         writer,
-        _VisitorWithWriter::writeListOf_IQualifier);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
         that.getEmbeddedDataSpecifications(),
         writer,
-        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeProperty(
         "valueType",
@@ -9663,7 +9391,7 @@ public class Xmlization {
         "extensions",
         that.getExtensions(),
         writer,
-        _VisitorWithWriter::writeListOf_IExtension);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
@@ -9681,13 +9409,13 @@ public class Xmlization {
         "displayName",
         that.getDisplayName(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringNameType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringTextType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
@@ -9699,19 +9427,19 @@ public class Xmlization {
         "supplementalSemanticIds",
         that.getSupplementalSemanticIds(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
         that.getQualifiers(),
         writer,
-        _VisitorWithWriter::writeListOf_IQualifier);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
         that.getEmbeddedDataSpecifications(),
         writer,
-        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "value",
@@ -9739,7 +9467,7 @@ public class Xmlization {
         "extensions",
         that.getExtensions(),
         writer,
-        _VisitorWithWriter::writeListOf_IExtension);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
@@ -9757,13 +9485,13 @@ public class Xmlization {
         "displayName",
         that.getDisplayName(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringNameType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringTextType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
@@ -9775,19 +9503,19 @@ public class Xmlization {
         "supplementalSemanticIds",
         that.getSupplementalSemanticIds(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
         that.getQualifiers(),
         writer,
-        _VisitorWithWriter::writeListOf_IQualifier);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
         that.getEmbeddedDataSpecifications(),
         writer,
-        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "value",
@@ -9821,7 +9549,7 @@ public class Xmlization {
         "extensions",
         that.getExtensions(),
         writer,
-        _VisitorWithWriter::writeListOf_IExtension);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
@@ -9839,13 +9567,13 @@ public class Xmlization {
         "displayName",
         that.getDisplayName(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringNameType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringTextType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
@@ -9857,19 +9585,19 @@ public class Xmlization {
         "supplementalSemanticIds",
         that.getSupplementalSemanticIds(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
         that.getQualifiers(),
         writer,
-        _VisitorWithWriter::writeListOf_IQualifier);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
         that.getEmbeddedDataSpecifications(),
         writer,
-        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "value",
@@ -9903,7 +9631,7 @@ public class Xmlization {
         "extensions",
         that.getExtensions(),
         writer,
-        _VisitorWithWriter::writeListOf_IExtension);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
@@ -9921,13 +9649,13 @@ public class Xmlization {
         "displayName",
         that.getDisplayName(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringNameType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringTextType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
@@ -9939,19 +9667,19 @@ public class Xmlization {
         "supplementalSemanticIds",
         that.getSupplementalSemanticIds(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
         that.getQualifiers(),
         writer,
-        _VisitorWithWriter::writeListOf_IQualifier);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
         that.getEmbeddedDataSpecifications(),
         writer,
-        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeProperty(
         "first",
@@ -9969,7 +9697,7 @@ public class Xmlization {
         "annotations",
         that.getAnnotations(),
         writer,
-        _VisitorWithWriter::writeListOf_IDataElement);
+        _VisitorWithWriter::writeListOf_IClass);
     }
 
     @Override
@@ -9991,7 +9719,7 @@ public class Xmlization {
         "extensions",
         that.getExtensions(),
         writer,
-        _VisitorWithWriter::writeListOf_IExtension);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
@@ -10009,13 +9737,13 @@ public class Xmlization {
         "displayName",
         that.getDisplayName(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringNameType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringTextType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
@@ -10027,25 +9755,25 @@ public class Xmlization {
         "supplementalSemanticIds",
         that.getSupplementalSemanticIds(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
         that.getQualifiers(),
         writer,
-        _VisitorWithWriter::writeListOf_IQualifier);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
         that.getEmbeddedDataSpecifications(),
         writer,
-        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "statements",
         that.getStatements(),
         writer,
-        _VisitorWithWriter::writeListOf_ISubmodelElement);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeProperty(
         "entityType",
@@ -10063,7 +9791,7 @@ public class Xmlization {
         "specificAssetIds",
         that.getSpecificAssetIds(),
         writer,
-        _VisitorWithWriter::writeListOf_ISpecificAssetId);
+        _VisitorWithWriter::writeListOf_IClass);
     }
 
     @Override
@@ -10149,7 +9877,7 @@ public class Xmlization {
         "extensions",
         that.getExtensions(),
         writer,
-        _VisitorWithWriter::writeListOf_IExtension);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
@@ -10167,13 +9895,13 @@ public class Xmlization {
         "displayName",
         that.getDisplayName(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringNameType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringTextType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
@@ -10185,19 +9913,19 @@ public class Xmlization {
         "supplementalSemanticIds",
         that.getSupplementalSemanticIds(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
         that.getQualifiers(),
         writer,
-        _VisitorWithWriter::writeListOf_IQualifier);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
         that.getEmbeddedDataSpecifications(),
         writer,
-        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeProperty(
         "observed",
@@ -10267,7 +9995,7 @@ public class Xmlization {
         "extensions",
         that.getExtensions(),
         writer,
-        _VisitorWithWriter::writeListOf_IExtension);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
@@ -10285,13 +10013,13 @@ public class Xmlization {
         "displayName",
         that.getDisplayName(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringNameType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringTextType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
@@ -10303,37 +10031,37 @@ public class Xmlization {
         "supplementalSemanticIds",
         that.getSupplementalSemanticIds(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
         that.getQualifiers(),
         writer,
-        _VisitorWithWriter::writeListOf_IQualifier);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
         that.getEmbeddedDataSpecifications(),
         writer,
-        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "inputVariables",
         that.getInputVariables(),
         writer,
-        _VisitorWithWriter::writeListOf_IOperationVariable);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "outputVariables",
         that.getOutputVariables(),
         writer,
-        _VisitorWithWriter::writeListOf_IOperationVariable);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "inoutputVariables",
         that.getInoutputVariables(),
         writer,
-        _VisitorWithWriter::writeListOf_IOperationVariable);
+        _VisitorWithWriter::writeListOf_IClass);
     }
 
     @Override
@@ -10377,7 +10105,7 @@ public class Xmlization {
         "extensions",
         that.getExtensions(),
         writer,
-        _VisitorWithWriter::writeListOf_IExtension);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
@@ -10395,13 +10123,13 @@ public class Xmlization {
         "displayName",
         that.getDisplayName(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringNameType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringTextType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "semanticId",
@@ -10413,19 +10141,19 @@ public class Xmlization {
         "supplementalSemanticIds",
         that.getSupplementalSemanticIds(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "qualifiers",
         that.getQualifiers(),
         writer,
-        _VisitorWithWriter::writeListOf_IQualifier);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "embeddedDataSpecifications",
         that.getEmbeddedDataSpecifications(),
         writer,
-        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
+        _VisitorWithWriter::writeListOf_IClass);
     }
 
     @Override
@@ -10447,7 +10175,7 @@ public class Xmlization {
         "extensions",
         that.getExtensions(),
         writer,
-        _VisitorWithWriter::writeListOf_IExtension);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "category",
@@ -10465,13 +10193,13 @@ public class Xmlization {
         "displayName",
         that.getDisplayName(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringNameType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "description",
         that.getDescription(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringTextType);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "administration",
@@ -10489,13 +10217,13 @@ public class Xmlization {
         "embeddedDataSpecifications",
         that.getEmbeddedDataSpecifications(),
         writer,
-        _VisitorWithWriter::writeListOf_IEmbeddedDataSpecification);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "isCaseOf",
         that.getIsCaseOf(),
         writer,
-        _VisitorWithWriter::writeListOf_IReference);
+        _VisitorWithWriter::writeListOf_IClass);
     }
 
     @Override
@@ -10529,7 +10257,7 @@ public class Xmlization {
         "keys",
         that.getKeys(),
         writer,
-        _VisitorWithWriter::writeListOf_IKey);
+        _VisitorWithWriter::writeListOf_IClass);
     }
 
     @Override
@@ -10635,19 +10363,19 @@ public class Xmlization {
         "assetAdministrationShells",
         that.getAssetAdministrationShells(),
         writer,
-        _VisitorWithWriter::writeListOf_IAssetAdministrationShell);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "submodels",
         that.getSubmodels(),
         writer,
-        _VisitorWithWriter::writeListOf_ISubmodel);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "conceptDescriptions",
         that.getConceptDescriptions(),
         writer,
-        _VisitorWithWriter::writeListOf_IConceptDescription);
+        _VisitorWithWriter::writeListOf_IClass);
     }
 
     @Override
@@ -10765,7 +10493,7 @@ public class Xmlization {
         "valueReferencePairs",
         that.getValueReferencePairs(),
         writer,
-        _VisitorWithWriter::writeListOf_IValueReferencePair);
+        _VisitorWithWriter::writeListOf_IClass);
     }
 
     @Override
@@ -10871,13 +10599,13 @@ public class Xmlization {
         "preferredName",
         that.getPreferredName(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringPreferredNameTypeIec61360);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "shortName",
         that.getShortName(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringShortNameTypeIec61360);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "unit",
@@ -10913,7 +10641,7 @@ public class Xmlization {
         "definition",
         that.getDefinition(),
         writer,
-        _VisitorWithWriter::writeListOf_ILangStringDefinitionTypeIec61360);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeOptionalProperty(
         "valueFormat",

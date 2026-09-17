@@ -770,13 +770,13 @@ public class Xmlization {
       writer.writeCharacters(that.toString());
     }
 
-    private static void writeListOf_string(
-      List<String> that,
+    private static void writeListOf_stringified(
+      List<?> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
-        for (String item : that) {
-          writeAtV_string(item, writer);
+        for (Object item : that) {
+          writeAtV_stringified(item, writer);
           index++;
         }
       } catch (_SerializeFailure failure) {
@@ -786,8 +786,8 @@ public class Xmlization {
       }
     }
 
-    private static void writeAtV_string(
-      String that,
+    private static void writeAtV_stringified(
+      Object that,
       XMLStreamWriter writer) {
       writeElement(
         "v",
@@ -803,7 +803,7 @@ public class Xmlization {
         "someNames",
         that.getSomeNames(),
         writer,
-        _VisitorWithWriter::writeListOf_string);
+        _VisitorWithWriter::writeListOf_stringified);
     }
 
     @Override
