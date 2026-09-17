@@ -939,71 +939,6 @@ def {function_name}(
     )
 
 
-_MONIKER_BY_PRIMITIVE_TYPE = {
-    intermediate.PrimitiveType.BOOL: "bool",
-    intermediate.PrimitiveType.INT: "int",
-    intermediate.PrimitiveType.FLOAT: "float",
-    intermediate.PrimitiveType.STR: "str",
-    intermediate.PrimitiveType.BYTEARRAY: "bytes",
-}
-assert all(
-    literal in _MONIKER_BY_PRIMITIVE_TYPE for literal in intermediate.PrimitiveType
-)
-
-
-# fmt: off
-@ensure(
-    lambda result:
-    "__" not in result,
-    "A moniker contains no double underscore, as the double underscore separates "
-    "the parts of a composed reader's name"
-)
-# fmt: on
-def _atomic_moniker(type_annotation: intermediate.TypeAnnotationUnion) -> Identifier:
-    """
-    Determine the moniker of the atomic ``type_annotation``.
-
-    The monikers are the parts out of which we build the names of the composed
-    readers. The parts are separated by a double underscore, and a moniker never
-    contains one, so that a name can always be split back into its parts. The arity
-    is spelled out in a tuple's name for the same reason. The names are thus unique
-    by construction, and we need no check for collisions.
-    """
-    primitive_type = intermediate.try_primitive_type(type_annotation)
-    if primitive_type is not None:
-        return Identifier(_MONIKER_BY_PRIMITIVE_TYPE[primitive_type])
-
-    assert isinstance(
-        type_annotation, intermediate.OurTypeAnnotation
-    ), f"Expected an atomic type annotation, but got: {type_annotation}"
-
-    return Identifier(naming.lower_snake_case(type_annotation.our_type.name))
-
-
-def _describe_type(type_annotation: intermediate.TypeAnnotationUnion) -> Stripped:
-    """Describe the atomic ``type_annotation`` for a docstring."""
-    primitive_type = intermediate.try_primitive_type(type_annotation)
-    if primitive_type is not None and isinstance(
-        type_annotation, intermediate.PrimitiveTypeAnnotation
-    ):
-        return Stripped(f"``{_MONIKER_BY_PRIMITIVE_TYPE[primitive_type]}``")
-
-    assert isinstance(
-        type_annotation, intermediate.OurTypeAnnotation
-    ), f"Expected an atomic type annotation, but got: {type_annotation}"
-
-    our_type = type_annotation.our_type
-
-    if isinstance(our_type, intermediate.NamedUnion):
-        type_name = python_naming.union_name(our_type.name)  # type: Identifier
-    elif isinstance(our_type, intermediate.Enumeration):
-        type_name = python_naming.enum_name(our_type.name)
-    else:
-        type_name = python_naming.class_name(our_type.name)
-
-    return Stripped(f":py:class:`.types.{type_name}`")
-
-
 def _is_encoded_as_text(type_annotation: intermediate.TypeAnnotationUnion) -> bool:
     """
     Check whether a value of the ``type_annotation`` is encoded as an element's text.
@@ -1057,7 +992,9 @@ def _content_reader_name(
             our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
         ):
             if len(our_type.concrete_descendants) > 0:
-                return Identifier(f"_read_nested__{_atomic_moniker(type_anno)}")
+                return Identifier(
+                    f"_read_nested__{python_common.atomic_moniker(type_anno)}"
+                )
 
             return python_naming.private_function_name(
                 Identifier(f"read_{our_type.name}_as_sequence")
@@ -1071,7 +1008,9 @@ def _content_reader_name(
             # would need to diverge. Unlike a plain class, a named union always takes
             # the discriminator-nesting path, regardless of how many implementers it
             # flattens to.
-            return Identifier(f"_read_nested__{_atomic_moniker(type_anno)}")
+            return Identifier(
+                f"_read_nested__{python_common.atomic_moniker(type_anno)}"
+            )
 
         else:
             assert_never(our_type)
@@ -1079,10 +1018,12 @@ def _content_reader_name(
     elif isinstance(type_anno, intermediate.ListTypeAnnotation):
         items_type_anno = intermediate.beneath_optional(type_anno.items)
 
-        return Identifier(f"_read_list_of__{_atomic_moniker(items_type_anno)}")
+        return Identifier(
+            f"_read_list_of__{python_common.atomic_moniker(items_type_anno)}"
+        )
 
     elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        monikers = [_atomic_moniker(item) for item in type_anno.items]
+        monikers = [python_common.atomic_moniker(item) for item in type_anno.items]
 
         return Identifier(
             f"_read_tuple{len(type_anno.items)}_of__" + "__".join(monikers)
@@ -1112,7 +1053,9 @@ def _element_reader_name(
     type_anno = intermediate.beneath_optional(type_annotation)
 
     if _is_encoded_as_text(type_anno):
-        return Identifier(f"_read_{_atomic_moniker(type_anno)}__at_{expected_tag}")
+        return Identifier(
+            f"_read_{python_common.atomic_moniker(type_anno)}__at_{expected_tag}"
+        )
 
     assert isinstance(
         type_anno, intermediate.OurTypeAnnotation
@@ -1193,7 +1136,7 @@ def {name}(
 ) -> {value_type}:
 {I}\"\"\"
 {I}Read the content of :paramref:`element`, which must be tagged
-{I}``{expected_tag}``, as {_describe_type(type_annotation)}.
+{I}``{expected_tag}``, as {python_common.describe_atomic_type(type_annotation)}.
 {I}\"\"\"
 {I}return _read_named_element(
 {II}element,
@@ -1257,7 +1200,7 @@ def {name}(
 ) -> List[{item_type}]:
 {I}\"\"\"
 {I}Read the items of :paramref:`element` as a list of
-{I}{_describe_type(items_type_anno)}.
+{I}{python_common.describe_atomic_type(items_type_anno)}.
 {I}\"\"\"
 {I}return _read_list_of_items(
 {II}element,
@@ -1871,7 +1814,7 @@ def _cls_sequence_writer_name(cls: intermediate.ConcreteClass) -> Identifier:
 
 def _tuple_writer_name(type_annotation: intermediate.TupleTypeAnnotation) -> Identifier:
     """Give out the name of the writer of a tuple of the ``type_annotation``."""
-    monikers = [_atomic_moniker(item) for item in type_annotation.items]
+    monikers = [python_common.atomic_moniker(item) for item in type_annotation.items]
 
     return Identifier(
         f"_write_tuple{len(type_annotation.items)}_of__" + "__".join(monikers)
@@ -4186,23 +4129,7 @@ def _with_elements_cleared_after_yield(
     # the shared helpers, a meta-model actually reaches. Only those are finally
     # generated, gated along the call graph.
 
-    for our_type in symbol_table.our_types:
-        if isinstance(our_type, intermediate.ConstrainedPrimitive):
-            continue
-
-        if (
-            naming.lower_snake_case(our_type.name)
-            in _MONIKER_BY_PRIMITIVE_TYPE.values()
-        ):
-            errors.append(
-                Error(
-                    our_type.parsed.node,
-                    f"The name of the type {our_type.name!r} gives the same moniker "
-                    f"as one of the primitive types, so the readers of the two would "
-                    f"be given the same name. Please rename the type, or contact "
-                    f"the developers if you need this feature.",
-                )
-            )
+    errors.extend(python_common.errors_in_monikers(symbol_table))
 
     if len(errors) > 0:
         return None, errors

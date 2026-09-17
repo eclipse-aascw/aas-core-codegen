@@ -18,6 +18,7 @@ from typing import (
     cast,
     Any,
     Callable,
+    Dict,
     Iterable,
     List,
     Mapping,
@@ -167,58 +168,81 @@ MutableJsonable = Union[
 # region De-serialization
 
 
-_ItemT = TypeVar("_ItemT")
+_ValueT = TypeVar("_ValueT")
+
+#: Parse a JSON-able value into a value of the meta-model
+_Parser = Callable[
+    [Jsonable],
+    _ValueT
+]
 
 
-def _bool_from_jsonable(
+def _as_mapping(
     jsonable: Jsonable
-) -> bool:
+) -> Mapping[str, Any]:
     """
-    Parse :paramref:`jsonable` as a boolean.
+    Interpret :paramref:`jsonable` as a mapping.
 
-    :param jsonable: JSON-able structure to be parsed
-    :return: parsed boolean
+    :param jsonable: JSON-able structure to be interpreted
+    :return: :paramref:`jsonable`, as a mapping
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, bool):
+    # NOTE (mristin):
+    # We check against ``dict`` first. That is what :py:mod:`json` gives us, and
+    # ``isinstance`` against a concrete class costs a fraction of ``isinstance``
+    # against the abstract :py:class:`collections.abc.Mapping` -- measured on
+    # CPython 3.10, 59 ns against 274 ns -- on a check which runs once for every
+    # instance that we de-serialize.
+    #
+    # We give the mapping back, instead of only raising, so that the caller can
+    # go on with a narrowed type. ``mypy --strict`` does not narrow a union
+    # across a call which merely raises.
+    if (
+        not isinstance(jsonable, dict)
+        and not isinstance(jsonable, collections.abc.Mapping)
+    ):
         raise DeserializationException(
-            f"Expected a bool, but got: {type(jsonable)}"
+            f"Expected a mapping, but got: {type(jsonable)}"
         )
+
     return jsonable
 
 
-def _int_from_jsonable(
-    jsonable: Jsonable
-) -> int:
+def _dispatch_from_jsonable(
+    jsonable: Jsonable,
+    dispatch: Mapping[str, _Parser[_ValueT]],
+    name: str
+) -> _ValueT:
     """
-    Parse :paramref:`jsonable` as an integer.
+    Parse :paramref:`jsonable` by dispatching on its ``modelType``.
 
     :param jsonable: JSON-able structure to be parsed
-    :return: parsed integer
+    :param dispatch: to parse a concrete instance, by its model type
+    :param name: of the parsed type, for the error message
+    :return: parsed instance
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, int):
+    mapping = _as_mapping(jsonable)
+
+    model_type = mapping.get("modelType", None)
+    if model_type is None:
         raise DeserializationException(
-            f"Expected an int, but got: {type(jsonable)}"
+            "Expected the property modelType, but found none"
         )
-    return jsonable
 
-
-def _float_from_jsonable(
-    jsonable: Jsonable
-) -> float:
-    """
-    Parse :paramref:`jsonable` as a floating-point number.
-
-    :param jsonable: JSON-able structure to be parsed
-    :return: parsed floating-point number
-    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
-    """
-    if not isinstance(jsonable, float):
+    if not isinstance(model_type, str):
         raise DeserializationException(
-            f"Expected a float, but got: {type(jsonable)}"
+            f"Expected the property modelType to be a str, "
+            f"but got: {type(model_type)}"
         )
-    return jsonable
+
+    parse = dispatch.get(model_type, None)
+    if parse is None:
+        raise DeserializationException(
+            f"Unexpected model type for {name}: {model_type}"
+        )
+
+    return parse(mapping)
 
 
 def _str_from_jsonable(
@@ -236,26 +260,6 @@ def _str_from_jsonable(
             f"Expected a str, but got: {type(jsonable)}"
         )
     return jsonable
-
-
-def _bytes_from_jsonable(
-    jsonable: Jsonable
-) -> bytes:
-    """
-    Decode :paramref:`jsonable` as base64 string to a ``bytearray``.
-
-    :param jsonable: JSON-able structure to be decoded
-    :return: decoded bytearray
-    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
-    """
-    if not isinstance(jsonable, str):
-        raise DeserializationException(
-            f"Expected a str, but got: {type(jsonable)}"
-        )
-
-    return base64.b64decode(
-        jsonable.encode('ascii')
-    )
 
 
 def _try_to_cast_to_array_like(
@@ -292,6 +296,13 @@ def _try_to_cast_to_array_like(
 
     >>> assert _try_to_cast_to_array_like({1, 2, 3}) is None
     """
+    # NOTE (mristin):
+    # A ``list`` is what :py:mod:`json` gives us, and the general checks below cost
+    # about ten times as much -- measured on CPython 3.10, ~550 ns against ~60 ns --
+    # so we shortcut it here.
+    if isinstance(jsonable, list):
+        return jsonable
+
     if (
         not isinstance(jsonable, (str, bytearray, bytes))
         and hasattr(jsonable, "__iter__")
@@ -311,8 +322,8 @@ def _try_to_cast_to_array_like(
 
 def _list_from_jsonable(
     jsonable: Jsonable,
-    parse_item: Callable[[Jsonable], _ItemT]
-) -> List[_ItemT]:
+    parse_item: _Parser[_ValueT]
+) -> List[_ValueT]:
     """
     Parse :paramref:`jsonable` as a list, applying :paramref:`parse_item` on
     every item.
@@ -328,7 +339,7 @@ def _list_from_jsonable(
             f"Expected something array-like, but got: {type(jsonable)}"
         )
 
-    result = []  # type: List[_ItemT]
+    result = []  # type: List[_ValueT]
     for i, jsonable_item in enumerate(array_like):
         try:
             item = parse_item(jsonable_item)
@@ -348,9 +359,9 @@ _TupleItem3T = TypeVar("_TupleItem3T")
 
 def _tuple3_from_jsonable(
     jsonable: Jsonable,
-    parse_item_1: Callable[[Jsonable], _TupleItem1T],
-    parse_item_2: Callable[[Jsonable], _TupleItem2T],
-    parse_item_3: Callable[[Jsonable], _TupleItem3T]
+    parse_item_1: _Parser[_TupleItem1T],
+    parse_item_2: _Parser[_TupleItem2T],
+    parse_item_3: _Parser[_TupleItem3T]
 ) -> Tuple[_TupleItem1T, _TupleItem2T, _TupleItem3T]:
     """
     Parse :paramref:`jsonable` as a tuple of 3 item(s), applying
@@ -410,29 +421,73 @@ def _tuple3_from_jsonable(
     )
 
 
-class _SetterForStructuralFirst:
-    """Provide de-serialization-setters for properties."""
+def _list_of__mixed_union_from_jsonable(
+    jsonable: Jsonable
+) -> List[aas_types.MixedUnion]:
+    """
+    Parse :paramref:`jsonable` as a list of
+    :py:class:`.types.MixedUnion`.
 
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.unique_to_first: Optional[str] = None
+    :param jsonable: JSON-able structure to be parsed
+    :return: parsed list
+    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+    """
+    return _list_from_jsonable(
+        jsonable,
+        mixed_union_from_jsonable
+    )
 
-    def ignore(self, jsonable: Jsonable) -> None:
-        """Ignore :paramref:`jsonable` and do not set anything."""
-        pass
 
-    def set_unique_to_first_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~unique_to_first`.
+def _list_of__model_typed_union_from_jsonable(
+    jsonable: Jsonable
+) -> List[aas_types.ModelTypedUnion]:
+    """
+    Parse :paramref:`jsonable` as a list of
+    :py:class:`.types.ModelTypedUnion`.
 
-        :param jsonable: input to be parsed
-        """
-        self.unique_to_first = _str_from_jsonable(
-            jsonable
-        )
+    :param jsonable: JSON-able structure to be parsed
+    :return: parsed list
+    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+    """
+    return _list_from_jsonable(
+        jsonable,
+        model_typed_union_from_jsonable
+    )
+
+
+def _list_of__structural_union_from_jsonable(
+    jsonable: Jsonable
+) -> List[aas_types.StructuralUnion]:
+    """
+    Parse :paramref:`jsonable` as a list of
+    :py:class:`.types.StructuralUnion`.
+
+    :param jsonable: JSON-able structure to be parsed
+    :return: parsed list
+    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+    """
+    return _list_from_jsonable(
+        jsonable,
+        structural_union_from_jsonable
+    )
+
+
+def _tuple3_of__structural_union__mixed_union__model_typed_union_from_jsonable(
+    jsonable: Jsonable
+) -> Tuple[aas_types.StructuralUnion, aas_types.MixedUnion, aas_types.ModelTypedUnion]:
+    """
+    Parse :paramref:`jsonable` as a tuple of 3 item(s).
+
+    :param jsonable: JSON-able structure to be parsed
+    :return: parsed tuple
+    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+    """
+    return _tuple3_from_jsonable(
+        jsonable,
+        structural_union_from_jsonable,
+        mixed_union_from_jsonable,
+        model_typed_union_from_jsonable
+    )
 
 
 def structural_first_from_jsonable(
@@ -446,66 +501,35 @@ def structural_first_from_jsonable(
     :return: Parsed instance of :py:class:`.types.StructuralFirst`
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, collections.abc.Mapping):
-        raise DeserializationException(
-            f"Expected a mapping, but got: {type(jsonable)}"
-        )
+    mapping = _as_mapping(jsonable)
 
-    setter = _SetterForStructuralFirst()
+    the_unique_to_first: Optional[str] = None
 
-    for key, jsonable_value in jsonable.items():
-        setter_method = (
-            _SETTER_MAP_FOR_STRUCTURAL_FIRST.get(key)
-        )
-        if setter_method is None:
-            raise DeserializationException(
-                f"Unexpected property: {key}"
-            )
-
-        try:
-            setter_method(setter, jsonable_value)
-        except DeserializationException as exception:
-            exception.path._prepend(
-                PropertySegment(
-                    jsonable_value,
-                    key
+    try:
+        for key, jsonable_value in mapping.items():
+            if key == 'modelType':
+                # The model type is redundant for this class, and we simply accept it.
+                pass
+            elif key == 'uniqueToFirst':
+                the_unique_to_first = _str_from_jsonable(jsonable_value)
+            else:
+                raise DeserializationException(
+                    f"Unexpected property: {key}"
                 )
-            )
-            raise exception
+    except DeserializationException as exception:
+        exception.path._prepend(
+            PropertySegment(mapping, key)
+        )
+        raise
 
-    if setter.unique_to_first is None:
+    if the_unique_to_first is None:
         raise DeserializationException(
             "The required property 'uniqueToFirst' is missing"
         )
 
     return aas_types.StructuralFirst(
-        setter.unique_to_first
+        the_unique_to_first
     )
-
-
-class _SetterForStructuralSecond:
-    """Provide de-serialization-setters for properties."""
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.unique_to_second: Optional[str] = None
-
-    def ignore(self, jsonable: Jsonable) -> None:
-        """Ignore :paramref:`jsonable` and do not set anything."""
-        pass
-
-    def set_unique_to_second_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~unique_to_second`.
-
-        :param jsonable: input to be parsed
-        """
-        self.unique_to_second = _str_from_jsonable(
-            jsonable
-        )
 
 
 def structural_second_from_jsonable(
@@ -519,40 +543,34 @@ def structural_second_from_jsonable(
     :return: Parsed instance of :py:class:`.types.StructuralSecond`
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, collections.abc.Mapping):
-        raise DeserializationException(
-            f"Expected a mapping, but got: {type(jsonable)}"
-        )
+    mapping = _as_mapping(jsonable)
 
-    setter = _SetterForStructuralSecond()
+    the_unique_to_second: Optional[str] = None
 
-    for key, jsonable_value in jsonable.items():
-        setter_method = (
-            _SETTER_MAP_FOR_STRUCTURAL_SECOND.get(key)
-        )
-        if setter_method is None:
-            raise DeserializationException(
-                f"Unexpected property: {key}"
-            )
-
-        try:
-            setter_method(setter, jsonable_value)
-        except DeserializationException as exception:
-            exception.path._prepend(
-                PropertySegment(
-                    jsonable_value,
-                    key
+    try:
+        for key, jsonable_value in mapping.items():
+            if key == 'modelType':
+                # The model type is redundant for this class, and we simply accept it.
+                pass
+            elif key == 'uniqueToSecond':
+                the_unique_to_second = _str_from_jsonable(jsonable_value)
+            else:
+                raise DeserializationException(
+                    f"Unexpected property: {key}"
                 )
-            )
-            raise exception
+    except DeserializationException as exception:
+        exception.path._prepend(
+            PropertySegment(mapping, key)
+        )
+        raise
 
-    if setter.unique_to_second is None:
+    if the_unique_to_second is None:
         raise DeserializationException(
             "The required property 'uniqueToSecond' is missing"
         )
 
     return aas_types.StructuralSecond(
-        setter.unique_to_second
+        the_unique_to_second
     )
 
 
@@ -567,16 +585,13 @@ def structural_union_from_jsonable(
     :return: Concrete instance corresponding to :py:class:`.types.StructuralUnion`
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, collections.abc.Mapping):
-        raise DeserializationException(
-            f"Expected a mapping, but got: {type(jsonable)}"
-        )
+    mapping = _as_mapping(jsonable)
 
-    if 'uniqueToFirst' in jsonable:
-        return structural_first_from_jsonable(jsonable)
+    if 'uniqueToFirst' in mapping:
+        return structural_first_from_jsonable(mapping)
 
-    if 'uniqueToSecond' in jsonable:
-        return structural_second_from_jsonable(jsonable)
+    if 'uniqueToSecond' in mapping:
+        return structural_second_from_jsonable(mapping)
 
     raise DeserializationException(
         "Could not determine the concrete type of StructuralUnion "
@@ -595,54 +610,11 @@ def mixed_abstract_member_from_jsonable(
     :return: Concrete instance of :py:class:`.types.MixedAbstractMember`
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, collections.abc.Mapping):
-        raise DeserializationException(
-            f"Expected a mapping, but got: {type(jsonable)}"
-        )
-
-    model_type = jsonable.get("modelType", None)
-    if model_type is None:
-        raise DeserializationException(
-            "Expected the property modelType, but found none"
-        )
-
-    if not isinstance(model_type, str):
-        raise DeserializationException(
-            "Expected the property modelType to be a str, but got: {type(model_type)}"
-        )
-
-    dispatch = _MIXED_ABSTRACT_MEMBER_FROM_JSONABLE_DISPATCH.get(model_type, None)
-    if dispatch is None:
-        raise DeserializationException(
-            f"Unexpected model type for MixedAbstractMember: {model_type}"
-        )
-
-    return dispatch(jsonable)
-
-
-class _SetterForMixedAbstractDescendantOne:
-    """Provide de-serialization-setters for properties."""
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.unique_to_abstract_descendant_one: Optional[str] = None
-
-    def ignore(self, jsonable: Jsonable) -> None:
-        """Ignore :paramref:`jsonable` and do not set anything."""
-        pass
-
-    def set_unique_to_abstract_descendant_one_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~unique_to_abstract_descendant_one`.
-
-        :param jsonable: input to be parsed
-        """
-        self.unique_to_abstract_descendant_one = _str_from_jsonable(
-            jsonable
-        )
+    return _dispatch_from_jsonable(
+        jsonable,
+        _MIXED_ABSTRACT_MEMBER_FROM_JSONABLE_DISPATCH,
+        'MixedAbstractMember'
+    )
 
 
 def mixed_abstract_descendant_one_from_jsonable(
@@ -656,66 +628,35 @@ def mixed_abstract_descendant_one_from_jsonable(
     :return: Parsed instance of :py:class:`.types.MixedAbstractDescendantOne`
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, collections.abc.Mapping):
-        raise DeserializationException(
-            f"Expected a mapping, but got: {type(jsonable)}"
-        )
+    mapping = _as_mapping(jsonable)
 
-    setter = _SetterForMixedAbstractDescendantOne()
+    the_unique_to_abstract_descendant_one: Optional[str] = None
 
-    for key, jsonable_value in jsonable.items():
-        setter_method = (
-            _SETTER_MAP_FOR_MIXED_ABSTRACT_DESCENDANT_ONE.get(key)
-        )
-        if setter_method is None:
-            raise DeserializationException(
-                f"Unexpected property: {key}"
-            )
-
-        try:
-            setter_method(setter, jsonable_value)
-        except DeserializationException as exception:
-            exception.path._prepend(
-                PropertySegment(
-                    jsonable_value,
-                    key
+    try:
+        for key, jsonable_value in mapping.items():
+            if key == 'modelType':
+                # The model type is redundant for this class, and we simply accept it.
+                pass
+            elif key == 'uniqueToAbstractDescendantOne':
+                the_unique_to_abstract_descendant_one = _str_from_jsonable(jsonable_value)
+            else:
+                raise DeserializationException(
+                    f"Unexpected property: {key}"
                 )
-            )
-            raise exception
+    except DeserializationException as exception:
+        exception.path._prepend(
+            PropertySegment(mapping, key)
+        )
+        raise
 
-    if setter.unique_to_abstract_descendant_one is None:
+    if the_unique_to_abstract_descendant_one is None:
         raise DeserializationException(
             "The required property 'uniqueToAbstractDescendantOne' is missing"
         )
 
     return aas_types.MixedAbstractDescendantOne(
-        setter.unique_to_abstract_descendant_one
+        the_unique_to_abstract_descendant_one
     )
-
-
-class _SetterForMixedAbstractDescendantTwo:
-    """Provide de-serialization-setters for properties."""
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.unique_to_abstract_descendant_two: Optional[str] = None
-
-    def ignore(self, jsonable: Jsonable) -> None:
-        """Ignore :paramref:`jsonable` and do not set anything."""
-        pass
-
-    def set_unique_to_abstract_descendant_two_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~unique_to_abstract_descendant_two`.
-
-        :param jsonable: input to be parsed
-        """
-        self.unique_to_abstract_descendant_two = _str_from_jsonable(
-            jsonable
-        )
 
 
 def mixed_abstract_descendant_two_from_jsonable(
@@ -729,40 +670,34 @@ def mixed_abstract_descendant_two_from_jsonable(
     :return: Parsed instance of :py:class:`.types.MixedAbstractDescendantTwo`
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, collections.abc.Mapping):
-        raise DeserializationException(
-            f"Expected a mapping, but got: {type(jsonable)}"
-        )
+    mapping = _as_mapping(jsonable)
 
-    setter = _SetterForMixedAbstractDescendantTwo()
+    the_unique_to_abstract_descendant_two: Optional[str] = None
 
-    for key, jsonable_value in jsonable.items():
-        setter_method = (
-            _SETTER_MAP_FOR_MIXED_ABSTRACT_DESCENDANT_TWO.get(key)
-        )
-        if setter_method is None:
-            raise DeserializationException(
-                f"Unexpected property: {key}"
-            )
-
-        try:
-            setter_method(setter, jsonable_value)
-        except DeserializationException as exception:
-            exception.path._prepend(
-                PropertySegment(
-                    jsonable_value,
-                    key
+    try:
+        for key, jsonable_value in mapping.items():
+            if key == 'modelType':
+                # The model type is redundant for this class, and we simply accept it.
+                pass
+            elif key == 'uniqueToAbstractDescendantTwo':
+                the_unique_to_abstract_descendant_two = _str_from_jsonable(jsonable_value)
+            else:
+                raise DeserializationException(
+                    f"Unexpected property: {key}"
                 )
-            )
-            raise exception
+    except DeserializationException as exception:
+        exception.path._prepend(
+            PropertySegment(mapping, key)
+        )
+        raise
 
-    if setter.unique_to_abstract_descendant_two is None:
+    if the_unique_to_abstract_descendant_two is None:
         raise DeserializationException(
             "The required property 'uniqueToAbstractDescendantTwo' is missing"
         )
 
     return aas_types.MixedAbstractDescendantTwo(
-        setter.unique_to_abstract_descendant_two
+        the_unique_to_abstract_descendant_two
     )
 
 
@@ -777,54 +712,11 @@ def mixed_concrete_with_descendants_from_jsonable(
     :return: Concrete instance of :py:class:`.types.MixedConcreteWithDescendants`
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, collections.abc.Mapping):
-        raise DeserializationException(
-            f"Expected a mapping, but got: {type(jsonable)}"
-        )
-
-    model_type = jsonable.get("modelType", None)
-    if model_type is None:
-        raise DeserializationException(
-            "Expected the property modelType, but found none"
-        )
-
-    if not isinstance(model_type, str):
-        raise DeserializationException(
-            "Expected the property modelType to be a str, but got: {type(model_type)}"
-        )
-
-    dispatch = _MIXED_CONCRETE_WITH_DESCENDANTS_FROM_JSONABLE_DISPATCH.get(model_type, None)
-    if dispatch is None:
-        raise DeserializationException(
-            f"Unexpected model type for MixedConcreteWithDescendants: {model_type}"
-        )
-
-    return dispatch(jsonable)
-
-
-class _SetterForMixedConcreteWithDescendants:
-    """Provide de-serialization-setters for properties."""
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.some_base_property: Optional[str] = None
-
-    def ignore(self, jsonable: Jsonable) -> None:
-        """Ignore :paramref:`jsonable` and do not set anything."""
-        pass
-
-    def set_some_base_property_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~some_base_property`.
-
-        :param jsonable: input to be parsed
-        """
-        self.some_base_property = _str_from_jsonable(
-            jsonable
-        )
+    return _dispatch_from_jsonable(
+        jsonable,
+        _MIXED_CONCRETE_WITH_DESCENDANTS_FROM_JSONABLE_DISPATCH,
+        'MixedConcreteWithDescendants'
+    )
 
 
 def _mixed_concrete_with_descendants_from_jsonable_without_dispatch(
@@ -845,80 +737,35 @@ def _mixed_concrete_with_descendants_from_jsonable_without_dispatch(
     :return: Parsed instance of :py:class:`.types.MixedConcreteWithDescendants`
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, collections.abc.Mapping):
-        raise DeserializationException(
-            f"Expected a mapping, but got: {type(jsonable)}"
-        )
+    mapping = _as_mapping(jsonable)
 
-    setter = _SetterForMixedConcreteWithDescendants()
+    the_some_base_property: Optional[str] = None
 
-    for key, jsonable_value in jsonable.items():
-        setter_method = (
-            _SETTER_MAP_FOR_MIXED_CONCRETE_WITH_DESCENDANTS.get(key)
-        )
-        if setter_method is None:
-            raise DeserializationException(
-                f"Unexpected property: {key}"
-            )
-
-        try:
-            setter_method(setter, jsonable_value)
-        except DeserializationException as exception:
-            exception.path._prepend(
-                PropertySegment(
-                    jsonable_value,
-                    key
+    try:
+        for key, jsonable_value in mapping.items():
+            if key == 'modelType':
+                # The dispatch has already matched the model type.
+                pass
+            elif key == 'someBaseProperty':
+                the_some_base_property = _str_from_jsonable(jsonable_value)
+            else:
+                raise DeserializationException(
+                    f"Unexpected property: {key}"
                 )
-            )
-            raise exception
+    except DeserializationException as exception:
+        exception.path._prepend(
+            PropertySegment(mapping, key)
+        )
+        raise
 
-    if setter.some_base_property is None:
+    if the_some_base_property is None:
         raise DeserializationException(
             "The required property 'someBaseProperty' is missing"
         )
 
     return aas_types.MixedConcreteWithDescendants(
-        setter.some_base_property
+        the_some_base_property
     )
-
-
-class _SetterForMixedConcreteWithDescendantsChild:
-    """Provide de-serialization-setters for properties."""
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.some_base_property: Optional[str] = None
-        self.some_child_property: Optional[str] = None
-
-    def ignore(self, jsonable: Jsonable) -> None:
-        """Ignore :paramref:`jsonable` and do not set anything."""
-        pass
-
-    def set_some_base_property_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~some_base_property`.
-
-        :param jsonable: input to be parsed
-        """
-        self.some_base_property = _str_from_jsonable(
-            jsonable
-        )
-
-    def set_some_child_property_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~some_child_property`.
-
-        :param jsonable: input to be parsed
-        """
-        self.some_child_property = _str_from_jsonable(
-            jsonable
-        )
 
 
 def mixed_concrete_with_descendants_child_from_jsonable(
@@ -932,84 +779,51 @@ def mixed_concrete_with_descendants_child_from_jsonable(
     :return: Parsed instance of :py:class:`.types.MixedConcreteWithDescendantsChild`
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, collections.abc.Mapping):
-        raise DeserializationException(
-            f"Expected a mapping, but got: {type(jsonable)}"
-        )
+    mapping = _as_mapping(jsonable)
 
-    setter = _SetterForMixedConcreteWithDescendantsChild()
-
-    model_type = jsonable.get("modelType", None)
-    if model_type is None:
-        raise DeserializationException(
-            "Expected the property modelType, but found none"
-        )
-
+    model_type = mapping.get('modelType', None)
     if model_type != 'MixedConcreteWithDescendantsChild':
         raise DeserializationException(
-            f"Invalid modelType, expected 'MixedConcreteWithDescendantsChild', "
+            f"Expected modelType to be 'MixedConcreteWithDescendantsChild', "
             f"but got: {model_type!r}"
         )
 
-    for key, jsonable_value in jsonable.items():
-        setter_method = (
-            _SETTER_MAP_FOR_MIXED_CONCRETE_WITH_DESCENDANTS_CHILD.get(key)
-        )
-        if setter_method is None:
-            raise DeserializationException(
-                f"Unexpected property: {key}"
-            )
+    the_some_base_property: Optional[str] = None
+    the_some_child_property: Optional[str] = None
 
-        try:
-            setter_method(setter, jsonable_value)
-        except DeserializationException as exception:
-            exception.path._prepend(
-                PropertySegment(
-                    jsonable_value,
-                    key
+    try:
+        for key, jsonable_value in mapping.items():
+            if key == 'modelType':
+                # The model type has already been checked above.
+                pass
+            elif key == 'someBaseProperty':
+                the_some_base_property = _str_from_jsonable(jsonable_value)
+            elif key == 'someChildProperty':
+                the_some_child_property = _str_from_jsonable(jsonable_value)
+            else:
+                raise DeserializationException(
+                    f"Unexpected property: {key}"
                 )
-            )
-            raise exception
+    except DeserializationException as exception:
+        exception.path._prepend(
+            PropertySegment(mapping, key)
+        )
+        raise
 
-    if setter.some_base_property is None:
+    if the_some_base_property is None:
         raise DeserializationException(
             "The required property 'someBaseProperty' is missing"
         )
 
-    if setter.some_child_property is None:
+    if the_some_child_property is None:
         raise DeserializationException(
             "The required property 'someChildProperty' is missing"
         )
 
     return aas_types.MixedConcreteWithDescendantsChild(
-        setter.some_base_property,
-        setter.some_child_property
+        the_some_base_property,
+        the_some_child_property
     )
-
-
-class _SetterForMixedConcreteLeaf:
-    """Provide de-serialization-setters for properties."""
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.unique_to_concrete_leaf: Optional[str] = None
-
-    def ignore(self, jsonable: Jsonable) -> None:
-        """Ignore :paramref:`jsonable` and do not set anything."""
-        pass
-
-    def set_unique_to_concrete_leaf_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~unique_to_concrete_leaf`.
-
-        :param jsonable: input to be parsed
-        """
-        self.unique_to_concrete_leaf = _str_from_jsonable(
-            jsonable
-        )
 
 
 def mixed_concrete_leaf_from_jsonable(
@@ -1023,40 +837,34 @@ def mixed_concrete_leaf_from_jsonable(
     :return: Parsed instance of :py:class:`.types.MixedConcreteLeaf`
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, collections.abc.Mapping):
-        raise DeserializationException(
-            f"Expected a mapping, but got: {type(jsonable)}"
-        )
+    mapping = _as_mapping(jsonable)
 
-    setter = _SetterForMixedConcreteLeaf()
+    the_unique_to_concrete_leaf: Optional[str] = None
 
-    for key, jsonable_value in jsonable.items():
-        setter_method = (
-            _SETTER_MAP_FOR_MIXED_CONCRETE_LEAF.get(key)
-        )
-        if setter_method is None:
-            raise DeserializationException(
-                f"Unexpected property: {key}"
-            )
-
-        try:
-            setter_method(setter, jsonable_value)
-        except DeserializationException as exception:
-            exception.path._prepend(
-                PropertySegment(
-                    jsonable_value,
-                    key
+    try:
+        for key, jsonable_value in mapping.items():
+            if key == 'modelType':
+                # The model type is redundant for this class, and we simply accept it.
+                pass
+            elif key == 'uniqueToConcreteLeaf':
+                the_unique_to_concrete_leaf = _str_from_jsonable(jsonable_value)
+            else:
+                raise DeserializationException(
+                    f"Unexpected property: {key}"
                 )
-            )
-            raise exception
+    except DeserializationException as exception:
+        exception.path._prepend(
+            PropertySegment(mapping, key)
+        )
+        raise
 
-    if setter.unique_to_concrete_leaf is None:
+    if the_unique_to_concrete_leaf is None:
         raise DeserializationException(
             "The required property 'uniqueToConcreteLeaf' is missing"
         )
 
     return aas_types.MixedConcreteLeaf(
-        setter.unique_to_concrete_leaf
+        the_unique_to_concrete_leaf
     )
 
 
@@ -1071,65 +879,28 @@ def mixed_union_from_jsonable(
     :return: Concrete instance corresponding to :py:class:`.types.MixedUnion`
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, collections.abc.Mapping):
-        raise DeserializationException(
-            f"Expected a mapping, but got: {type(jsonable)}"
+    mapping = _as_mapping(jsonable)
+
+    if "modelType" in mapping:
+        return _dispatch_from_jsonable(
+            mapping,
+            _MIXED_UNION_FROM_JSONABLE_DISPATCH,
+            'MixedUnion'
         )
 
-    model_type = jsonable.get("modelType", None)
-    if model_type is not None:
-        if not isinstance(model_type, str):
-            raise DeserializationException(
-                f"Expected the property modelType to be a str, "
-                f"but got: {type(model_type)}"
-            )
+    if 'uniqueToAbstractDescendantOne' in mapping:
+        return mixed_abstract_descendant_one_from_jsonable(mapping)
 
-        dispatch = _MIXED_UNION_FROM_JSONABLE_DISPATCH.get(model_type, None)
-        if dispatch is None:
-            raise DeserializationException(
-                f"Unexpected model type for MixedUnion: {model_type}"
-            )
+    if 'uniqueToAbstractDescendantTwo' in mapping:
+        return mixed_abstract_descendant_two_from_jsonable(mapping)
 
-        return dispatch(jsonable)
-
-    if 'uniqueToAbstractDescendantOne' in jsonable:
-        return mixed_abstract_descendant_one_from_jsonable(jsonable)
-
-    if 'uniqueToAbstractDescendantTwo' in jsonable:
-        return mixed_abstract_descendant_two_from_jsonable(jsonable)
-
-    if 'uniqueToConcreteLeaf' in jsonable:
-        return mixed_concrete_leaf_from_jsonable(jsonable)
+    if 'uniqueToConcreteLeaf' in mapping:
+        return mixed_concrete_leaf_from_jsonable(mapping)
 
     raise DeserializationException(
         "Could not determine the concrete type of MixedUnion "
         "for the given JSON object"
     )
-
-
-class _SetterForModelTypedFirst:
-    """Provide de-serialization-setters for properties."""
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.some_property: Optional[str] = None
-
-    def ignore(self, jsonable: Jsonable) -> None:
-        """Ignore :paramref:`jsonable` and do not set anything."""
-        pass
-
-    def set_some_property_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~some_property`.
-
-        :param jsonable: input to be parsed
-        """
-        self.some_property = _str_from_jsonable(
-            jsonable
-        )
 
 
 def model_typed_first_from_jsonable(
@@ -1143,78 +914,42 @@ def model_typed_first_from_jsonable(
     :return: Parsed instance of :py:class:`.types.ModelTypedFirst`
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, collections.abc.Mapping):
-        raise DeserializationException(
-            f"Expected a mapping, but got: {type(jsonable)}"
-        )
+    mapping = _as_mapping(jsonable)
 
-    setter = _SetterForModelTypedFirst()
-
-    model_type = jsonable.get("modelType", None)
-    if model_type is None:
-        raise DeserializationException(
-            "Expected the property modelType, but found none"
-        )
-
+    model_type = mapping.get('modelType', None)
     if model_type != 'ModelTypedFirst':
         raise DeserializationException(
-            f"Invalid modelType, expected 'ModelTypedFirst', "
+            f"Expected modelType to be 'ModelTypedFirst', "
             f"but got: {model_type!r}"
         )
 
-    for key, jsonable_value in jsonable.items():
-        setter_method = (
-            _SETTER_MAP_FOR_MODEL_TYPED_FIRST.get(key)
-        )
-        if setter_method is None:
-            raise DeserializationException(
-                f"Unexpected property: {key}"
-            )
+    the_some_property: Optional[str] = None
 
-        try:
-            setter_method(setter, jsonable_value)
-        except DeserializationException as exception:
-            exception.path._prepend(
-                PropertySegment(
-                    jsonable_value,
-                    key
+    try:
+        for key, jsonable_value in mapping.items():
+            if key == 'modelType':
+                # The model type has already been checked above.
+                pass
+            elif key == 'someProperty':
+                the_some_property = _str_from_jsonable(jsonable_value)
+            else:
+                raise DeserializationException(
+                    f"Unexpected property: {key}"
                 )
-            )
-            raise exception
+    except DeserializationException as exception:
+        exception.path._prepend(
+            PropertySegment(mapping, key)
+        )
+        raise
 
-    if setter.some_property is None:
+    if the_some_property is None:
         raise DeserializationException(
             "The required property 'someProperty' is missing"
         )
 
     return aas_types.ModelTypedFirst(
-        setter.some_property
+        the_some_property
     )
-
-
-class _SetterForModelTypedSecond:
-    """Provide de-serialization-setters for properties."""
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.some_property: Optional[str] = None
-
-    def ignore(self, jsonable: Jsonable) -> None:
-        """Ignore :paramref:`jsonable` and do not set anything."""
-        pass
-
-    def set_some_property_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~some_property`.
-
-        :param jsonable: input to be parsed
-        """
-        self.some_property = _str_from_jsonable(
-            jsonable
-        )
 
 
 def model_typed_second_from_jsonable(
@@ -1228,52 +963,41 @@ def model_typed_second_from_jsonable(
     :return: Parsed instance of :py:class:`.types.ModelTypedSecond`
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, collections.abc.Mapping):
-        raise DeserializationException(
-            f"Expected a mapping, but got: {type(jsonable)}"
-        )
+    mapping = _as_mapping(jsonable)
 
-    setter = _SetterForModelTypedSecond()
-
-    model_type = jsonable.get("modelType", None)
-    if model_type is None:
-        raise DeserializationException(
-            "Expected the property modelType, but found none"
-        )
-
+    model_type = mapping.get('modelType', None)
     if model_type != 'ModelTypedSecond':
         raise DeserializationException(
-            f"Invalid modelType, expected 'ModelTypedSecond', "
+            f"Expected modelType to be 'ModelTypedSecond', "
             f"but got: {model_type!r}"
         )
 
-    for key, jsonable_value in jsonable.items():
-        setter_method = (
-            _SETTER_MAP_FOR_MODEL_TYPED_SECOND.get(key)
-        )
-        if setter_method is None:
-            raise DeserializationException(
-                f"Unexpected property: {key}"
-            )
+    the_some_property: Optional[str] = None
 
-        try:
-            setter_method(setter, jsonable_value)
-        except DeserializationException as exception:
-            exception.path._prepend(
-                PropertySegment(
-                    jsonable_value,
-                    key
+    try:
+        for key, jsonable_value in mapping.items():
+            if key == 'modelType':
+                # The model type has already been checked above.
+                pass
+            elif key == 'someProperty':
+                the_some_property = _str_from_jsonable(jsonable_value)
+            else:
+                raise DeserializationException(
+                    f"Unexpected property: {key}"
                 )
-            )
-            raise exception
+    except DeserializationException as exception:
+        exception.path._prepend(
+            PropertySegment(mapping, key)
+        )
+        raise
 
-    if setter.some_property is None:
+    if the_some_property is None:
         raise DeserializationException(
             "The required property 'someProperty' is missing"
         )
 
     return aas_types.ModelTypedSecond(
-        setter.some_property
+        the_some_property
     )
 
 
@@ -1288,194 +1012,19 @@ def model_typed_union_from_jsonable(
     :return: Concrete instance corresponding to :py:class:`.types.ModelTypedUnion`
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, collections.abc.Mapping):
-        raise DeserializationException(
-            f"Expected a mapping, but got: {type(jsonable)}"
+    mapping = _as_mapping(jsonable)
+
+    if "modelType" in mapping:
+        return _dispatch_from_jsonable(
+            mapping,
+            _MODEL_TYPED_UNION_FROM_JSONABLE_DISPATCH,
+            'ModelTypedUnion'
         )
-
-    model_type = jsonable.get("modelType", None)
-    if model_type is not None:
-        if not isinstance(model_type, str):
-            raise DeserializationException(
-                f"Expected the property modelType to be a str, "
-                f"but got: {type(model_type)}"
-            )
-
-        dispatch = _MODEL_TYPED_UNION_FROM_JSONABLE_DISPATCH.get(model_type, None)
-        if dispatch is None:
-            raise DeserializationException(
-                f"Unexpected model type for ModelTypedUnion: {model_type}"
-            )
-
-        return dispatch(jsonable)
 
     raise DeserializationException(
         "Could not determine the concrete type of ModelTypedUnion "
         "for the given JSON object"
     )
-
-
-class _SetterForSomething:
-    """Provide de-serialization-setters for properties."""
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.structural_property: Optional[aas_types.StructuralUnion] = None
-        self.mixed_property: Optional[aas_types.MixedUnion] = None
-        self.model_typed_property: Optional[aas_types.ModelTypedUnion] = None
-        self.list_structural_property: Optional[List[aas_types.StructuralUnion]] = None
-        self.list_mixed_property: Optional[List[aas_types.MixedUnion]] = None
-        self.list_model_typed_property: Optional[List[aas_types.ModelTypedUnion]] = None
-        self.tuple_property: Optional[
-            Tuple[
-                aas_types.StructuralUnion,
-                aas_types.MixedUnion,
-                aas_types.ModelTypedUnion,
-            ]
-        ] = None
-        self.optional_structural_property: Optional[aas_types.StructuralUnion] = None
-        self.optional_mixed_property: Optional[aas_types.MixedUnion] = None
-        self.optional_model_typed_property: Optional[aas_types.ModelTypedUnion] = None
-
-    def ignore(self, jsonable: Jsonable) -> None:
-        """Ignore :paramref:`jsonable` and do not set anything."""
-        pass
-
-    def set_structural_property_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~structural_property`.
-
-        :param jsonable: input to be parsed
-        """
-        self.structural_property = structural_union_from_jsonable(
-            jsonable
-        )
-
-    def set_mixed_property_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~mixed_property`.
-
-        :param jsonable: input to be parsed
-        """
-        self.mixed_property = mixed_union_from_jsonable(
-            jsonable
-        )
-
-    def set_model_typed_property_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~model_typed_property`.
-
-        :param jsonable: input to be parsed
-        """
-        self.model_typed_property = model_typed_union_from_jsonable(
-            jsonable
-        )
-
-    def set_list_structural_property_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~list_structural_property`.
-
-        :param jsonable: input to be parsed
-        """
-        self.list_structural_property = _list_from_jsonable(
-            jsonable,
-            structural_union_from_jsonable
-        )
-
-    def set_list_mixed_property_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~list_mixed_property`.
-
-        :param jsonable: input to be parsed
-        """
-        self.list_mixed_property = _list_from_jsonable(
-            jsonable,
-            mixed_union_from_jsonable
-        )
-
-    def set_list_model_typed_property_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~list_model_typed_property`.
-
-        :param jsonable: input to be parsed
-        """
-        self.list_model_typed_property = _list_from_jsonable(
-            jsonable,
-            model_typed_union_from_jsonable
-        )
-
-    def set_tuple_property_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~tuple_property`.
-
-        :param jsonable: input to be parsed
-        """
-        self.tuple_property = _tuple3_from_jsonable(
-            jsonable,
-            structural_union_from_jsonable,
-            mixed_union_from_jsonable,
-            model_typed_union_from_jsonable
-        )
-
-    def set_optional_structural_property_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~optional_structural_property`.
-
-        :param jsonable: input to be parsed
-        """
-        self.optional_structural_property = structural_union_from_jsonable(
-            jsonable
-        )
-
-    def set_optional_mixed_property_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~optional_mixed_property`.
-
-        :param jsonable: input to be parsed
-        """
-        self.optional_mixed_property = mixed_union_from_jsonable(
-            jsonable
-        )
-
-    def set_optional_model_typed_property_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~optional_model_typed_property`.
-
-        :param jsonable: input to be parsed
-        """
-        self.optional_model_typed_property = model_typed_union_from_jsonable(
-            jsonable
-        )
 
 
 def something_from_jsonable(
@@ -1489,275 +1038,162 @@ def something_from_jsonable(
     :return: Parsed instance of :py:class:`.types.Something`
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, collections.abc.Mapping):
-        raise DeserializationException(
-            f"Expected a mapping, but got: {type(jsonable)}"
-        )
+    mapping = _as_mapping(jsonable)
 
-    setter = _SetterForSomething()
+    the_structural_property: Optional[aas_types.StructuralUnion] = None
+    the_mixed_property: Optional[aas_types.MixedUnion] = None
+    the_model_typed_property: Optional[aas_types.ModelTypedUnion] = None
+    the_list_structural_property: Optional[List[aas_types.StructuralUnion]] = None
+    the_list_mixed_property: Optional[List[aas_types.MixedUnion]] = None
+    the_list_model_typed_property: Optional[List[aas_types.ModelTypedUnion]] = None
+    the_tuple_property: Optional[
+        Tuple[
+            aas_types.StructuralUnion,
+            aas_types.MixedUnion,
+            aas_types.ModelTypedUnion,
+        ]
+    ] = None
+    the_optional_structural_property: Optional[aas_types.StructuralUnion] = None
+    the_optional_mixed_property: Optional[aas_types.MixedUnion] = None
+    the_optional_model_typed_property: Optional[aas_types.ModelTypedUnion] = None
 
-    for key, jsonable_value in jsonable.items():
-        setter_method = (
-            _SETTER_MAP_FOR_SOMETHING.get(key)
-        )
-        if setter_method is None:
-            raise DeserializationException(
-                f"Unexpected property: {key}"
-            )
-
-        try:
-            setter_method(setter, jsonable_value)
-        except DeserializationException as exception:
-            exception.path._prepend(
-                PropertySegment(
-                    jsonable_value,
-                    key
+    try:
+        for key, jsonable_value in mapping.items():
+            if key == 'modelType':
+                # The model type is redundant for this class, and we simply accept it.
+                pass
+            elif key == 'structuralProperty':
+                the_structural_property = structural_union_from_jsonable(jsonable_value)
+            elif key == 'mixedProperty':
+                the_mixed_property = mixed_union_from_jsonable(jsonable_value)
+            elif key == 'modelTypedProperty':
+                the_model_typed_property = model_typed_union_from_jsonable(jsonable_value)
+            elif key == 'listStructuralProperty':
+                the_list_structural_property = (
+                    _list_of__structural_union_from_jsonable(jsonable_value)
                 )
-            )
-            raise exception
+            elif key == 'listMixedProperty':
+                the_list_mixed_property = (
+                    _list_of__mixed_union_from_jsonable(jsonable_value)
+                )
+            elif key == 'listModelTypedProperty':
+                the_list_model_typed_property = (
+                    _list_of__model_typed_union_from_jsonable(jsonable_value)
+                )
+            elif key == 'tupleProperty':
+                the_tuple_property = (
+                    _tuple3_of__structural_union__mixed_union__model_typed_union_from_jsonable(jsonable_value)
+                )
+            elif key == 'optionalStructuralProperty':
+                the_optional_structural_property = (
+                    structural_union_from_jsonable(jsonable_value)
+                )
+            elif key == 'optionalMixedProperty':
+                the_optional_mixed_property = mixed_union_from_jsonable(jsonable_value)
+            elif key == 'optionalModelTypedProperty':
+                the_optional_model_typed_property = (
+                    model_typed_union_from_jsonable(jsonable_value)
+                )
+            else:
+                raise DeserializationException(
+                    f"Unexpected property: {key}"
+                )
+    except DeserializationException as exception:
+        exception.path._prepend(
+            PropertySegment(mapping, key)
+        )
+        raise
 
-    if setter.structural_property is None:
+    if the_structural_property is None:
         raise DeserializationException(
             "The required property 'structuralProperty' is missing"
         )
 
-    if setter.mixed_property is None:
+    if the_mixed_property is None:
         raise DeserializationException(
             "The required property 'mixedProperty' is missing"
         )
 
-    if setter.model_typed_property is None:
+    if the_model_typed_property is None:
         raise DeserializationException(
             "The required property 'modelTypedProperty' is missing"
         )
 
-    if setter.list_structural_property is None:
+    if the_list_structural_property is None:
         raise DeserializationException(
             "The required property 'listStructuralProperty' is missing"
         )
 
-    if setter.list_mixed_property is None:
+    if the_list_mixed_property is None:
         raise DeserializationException(
             "The required property 'listMixedProperty' is missing"
         )
 
-    if setter.list_model_typed_property is None:
+    if the_list_model_typed_property is None:
         raise DeserializationException(
             "The required property 'listModelTypedProperty' is missing"
         )
 
-    if setter.tuple_property is None:
+    if the_tuple_property is None:
         raise DeserializationException(
             "The required property 'tupleProperty' is missing"
         )
 
     return aas_types.Something(
-        setter.structural_property,
-        setter.mixed_property,
-        setter.model_typed_property,
-        setter.list_structural_property,
-        setter.list_mixed_property,
-        setter.list_model_typed_property,
-        setter.tuple_property,
-        setter.optional_structural_property,
-        setter.optional_mixed_property,
-        setter.optional_model_typed_property
+        the_structural_property,
+        the_mixed_property,
+        the_model_typed_property,
+        the_list_structural_property,
+        the_list_mixed_property,
+        the_list_model_typed_property,
+        the_tuple_property,
+        the_optional_structural_property,
+        the_optional_mixed_property,
+        the_optional_model_typed_property
     )
 
 
-_SETTER_MAP_FOR_STRUCTURAL_FIRST: Mapping[
-    str,
-    Callable[
-        [_SetterForStructuralFirst, Jsonable],
-        None
-    ]
-] = {
-    'uniqueToFirst':
-        _SetterForStructuralFirst.set_unique_to_first_from_jsonable,
-    'modelType':
-        _SetterForStructuralFirst.ignore
-}
-
-
-_SETTER_MAP_FOR_STRUCTURAL_SECOND: Mapping[
-    str,
-    Callable[
-        [_SetterForStructuralSecond, Jsonable],
-        None
-    ]
-] = {
-    'uniqueToSecond':
-        _SetterForStructuralSecond.set_unique_to_second_from_jsonable,
-    'modelType':
-        _SetterForStructuralSecond.ignore
-}
-
-
+#: De-serialize a concrete instance of
+#: :py:class:`.types.MixedAbstractMember`, by its model type
 _MIXED_ABSTRACT_MEMBER_FROM_JSONABLE_DISPATCH: Mapping[
     str,
-    Callable[[Jsonable], aas_types.MixedAbstractMember]
+    _Parser[aas_types.MixedAbstractMember]
 ] = {
     'MixedAbstractDescendantOne': mixed_abstract_descendant_one_from_jsonable,
     'MixedAbstractDescendantTwo': mixed_abstract_descendant_two_from_jsonable,
 }
 
 
-_SETTER_MAP_FOR_MIXED_ABSTRACT_DESCENDANT_ONE: Mapping[
-    str,
-    Callable[
-        [_SetterForMixedAbstractDescendantOne, Jsonable],
-        None
-    ]
-] = {
-    'uniqueToAbstractDescendantOne':
-        _SetterForMixedAbstractDescendantOne.set_unique_to_abstract_descendant_one_from_jsonable,
-    'modelType':
-        _SetterForMixedAbstractDescendantOne.ignore
-}
-
-
-_SETTER_MAP_FOR_MIXED_ABSTRACT_DESCENDANT_TWO: Mapping[
-    str,
-    Callable[
-        [_SetterForMixedAbstractDescendantTwo, Jsonable],
-        None
-    ]
-] = {
-    'uniqueToAbstractDescendantTwo':
-        _SetterForMixedAbstractDescendantTwo.set_unique_to_abstract_descendant_two_from_jsonable,
-    'modelType':
-        _SetterForMixedAbstractDescendantTwo.ignore
-}
-
-
+#: De-serialize a concrete instance of
+#: :py:class:`.types.MixedConcreteWithDescendants`, by its model type
 _MIXED_CONCRETE_WITH_DESCENDANTS_FROM_JSONABLE_DISPATCH: Mapping[
     str,
-    Callable[[Jsonable], aas_types.MixedConcreteWithDescendants]
+    _Parser[aas_types.MixedConcreteWithDescendants]
 ] = {
     'MixedConcreteWithDescendants': _mixed_concrete_with_descendants_from_jsonable_without_dispatch,
     'MixedConcreteWithDescendantsChild': mixed_concrete_with_descendants_child_from_jsonable,
 }
 
 
-_SETTER_MAP_FOR_MIXED_CONCRETE_WITH_DESCENDANTS: Mapping[
-    str,
-    Callable[
-        [_SetterForMixedConcreteWithDescendants, Jsonable],
-        None
-    ]
-] = {
-    'someBaseProperty':
-        _SetterForMixedConcreteWithDescendants.set_some_base_property_from_jsonable,
-    'modelType':
-        _SetterForMixedConcreteWithDescendants.ignore
-}
-
-
-_SETTER_MAP_FOR_MIXED_CONCRETE_WITH_DESCENDANTS_CHILD: Mapping[
-    str,
-    Callable[
-        [_SetterForMixedConcreteWithDescendantsChild, Jsonable],
-        None
-    ]
-] = {
-    'someBaseProperty':
-        _SetterForMixedConcreteWithDescendantsChild.set_some_base_property_from_jsonable,
-    'someChildProperty':
-        _SetterForMixedConcreteWithDescendantsChild.set_some_child_property_from_jsonable,
-    'modelType':
-        _SetterForMixedConcreteWithDescendantsChild.ignore
-}
-
-
-_SETTER_MAP_FOR_MIXED_CONCRETE_LEAF: Mapping[
-    str,
-    Callable[
-        [_SetterForMixedConcreteLeaf, Jsonable],
-        None
-    ]
-] = {
-    'uniqueToConcreteLeaf':
-        _SetterForMixedConcreteLeaf.set_unique_to_concrete_leaf_from_jsonable,
-    'modelType':
-        _SetterForMixedConcreteLeaf.ignore
-}
-
-
+#: De-serialize an implementer of
+#: :py:class:`.types.MixedUnion`, by its model type
 _MIXED_UNION_FROM_JSONABLE_DISPATCH: Mapping[
     str,
-    Callable[[Jsonable], aas_types.MixedUnion]
+    _Parser[aas_types.MixedUnion]
 ] = {
     'MixedConcreteWithDescendantsChild': mixed_concrete_with_descendants_child_from_jsonable,
     'MixedConcreteWithDescendants': mixed_concrete_with_descendants_from_jsonable,
 }
 
 
-_SETTER_MAP_FOR_MODEL_TYPED_FIRST: Mapping[
-    str,
-    Callable[
-        [_SetterForModelTypedFirst, Jsonable],
-        None
-    ]
-] = {
-    'someProperty':
-        _SetterForModelTypedFirst.set_some_property_from_jsonable,
-    'modelType':
-        _SetterForModelTypedFirst.ignore
-}
-
-
-_SETTER_MAP_FOR_MODEL_TYPED_SECOND: Mapping[
-    str,
-    Callable[
-        [_SetterForModelTypedSecond, Jsonable],
-        None
-    ]
-] = {
-    'someProperty':
-        _SetterForModelTypedSecond.set_some_property_from_jsonable,
-    'modelType':
-        _SetterForModelTypedSecond.ignore
-}
-
-
+#: De-serialize an implementer of
+#: :py:class:`.types.ModelTypedUnion`, by its model type
 _MODEL_TYPED_UNION_FROM_JSONABLE_DISPATCH: Mapping[
     str,
-    Callable[[Jsonable], aas_types.ModelTypedUnion]
+    _Parser[aas_types.ModelTypedUnion]
 ] = {
     'ModelTypedFirst': model_typed_first_from_jsonable,
     'ModelTypedSecond': model_typed_second_from_jsonable,
-}
-
-
-_SETTER_MAP_FOR_SOMETHING: Mapping[
-    str,
-    Callable[
-        [_SetterForSomething, Jsonable],
-        None
-    ]
-] = {
-    'structuralProperty':
-        _SetterForSomething.set_structural_property_from_jsonable,
-    'mixedProperty':
-        _SetterForSomething.set_mixed_property_from_jsonable,
-    'modelTypedProperty':
-        _SetterForSomething.set_model_typed_property_from_jsonable,
-    'listStructuralProperty':
-        _SetterForSomething.set_list_structural_property_from_jsonable,
-    'listMixedProperty':
-        _SetterForSomething.set_list_mixed_property_from_jsonable,
-    'listModelTypedProperty':
-        _SetterForSomething.set_list_model_typed_property_from_jsonable,
-    'tupleProperty':
-        _SetterForSomething.set_tuple_property_from_jsonable,
-    'optionalStructuralProperty':
-        _SetterForSomething.set_optional_structural_property_from_jsonable,
-    'optionalMixedProperty':
-        _SetterForSomething.set_optional_mixed_property_from_jsonable,
-    'optionalModelTypedProperty':
-        _SetterForSomething.set_optional_model_typed_property_from_jsonable,
-    'modelType':
-        _SetterForSomething.ignore
 }
 
 

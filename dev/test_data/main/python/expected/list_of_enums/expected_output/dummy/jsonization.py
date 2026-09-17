@@ -18,6 +18,7 @@ from typing import (
     cast,
     Any,
     Callable,
+    Dict,
     Iterable,
     List,
     Mapping,
@@ -167,95 +168,44 @@ MutableJsonable = Union[
 # region De-serialization
 
 
-_ItemT = TypeVar("_ItemT")
+_ValueT = TypeVar("_ValueT")
+
+#: Parse a JSON-able value into a value of the meta-model
+_Parser = Callable[
+    [Jsonable],
+    _ValueT
+]
 
 
-def _bool_from_jsonable(
+def _as_mapping(
     jsonable: Jsonable
-) -> bool:
+) -> Mapping[str, Any]:
     """
-    Parse :paramref:`jsonable` as a boolean.
+    Interpret :paramref:`jsonable` as a mapping.
 
-    :param jsonable: JSON-able structure to be parsed
-    :return: parsed boolean
+    :param jsonable: JSON-able structure to be interpreted
+    :return: :paramref:`jsonable`, as a mapping
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, bool):
+    # NOTE (mristin):
+    # We check against ``dict`` first. That is what :py:mod:`json` gives us, and
+    # ``isinstance`` against a concrete class costs a fraction of ``isinstance``
+    # against the abstract :py:class:`collections.abc.Mapping` -- measured on
+    # CPython 3.10, 59 ns against 274 ns -- on a check which runs once for every
+    # instance that we de-serialize.
+    #
+    # We give the mapping back, instead of only raising, so that the caller can
+    # go on with a narrowed type. ``mypy --strict`` does not narrow a union
+    # across a call which merely raises.
+    if (
+        not isinstance(jsonable, dict)
+        and not isinstance(jsonable, collections.abc.Mapping)
+    ):
         raise DeserializationException(
-            f"Expected a bool, but got: {type(jsonable)}"
+            f"Expected a mapping, but got: {type(jsonable)}"
         )
+
     return jsonable
-
-
-def _int_from_jsonable(
-    jsonable: Jsonable
-) -> int:
-    """
-    Parse :paramref:`jsonable` as an integer.
-
-    :param jsonable: JSON-able structure to be parsed
-    :return: parsed integer
-    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
-    """
-    if not isinstance(jsonable, int):
-        raise DeserializationException(
-            f"Expected an int, but got: {type(jsonable)}"
-        )
-    return jsonable
-
-
-def _float_from_jsonable(
-    jsonable: Jsonable
-) -> float:
-    """
-    Parse :paramref:`jsonable` as a floating-point number.
-
-    :param jsonable: JSON-able structure to be parsed
-    :return: parsed floating-point number
-    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
-    """
-    if not isinstance(jsonable, float):
-        raise DeserializationException(
-            f"Expected a float, but got: {type(jsonable)}"
-        )
-    return jsonable
-
-
-def _str_from_jsonable(
-    jsonable: Jsonable
-) -> str:
-    """
-    Parse :paramref:`jsonable` as a string.
-
-    :param jsonable: JSON-able structure to be parsed
-    :return: parsed string
-    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
-    """
-    if not isinstance(jsonable, str):
-        raise DeserializationException(
-            f"Expected a str, but got: {type(jsonable)}"
-        )
-    return jsonable
-
-
-def _bytes_from_jsonable(
-    jsonable: Jsonable
-) -> bytes:
-    """
-    Decode :paramref:`jsonable` as base64 string to a ``bytearray``.
-
-    :param jsonable: JSON-able structure to be decoded
-    :return: decoded bytearray
-    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
-    """
-    if not isinstance(jsonable, str):
-        raise DeserializationException(
-            f"Expected a str, but got: {type(jsonable)}"
-        )
-
-    return base64.b64decode(
-        jsonable.encode('ascii')
-    )
 
 
 def _try_to_cast_to_array_like(
@@ -292,6 +242,13 @@ def _try_to_cast_to_array_like(
 
     >>> assert _try_to_cast_to_array_like({1, 2, 3}) is None
     """
+    # NOTE (mristin):
+    # A ``list`` is what :py:mod:`json` gives us, and the general checks below cost
+    # about ten times as much -- measured on CPython 3.10, ~550 ns against ~60 ns --
+    # so we shortcut it here.
+    if isinstance(jsonable, list):
+        return jsonable
+
     if (
         not isinstance(jsonable, (str, bytearray, bytes))
         and hasattr(jsonable, "__iter__")
@@ -311,8 +268,8 @@ def _try_to_cast_to_array_like(
 
 def _list_from_jsonable(
     jsonable: Jsonable,
-    parse_item: Callable[[Jsonable], _ItemT]
-) -> List[_ItemT]:
+    parse_item: _Parser[_ValueT]
+) -> List[_ValueT]:
     """
     Parse :paramref:`jsonable` as a list, applying :paramref:`parse_item` on
     every item.
@@ -328,7 +285,7 @@ def _list_from_jsonable(
             f"Expected something array-like, but got: {type(jsonable)}"
         )
 
-    result = []  # type: List[_ItemT]
+    result = []  # type: List[_ValueT]
     for i, jsonable_item in enumerate(array_like):
         try:
             item = parse_item(jsonable_item)
@@ -339,6 +296,23 @@ def _list_from_jsonable(
         result.append(item)
 
     return result
+
+
+def _list_of__result_from_jsonable(
+    jsonable: Jsonable
+) -> List[aas_types.Result]:
+    """
+    Parse :paramref:`jsonable` as a list of
+    :py:class:`.types.Result`.
+
+    :param jsonable: JSON-able structure to be parsed
+    :return: parsed list
+    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+    """
+    return _list_from_jsonable(
+        jsonable,
+        result_from_jsonable
+    )
 
 
 def result_from_jsonable(
@@ -367,32 +341,6 @@ def result_from_jsonable(
     return literal
 
 
-class _SetterForSomething:
-    """Provide de-serialization-setters for properties."""
-
-    def __init__(self) -> None:
-        """Initialize with all the properties unset."""
-        self.some_results: Optional[List[aas_types.Result]] = None
-
-    def ignore(self, jsonable: Jsonable) -> None:
-        """Ignore :paramref:`jsonable` and do not set anything."""
-        pass
-
-    def set_some_results_from_jsonable(
-            self,
-            jsonable: Jsonable
-    ) -> None:
-        """
-        Parse :paramref:`jsonable` as the value of :py:attr:`~some_results`.
-
-        :param jsonable: input to be parsed
-        """
-        self.some_results = _list_from_jsonable(
-            jsonable,
-            result_from_jsonable
-        )
-
-
 def something_from_jsonable(
         jsonable: Jsonable
 ) -> aas_types.Something:
@@ -404,55 +352,35 @@ def something_from_jsonable(
     :return: Parsed instance of :py:class:`.types.Something`
     :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
     """
-    if not isinstance(jsonable, collections.abc.Mapping):
-        raise DeserializationException(
-            f"Expected a mapping, but got: {type(jsonable)}"
-        )
+    mapping = _as_mapping(jsonable)
 
-    setter = _SetterForSomething()
+    the_some_results: Optional[List[aas_types.Result]] = None
 
-    for key, jsonable_value in jsonable.items():
-        setter_method = (
-            _SETTER_MAP_FOR_SOMETHING.get(key)
-        )
-        if setter_method is None:
-            raise DeserializationException(
-                f"Unexpected property: {key}"
-            )
-
-        try:
-            setter_method(setter, jsonable_value)
-        except DeserializationException as exception:
-            exception.path._prepend(
-                PropertySegment(
-                    jsonable_value,
-                    key
+    try:
+        for key, jsonable_value in mapping.items():
+            if key == 'modelType':
+                # The model type is redundant for this class, and we simply accept it.
+                pass
+            elif key == 'someResults':
+                the_some_results = _list_of__result_from_jsonable(jsonable_value)
+            else:
+                raise DeserializationException(
+                    f"Unexpected property: {key}"
                 )
-            )
-            raise exception
+    except DeserializationException as exception:
+        exception.path._prepend(
+            PropertySegment(mapping, key)
+        )
+        raise
 
-    if setter.some_results is None:
+    if the_some_results is None:
         raise DeserializationException(
             "The required property 'someResults' is missing"
         )
 
     return aas_types.Something(
-        setter.some_results
+        the_some_results
     )
-
-
-_SETTER_MAP_FOR_SOMETHING: Mapping[
-    str,
-    Callable[
-        [_SetterForSomething, Jsonable],
-        None
-    ]
-] = {
-    'someResults':
-        _SetterForSomething.set_some_results_from_jsonable,
-    'modelType':
-        _SetterForSomething.ignore
-}
 
 
 # endregion
