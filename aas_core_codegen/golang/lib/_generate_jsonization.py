@@ -1,7 +1,7 @@
 """Generate code for JSON de/serialization."""
 
 import io
-from typing import Tuple, Optional, List, Union
+from typing import Tuple, Optional, List, Sequence, Union
 
 from icontract import ensure, require
 
@@ -18,6 +18,7 @@ from aas_core_codegen.golang import (
     common as golang_common,
     naming as golang_naming,
     description as golang_description,
+    pointering as golang_pointering,
 )
 from aas_core_codegen.golang.common import (
     INDENT as I,
@@ -231,26 +232,323 @@ func bytesFromJsonable(
     )
 
 
+def _generate_call_statement(
+    prefix: str,
+    function: str,
+    arguments: Sequence[str],
+    optional: bool,
+    indention: int,
+) -> Stripped:
+    """
+    Generate ``prefix`` followed by a call to ``function`` with the ``arguments``.
+
+    If ``optional``, the call is wrapped in ``parseOptional``, which turns its result
+    into a pointer.
+
+    The statement is expected to start at the column given by ``indention`` tabs. If it
+    does not fit on a single line, every argument goes on a line of its own, indented
+    by one more tab.
+    """
+    call = f"{function}({', '.join(arguments)})"
+
+    single_line = f"{prefix}parseOptional({call})" if optional else f"{prefix}{call}"
+
+    if (
+        indention * golang_common.TAB_WIDTH + len(single_line)
+        <= golang_common.MAX_LINE_LENGTH
+    ):
+        return Stripped(single_line)
+
+    if optional:
+        inner = _generate_call_statement(
+            prefix="",
+            function=function,
+            arguments=arguments,
+            optional=False,
+            indention=indention + 1,
+        )
+
+        return Stripped(
+            f"""\
+{prefix}parseOptional(
+{I}{indent_but_first_line(inner, I)},
+)"""
+        )
+
+    arguments_joined = golang_common.join_arguments(arguments, indention + 1)
+
+    return Stripped(
+        f"""\
+{prefix}{function}(
+{I}{indent_but_first_line(arguments_joined, I)}
+)"""
+    )
+
+
+def _generate_prepend_name() -> Stripped:
+    """Generate the helper to prepend a property name to the error path."""
+    return Stripped(
+        f"""\
+// Prepend the `name` segment to the path of the `err`, if it is
+// a de-serialization error, and return the `err` back for chaining.
+func prependName(err error, name string) error {{
+{I}if deseriaErr, ok := err.(*DeserializationError); ok {{
+{II}deseriaErr.Path.PrependName(
+{III}&aasreporting.NameSegment{{Name: name}},
+{II})
+{I}}}
+{I}return err
+}}"""
+    )
+
+
+def _generate_prepend_index() -> Stripped:
+    """Generate the helper to prepend an item index to the error path."""
+    return Stripped(
+        f"""\
+// Prepend the `index` segment to the path of the `err`, if it is
+// a de-serialization error, and return the `err` back for chaining.
+func prependIndex(err error, index int) error {{
+{I}if deseriaErr, ok := err.(*DeserializationError); ok {{
+{II}deseriaErr.Path.PrependIndex(
+{III}&aasreporting.IndexSegment{{Index: index}},
+{II})
+{I}}}
+{I}return err
+}}"""
+    )
+
+
+def _generate_parse_optional() -> Stripped:
+    """Generate the helper to turn a parsed value into a pointer."""
+    return Stripped(
+        f"""\
+// Return a pointer to the `value`, or the `err`, if any.
+//
+// This function takes the *results* of a parse function instead of the parse
+// function itself. Go binds all the results of a call to the whole parameter
+// list of the enclosing call, so this single helper composes with every parse
+// function, however many arguments that function takes -- including
+// `parseOptional(parseTuple2(v, ...))`, which a parser-taking signature could
+// not express, as the item parsers of a tuple vary both in number and in type.
+func parseOptional[T any](value T, err error) (*T, error) {{
+{I}if err != nil {{
+{II}return nil, err
+{I}}}
+{I}return &value, nil
+}}"""
+    )
+
+
+def _generate_not_a_map_error() -> Stripped:
+    """Generate the helper to report a JSON-able which is no JSON object."""
+    # NOTE (mristin):
+    # Only the *error* is shared, not the cast which precedes it. Every instance goes
+    # through that cast, and a helper performing it would have to hand the failure back
+    # as an ``error``, so the caller would test a two-word interface where it now tests
+    # a bool -- measurably slower on the happy path, for a function Go inlines anyhow.
+    # A JSON null fails the cast just as a number does, so this is the place which
+    # tells them apart.
+    return Stripped(
+        f"""\
+// Report that `jsonable` is no JSON object.
+func notAMapError(jsonable interface{{}}) error {{
+{I}if jsonable == nil {{
+{II}return newDeserializationError(
+{III}"Expected a JSON object, but got null",
+{II})
+{I}}}
+
+{I}return newDeserializationError(
+{II}fmt.Sprintf(
+{III}"Expected a JSON object, but got %T",
+{III}jsonable,
+{II}),
+{I})
+}}"""
+    )
+
+
+def _generate_model_type_from_map() -> Stripped:
+    """Generate the function to extract the model type discriminator from a map."""
+    return Stripped(
+        f"""\
+// Extract the `modelType` property of `m` as a string, or return an error.
+//
+// This is the only place which knows how the model type is spelled on the wire.
+// Both the dispatch on the model type and its check in a concrete class go
+// through it.
+func modelTypeFromMap(
+{I}m map[string]interface{{}},
+) (modelType string, err error) {{
+{I}jsonable, ok := m["modelType"]
+{I}if !ok {{
+{II}err = newDeserializationError(
+{III}"The required property modelType is missing",
+{II})
+{II}return
+{I}}}
+
+{I}modelType, err = stringFromJsonable(jsonable)
+{I}if err != nil {{
+{II}err = prependName(err, "modelType")
+{I}}}
+{I}return
+}}"""
+    )
+
+
+def _generate_check_model_type() -> Stripped:
+    """Generate the function to check the model type of a map against an expectation."""
+    return Stripped(
+        f"""\
+// Check that `m` specifies the `expected` model type, or return an error.
+func checkModelType(
+{I}m map[string]interface{{}},
+{I}expected string,
+) (err error) {{
+{I}var modelType string
+{I}modelType, err = modelTypeFromMap(m)
+{I}if err != nil {{
+{II}return
+{I}}}
+
+{I}if modelType != expected {{
+{II}err = prependName(
+{III}newDeserializationError(
+{IIII}fmt.Sprintf(
+{IIIII}"Expected the model type '%s', but got %s",
+{IIIII}expected,
+{IIIII}modelType,
+{IIII}),
+{III}),
+{III}"modelType",
+{II})
+{I}}}
+{I}return
+}}"""
+    )
+
+
+def _generate_not_an_enum_text_error() -> Stripped:
+    """Generate the helper to report a JSON-able which is no enumeration text."""
+    return Stripped(
+        f"""\
+// Report that `jsonable` is no text of a literal of the enumeration `enumName`.
+func notAnEnumTextError(
+{I}jsonable interface{{}},
+{I}enumName string,
+) error {{
+{I}if jsonable == nil {{
+{II}return newDeserializationError(
+{III}"Expected a string representation of " + enumName + ", but got null",
+{II})
+{I}}}
+
+{I}return newDeserializationError(
+{II}fmt.Sprintf(
+{III}"Expected a string representation of %s, but got %T",
+{III}enumName,
+{III}jsonable,
+{II}),
+{I})
+}}"""
+    )
+
+
+def _generate_unexpected_enum_literal_error() -> Stripped:
+    """Generate the helper to report a text which is no literal of an enumeration."""
+    return Stripped(
+        f"""\
+// Report that `text` is no literal of the enumeration `enumName`.
+func unexpectedEnumLiteralError(
+{I}text string,
+{I}enumName string,
+) error {{
+{I}return newDeserializationError(
+{II}fmt.Sprintf(
+{III}"Expected a string representation of %s, but got %v",
+{III}enumName,
+{III}text,
+{II}),
+{I})
+}}"""
+    )
+
+
+def _generate_has_all_properties() -> Stripped:
+    """Generate the helper to check the presence of properties in a map."""
+    return Stripped(
+        f"""\
+// Check that `m` contains all the properties with the given `names`.
+//
+// The named unions are verified at the code generation time such that
+// the required properties of the structurally dispatched implementers are
+// pairwise disjoint. The presence of the properties thus suffices to tell
+// the implementers apart, and their values need not be inspected.
+func hasAllProperties(
+{I}m map[string]interface{{}},
+{I}names ...string,
+) bool {{
+{I}for _, name := range names {{
+{II}if _, ok := m[name]; !ok {{
+{III}return false
+{II}}}
+{I}}}
+{I}return true
+}}"""
+    )
+
+
+def _generate_union_from_map() -> Stripped:
+    """Generate the generic helper to parse an implementer of a named union."""
+    return Stripped(
+        f"""\
+// Parse `m` with `fromMap` and wrap the instance into a union with `newUnion`,
+// or return an error.
+func unionFromMap[I any, U any](
+{I}m map[string]interface{{}},
+{I}fromMap func(m map[string]interface{{}}) (I, error),
+{I}newUnion func(that I) U,
+) (result U, err error) {{
+{I}var instance I
+{I}instance, err = fromMap(m)
+{I}if err != nil {{
+{II}return
+{I}}}
+{I}result = newUnion(instance)
+{I}return
+}}"""
+    )
+
+
 def _generate_parse_array() -> Stripped:
     """Generate the generic helper to parse a JSON array item-by-item."""
     return Stripped(
         f"""\
-// Parse `jsonableArray` into a slice of `T` by calling `parseItem` on every
-// item, or return an error.
+// Parse `jsonable` as an array and parse every item with `parseItem`,
+// or return an error.
 func parseArray[T any](
-{I}jsonableArray []interface{{}},
+{I}jsonable interface{{}},
 {I}parseItem func(jsonable interface{{}}) (T, error),
 ) (result []T, err error) {{
+{I}jsonableArray, ok := jsonable.([]interface{{}})
+{I}if !ok {{
+{II}err = newDeserializationError(
+{III}fmt.Sprintf(
+{IIII}"Expected an array, but got %T",
+{IIII}jsonable,
+{III}),
+{II})
+{II}return
+{I}}}
+
 {I}result = make([]T, len(jsonableArray))
 {I}for i, itemJsonable := range jsonableArray {{
 {II}var item T
 {II}item, err = parseItem(itemJsonable)
 {II}if err != nil {{
-{III}if deseriaErr, ok := err.(*DeserializationError); ok {{
-{IIII}deseriaErr.Path.PrependIndex(
-{IIIII}&aasreporting.IndexSegment{{Index: i}},
-{IIII})
-{III}}}
+{III}err = prependIndex(err, i)
 {III}return
 {II}}}
 {II}result[i] = item
@@ -290,11 +588,7 @@ def _generate_parse_tuple_helper(arity: int) -> Stripped:
 var item{i} {type_params[i]}
 item{i}, err = parseItem{i}(jsonableArray[{i}])
 if err != nil {{
-{I}if deseriaErr, ok := err.(*DeserializationError); ok {{
-{II}deseriaErr.Path.PrependIndex(
-{III}&aasreporting.IndexSegment{{Index: {i}}},
-{II})
-{I}}}
+{I}err = prependIndex(err, {i})
 {I}return
 }}"""
             )
@@ -308,13 +602,24 @@ if err != nil {{
 
     return Stripped(
         f"""\
-// Parse `jsonableArray` into a {tuple_type} by calling `parseItem0`,
-// `parseItem1`, *etc.* on the correspondingly positioned item, or return
-// an error.
+// Parse `jsonable` as an array of exactly {arity} item(s) and parse them into
+// a {tuple_type} with `parseItem0`, `parseItem1`, *etc.*,
+// or return an error.
 func {function_name}[{type_params_joined}](
-{I}jsonableArray []interface{{}},
+{I}jsonable interface{{}},
 {I}{indent_but_first_line(params_joined, I)},
 ) (result {tuple_type}, err error) {{
+{I}jsonableArray, ok := jsonable.([]interface{{}})
+{I}if !ok {{
+{II}err = newDeserializationError(
+{III}fmt.Sprintf(
+{IIII}"Expected an array, but got %T",
+{IIII}jsonable,
+{III}),
+{II})
+{II}return
+{I}}}
+
 {I}if len(jsonableArray) != {arity} {{
 {II}err = newDeserializationError(
 {III}fmt.Sprintf(
@@ -349,6 +654,8 @@ def _generate_enumeration_from_jsonable(
         Identifier(f"{enumeration.name}_from_string")
     )
 
+    enum_name_literal = golang_common.string_literal(enum_name)
+
     return Stripped(
         f"""\
 // Parse `jsonable` as a literal of [aastypes.{enum_name}],
@@ -356,38 +663,16 @@ def _generate_enumeration_from_jsonable(
 func {function_name}(
 {I}jsonable interface{{}},
 ) (result aastypes.{enum_name}, err error) {{
-{I}if jsonable == nil {{
-{II}err = newDeserializationError(
-{III}"Expected a string representation of {enum_name}, " +
-{III}"but got null",
-{II})
-{II}return
-{I}}}
-
 {I}text, ok := jsonable.(string)
 {I}if !ok {{
-{II}err = newDeserializationError(
-{III}fmt.Sprintf(
-{IIII}"Expected a string representation of {enum_name}, " +
-{IIII}"but got %T",
-{IIII}jsonable,
-{III}),
-{II})
+{II}err = notAnEnumTextError(jsonable, {enum_name_literal})
 {II}return
 {I}}}
 
 {I}result, ok = aasstringification.{enum_from_str}(text)
 {I}if !ok {{
-{II}err = newDeserializationError(
-{III}fmt.Sprintf(
-{IIII}"Expected a string representation of {enum_name}, " +
-{IIII}"but got %v",
-{IIII}text,
-{III}),
-{II})
-{II}return
+{II}err = unexpectedEnumLiteralError(text, {enum_name_literal})
 {I}}}
-
 {I}return
 }}"""
     )
@@ -467,26 +752,9 @@ func {function_name}(
 {I}result aastypes.{interface_name},
 {I}err error,
 ) {{
-{I}var modelTypeAny interface{{}}
-{I}var ok bool
-{I}modelTypeAny, ok = m["modelType"];
-{I}if !ok {{
-{II}err = newDeserializationError(
-{III}"The required property modelType is missing",
-{II})
-{II}return
-{I}}}
-
 {I}var modelType string
-{I}modelType, ok = modelTypeAny.(string)
-{I}if !ok {{
-{II}err = newDeserializationError(
-{III}fmt.Sprintf(
-{IIII}"Expected the property modelType to be a string, " +
-{IIII}"but got %T",
-{IIII}modelTypeAny,
-{III}),
-{II})
+{I}modelType, err = modelTypeFromMap(m)
+{I}if err != nil {{
 {II}return
 {I}}}
 
@@ -496,6 +764,38 @@ func {function_name}(
 
 {I}return
 }}"""
+    )
+
+
+def _generate_return_union_from_map(
+    implementer: intermediate.ConcreteClass,
+    named_union: intermediate.NamedUnion,
+    indention: int,
+) -> Stripped:
+    """
+    Generate the statement parsing the ``implementer`` and wrapping it in the union.
+
+    We deliberately call the ``*FromMapWithoutDispatch`` function of the exact
+    ``implementer`` instead of its public ``*FromJsonable``. The JSON-able has already
+    been cast to a map, and the implementer has already been determined -- either by
+    the model type, which the surrounding switch has just matched, or structurally.
+    Going through ``*FromJsonable`` would re-do both, and, for an implementer with
+    concrete descendants of its own, dispatch on the model type a second time.
+    """
+    from_map_name = golang_naming.private_function_name(
+        Identifier(f"{implementer.name}_from_map_without_dispatch")
+    )
+
+    new_union_name = golang_naming.function_name(
+        Identifier(f"new_{named_union.name}_from_{implementer.name}")
+    )
+
+    return _generate_call_statement(
+        prefix="return ",
+        function="unionFromMap",
+        arguments=["m", from_map_name, f"aastypes.{new_union_name}"],
+        optional=False,
+        indention=indention,
     )
 
 
@@ -521,58 +821,35 @@ def _generate_named_union_from_jsonable(
     blocks = [
         Stripped(
             f"""\
-if jsonable == nil {{
-{I}err = newDeserializationError(
-{II}"Expected a JSON object, but got null",
-{I})
-{I}return
-}}"""
-        ),
-        Stripped(
-            f"""\
 m, ok := jsonable.(map[string]interface{{}})
 if !ok {{
-{I}err = newDeserializationError(
-{II}fmt.Sprintf(
-{III}"Expected a JSON object, but got %T",
-{III}jsonable,
-{II}),
-{I})
+{I}err = notAMapError(jsonable)
 {I}return
 }}"""
-        ),
+        )
     ]  # type: List[Stripped]
 
     if len(with_model_type) > 0:
+        # NOTE (mristin):
+        # The model type is optional here. An implementer which does not specify it is
+        # dispatched structurally below, so a missing ``modelType`` is not an error.
         case_blocks = []  # type: List[Stripped]
         for implementer in with_model_type:
             model_type_literal = golang_common.string_literal(
                 naming.json_model_type(implementer.name)
             )
 
-            implementer_interface_name = golang_naming.interface_name(implementer.name)
-            implementer_from_jsonable = golang_naming.function_name(
-                Identifier(f"{implementer.name}_from_jsonable")
-            )
-            from_method_name = golang_naming.function_name(
-                Identifier(f"new_{named_union.name}_from_{implementer.name}")
+            statement = _generate_return_union_from_map(
+                implementer=implementer,
+                named_union=named_union,
+                indention=3,
             )
 
             case_blocks.append(
                 Stripped(
                     f"""\
 case {model_type_literal}:
-{I}var instance aastypes.{implementer_interface_name}
-{I}instance, err = {implementer_from_jsonable}(
-{II}m,
-{I})
-{I}if err != nil {{
-{II}return
-{I}}}
-{I}result = aastypes.{from_method_name}(
-{II}instance,
-{I})
-{I}return"""
+{I}{indent_but_first_line(statement, I)}"""
                 )
             )
 
@@ -595,18 +872,10 @@ default:
         blocks.append(
             Stripped(
                 f"""\
-modelTypeAny, foundModelType := m["modelType"]
-if foundModelType {{
+if _, found := m["modelType"]; found {{
 {I}var modelType string
-{I}modelType, ok = modelTypeAny.(string)
-{I}if !ok {{
-{II}err = newDeserializationError(
-{III}fmt.Sprintf(
-{IIII}"Expected the property modelType to be a string, "+
-{IIIII}"but got %T",
-{IIII}modelTypeAny,
-{III}),
-{II})
+{I}modelType, err = modelTypeFromMap(m)
+{I}if err != nil {{
 {II}return
 {I}}}
 
@@ -618,14 +887,6 @@ if foundModelType {{
         )
 
     for implementer in without_model_type:
-        implementer_interface_name = golang_naming.interface_name(implementer.name)
-        implementer_from_jsonable = golang_naming.function_name(
-            Identifier(f"{implementer.name}_from_jsonable")
-        )
-        from_method_name = golang_naming.function_name(
-            Identifier(f"new_{named_union.name}_from_{implementer.name}")
-        )
-
         required_props = [
             prop
             for prop in implementer.properties
@@ -638,36 +899,26 @@ if foundModelType {{
             f"verified in the intermediate stage."
         )
 
-        found_names = [
-            golang_naming.variable_name(Identifier(f"found_{i}"))
-            for i in range(len(required_props))
-        ]
-
-        found_checks = "\n".join(
-            f"_, {found_name} := m[{golang_common.string_literal(prop.json_name)}]"
-            for found_name, prop in zip(found_names, required_props)
+        condition = _generate_call_statement(
+            prefix="if ",
+            function="hasAllProperties",
+            arguments=["m"]
+            + [golang_common.string_literal(prop.json_name) for prop in required_props],
+            optional=False,
+            indention=1,
         )
 
-        found_condition = " && ".join(found_names)
+        statement = _generate_return_union_from_map(
+            implementer=implementer,
+            named_union=named_union,
+            indention=2,
+        )
 
         blocks.append(
             Stripped(
                 f"""\
-{{
-{I}{indent_but_first_line(found_checks, I)}
-{I}if {found_condition} {{
-{II}var instance aastypes.{implementer_interface_name}
-{II}instance, err = {implementer_from_jsonable}(
-{III}m,
-{II})
-{II}if err != nil {{
-{III}return
-{II}}}
-{II}result = aastypes.{from_method_name}(
-{III}instance,
-{II})
-{II}return
-{I}}}
+{condition} {{
+{I}{indent_but_first_line(statement, I)}
 }}"""
             )
         )
@@ -701,7 +952,7 @@ func {function_name}(
 
 
 def _generate_class_from_jsonable(cls: intermediate.ClassUnion) -> Stripped:
-    """Generate the de-serialization function for a class that involves a dispatch."""
+    """Generate the de-serialization function for a class from a JSON-able."""
     function_name = golang_naming.function_name(Identifier(f"{cls.name}_from_jsonable"))
 
     interface_name = golang_naming.interface_name(cls.name)
@@ -709,27 +960,15 @@ def _generate_class_from_jsonable(cls: intermediate.ClassUnion) -> Stripped:
     blocks = [
         Stripped(
             f"""\
-if jsonable == nil {{
-{I}err = newDeserializationError(
-{II}"Expected a JSON object, but got null",
-{I})
-{I}return
-}}"""
-        ),
-        Stripped(
-            f"""\
 m, ok := jsonable.(map[string]interface{{}})
 if !ok {{
-{I}err = newDeserializationError(
-{II}fmt.Sprintf(
-{III}"Expected a JSON object, but got %T",
-{III}jsonable,
-{II}),
-{I})
+{I}err = notAMapError(jsonable)
 {I}return
 }}"""
-        ),
+        )
     ]  # type: List[Stripped]
+
+    from_map_name: str
 
     if len(cls.concrete_descendants) == 0:
         assert not isinstance(cls, intermediate.AbstractClass), (
@@ -740,13 +979,32 @@ if !ok {{
         from_map_name = golang_naming.private_function_name(
             Identifier(f"{cls.name}_from_map_without_dispatch")
         )
+
+        # NOTE (mristin):
+        # This is the only path into the class which does not dispatch on the model
+        # type, so this is where the model type has to be checked. On the dispatched
+        # path, the switch of the dispatching function has already matched it, see
+        # :py:func:`_generate_class_from_map`.
+        if cls.serialization.with_model_type:
+            model_type_literal = golang_common.string_literal(
+                naming.json_model_type(cls.name)
+            )
+
+            blocks.append(
+                Stripped(
+                    f"""\
+err = checkModelType(m, {model_type_literal})
+if err != nil {{
+{I}return
+}}"""
+                )
+            )
     else:
         from_map_name = golang_naming.private_function_name(
             Identifier(f"{cls.name}_from_map")
         )
 
-    blocks.append(Stripped(f"result, err = {from_map_name}(m)"))
-    blocks.append(Stripped("return"))
+    blocks.append(Stripped(f"return {from_map_name}(m)"))
 
     body = Stripped("\n\n".join(blocks))
 
@@ -824,116 +1082,59 @@ def _determine_parse_function_for_atomic_value(
     return Stripped(function_name)
 
 
+#: Number of tabs the body of a ``case`` of the property switch is indented by, counted
+#: from the beginning of the line -- one for the function body, one for the ``for``
+#: loop and one for the ``case`` itself
+_CASE_BODY_INDENTION = 3
+
+
 def _generate_deserialization_switch_statement(
     cls: intermediate.ConcreteClass,
 ) -> Stripped:
     """
     Generate the switch statement for de-serialization of the properties.
 
-    This statement is expected to be run in a ``for k, v := range m`` loop.
-    We switch on ``k`` and the value of the property is given as ``v``. The ``jsonable``
-    is expected to be of type ``map[string]interface{}``.
+    This statement is expected to be run in a ``for k, v := range m`` loop. We switch
+    on ``k`` and the value of the property is given as ``v``. The ``jsonable`` is
+    expected to be of type ``map[string]interface{}``.
+
+    Every case is a single assignment to the corresponding ``the*`` variable. The error
+    is deliberately *not* checked in the case, but once after the switch, where ``k``
+    is at hand -- ``k`` is exactly the JSON name of the property, so the path segment
+    needs no literal of its own, and the check needs no copy of its own.
 
     The resulting struct we parse into is ``result``, a pointer to the struct
-    corresponding to ``cls``. Whenever we encounter a property, we have to set
-    the corresponding boolean ``found*`` to ``True``.
+    corresponding to ``cls``. Whenever we encounter a required property, we have to set
+    the corresponding boolean ``found*`` to ``true``.
 
     This function was originally part of
     ``_generate_concrete_class_from_map_without_dispatch``, but we refactored it out
     since it was too much to read. Best if your read both functions in two vertical
     editor panes.
 
-    If the serialization requires model type, we also expect that the variable
-    ``foundModelType`` have been initialized as a ``bool`` in the preceding generated
-    code. The generated case block will parse and set it in case that the model type
-    is correctly specified. This will be performed even though the code might have
-    had to parse model type before for the dispatch. We decided to double-check to cover
-    the case where a dispatch is *unnecessary* (*e.g.*, the caller knows the expected
-    runtime type), but the model type might still be invalid in the input. Hence, when
-    the dispatch is *necessary*, the model type JSON property will be parsed twice,
-    which is a cost we currently find acceptable.
+    The model type, if the serialization requires one, is checked by the caller before
+    the loop, so that a wrong model type is reported without de-serializing any of
+    the properties first. The case for it is therefore empty, and only keeps the model
+    type from being reported as an unexpected property.
     """
     case_blocks = []  # type: List[Stripped]
 
     for prop in cls.properties:
         type_anno = intermediate.beneath_optional(prop.type_annotation)
 
-        optional = isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
-
         prop_var = golang_naming.variable_name(Identifier(f"the_{prop.name}"))
 
         json_prop_literal = golang_common.string_literal(prop.json_name)
 
-        case_body: Stripped
+        function: str
+        arguments: List[str]
 
-        primitive_type = intermediate.try_primitive_type(type_anno)
-
-        # NOTE (mristin):
-        # We handle this case of the atomic value separately from the others as
-        # we model the optional values with pointers, so we first have to parse into
-        # a value, and then pass a pointer to that value to the property of
-        # the instance.
-        if optional and (
-            (
-                primitive_type is not None
-                and primitive_type is not intermediate.PrimitiveType.BYTEARRAY
-            )
-            or (
-                isinstance(type_anno, intermediate.OurTypeAnnotation)
-                and isinstance(type_anno.our_type, intermediate.Enumeration)
-            )
-        ):
-            assert isinstance(
-                type_anno,
-                (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
-            )
-            parse_function = _determine_parse_function_for_atomic_value(type_anno)
-
-            value_type = golang_common.generate_type(
-                type_annotation=type_anno, types_package=Identifier("aastypes")
-            )
-
-            case_body = Stripped(
-                f"""\
-var parsed {value_type}
-parsed, err = {parse_function}(
-{I}v,
-)
-if err != nil {{
-{I}if deseriaErr, ok := err.(*DeserializationError); ok {{
-{II}deseriaErr.Path.PrependName(
-{III}&aasreporting.NameSegment{{
-{IIII}Name: {json_prop_literal},
-{III}}},
-{II})
-{I}}}
-{I}return
-}}
-{prop_var} = &parsed"""
-            )
-
-        elif isinstance(
+        if isinstance(
             type_anno,
             (intermediate.PrimitiveTypeAnnotation, intermediate.OurTypeAnnotation),
         ):
-            parse_function = _determine_parse_function_for_atomic_value(type_anno)
-
-            case_body = Stripped(
-                f"""\
-{prop_var}, err = {parse_function}(
-{I}v,
-)
-if err != nil {{
-{I}if deseriaErr, ok := err.(*DeserializationError); ok {{
-{II}deseriaErr.Path.PrependName(
-{III}&aasreporting.NameSegment{{
-{IIII}Name: {json_prop_literal},
-{III}}},
-{II})
-{I}}}
-{I}return
-}}"""
-            )
+            function = _determine_parse_function_for_atomic_value(type_anno)
+            arguments = ["v"]
 
         elif isinstance(type_anno, intermediate.ListTypeAnnotation):
             assert isinstance(
@@ -944,51 +1145,16 @@ if err != nil {{
                 f"Please contact the developers if you need this feature."
             )
 
-            parse_function = _determine_parse_function_for_atomic_value(type_anno.items)
-
-            case_body = Stripped(
-                f"""\
-jsonableArray, ok := v.([]interface{{}})
-if !ok {{
-{I}deseriaErr := newDeserializationError(
-{II}fmt.Sprintf(
-{III}"Expected an array, but got %T",
-{III}v,
-{II}),
-{I})
-
-{I}deseriaErr.Path.PrependName(
-{II}&aasreporting.NameSegment{{
-{III}Name: {json_prop_literal},
-{II}}},
-{I})
-
-{I}err = deseriaErr
-
-{I}return
-}}
-
-{prop_var}, err = parseArray(
-{I}jsonableArray,
-{I}{parse_function},
-)
-if err != nil {{
-{I}if deseriaErr, ok := err.(*DeserializationError); ok {{
-{II}deseriaErr.Path.PrependName(
-{III}&aasreporting.NameSegment{{
-{IIII}Name: {json_prop_literal},
-{III}}},
-{II})
-{I}}}
-
-{I}return
-}}"""
-            )
+            function = "parseArray"
+            arguments = [
+                "v",
+                _determine_parse_function_for_atomic_value(type_anno.items),
+            ]
 
         elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-            arity = len(type_anno.items)
+            function = f"parseTuple{len(type_anno.items)}"
+            arguments = ["v"]
 
-            parse_functions = []  # type: List[str]
             for item_type_anno in type_anno.items:
                 assert isinstance(
                     item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
@@ -999,56 +1165,30 @@ if err != nil {{
                     f"intermediate._translate._verify_only_simple_type_patterns."
                 )
 
-                parse_functions.append(
+                arguments.append(
                     _determine_parse_function_for_atomic_value(item_type_anno)
                 )
-
-            parse_functions_joined = "\n".join(f"{fn}," for fn in parse_functions)
-
-            case_body = Stripped(
-                f"""\
-jsonableArray, ok := v.([]interface{{}})
-if !ok {{
-{I}deseriaErr := newDeserializationError(
-{II}fmt.Sprintf(
-{III}"Expected an array, but got %T",
-{III}v,
-{II}),
-{I})
-
-{I}deseriaErr.Path.PrependName(
-{II}&aasreporting.NameSegment{{
-{III}Name: {json_prop_literal},
-{II}}},
-{I})
-
-{I}err = deseriaErr
-
-{I}return
-}}
-
-{prop_var}, err = parseTuple{arity}(
-{I}jsonableArray,
-{I}{indent_but_first_line(parse_functions_joined, I)}
-)
-if err != nil {{
-{I}if deseriaErr, ok := err.(*DeserializationError); ok {{
-{II}deseriaErr.Path.PrependName(
-{III}&aasreporting.NameSegment{{
-{IIII}Name: {json_prop_literal},
-{III}}},
-{II})
-{I}}}
-
-{I}return
-}}"""
-            )
 
         else:
             # noinspection PyTypeChecker
             assert_never(type_anno)
 
-        if not optional:
+        # NOTE (mristin):
+        # An optional value which Go can not represent as nil on its own is modeled as
+        # a pointer. ``parseOptional`` takes the results of the parse function and
+        # gives us back the pointer, so that the case stays a single statement whatever
+        # the property is -- a scalar, an enumeration or a tuple.
+        prefix = f"{prop_var}, err = "
+
+        case_body = _generate_call_statement(
+            prefix=prefix,
+            function=function,
+            arguments=arguments,
+            optional=golang_pointering.is_pointer_type(prop.type_annotation),
+            indention=_CASE_BODY_INDENTION,
+        )
+
+        if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
             found_var = golang_naming.variable_name(Identifier(f"found_{prop.name}"))
 
             # NOTE (mristin):
@@ -1069,54 +1209,11 @@ case {json_prop_literal}:
         )
 
     if cls.serialization.with_model_type:
-        # NOTE (mristin):
-        # We explicitly check for the model type if the meta-model instructs us to.
-        #
-        # This is crucial for the fix of the problem discovered in:
-        # https://github.com/aas-core-works/aas-core3.0-python/issues/32
-        model_type = naming.json_model_type(cls.name)
-        model_type_case_body = Stripped(
-            f"""\
-var modelType string
-modelType, err = stringFromJsonable(
-{I}v,
-)
-if err != nil {{
-{I}if deseriaErr, ok := err.(*DeserializationError); ok {{
-{II}deseriaErr.Path.PrependName(
-{III}&aasreporting.NameSegment{{
-{IIII}Name: "modelType",
-{III}}},
-{II})
-{I}}}
-{I}return
-}}
-
-if modelType != "{model_type}" {{
-{I}deseriaErr := newDeserializationError(
-{II}fmt.Sprintf(
-{III}"Expected the model type '{model_type}', but got %v",
-{III}v,
-{II}),
-{I})
-
-{I}deseriaErr.Path.PrependName(
-{II}&aasreporting.NameSegment{{
-{III}Name: "modelType",
-{II}}},
-{I})
-
-{I}err = deseriaErr
-{I}return
-}}
-
-foundModelType = true"""
-        )
         case_blocks.append(
             Stripped(
                 f"""\
 case "modelType":
-{I}{indent_but_first_line(model_type_case_body, I)}"""
+{I}// The model type has already been checked before the loop."""
             )
         )
 
@@ -1153,6 +1250,10 @@ def _generate_concrete_class_from_map_without_dispatch(
     This function performs no dispatch. If it de-serializes a concrete class with
     concrete descendants, we have to provide a different name. Otherwise, it would
     shadow the name for the dispatch function.
+
+    The model type is *not* checked here. Either a dispatch function has matched it in
+    its switch, or ``*FromJsonable`` has checked it before calling us -- see
+    :py:func:`_generate_class_from_map` and :py:func:`_generate_class_from_jsonable`.
     """
     # fmt: off
     assert (
@@ -1201,14 +1302,6 @@ def _generate_concrete_class_from_map_without_dispatch(
 
     # endregion
 
-    # NOTE (mristin):
-    # We explicitly check for the model type if the meta-model instructs us to.
-    #
-    # This is crucial for the fix of the problem discovered in:
-    # https://github.com/aas-core-works/aas-core3.0-python/issues/32
-    if cls.serialization.with_model_type:
-        blocks.append(Stripped("var foundModelType bool"))
-
     # region Switch on property name
 
     switch_statement = _generate_deserialization_switch_statement(cls=cls)
@@ -1216,16 +1309,21 @@ def _generate_concrete_class_from_map_without_dispatch(
     # endregion
 
     # NOTE (mristin):
-    # ``v`` is only referenced in the case branches of the switch statement, which
-    # only exist for the actual properties and, if applicable, the model type
-    # discriminator. If neither is present, ``v`` would be declared, but never used,
-    # which Go rejects at compile time.
-    if len(cls.properties) > 0 or cls.serialization.with_model_type:
+    # ``v`` is only referenced in the case branches which actually parse a property.
+    # If there are none, ``v`` would be declared, but never used, which Go rejects at
+    # compile time. The same goes for the check of the error, which no case but those
+    # can set -- the default case returns on its own.
+    if len(cls.properties) > 0:
         blocks.append(
             Stripped(
                 f"""\
 for k, v := range m {{
 {I}{indent_but_first_line(switch_statement, I)}
+
+{I}if err != nil {{
+{II}err = prependName(err, k)
+{II}return
+{I}}}
 }}"""
             )
         )
@@ -1264,24 +1362,6 @@ if !{found_var} {{
         )
 
     # endregion
-
-    if cls.serialization.with_model_type:
-        # NOTE (mristin):
-        # We explicitly check for the model type if the meta-model instructs us to.
-        #
-        # This is crucial for the fix of the problem discovered in:
-        # https://github.com/aas-core-works/aas-core3.0-python/issues/32
-        blocks.append(
-            Stripped(
-                f"""\
-if !foundModelType {{
-{I}err = newDeserializationError(
-{II}"The required property modelType is missing",
-{I})
-{I}return
-}}"""
-            )
-        )
 
     constructing_statements = []  # type: List[Stripped]
 
@@ -2275,13 +2355,27 @@ func (de *DeserializationError) PathString() string {{
 {I}return aasreporting.ToJSONPath(de.Path)
 }}"""
         ),
+        _generate_prepend_name(),
+        _generate_prepend_index(),
         _generate_bool_from_jsonable(),
         _generate_int64_from_jsonable(),
         _generate_float64_from_jsonable(),
         _generate_string_from_jsonable(),
         _generate_bytes_from_jsonable(),
+        _generate_parse_optional(),
+        _generate_not_a_map_error(),
+        _generate_model_type_from_map(),
+        _generate_check_model_type(),
         _generate_parse_array(),
     ]  # type: List[Stripped]
+
+    if len(symbol_table.enumerations) > 0:
+        blocks.append(_generate_not_an_enum_text_error())
+        blocks.append(_generate_unexpected_enum_literal_error())
+
+    if len(symbol_table.named_unions) > 0:
+        blocks.append(_generate_has_all_properties())
+        blocks.append(_generate_union_from_map())
 
     for arity in intermediate.tuple_arities(symbol_table):
         blocks.append(_generate_parse_tuple_helper(arity))
