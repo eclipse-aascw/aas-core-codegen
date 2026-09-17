@@ -77,6 +77,9 @@ over_type_annotation_and_nested_type_annotations = (
 )
 tuple_arities = _types.tuple_arities
 
+NumericPlace = _types.NumericPlace
+numeric_places = _types.numeric_places
+
 translate = _translate.translate
 errors_if_contracts_for_functions_or_methods_defined = (
     _translate.errors_if_contracts_for_functions_or_methods_defined

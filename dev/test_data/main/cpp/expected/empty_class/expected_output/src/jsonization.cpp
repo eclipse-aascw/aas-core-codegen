@@ -6,6 +6,7 @@
 #include "dummy/wstringification.hpp"
 
 #pragma warning(push, 0)
+#include <cmath>
 #include <set>
 #include <sstream>
 #include <unordered_map>
@@ -303,11 +304,35 @@ std::pair<
     "but it does not."
   );
 
+  const double value(json.get<double>());
+
+  // NOTE (mristin):
+  // JSON knows neither an infinity nor a not-a-number, so a conformant parser
+  // can never give us one. The caller can still hand us a JSON value which
+  // has been constructed programmatically, so we have to check here.
+
+  if (!std::isfinite(value)) {
+    std::wstring message = common::Concat(
+      L"Expected a finite number, but got: ",
+      std::to_wstring(value)
+    );
+
+    return std::make_pair<
+      common::optional<double>,
+      common::optional<DeserializationError>
+    >(
+      common::nullopt,
+      common::make_optional<DeserializationError>(
+        message
+      )
+    );
+  }
+
   return std::make_pair<
     common::optional<double>,
     common::optional<DeserializationError>
   >(
-    json.get<double>(),
+    value,
     common::nullopt
   );
 }
@@ -732,12 +757,41 @@ std::pair<
 }
 
 /**
- * Serialize the given floating-point number to a JSON value.
+ * \brief Serialize the given floating-point number to a JSON value.
+ *
+ * JSON knows neither an infinity nor a not-a-number, so we refuse to serialize
+ * them instead of silently writing them out as ``null``.
  */
-nlohmann::json SerializeDouble(
-  double value
-) {
-  return value;
+std::pair<
+  common::optional<nlohmann::json>,
+  common::optional<SerializationError>
+> SerializeDouble(double value) {
+  if (!std::isfinite(value)) {
+    const std::wstring message = common::Concat(
+      L"The floating-point number ",
+      std::to_wstring(value),
+      L" can not be serialized to JSON as JSON knows no infinity "
+      L"and no not-a-number."
+    );
+
+    return std::make_pair<
+      common::optional<nlohmann::json>,
+      common::optional<SerializationError>
+    >(
+      common::nullopt,
+      common::make_optional<SerializationError>(
+        message
+      )
+    );
+  }
+
+  return std::make_pair<
+    common::optional<nlohmann::json>,
+    common::optional<SerializationError>
+  >(
+    common::make_optional<nlohmann::json>(value),
+    common::nullopt
+  );
 }
 
 /**

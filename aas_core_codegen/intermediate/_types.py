@@ -3524,6 +3524,128 @@ def over_type_annotation_and_nested_type_annotations(
         pass
 
 
+class NumericPlace:
+    """
+    Locate a number within a concrete class whose JSON serialization can fail.
+
+    JSON can represent neither a non-finite floating-point number nor an
+    integer outside ``[-2^53 + 1, 2^53 - 1]``, so the generated serializers
+    have to refuse both. This locates the places where such a number can sit,
+    so that the generated tests can put one there and assert that the
+    serialization fails at exactly the reported path.
+    """
+
+    #: Concrete class holding the property
+    cls: Final[ConcreteClass]
+
+    #: Property holding the number, always required, never optional
+    prop: Final[Property]
+
+    #: Type of the number, either an integer or a floating-point number
+    a_type: Final[PrimitiveType]
+
+    #: Position of the number within the property's value, or ``None`` if
+    #: the property *is* the number
+    #:
+    #: For a list, this is the index at which the test puts the number. For
+    #: a tuple, this is the position of the item which is the number.
+    index: Final[Optional[int]]
+
+    #: True if the property is a list, as opposed to a tuple or the number
+    #: itself
+    #:
+    #: A list and a tuple render the same path segment, but differ in how
+    #: the generated test has to construct the value.
+    in_list: Final[bool]
+
+    @require(
+        lambda cls, prop: id(prop) in cls.property_id_set,
+        "The property belongs to the class",
+    )
+    def __init__(
+        self,
+        cls: ConcreteClass,
+        prop: Property,
+        a_type: PrimitiveType,
+        index: Optional[int],
+        in_list: bool,
+    ) -> None:
+        """Initialize with the given values."""
+        self.cls = cls
+        self.prop = prop
+        self.a_type = a_type
+        self.index = index
+        self.in_list = in_list
+
+
+def numeric_places(symbol_table: SymbolTable) -> List[NumericPlace]:
+    """
+    List the places where a number unrepresentable in JSON can sit.
+
+    Only required properties are considered. An optional property would make
+    the generated test construct a value before it can corrupt it, which buys
+    no additional coverage of the error path.
+
+    At most one place is reported per (class, property), as the second one
+    would exercise the very same code.
+    """
+    result = []  # type: List[NumericPlace]
+
+    for cls in symbol_table.concrete_classes:
+        for prop in cls.properties:
+            if isinstance(prop.type_annotation, OptionalTypeAnnotation):
+                continue
+
+            type_anno = prop.type_annotation
+
+            a_type = try_primitive_type(type_anno)
+            if a_type is PrimitiveType.INT or a_type is PrimitiveType.FLOAT:
+                result.append(
+                    NumericPlace(
+                        cls=cls, prop=prop, a_type=a_type, index=None, in_list=False
+                    )
+                )
+                continue
+
+            if isinstance(type_anno, ListTypeAnnotation):
+                items_type = try_primitive_type(type_anno.items)
+                if items_type is PrimitiveType.INT or items_type is PrimitiveType.FLOAT:
+                    # NOTE (mristin):
+                    # We deliberately put the number at the second position so
+                    # that a serializer which always reports the index 0 does
+                    # not pass the test.
+                    result.append(
+                        NumericPlace(
+                            cls=cls,
+                            prop=prop,
+                            a_type=items_type,
+                            index=1,
+                            in_list=True,
+                        )
+                    )
+                continue
+
+            if isinstance(type_anno, TupleTypeAnnotation):
+                for i, item_type_anno in enumerate(type_anno.items):
+                    item_type = try_primitive_type(item_type_anno)
+                    if (
+                        item_type is PrimitiveType.INT
+                        or item_type is PrimitiveType.FLOAT
+                    ):
+                        result.append(
+                            NumericPlace(
+                                cls=cls,
+                                prop=prop,
+                                a_type=item_type,
+                                index=i,
+                                in_list=False,
+                            )
+                        )
+                        break
+
+    return result
+
+
 @ensure(
     lambda result: sorted(set(result)) == result,
     "The arities are unique and sorted",

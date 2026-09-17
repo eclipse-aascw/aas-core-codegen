@@ -25,6 +25,7 @@ from aas_core_codegen.intermediate._types import (
     ListTypeAnnotation,
     MetaModel,
     NamedUnion,
+    NumericPlace,
     OptionalTypeAnnotation,
     OurTypeAnnotation,
     PatternVerification,
@@ -860,6 +861,25 @@ def _stringify_interface(
     return result
 
 
+def _stringify_numeric_place(
+    that: NumericPlace,
+) -> stringify_mod.Entity:
+    result = stringify_mod.Entity(
+        name=that.__class__.__name__,
+        properties=[
+            stringify_mod.Property("cls", f"Reference to our type {that.cls.name}"),
+            stringify_mod.Property(
+                "prop", f"Reference to the property {that.prop.name}"
+            ),
+            stringify_mod.Property("a_type", that.a_type.name),
+            stringify_mod.Property("index", that.index),
+            stringify_mod.Property("in_list", that.in_list),
+        ],
+    )
+
+    return result
+
+
 def _stringify_meta_model(
     that: MetaModel,
 ) -> stringify_mod.Entity:
@@ -963,6 +983,7 @@ Dumpable = Union[
     ListTypeAnnotation,
     MetaModel,
     NamedUnion,
+    NumericPlace,
     OptionalTypeAnnotation,
     OurTypeAnnotation,
     PatternVerification,
@@ -1004,6 +1025,7 @@ _DISPATCH = {
     DescriptionOfSignature: _stringify_description_of_signature,
     Enumeration: _stringify_enumeration,
     NamedUnion: _stringify_named_union,
+    NumericPlace: _stringify_numeric_place,
     EnumerationLiteral: _stringify_enumeration_literal,
     ImplementationSpecificMethod: _stringify_implementation_specific_method,
     ImplementationSpecificVerification: _stringify_implementation_specific_verification,
