@@ -1444,64 +1444,74 @@ public class Jsonization {
 
     private static class _Transformer extends AbstractTransformer<JsonNode> {
       /**
-       * Convert {@code that} 64-bit long integer to a JSON value.
+       * Dispatch the serialization over the run-time type of an instance.
        *
-       * @param that value to be converted
+       * <p>The transformer carries no state, so a single instance serves
+       * the whole program.
        */
-      private static JsonNode toJsonNode(Long that) {
-        // We need to check that we can perform a lossless conversion.
-        long primitiveThat = that.longValue();
-        if ((long)((double)primitiveThat) != primitiveThat) {
-          throw new IllegalArgumentException(
-            "The number can not be losslessly represented in JSON: " + that);
-        }
-        return JsonNodeFactory.instance.numberNode(that);
+      private static final _Transformer INSTANCE = new _Transformer();
+
+      /**
+       * Serialize {@code that} into a JSON object.
+       *
+       * <p>Which JSON object that is, is decided by the run-time type of
+       * {@code that}, so this one serializer serves every abstract class, every
+       * concrete class with descendants, and the item of a list or of a tuple of
+       * any class at all. The de-serialization, which has to decide what to
+       * construct before it has read anything, needs a dispatcher per interface
+       * instead.
+       *
+       * <p>It is static, so that a composed serializer -- which is static as well,
+       * since it carries no state either -- can reach it.
+       */
+      static JsonNode transformClass(IClass that) {
+        return INSTANCE.transform(that);
       }
 
       /**
-       * Convert {@code that} byte array to a JSON value.
+       * Serialize the named union {@code that} into a JSON object.
        *
-       * @param that value to be converted
+       * <p>A named union is not itself an {@link IClass}, so it can not be
+       * dispatched by {@link #transformClass} directly. Dispatching over
+       * the common {@code IUnion<?>} instead of the union's own type means
+       * a single serializer for *all* the named unions, and not one per union.
+       *
+       * <p>Should a named union ever be allowed to flatten a primitive or an
+       * enumeration alternative, only this body has to change -- every call site
+       * stays the same.
        */
-      private static JsonNode bytesToJsonNode(byte[] that) {
-        return JsonNodeFactory.instance.textNode(
-          Base64.getEncoder().encodeToString(that));
+      private static JsonNode transformUnion(IUnion<?> that) {
+        return transformClass(that.getUnderlying());
       }
 
       /**
-       * Serialize every item of {@code items} with {@code serializeItem} into
-       * a JSON array.
+       * Serialize every item of {@code that} into a JSON array.
        *
-       * @param items to be serialized
-       * @param serializeItem to serialize a single item of {@code items}
+       * @param that to be serialized
        */
-      private static <T> ArrayNode serializeArray(
-        Iterable<T> items,
-        Function<T, JsonNode> serializeItem) {
+      private static ArrayNode serializeListOf_IUnion(
+        List<? extends IUnion<?>> that) {
         final ArrayNode result = JsonNodeFactory.instance.arrayNode();
-        for (T item : items) {
-          result.add(
-            serializeItem.apply(item));
+        for (IUnion<?> item : that) {
+          result.add(transformUnion(item));
         }
         return result;
       }
 
       /**
-       * Serialize each item of {@code value} with the corresponding
-       * {@code serializeItemI} into a JSON array.
+       * Serialize each of the 3 items of {@code that} into a JSON array.
+       *
+       * @param that to be serialized
        */
-      private static <T1, T2, T3> ArrayNode serializeTuple3(
-        Tuple3<T1, T2, T3> value,
-        Function<T1, JsonNode> serializeItem1,
-        Function<T2, JsonNode> serializeItem2,
-        Function<T3, JsonNode> serializeItem3) {
+      private static ArrayNode serializeTupleOf3_IUnion_IUnion_IUnion(
+        Tuple3<
+          ? extends IUnion<?>,
+          ? extends IUnion<?>,
+          ? extends IUnion<?>> that) {
         final ArrayNode result = JsonNodeFactory.instance.arrayNode();
-        result.add(
-          serializeItem1.apply(value.item1()));
-        result.add(
-          serializeItem2.apply(value.item2()));
-        result.add(
-          serializeItem3.apply(value.item3()));
+        result.add(transformUnion(that.item1()));
+        result.add(transformUnion(that.item2()));
+        result.add(transformUnion(that.item3()));
         return result;
       }
 
@@ -1511,8 +1521,7 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.put("uniqueToFirst", JsonNodeFactory.instance.textNode(
-          that.getUniqueToFirst()));
+        result.set("uniqueToFirst", JsonNodeFactory.instance.textNode(that.getUniqueToFirst()));
 
         return result;
       }
@@ -1523,8 +1532,7 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.put("uniqueToSecond", JsonNodeFactory.instance.textNode(
-          that.getUniqueToSecond()));
+        result.set("uniqueToSecond", JsonNodeFactory.instance.textNode(that.getUniqueToSecond()));
 
         return result;
       }
@@ -1535,7 +1543,7 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.put("uniqueToAbstractDescendantOne", JsonNodeFactory.instance.textNode(
+        result.set("uniqueToAbstractDescendantOne", JsonNodeFactory.instance.textNode(
           that.getUniqueToAbstractDescendantOne()));
 
         return result;
@@ -1547,7 +1555,7 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.put("uniqueToAbstractDescendantTwo", JsonNodeFactory.instance.textNode(
+        result.set("uniqueToAbstractDescendantTwo", JsonNodeFactory.instance.textNode(
           that.getUniqueToAbstractDescendantTwo()));
 
         return result;
@@ -1559,8 +1567,7 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.put("someBaseProperty", JsonNodeFactory.instance.textNode(
-          that.getSomeBaseProperty()));
+        result.set("someBaseProperty", JsonNodeFactory.instance.textNode(that.getSomeBaseProperty()));
 
         result.put("modelType", "MixedConcreteWithDescendants");
 
@@ -1573,10 +1580,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.put("someBaseProperty", JsonNodeFactory.instance.textNode(
-          that.getSomeBaseProperty()));
+        result.set("someBaseProperty", JsonNodeFactory.instance.textNode(that.getSomeBaseProperty()));
 
-        result.put("someChildProperty", JsonNodeFactory.instance.textNode(
+        result.set("someChildProperty", JsonNodeFactory.instance.textNode(
           that.getSomeChildProperty()));
 
         result.put("modelType", "MixedConcreteWithDescendantsChild");
@@ -1590,7 +1596,7 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.put("uniqueToConcreteLeaf", JsonNodeFactory.instance.textNode(
+        result.set("uniqueToConcreteLeaf", JsonNodeFactory.instance.textNode(
           that.getUniqueToConcreteLeaf()));
 
         return result;
@@ -1602,8 +1608,7 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.put("someProperty", JsonNodeFactory.instance.textNode(
-          that.getSomeProperty()));
+        result.set("someProperty", JsonNodeFactory.instance.textNode(that.getSomeProperty()));
 
         result.put("modelType", "ModelTypedFirst");
 
@@ -1616,8 +1621,7 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.put("someProperty", JsonNodeFactory.instance.textNode(
-          that.getSomeProperty()));
+        result.set("someProperty", JsonNodeFactory.instance.textNode(that.getSomeProperty()));
 
         result.put("modelType", "ModelTypedSecond");
 
@@ -1630,57 +1634,38 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("structuralProperty", transform(
-          that.getStructuralProperty()));
+        result.set("structuralProperty", transformUnion(that.getStructuralProperty()));
 
-        result.set("mixedProperty", transform(
-          that.getMixedProperty()));
+        result.set("mixedProperty", transformUnion(that.getMixedProperty()));
 
-        result.set("modelTypedProperty", transform(
-          that.getModelTypedProperty()));
+        result.set("modelTypedProperty", transformUnion(that.getModelTypedProperty()));
 
-        final ArrayNode arrayListStructuralProperty = serializeArray(
-          that.getListStructuralProperty(),
-          this::transform);
-        result.set("listStructuralProperty", arrayListStructuralProperty);
+        result.set("listStructuralProperty", serializeListOf_IUnion(
+          that.getListStructuralProperty()));
 
-        final ArrayNode arrayListMixedProperty = serializeArray(
-          that.getListMixedProperty(),
-          this::transform);
-        result.set("listMixedProperty", arrayListMixedProperty);
+        result.set("listMixedProperty", serializeListOf_IUnion(that.getListMixedProperty()));
 
-        final ArrayNode arrayListModelTypedProperty = serializeArray(
-          that.getListModelTypedProperty(),
-          this::transform);
-        result.set("listModelTypedProperty", arrayListModelTypedProperty);
+        result.set("listModelTypedProperty", serializeListOf_IUnion(
+          that.getListModelTypedProperty()));
 
-        final ArrayNode arrayTupleProperty = serializeTuple3(
-          that.getTupleProperty(),
-          this::transform,
-          this::transform,
-          this::transform);
-        result.set("tupleProperty", arrayTupleProperty);
+        result.set("tupleProperty", serializeTupleOf3_IUnion_IUnion_IUnion(
+          that.getTupleProperty()));
 
         if (that.getOptionalStructuralProperty().isPresent()) {
-          result.set("optionalStructuralProperty", transform(
+          result.set("optionalStructuralProperty", transformUnion(
             that.getOptionalStructuralProperty().get()));
         }
 
         if (that.getOptionalMixedProperty().isPresent()) {
-          result.set("optionalMixedProperty", transform(
-            that.getOptionalMixedProperty().get()));
+          result.set("optionalMixedProperty", transformUnion(that.getOptionalMixedProperty().get()));
         }
 
         if (that.getOptionalModelTypedProperty().isPresent()) {
-          result.set("optionalModelTypedProperty", transform(
+          result.set("optionalModelTypedProperty", transformUnion(
             that.getOptionalModelTypedProperty().get()));
         }
 
         return result;
-      }
-
-      private JsonNode transform(IUnion<?> that) {
-        return transform(that.getUnderlying());
       }
     }
 
@@ -1698,13 +1683,11 @@ public class Jsonization {
      */
     public static class Serialize
     {
-      private static final _Transformer transformer = new _Transformer();
-
       /**
        * Serialize an instance of the meta-model into a JSON object.
        */
       public static JsonNode toJsonObject(IClass that) {
-        return transformer.transform(that);
+        return _Transformer.transformClass(that);
       }
     }
 }

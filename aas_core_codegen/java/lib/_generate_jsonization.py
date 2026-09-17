@@ -2,7 +2,7 @@
 
 import io
 import textwrap
-from typing import Final, List, Optional, Set, Tuple
+from typing import Final, List, Mapping, Optional, Set, Tuple
 
 from icontract import ensure
 
@@ -25,16 +25,17 @@ from aas_core_codegen.java.common import (
     INDENT4 as IIII,
 )
 
-# region De-serialization
-
 #: Maximal length of a generated line before a call is broken over two lines
 _MAX_LINE_LENGTH: Final[int] = 100
 
 #: Indentation, in characters, of the body of a function of
-#: the de-serialization implementation. The body sits four levels deep: the class
-#: ``Jsonization``, the class ``_DeserializeImplementation``, the function and
-#: finally its body.
+#: the de-serialization implementation or of the transformer. The body sits four
+#: levels deep either way: the class ``Jsonization``, the class
+#: (``_DeserializeImplementation`` or ``_Transformer``), the function and finally
+#: its body.
 _FUNCTION_BODY_INDENTATION: Final[int] = len(I) * 4
+
+# region De-serialization
 
 #: Indentation, in characters, of the body of a ``case`` of a property loop.
 #: The body sits seven levels deep: the class ``Jsonization``, the class
@@ -501,10 +502,7 @@ def _composed_type_annotations(
         for arg in cls.constructor.arguments:
             type_anno = intermediate.beneath_optional(arg.type_annotation)
 
-            if not isinstance(
-                type_anno,
-                (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
-            ):
+            if not isinstance(type_anno, intermediate.ContainerTypeAnnotationAsTuple):
                 continue
 
             moniker = java_common.type_moniker(type_anno)
@@ -1567,336 +1565,452 @@ public static class Deserialize
 
 # region Serialization
 
+# NOTE (mristin):
+# The three functions which follow answer, for a value which is neither
+# a list nor a tuple, what serializes it and how it is spelled. They are
+# the writing twins of :py:func:`_parse_method_for_atomic_value`, and like it
+# they dispatch on the type annotation and need no notion of their own.
+#
+# Several types give the same answer -- every class serializes through
+# ``transformClass``, every enumeration through ``Serialize.toJsonValue`` --
+# and that is the whole of what makes a serializer shared. The reading can
+# not share this way: it has to decide what to construct before it has read
+# anything, so it needs one parser per type where the writing needs one
+# function per answer.
 
-def _generate_serialize_primitive_value(
-    primitive_type: intermediate.PrimitiveType, source_expr: Stripped
-) -> Stripped:
+
+_SERIALIZE_FUNCTION_BY_PRIMITIVE_TYPE: Final[
+    Mapping[intermediate.PrimitiveType, Stripped]
+] = {
+    intermediate.PrimitiveType.BOOL: Stripped("JsonNodeFactory.instance.booleanNode"),
+    intermediate.PrimitiveType.INT: Stripped("toJsonNode"),
+    intermediate.PrimitiveType.FLOAT: Stripped("JsonNodeFactory.instance.numberNode"),
+    intermediate.PrimitiveType.STR: Stripped("JsonNodeFactory.instance.textNode"),
+    intermediate.PrimitiveType.BYTEARRAY: Stripped("bytesToJsonNode"),
+}
+assert all(
+    literal in _SERIALIZE_FUNCTION_BY_PRIMITIVE_TYPE
+    for literal in intermediate.PrimitiveType
+)
+
+
+def _serialize_function(type_anno: intermediate.AtomicTypeAnnotation) -> Stripped:
     """
-    Generate the snippet to serialize ``source_expr`` to JSON.
+    Name the function converting a single value of ``type_anno`` into a JSON node.
 
-    Source expression is expected to be of ``primitive_type``.
+    None of them is generic, so a call is a direct one and needs neither
+    a ``Function`` nor the lambda which creating one would allocate.
     """
-    if primitive_type is intermediate.PrimitiveType.BOOL:
-        # We can not use textwrap due to indent_but_first_line.
-        return Stripped(
-            f"""\
-JsonNodeFactory.instance.booleanNode(
-{I}{indent_but_first_line(source_expr, I)})"""
-        )
-    elif primitive_type is intermediate.PrimitiveType.FLOAT:
-        # We can not use textwrap due to indent_but_first_line.
-        return Stripped(
-            f"""\
-JsonNodeFactory.instance.numberNode(
-{I}{indent_but_first_line(source_expr, I)})"""
-        )
-    elif primitive_type is intermediate.PrimitiveType.STR:
-        # We can not use textwrap due to indent_but_first_line.
-        return Stripped(
-            f"""\
-JsonNodeFactory.instance.textNode(
-{I}{indent_but_first_line(source_expr, I)})"""
-        )
-    elif primitive_type is intermediate.PrimitiveType.INT:
-        # We can not use textwrap due to indent_but_first_line.
-        return Stripped(
-            f"""\
-_Transformer.toJsonNode(
-{I}{indent_but_first_line(source_expr, I)})"""
-        )
-    elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
-        # We can not use textwrap due to indent_but_first_line.
-        return Stripped(
-            f"""\
-_Transformer.bytesToJsonNode(
-{I}{indent_but_first_line(source_expr, I)})"""
-        )
-    else:
-        assert_never(primitive_type)
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        return _SERIALIZE_FUNCTION_BY_PRIMITIVE_TYPE[primitive_type]
+
+    assert isinstance(
+        type_anno, intermediate.OurTypeAnnotation
+    ), f"Expected one of our types, but got: {type_anno}"
+
+    our_type = type_anno.our_type
+
+    if isinstance(our_type, intermediate.Enumeration):
+        return Stripped("Serialize.toJsonValue")
+
+    if isinstance(our_type, intermediate.NamedUnion):
+        return Stripped("transformUnion")
+
+    assert isinstance(
+        our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+    ), f"Expected a class, but got: {our_type}"
+
+    return Stripped("transformClass")
 
 
-def _serialize_method_reference_for_primitive_type(
-    primitive_type: intermediate.PrimitiveType,
-) -> Stripped:
-    """Determine a bare method reference for serializing a primitive value."""
-    if primitive_type is intermediate.PrimitiveType.BOOL:
-        return Stripped("JsonNodeFactory.instance::booleanNode")
-    elif primitive_type is intermediate.PrimitiveType.FLOAT:
-        return Stripped("JsonNodeFactory.instance::numberNode")
-    elif primitive_type is intermediate.PrimitiveType.STR:
-        return Stripped("JsonNodeFactory.instance::textNode")
-    elif primitive_type is intermediate.PrimitiveType.INT:
-        return Stripped("_Transformer::toJsonNode")
-    elif primitive_type is intermediate.PrimitiveType.BYTEARRAY:
-        return Stripped("_Transformer::bytesToJsonNode")
-    else:
-        assert_never(primitive_type)
-
-
-def _serialize_method_reference_for_atomic_value(
-    type_annotation: intermediate.AtomicTypeAnnotation,
-) -> Stripped:
+@ensure(lambda result: "_" not in result)
+def _serialized_leaf_moniker(type_anno: intermediate.AtomicTypeAnnotation) -> str:
     """
-    Determine a bare method reference for serializing an atomic value to JSON.
+    Name what ``type_anno`` is serialized *as*, for a composed serializer to be named after.
 
-    The reference matches ``Function<T, JsonNode>`` for the item's Java type
-    ``T``, so it can be passed on directly wherever such a function is
-    expected (e.g. as an item serializer in a list or a tuple), with no
-    closure needed.
+    This is the writing counterpart of
+    :py:func:`aas_core_codegen.java.common.leaf_moniker`, which names a leaf by
+    its very type. Here every class collapses onto ``IClass``, every
+    enumeration onto ``IEnum`` and every named union onto ``IUnion``, so that
+    the serializers of a list of any class, of any enumeration or of any union
+    are one apiece.
+
+    ``IClass``, ``IEnum`` and ``IUnion`` are the fixed names of our own
+    interfaces and are never generated from the meta-model, and a scalar's
+    moniker is lower-case, so none of them can be confused with the moniker of
+    one of our types. None contains an underscore, as the moniker grammar
+    requires (see :py:func:`aas_core_codegen.java.common.list_moniker`).
     """
-    if isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
-        return _serialize_method_reference_for_primitive_type(type_annotation.a_type)
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        return java_common.PRIMITIVE_TYPE_TO_MONIKER[primitive_type]
 
-    elif isinstance(type_annotation, intermediate.OurTypeAnnotation):
-        our_type = type_annotation.our_type
-        if isinstance(our_type, intermediate.Enumeration):
-            method_name = java_naming.method_name(
-                Identifier(f"{our_type.name}_to_json_value")
-            )
-            return Stripped(f"Serialize::{method_name}")
-        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-            return _serialize_method_reference_for_primitive_type(our_type.constrainee)
-        elif isinstance(
-            our_type,
-            (
-                intermediate.AbstractClass,
-                intermediate.ConcreteClass,
-                intermediate.NamedUnion,
-            ),
-        ):
-            # NOTE (mristin):
-            # ``transform`` is an instance method of the enclosing
-            # ``_Transformer`` class itself, dispatching through the visitor
-            # pattern, so it is referenced bound to ``this``. A named union
-            # is matched by its own ``transform`` overload (see
-            # :py:func:`_generate_union_transform_helper`), so it can
-            # be referenced exactly like a class.
-            return Stripped("this::transform")
-        else:
-            assert_never(our_type)
-    else:
-        assert_never(type_annotation)
+    assert isinstance(
+        type_anno, intermediate.OurTypeAnnotation
+    ), f"Expected one of our types, but got: {type_anno}"
+
+    our_type = type_anno.our_type
+
+    if isinstance(our_type, intermediate.Enumeration):
+        return "IEnum"
+
+    if isinstance(our_type, intermediate.NamedUnion):
+        return "IUnion"
+
+    assert isinstance(
+        our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+    ), f"Expected a class, but got: {our_type}"
+
+    return "IClass"
 
 
-def _generate_serialize_tuple_helper(arity: int) -> Stripped:
-    """Generate the generic helper to serialize a tuple into a JSON array."""
-    type_params = [f"T{i + 1}" for i in range(arity)]
-    tuple_type = f"Tuple{arity}<{', '.join(type_params)}>"
+def _serialized_value_type(type_anno: intermediate.AtomicTypeAnnotation) -> Stripped:
+    """
+    Render the type of a value of ``type_anno`` as its serializer takes it.
 
-    param_lines = [f"{tuple_type} value"] + [
-        f"Function<T{i + 1}, JsonNode> serializeItem{i + 1}" for i in range(arity)
+    A scalar keeps its own Java type; everything else widens to the interface
+    it is serialized through, so that one serializer serves them all.
+    """
+    primitive_type = intermediate.try_primitive_type(type_anno)
+    if primitive_type is not None:
+        return java_common.PRIMITIVE_TYPE_MAP[primitive_type]
+
+    moniker = _serialized_leaf_moniker(type_anno)
+
+    # NOTE (mristin):
+    # ``IUnion`` is generic in the union's own type, which is exactly what we
+    # are widening away here, so the wildcard stands for it.
+    return Stripped("IUnion<?>" if moniker == "IUnion" else moniker)
+
+
+def _serialized_argument_type(type_anno: intermediate.AtomicTypeAnnotation) -> Stripped:
+    """
+    Render the type of a value of ``type_anno`` as an argument of a container.
+
+    Java generics are invariant, so a ``List<IExtension>`` is *not*
+    a ``List<IClass>`` and a ``Tuple2<IExtension, IKey>`` is *not*
+    a ``Tuple2<IClass, IClass>``. Wherever the value type widens, the bound has
+    to be spelled out for the container to accept the list or the tuple which
+    a property actually holds. A scalar widens to nothing, so it needs none.
+    """
+    value_type = _serialized_value_type(type_anno)
+
+    if intermediate.try_primitive_type(type_anno) is not None:
+        return value_type
+
+    return Stripped(f"? extends {value_type}")
+
+
+def _item_type_annotations(
+    type_anno: intermediate.ContainerTypeAnnotation,
+) -> List[intermediate.AtomicTypeAnnotation]:
+    """
+    Give the items of the list or of the tuple ``type_anno``, in order.
+
+    An item is atomic, which
+    :py:func:`aas_core_codegen.intermediate._translate._verify_only_simple_type_patterns`
+    guarantees for a tuple and which the code generators assume for a list,
+    and which we narrow here so that the leaf functions can simply say so in
+    their signatures.
+    """
+    items = (
+        [type_anno.items]
+        if isinstance(type_anno, intermediate.ListTypeAnnotation)
+        else list(type_anno.items)
+    )
+
+    result = []  # type: List[intermediate.AtomicTypeAnnotation]
+    for item in items:
+        assert isinstance(item, intermediate.AtomicTypeAnnotationAsTuple), (
+            f"We only support lists and tuples of atomic values (primitives, "
+            f"constrained primitives, enumeration literals), of classes or of "
+            f"named unions when serializing to JSON, but got the nested "
+            f"type {item}. Please contact the developers if you need this "
+            f"feature."
+        )
+        result.append(item)
+
+    return result
+
+
+def _serializer_name(type_anno: intermediate.ContainerTypeAnnotation) -> Identifier:
+    """
+    Name the function serializing the list or the tuple ``type_anno``.
+
+    Only a list and a tuple have no function of their own to be named after,
+    so only they are composed out of the serialization of their items. The name
+    follows what those items are serialized *as* and not their types (see
+    :py:func:`_serialized_leaf_moniker`), so one function serves every list,
+    and every tuple, whose items are serialized the same way.
+    """
+    monikers = [
+        _serialized_leaf_moniker(item_type_anno)
+        for item_type_anno in _item_type_annotations(type_anno)
     ]
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        return Identifier(f"serialize{java_common.list_moniker(monikers[0])}")
+
+    return Identifier(f"serialize{java_common.tuple_moniker(monikers)}")
+
+
+def _container_type(type_anno: intermediate.ContainerTypeAnnotation) -> Stripped:
+    """Render the list or the tuple ``type_anno`` as its serializer takes it."""
+    argument_types = [
+        _serialized_argument_type(item_type_anno)
+        for item_type_anno in _item_type_annotations(type_anno)
+    ]
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        return Stripped(f"List<{argument_types[0]}>")
+
+    return java_common.tuple_type(argument_types)
+
+
+def _serialize_call(
+    type_anno: intermediate.AtomicTypeAnnotation,
+    source_expr: Stripped,
+    indentation: int,
+) -> Stripped:
+    """
+    Generate the expression converting ``source_expr`` into a JSON node.
+
+    ``indentation`` is where the expression starts, so that a call which does
+    not fit the line is broken after the opening parenthesis.
+    """
+    function = _serialize_function(type_anno)
+
+    one_liner = Stripped(f"{function}({source_expr})")
+    if "\n" not in one_liner and indentation + len(one_liner) <= _MAX_LINE_LENGTH:
+        return one_liner
+
+    # We can not use textwrap due to indent_but_first_line.
+    return Stripped(
+        f"""\
+{function}(
+{I}{indent_but_first_line(source_expr, I)})"""
+    )
+
+
+def _generate_composed_serializer(
+    type_anno: intermediate.ContainerTypeAnnotation,
+) -> Stripped:
+    """
+    Generate the serializer of the list or of the tuple ``type_anno``.
+
+    The signature and the body are spelled by what the items are serialized
+    *as*, never by their types, so that the one function really does serve
+    every list, and every tuple, whose items are serialized the same way --
+    ``type_anno`` is only the first representative which reached it.
+
+    The parameter is therefore wider than the list or the tuple a property
+    holds, which means ``javac`` no longer rejects a value handed to the wrong
+    serializer: a ``List<byte[]>`` passed to ``serializeListOf_string``
+    compiles, and would emit ``[B@1a2b3c`` instead of base64. What keeps that
+    from happening is that :py:func:`_serialized_leaf_moniker` names
+    the serializer and :py:func:`_serialize_function` fills its body, and both
+    answer a byte array with something of its own -- the same discipline
+    :py:func:`aas_core_codegen.java.common.leaf_moniker` already relies on.
+
+    There is no combinator, and hence no ``Function``: the loop and the item
+    conversions are written out, so every call is a direct one. A generic
+    helper shared by everything would have to be handed the conversion as
+    a ``Function``, whose ``apply`` would then be megamorphic -- one
+    implementation per item type at a single call site -- so it would neither
+    inline nor stay free of allocation.
+    """
+    name = _serializer_name(type_anno)
+    value_type = _container_type(type_anno)
+    item_type_annos = _item_type_annotations(type_anno)
+
+    body_indentation = _FUNCTION_BODY_INDENTATION
+
+    stmts = [
+        Stripped("final ArrayNode result = JsonNodeFactory.instance.arrayNode();")
+    ]  # type: List[Stripped]
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        item_type = _serialized_value_type(item_type_annos[0])
+        conversion = _serialize_call(
+            type_anno=item_type_annos[0],
+            source_expr=Stripped("item"),
+            # The conversion sits inside ``result.add(`` in the loop body,
+            # one level deeper than the body of the function.
+            indentation=body_indentation + len(I) + len("result.add("),
+        )
+
+        stmts.append(
+            Stripped(
+                f"""\
+for ({item_type} item : that) {{
+{I}result.add({indent_but_first_line(conversion, I)});
+}}"""
+            )
+        )
+    else:
+        for i, item_type_anno in enumerate(item_type_annos):
+            conversion = _serialize_call(
+                type_anno=item_type_anno,
+                source_expr=Stripped(f"that.item{i + 1}()"),
+                indentation=body_indentation + len("result.add("),
+            )
+            stmts.append(Stripped(f"result.add({conversion});"))
+
+    stmts.append(Stripped("return result;"))
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        description = "every item of {@code that}"
+    else:
+        description = f"each of the {len(item_type_annos)} items of {{@code that}}"
 
     writer = io.StringIO()
     writer.write(
         f"""\
 /**
- * Serialize each item of {{@code value}} with the corresponding
- * {{@code serializeItemI}} into a JSON array.
+ * Serialize {description} into a JSON array.
+ *
+ * @param that to be serialized
  */
-private static <{", ".join(type_params)}> ArrayNode serializeTuple{arity}(
+private static ArrayNode {name}(
+{I}{indent_but_first_line(value_type, I)} that) {{
 """
     )
-    for i, param_line in enumerate(param_lines):
-        writer.write(I)
-        writer.write(param_line)
-        writer.write(",\n" if i < len(param_lines) - 1 else ") {\n")
 
-    writer.write(f"{I}final ArrayNode result = JsonNodeFactory.instance.arrayNode();\n")
-    for i in range(arity):
-        writer.write(
-            f"""\
-{I}result.add(
-{II}serializeItem{i + 1}.apply(value.item{i + 1}()));
-"""
-        )
-    writer.write(f"{I}return result;\n}}")
+    for stmt in stmts:
+        writer.write(textwrap.indent(stmt, I))
+        writer.write("\n")
+
+    writer.write("}")
 
     return Stripped(writer.getvalue())
 
 
-def _generate_serialize_atomic_value(
-    type_annotation: intermediate.AtomicTypeAnnotation, source_expr: Stripped
-) -> Stripped:
-    """Generate the snippet to serialize ``source_expr`` to JSON."""
-    if isinstance(type_annotation, intermediate.PrimitiveTypeAnnotation):
-        return _generate_serialize_primitive_value(
-            primitive_type=type_annotation.a_type, source_expr=source_expr
-        )
-    elif isinstance(type_annotation, intermediate.OurTypeAnnotation):
-        our_type = type_annotation.our_type
-        if isinstance(our_type, intermediate.Enumeration):
-            method_name = java_naming.method_name(
-                Identifier(f"{our_type.name}_to_json_value")
-            )
-
-            # We can not use textwrap due to indent_but_first_line.
-            return Stripped(
-                f"""\
-Serialize.{method_name}(
-{I}{indent_but_first_line(source_expr, I)})"""
-            )
-        elif isinstance(our_type, intermediate.ConstrainedPrimitive):
-            return _generate_serialize_primitive_value(
-                primitive_type=our_type.constrainee, source_expr=source_expr
-            )
-        elif isinstance(
-            our_type,
-            (
-                intermediate.AbstractClass,
-                intermediate.ConcreteClass,
-                intermediate.NamedUnion,
-            ),
-        ):
-            # NOTE (mristin):
-            # A named union is matched by its own ``transform`` overload
-            # (see :py:func:`_generate_union_transform_helper`), so it
-            # can be transformed exactly like a class instance here.
-
-            # We can not use textwrap due to indent_but_first_line.
-            return Stripped(
-                f"""\
-transform(
-{I}{indent_but_first_line(source_expr, I)})"""
-            )
-        else:
-            assert_never(our_type)
-    else:
-        assert_never(type_annotation)
+def _generate_transform_class_helper() -> Stripped:
+    """Generate the static entry dispatching over the run-time type."""
+    return Stripped(
+        f"""\
+/**
+ * Serialize {{@code that}} into a JSON object.
+ *
+ * <p>Which JSON object that is, is decided by the run-time type of
+ * {{@code that}}, so this one serializer serves every abstract class, every
+ * concrete class with descendants, and the item of a list or of a tuple of
+ * any class at all. The de-serialization, which has to decide what to
+ * construct before it has read anything, needs a dispatcher per interface
+ * instead.
+ *
+ * <p>It is static, so that a composed serializer -- which is static as well,
+ * since it carries no state either -- can reach it.
+ */
+static JsonNode transformClass(IClass that) {{
+{I}return INSTANCE.transform(that);
+}}"""
+    )
 
 
-@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
-def _generate_transform_property(
-    prop: intermediate.Property,
-) -> Tuple[Optional[Stripped], Optional[Error]]:
-    """Generate the snippet to transform a property into a JSON node."""
+def _generate_transform_union_helper() -> Stripped:
+    """Generate a single serializer shared by every named union."""
+    return Stripped(
+        f"""\
+/**
+ * Serialize the named union {{@code that}} into a JSON object.
+ *
+ * <p>A named union is not itself an {{@link IClass}}, so it can not be
+ * dispatched by {{@link #transformClass}} directly. Dispatching over
+ * the common {{@code IUnion<?>}} instead of the union's own type means
+ * a single serializer for *all* the named unions, and not one per union.
+ *
+ * <p>Should a named union ever be allowed to flatten a primitive or an
+ * enumeration alternative, only this body has to change -- every call site
+ * stays the same.
+ */
+private static JsonNode transformUnion(IUnion<?> that) {{
+{I}return transformClass(that.getUnderlying());
+}}"""
+    )
+
+
+def _generate_transform_property(prop: intermediate.Property) -> Stripped:
+    """
+    Generate the snippet to transform a property into a JSON node.
+
+    Every property is now the very same statement -- a key and the value
+    serialized by the function of its kind -- because a list and a tuple have
+    a named serializer of their own just like everything else (see
+    :py:func:`_serializer_name`). They used to be the exception, composing
+    their item serializers at the call site into a named temporary which
+    the next line then handed over.
+
+    We set instead of putting, for a ``String`` as much as for anything else:
+    ``ObjectNode.put(String, JsonNode)`` is deprecated in Jackson, and
+    a constrained ``String`` already went through ``set``.
+    """
     type_anno = intermediate.beneath_optional(prop.type_annotation)
-
-    stmts = []  # type: List[Stripped]
 
     getter_name = java_naming.getter_name(prop.name)
     prop_literal = java_common.string_literal(prop.json_name)
 
-    source_expr: Stripped
+    is_optional = isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
 
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        source_expr = Stripped(f"that.{getter_name}().get()")
-    else:
-        source_expr = Stripped(f"that.{getter_name}()")
+    source_expr = Stripped(
+        f"that.{getter_name}().get()" if is_optional else f"that.{getter_name}()"
+    )
 
-    if isinstance(
-        type_anno,
-        intermediate.PrimitiveTypeAnnotation,
-    ):
-        conversion_expr = _generate_serialize_atomic_value(
-            type_annotation=type_anno, source_expr=source_expr
-        )
+    #: The statement sits one level deeper when the property is optional, as
+    #: it is then wrapped in an ``if``.
+    indentation = _FUNCTION_BODY_INDENTATION + (len(I) if is_optional else 0)
 
-        # NOTE (empwilli):
-        # We have to use ObjectNode.put for Strings but the function is deprecated for JsonObjects.
-        if type_anno.a_type == intermediate.PrimitiveType.STR:
-            stmts.append(Stripped(f"result.put({prop_literal}, {conversion_expr});"))
+    conversion: Stripped
+
+    if isinstance(type_anno, intermediate.ContainerTypeAnnotationAsTuple):
+        # NOTE (mristin):
+        # That the items are atomic is asserted in
+        # :py:func:`_item_type_annotations`, which names the offending type,
+        # and through which every use of the items goes.
+        name = _serializer_name(type_anno)
+
+        one_liner = Stripped(f"{name}({source_expr})")
+        prefix_length = indentation + len(f"result.set({prop_literal}, ") + len(");")
+
+        if prefix_length + len(one_liner) <= _MAX_LINE_LENGTH:
+            conversion = one_liner
         else:
-            stmts.append(Stripped(f"result.set({prop_literal}, {conversion_expr});"))
-    elif isinstance(
-        type_anno,
-        intermediate.OurTypeAnnotation,
-    ):
-        conversion_expr = _generate_serialize_atomic_value(
-            type_annotation=type_anno, source_expr=source_expr
-        )
-        stmts.append(Stripped(f"result.set({prop_literal}, {conversion_expr});"))
-    elif isinstance(type_anno, intermediate.ListTypeAnnotation):
-        assert isinstance(type_anno.items, intermediate.AtomicTypeAnnotationAsTuple), (
-            f"We only support lists of atomic values (primitives, constrained "
-            f"primitives, enumeration literals) or classes when serializing "
-            f"to JSON, but the property {prop.name!r} has the unsupported "
-            f"nested type {prop.type_annotation}. Please contact the "
-            f"developers if you need this feature."
-        )
-
-        array_var = java_naming.variable_name(Identifier(f"array_{prop.name}"))
-
-        item_serializer = _serialize_method_reference_for_atomic_value(type_anno.items)
-
-        stmts.append(
-            Stripped(
+            # We can not use textwrap due to indent_but_first_line.
+            conversion = Stripped(
                 f"""\
-final ArrayNode {array_var} = serializeArray(
-{I}{source_expr},
-{I}{item_serializer});
-result.set({prop_literal}, {array_var});"""
+{name}(
+{I}{indent_but_first_line(source_expr, I)})"""
             )
-        )
-    elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-        arity = len(type_anno.items)
-        array_var = java_naming.variable_name(Identifier(f"array_{prop.name}"))
-
-        item_serializers = []  # type: List[Stripped]
-        for item_type_anno in type_anno.items:
-            assert isinstance(
-                item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
-            ), (
-                f"Expected an atomic tuple item (a primitive, a constrained "
-                f"primitive, an enumeration or a class), but got {item_type_anno}. "
-                f"This should have already been verified in "
-                f"intermediate._translate._verify_only_simple_type_patterns."
-            )
-
-            item_serializers.append(
-                _serialize_method_reference_for_atomic_value(item_type_anno)
-            )
-
-        joined_item_serializers = ",\n".join(item_serializers)
-
-        stmts.append(
-            Stripped(
-                f"""\
-final ArrayNode {array_var} = serializeTuple{arity}(
-{I}{source_expr},
-{I}{indent_but_first_line(joined_item_serializers, I)});
-result.set({prop_literal}, {array_var});"""
-            )
-        )
     else:
-        assert_never(type_anno)
+        conversion = _serialize_call(
+            type_anno=type_anno,
+            source_expr=source_expr,
+            indentation=indentation + len(f"result.set({prop_literal}, "),
+        )
 
-    serialize_block = Stripped("\n".join(stmts))
-    if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-        return (
-            Stripped(
-                f"""\
+    statement = Stripped(f"result.set({prop_literal}, {conversion});")
+
+    if not is_optional:
+        return statement
+
+    # We can not use textwrap due to indent_but_first_line.
+    return Stripped(
+        f"""\
 if (that.{getter_name}().isPresent()) {{
-{I}{indent_but_first_line(serialize_block, I)}
+{I}{indent_but_first_line(statement, I)}
 }}"""
-            ),
-            None,
-        )
-    else:
-        return serialize_block, None
+    )
 
 
-@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
-def _generate_transform_for_class(
-    cls: intermediate.ConcreteClass,
-) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
+def _generate_transform_for_class(cls: intermediate.ConcreteClass) -> Stripped:
     """Generate the transform method to a JSON object for the given concrete class."""
-    errors = []  # type: List[Error]
-
     blocks = [
         Stripped("final ObjectNode result = JsonNodeFactory.instance.objectNode();"),
     ]  # type: List[Stripped]
 
     for prop in cls.properties:
-        block, error = _generate_transform_property(prop=prop)
-        if error is not None:
-            errors.append(error)
-        else:
-            assert block is not None
-            blocks.append(block)
-
-    if len(errors) > 0:
-        return None, errors
+        blocks.append(_generate_transform_property(prop=prop))
 
     if cls.serialization is not None and cls.serialization.with_model_type:
         model_type = java_common.string_literal(naming.json_model_type(cls.name))
@@ -1925,49 +2039,87 @@ public JsonNode {transform_name}(
 
     writer.write("\n}")
 
-    return Stripped(writer.getvalue()), None
+    return Stripped(writer.getvalue())
 
 
-def _generate_union_transform_helper() -> Stripped:
+def _composed_serializer_type_annotations(
+    symbol_table: intermediate.SymbolTable,
+) -> List[intermediate.ContainerTypeAnnotation]:
     """
-    Generate a single ``transform`` overload shared by every named union.
+    List the list- and tuple-typed values which need a serializer of their own.
 
-    A named union is not itself an ``IClass``, so it can not be dispatched by
-    the inherited, ``IClass``-typed ``transform(IClass)`` overload of
-    ``AbstractTransformer``. We add this overload, single-purpose, next to
-    the per-class ``transform_*`` overrides, so that call sites can keep
-    passing ``transform`` around as a plain method reference or calling it
-    directly, regardless of whether the value at hand is a class instance or
-    a named union -- see :py:func:`_generate_serialize_atomic_value` and
-    :py:func:`_serialize_method_reference_for_atomic_value`.
+    This is the writing twin of :py:func:`_composed_type_annotations`, and
+    deliberately not the same function.
 
-    Dispatching over the common ``IUnion<?>`` (see ``_generate_iunion`` in
-    ``_generate_types.py``) instead of the union's own type means we need
-    only this one overload for *all* named unions, not one per union.
+    Only a list and a tuple have no function of their own to be named after,
+    so only they are composed out of the serialization of their items.
 
-    Should a named union ever be allowed to flatten primitive or enumeration
-    alternatives, only the body of this method has to change (to dispatch on
-    the underlying value's kind) -- every call site stays the same.
+    The result is de-duplicated by the name of the serializer, which follows
+    the kinds of the items (see :py:func:`_serializer_name`), so it is
+    strictly shorter than the de-serialization's list of the same shape: every
+    list of a class collapses onto one entry here, where each item type still
+    needs a parser of its own there.
+
+    An implementation-specific class is scanned as well, although its own
+    method is given as a snippet: the snippet still serializes the properties
+    of that very class, and hence may well call the serializers of their
+    types.
     """
+    result = []  # type: List[intermediate.ContainerTypeAnnotation]
+    observed = set()  # type: Set[str]
+
+    for cls in symbol_table.concrete_classes:
+        for prop in cls.properties:
+            type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+            if not isinstance(
+                type_anno,
+                (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
+            ):
+                continue
+
+            name = _serializer_name(type_anno)
+            if name not in observed:
+                observed.add(name)
+                result.append(type_anno)
+
+    return result
+
+
+def _called_serialize_functions(
+    symbol_table: intermediate.SymbolTable,
+) -> Set[Stripped]:
+    """
+    Collect the conversion functions the meta-model actually calls.
+
+    This is the gating, and it follows the call graph literally: the very
+    function which names a call decides whether that call can occur at all, so
+    a helper can not be gated on one condition and called under another.
+    A property is collected as well as an item, since a conversion is the same
+    call in either position.
+    """
+    result = set()  # type: Set[Stripped]
+
+    for cls in symbol_table.concrete_classes:
+        for prop in cls.properties:
+            type_anno = intermediate.beneath_optional(prop.type_annotation)
+
+            item_type_annos = (
+                _item_type_annotations(type_anno)
+                if isinstance(type_anno, intermediate.ContainerTypeAnnotationAsTuple)
+                else [type_anno]
+            )
+
+            for item_type_anno in item_type_annos:
+                result.add(_serialize_function(item_type_anno))
+
+    return result
+
+
+def _generate_to_json_node_helper() -> Stripped:
+    """Generate the conversion of a 64-bit integer, which JSON can not hold."""
     return Stripped(
         f"""\
-private JsonNode transform(IUnion<?> that) {{
-{I}return transform(that.getUnderlying());
-}}"""
-    )
-
-
-@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
-def _generate_transformer(
-    symbol_table: intermediate.SymbolTable,
-    spec_impls: specific_implementations.SpecificImplementations,
-) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
-    """Generate a transformer which transforms instances of the meta-model to JSON."""
-    errors = []  # type: List[Error]
-
-    blocks = [
-        Stripped(
-            f"""\
 /**
  * Convert {{@code that}} 64-bit long integer to a JSON value.
  *
@@ -1982,9 +2134,13 @@ private static JsonNode toJsonNode(Long that) {{
 {I}}}
 {I}return JsonNodeFactory.instance.numberNode(that);
 }}"""
-        ),
-        Stripped(
-            f"""\
+    )
+
+
+def _generate_bytes_to_json_node_helper() -> Stripped:
+    """Generate the conversion of a byte array into a base64 JSON string."""
+    return Stripped(
+        f"""\
 /**
  * Convert {{@code that}} byte array to a JSON value.
  *
@@ -1994,31 +2150,48 @@ private static JsonNode bytesToJsonNode(byte[] that) {{
 {I}return JsonNodeFactory.instance.textNode(
 {II}Base64.getEncoder().encodeToString(that));
 }}"""
-        ),
+    )
+
+
+@ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
+def _generate_transformer(
+    symbol_table: intermediate.SymbolTable,
+    spec_impls: specific_implementations.SpecificImplementations,
+) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
+    """Generate a transformer which transforms instances of the meta-model to JSON."""
+    errors = []  # type: List[Error]
+
+    # NOTE (mristin):
+    # The gating follows the call graph, exactly as it does on the reading
+    # side: a model which never serializes a byte array pays for neither
+    # the base64 conversion nor the import it needs.
+    called = _called_serialize_functions(symbol_table)
+
+    blocks = [
         Stripped(
-            f"""\
+            """\
 /**
- * Serialize every item of {{@code items}} with {{@code serializeItem}} into
- * a JSON array.
+ * Dispatch the serialization over the run-time type of an instance.
  *
- * @param items to be serialized
- * @param serializeItem to serialize a single item of {{@code items}}
+ * <p>The transformer carries no state, so a single instance serves
+ * the whole program.
  */
-private static <T> ArrayNode serializeArray(
-{I}Iterable<T> items,
-{I}Function<T, JsonNode> serializeItem) {{
-{I}final ArrayNode result = JsonNodeFactory.instance.arrayNode();
-{I}for (T item : items) {{
-{II}result.add(
-{III}serializeItem.apply(item));
-{I}}}
-{I}return result;
-}}"""
+private static final _Transformer INSTANCE = new _Transformer();"""
         ),
+        _generate_transform_class_helper(),
     ]  # type: List[Stripped]
 
-    for arity in intermediate.tuple_arities(symbol_table):
-        blocks.append(_generate_serialize_tuple_helper(arity=arity))
+    if Stripped("transformUnion") in called:
+        blocks.append(_generate_transform_union_helper())
+
+    if Stripped("toJsonNode") in called:
+        blocks.append(_generate_to_json_node_helper())
+
+    if Stripped("bytesToJsonNode") in called:
+        blocks.append(_generate_bytes_to_json_node_helper())
+
+    for type_anno in _composed_serializer_type_annotations(symbol_table):
+        blocks.append(_generate_composed_serializer(type_anno))
 
     for our_type in symbol_table.our_types:
         if isinstance(our_type, intermediate.Enumeration):
@@ -2052,24 +2225,16 @@ private static <T> ArrayNode serializeArray(
 
                 blocks.append(spec_impls[implementation_key])
             else:
-                block, cls_errors = _generate_transform_for_class(cls=our_type)
-                if cls_errors is not None:
-                    errors.extend(cls_errors)
-                else:
-                    assert block is not None
-                    blocks.append(block)
+                blocks.append(_generate_transform_for_class(cls=our_type))
 
         elif isinstance(our_type, intermediate.NamedUnion):
             # A named union is never double-dispatched here directly -- it
-            # is unwrapped by the single shared ``transform(IUnion<?>)``
-            # overload instead (see :py:func:`_generate_union_transform_helper`).
+            # is unwrapped by the single shared ``transformUnion`` instead
+            # (see :py:func:`_generate_transform_union_helper`).
             pass
 
         else:
             assert_never(our_type)
-
-    if len(symbol_table.named_unions) > 0:
-        blocks.append(_generate_union_transform_helper())
 
     if len(errors) > 0:
         return None, errors
@@ -2096,14 +2261,13 @@ def _generate_serialize(
 ) -> Stripped:
     """Generate the static serializer."""
     blocks = [
-        Stripped("private static final _Transformer transformer = new _Transformer();"),
         Stripped(
             f"""\
 /**
  * Serialize an instance of the meta-model into a JSON object.
  */
 public static JsonNode toJsonObject(IClass that) {{
-{I}return transformer.transform(that);
+{I}return _Transformer.transformClass(that);
 }}"""
         ),
     ]  # type: List[Stripped]
@@ -2138,10 +2302,10 @@ public static JsonNode {enum_to_json_value_name}(IEnum that) {{
             )
         )
 
-        for enum in symbol_table.enumerations:
-            name = java_naming.enum_name(enum.name)
+        for enumeration in symbol_table.enumerations:
+            name = java_naming.enum_name(enumeration.name)
             method_name = java_naming.method_name(
-                Identifier(f"{enum.name}_to_json_value")
+                Identifier(f"{enumeration.name}_to_json_value")
             )
             blocks.append(
                 Stripped(
@@ -2226,6 +2390,20 @@ def generate(
     """
     errors = []  # type: List[Error]
 
+    # NOTE (mristin):
+    # An ``ArrayNode`` is only ever built by a composed serializer, and
+    # a ``Function`` is only ever taken by ``tryEnumFrom`` and by the array and
+    # the tuple parsers, so a model which composes nothing needs neither
+    # import. The serialization no longer takes a ``Function`` at all -- every
+    # composed serializer writes out its loop and calls the conversions
+    # directly (see :py:func:`_generate_composed_serializer`).
+    composes_a_container = len(_composed_serializer_type_annotations(symbol_table)) > 0
+
+    needs_function = (
+        len(symbol_table.enumerations) > 0
+        or len(_composed_type_annotations(symbol_table)) > 0
+    )
+
     imports = [
         Stripped(f"import {package}.common.*;"),
         Stripped(f"import {package}.reporting.Reporting;"),
@@ -2235,12 +2413,23 @@ def generate(
         Stripped(f"import {package}.stringification.Stringification;"),
         Stripped(f"import {package}.visitation.AbstractTransformer;"),
         Stripped("import com.fasterxml.jackson.databind.JsonNode;"),
-        Stripped("import com.fasterxml.jackson.databind.node.ArrayNode;"),
-        Stripped("import com.fasterxml.jackson.databind.node.JsonNodeFactory;"),
-        Stripped("import com.fasterxml.jackson.databind.node.ObjectNode;"),
-        Stripped("import java.util.*;"),
-        Stripped("import java.util.function.Function;"),
     ]  # type: List[Stripped]
+
+    if composes_a_container:
+        imports.append(
+            Stripped("import com.fasterxml.jackson.databind.node.ArrayNode;")
+        )
+
+    imports.extend(
+        [
+            Stripped("import com.fasterxml.jackson.databind.node.JsonNodeFactory;"),
+            Stripped("import com.fasterxml.jackson.databind.node.ObjectNode;"),
+            Stripped("import java.util.*;"),
+        ]
+    )
+
+    if needs_function:
+        imports.append(Stripped("import java.util.function.Function;"))
 
     deserialize_impl_block, deserialize_impl_errors = _generate_deserialize_impl(
         symbol_table=symbol_table, spec_impls=spec_impls
