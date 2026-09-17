@@ -13,11 +13,9 @@ import dummy.types.model.*;
 import dummy.stringification.Stringification;
 import dummy.visitation.AbstractTransformer;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.*;
-import java.util.function.Function;
 
 /**
  * Provide de/serialization of meta-model classes to/from JSON.
@@ -839,6 +837,31 @@ public class Jsonization {
 
     private static class _Transformer extends AbstractTransformer<JsonNode> {
       /**
+       * Dispatch the serialization over the run-time type of an instance.
+       *
+       * <p>The transformer carries no state, so a single instance serves
+       * the whole program.
+       */
+      private static final _Transformer INSTANCE = new _Transformer();
+
+      /**
+       * Serialize {@code that} into a JSON object.
+       *
+       * <p>Which JSON object that is, is decided by the run-time type of
+       * {@code that}, so this one serializer serves every abstract class, every
+       * concrete class with descendants, and the item of a list or of a tuple of
+       * any class at all. The de-serialization, which has to decide what to
+       * construct before it has read anything, needs a dispatcher per interface
+       * instead.
+       *
+       * <p>It is static, so that a composed serializer -- which is static as well,
+       * since it carries no state either -- can reach it.
+       */
+      static JsonNode transformClass(IClass that) {
+        return INSTANCE.transform(that);
+      }
+
+      /**
        * Convert {@code that} 64-bit long integer to a JSON value.
        *
        * @param that value to be converted
@@ -853,45 +876,15 @@ public class Jsonization {
         return JsonNodeFactory.instance.numberNode(that);
       }
 
-      /**
-       * Convert {@code that} byte array to a JSON value.
-       *
-       * @param that value to be converted
-       */
-      private static JsonNode bytesToJsonNode(byte[] that) {
-        return JsonNodeFactory.instance.textNode(
-          Base64.getEncoder().encodeToString(that));
-      }
-
-      /**
-       * Serialize every item of {@code items} with {@code serializeItem} into
-       * a JSON array.
-       *
-       * @param items to be serialized
-       * @param serializeItem to serialize a single item of {@code items}
-       */
-      private static <T> ArrayNode serializeArray(
-        Iterable<T> items,
-        Function<T, JsonNode> serializeItem) {
-        final ArrayNode result = JsonNodeFactory.instance.arrayNode();
-        for (T item : items) {
-          result.add(
-            serializeItem.apply(item));
-        }
-        return result;
-      }
-
       @Override
       public JsonNode transformBranch(
         IBranch that
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.put("identifier", JsonNodeFactory.instance.textNode(
-          that.getIdentifier()));
+        result.set("identifier", JsonNodeFactory.instance.textNode(that.getIdentifier()));
 
-        result.put("description", JsonNodeFactory.instance.textNode(
-          that.getDescription()));
+        result.set("description", JsonNodeFactory.instance.textNode(that.getDescription()));
 
         result.put("modelType", "Branch");
 
@@ -904,14 +897,11 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.put("identifier", JsonNodeFactory.instance.textNode(
-          that.getIdentifier()));
+        result.set("identifier", JsonNodeFactory.instance.textNode(that.getIdentifier()));
 
-        result.put("description", JsonNodeFactory.instance.textNode(
-          that.getDescription()));
+        result.set("description", JsonNodeFactory.instance.textNode(that.getDescription()));
 
-        result.set("value", _Transformer.toJsonNode(
-          that.getValue()));
+        result.set("value", toJsonNode(that.getValue()));
 
         result.put("modelType", "Leaf");
 
@@ -924,17 +914,13 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.put("identifier", JsonNodeFactory.instance.textNode(
-          that.getIdentifier()));
+        result.set("identifier", JsonNodeFactory.instance.textNode(that.getIdentifier()));
 
-        result.put("description", JsonNodeFactory.instance.textNode(
-          that.getDescription()));
+        result.set("description", JsonNodeFactory.instance.textNode(that.getDescription()));
 
-        result.set("value", _Transformer.toJsonNode(
-          that.getValue()));
+        result.set("value", toJsonNode(that.getValue()));
 
-        result.put("details", JsonNodeFactory.instance.textNode(
-          that.getDetails()));
+        result.set("details", JsonNodeFactory.instance.textNode(that.getDetails()));
 
         result.put("modelType", "Blossom");
 
@@ -947,11 +933,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("someChoice", transform(
-          that.getSomeChoice()));
+        result.set("someChoice", transformClass(that.getSomeChoice()));
 
-        result.set("somethingWithoutChoice", transform(
-          that.getSomethingWithoutChoice()));
+        result.set("somethingWithoutChoice", transformClass(that.getSomethingWithoutChoice()));
 
         return result;
       }
@@ -962,11 +946,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("node", transform(
-          that.getNode()));
+        result.set("node", transformClass(that.getNode()));
 
-        result.set("something", transform(
-          that.getSomething()));
+        result.set("something", transformClass(that.getSomething()));
 
         return result;
       }
@@ -986,13 +968,11 @@ public class Jsonization {
      */
     public static class Serialize
     {
-      private static final _Transformer transformer = new _Transformer();
-
       /**
        * Serialize an instance of the meta-model into a JSON object.
        */
       public static JsonNode toJsonObject(IClass that) {
-        return transformer.transform(that);
+        return _Transformer.transformClass(that);
       }
     }
 }

@@ -638,6 +638,31 @@ public class Jsonization {
 
     private static class _Transformer extends AbstractTransformer<JsonNode> {
       /**
+       * Dispatch the serialization over the run-time type of an instance.
+       *
+       * <p>The transformer carries no state, so a single instance serves
+       * the whole program.
+       */
+      private static final _Transformer INSTANCE = new _Transformer();
+
+      /**
+       * Serialize {@code that} into a JSON object.
+       *
+       * <p>Which JSON object that is, is decided by the run-time type of
+       * {@code that}, so this one serializer serves every abstract class, every
+       * concrete class with descendants, and the item of a list or of a tuple of
+       * any class at all. The de-serialization, which has to decide what to
+       * construct before it has read anything, needs a dispatcher per interface
+       * instead.
+       *
+       * <p>It is static, so that a composed serializer -- which is static as well,
+       * since it carries no state either -- can reach it.
+       */
+      static JsonNode transformClass(IClass that) {
+        return INSTANCE.transform(that);
+      }
+
+      /**
        * Convert {@code that} 64-bit long integer to a JSON value.
        *
        * @param that value to be converted
@@ -653,29 +678,15 @@ public class Jsonization {
       }
 
       /**
-       * Convert {@code that} byte array to a JSON value.
+       * Serialize every item of {@code that} into a JSON array.
        *
-       * @param that value to be converted
+       * @param that to be serialized
        */
-      private static JsonNode bytesToJsonNode(byte[] that) {
-        return JsonNodeFactory.instance.textNode(
-          Base64.getEncoder().encodeToString(that));
-      }
-
-      /**
-       * Serialize every item of {@code items} with {@code serializeItem} into
-       * a JSON array.
-       *
-       * @param items to be serialized
-       * @param serializeItem to serialize a single item of {@code items}
-       */
-      private static <T> ArrayNode serializeArray(
-        Iterable<T> items,
-        Function<T, JsonNode> serializeItem) {
+      private static ArrayNode serializeListOf_IClass(
+        List<? extends IClass> that) {
         final ArrayNode result = JsonNodeFactory.instance.arrayNode();
-        for (T item : items) {
-          result.add(
-            serializeItem.apply(item));
+        for (IClass item : that) {
+          result.add(transformClass(item));
         }
         return result;
       }
@@ -686,8 +697,7 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.put("name", JsonNodeFactory.instance.textNode(
-          that.getName()));
+        result.set("name", JsonNodeFactory.instance.textNode(that.getName()));
 
         result.put("modelType", "SomeItem");
 
@@ -700,8 +710,7 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("serialNumber", _Transformer.toJsonNode(
-          that.getSerialNumber()));
+        result.set("serialNumber", toJsonNode(that.getSerialNumber()));
 
         result.put("modelType", "AnotherItem");
 
@@ -714,8 +723,7 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.put("name", JsonNodeFactory.instance.textNode(
-          that.getName()));
+        result.set("name", JsonNodeFactory.instance.textNode(that.getName()));
 
         return result;
       }
@@ -726,15 +734,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        final ArrayNode arraySomeItems = serializeArray(
-          that.getSomeItems(),
-          this::transform);
-        result.set("someItems", arraySomeItems);
+        result.set("someItems", serializeListOf_IClass(that.getSomeItems()));
 
-        final ArrayNode arraySomeSimples = serializeArray(
-          that.getSomeSimples(),
-          this::transform);
-        result.set("someSimples", arraySomeSimples);
+        result.set("someSimples", serializeListOf_IClass(that.getSomeSimples()));
 
         return result;
       }
@@ -754,13 +756,11 @@ public class Jsonization {
      */
     public static class Serialize
     {
-      private static final _Transformer transformer = new _Transformer();
-
       /**
        * Serialize an instance of the meta-model into a JSON object.
        */
       public static JsonNode toJsonObject(IClass that) {
-        return transformer.transform(that);
+        return _Transformer.transformClass(that);
       }
     }
 }

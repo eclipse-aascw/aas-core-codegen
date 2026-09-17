@@ -6542,18 +6542,28 @@ public class Jsonization {
 
     private static class _Transformer extends AbstractTransformer<JsonNode> {
       /**
-       * Convert {@code that} 64-bit long integer to a JSON value.
+       * Dispatch the serialization over the run-time type of an instance.
        *
-       * @param that value to be converted
+       * <p>The transformer carries no state, so a single instance serves
+       * the whole program.
        */
-      private static JsonNode toJsonNode(Long that) {
-        // We need to check that we can perform a lossless conversion.
-        long primitiveThat = that.longValue();
-        if ((long)((double)primitiveThat) != primitiveThat) {
-          throw new IllegalArgumentException(
-            "The number can not be losslessly represented in JSON: " + that);
-        }
-        return JsonNodeFactory.instance.numberNode(that);
+      private static final _Transformer INSTANCE = new _Transformer();
+
+      /**
+       * Serialize {@code that} into a JSON object.
+       *
+       * <p>Which JSON object that is, is decided by the run-time type of
+       * {@code that}, so this one serializer serves every abstract class, every
+       * concrete class with descendants, and the item of a list or of a tuple of
+       * any class at all. The de-serialization, which has to decide what to
+       * construct before it has read anything, needs a dispatcher per interface
+       * instead.
+       *
+       * <p>It is static, so that a composed serializer -- which is static as well,
+       * since it carries no state either -- can reach it.
+       */
+      static JsonNode transformClass(IClass that) {
+        return INSTANCE.transform(that);
       }
 
       /**
@@ -6567,19 +6577,15 @@ public class Jsonization {
       }
 
       /**
-       * Serialize every item of {@code items} with {@code serializeItem} into
-       * a JSON array.
+       * Serialize every item of {@code that} into a JSON array.
        *
-       * @param items to be serialized
-       * @param serializeItem to serialize a single item of {@code items}
+       * @param that to be serialized
        */
-      private static <T> ArrayNode serializeArray(
-        Iterable<T> items,
-        Function<T, JsonNode> serializeItem) {
+      private static ArrayNode serializeListOf_IClass(
+        List<? extends IClass> that) {
         final ArrayNode result = JsonNodeFactory.instance.arrayNode();
-        for (T item : items) {
-          result.add(
-            serializeItem.apply(item));
+        for (IClass item : that) {
+          result.add(transformClass(item));
         }
         return result;
       }
@@ -6591,35 +6597,26 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transform(
-            that.getSemanticId().get()));
+          result.set("semanticId", transformClass(that.getSemanticId().get()));
         }
 
         if (that.getSupplementalSemanticIds().isPresent()) {
-          final ArrayNode arraySupplementalSemanticIds = serializeArray(
-            that.getSupplementalSemanticIds().get(),
-            this::transform);
-          result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
+          result.set("supplementalSemanticIds", serializeListOf_IClass(
+            that.getSupplementalSemanticIds().get()));
         }
 
-        result.set("name", JsonNodeFactory.instance.textNode(
-          that.getName()));
+        result.set("name", JsonNodeFactory.instance.textNode(that.getName()));
 
         if (that.getValueType().isPresent()) {
-          result.set("valueType", Serialize.dataTypeDefXsdToJsonValue(
-            that.getValueType().get()));
+          result.set("valueType", Serialize.toJsonValue(that.getValueType().get()));
         }
 
         if (that.getValue().isPresent()) {
-          result.set("value", JsonNodeFactory.instance.textNode(
-            that.getValue().get()));
+          result.set("value", JsonNodeFactory.instance.textNode(that.getValue().get()));
         }
 
         if (that.getRefersTo().isPresent()) {
-          final ArrayNode arrayRefersTo = serializeArray(
-            that.getRefersTo().get(),
-            this::transform);
-          result.set("refersTo", arrayRefersTo);
+          result.set("refersTo", serializeListOf_IClass(that.getRefersTo().get()));
         }
 
         return result;
@@ -6632,30 +6629,24 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
-          final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
-            that.getEmbeddedDataSpecifications().get(),
-            this::transform);
-          result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
+          result.set("embeddedDataSpecifications", serializeListOf_IClass(
+            that.getEmbeddedDataSpecifications().get()));
         }
 
         if (that.getVersion().isPresent()) {
-          result.set("version", JsonNodeFactory.instance.textNode(
-            that.getVersion().get()));
+          result.set("version", JsonNodeFactory.instance.textNode(that.getVersion().get()));
         }
 
         if (that.getRevision().isPresent()) {
-          result.set("revision", JsonNodeFactory.instance.textNode(
-            that.getRevision().get()));
+          result.set("revision", JsonNodeFactory.instance.textNode(that.getRevision().get()));
         }
 
         if (that.getCreator().isPresent()) {
-          result.set("creator", transform(
-            that.getCreator().get()));
+          result.set("creator", transformClass(that.getCreator().get()));
         }
 
         if (that.getTemplateId().isPresent()) {
-          result.set("templateId", JsonNodeFactory.instance.textNode(
-            that.getTemplateId().get()));
+          result.set("templateId", JsonNodeFactory.instance.textNode(that.getTemplateId().get()));
         }
 
         return result;
@@ -6668,36 +6659,28 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transform(
-            that.getSemanticId().get()));
+          result.set("semanticId", transformClass(that.getSemanticId().get()));
         }
 
         if (that.getSupplementalSemanticIds().isPresent()) {
-          final ArrayNode arraySupplementalSemanticIds = serializeArray(
-            that.getSupplementalSemanticIds().get(),
-            this::transform);
-          result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
+          result.set("supplementalSemanticIds", serializeListOf_IClass(
+            that.getSupplementalSemanticIds().get()));
         }
 
         if (that.getKind().isPresent()) {
-          result.set("kind", Serialize.qualifierKindToJsonValue(
-            that.getKind().get()));
+          result.set("kind", Serialize.toJsonValue(that.getKind().get()));
         }
 
-        result.set("type", JsonNodeFactory.instance.textNode(
-          that.getType()));
+        result.set("type", JsonNodeFactory.instance.textNode(that.getType()));
 
-        result.set("valueType", Serialize.dataTypeDefXsdToJsonValue(
-          that.getValueType()));
+        result.set("valueType", Serialize.toJsonValue(that.getValueType()));
 
         if (that.getValue().isPresent()) {
-          result.set("value", JsonNodeFactory.instance.textNode(
-            that.getValue().get()));
+          result.set("value", JsonNodeFactory.instance.textNode(that.getValue().get()));
         }
 
         if (that.getValueId().isPresent()) {
-          result.set("valueId", transform(
-            that.getValueId().get()));
+          result.set("valueId", transformClass(that.getValueId().get()));
         }
 
         return result;
@@ -6710,64 +6693,44 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getExtensions().isPresent()) {
-          final ArrayNode arrayExtensions = serializeArray(
-            that.getExtensions().get(),
-            this::transform);
-          result.set("extensions", arrayExtensions);
+          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
         }
 
         if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(
-            that.getCategory().get()));
+          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
         }
 
         if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(
-            that.getIdShort().get()));
+          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
         }
 
         if (that.getDisplayName().isPresent()) {
-          final ArrayNode arrayDisplayName = serializeArray(
-            that.getDisplayName().get(),
-            this::transform);
-          result.set("displayName", arrayDisplayName);
+          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
         }
 
         if (that.getDescription().isPresent()) {
-          final ArrayNode arrayDescription = serializeArray(
-            that.getDescription().get(),
-            this::transform);
-          result.set("description", arrayDescription);
+          result.set("description", serializeListOf_IClass(that.getDescription().get()));
         }
 
         if (that.getAdministration().isPresent()) {
-          result.set("administration", transform(
-            that.getAdministration().get()));
+          result.set("administration", transformClass(that.getAdministration().get()));
         }
 
-        result.set("id", JsonNodeFactory.instance.textNode(
-          that.getId()));
+        result.set("id", JsonNodeFactory.instance.textNode(that.getId()));
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
-          final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
-            that.getEmbeddedDataSpecifications().get(),
-            this::transform);
-          result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
+          result.set("embeddedDataSpecifications", serializeListOf_IClass(
+            that.getEmbeddedDataSpecifications().get()));
         }
 
         if (that.getDerivedFrom().isPresent()) {
-          result.set("derivedFrom", transform(
-            that.getDerivedFrom().get()));
+          result.set("derivedFrom", transformClass(that.getDerivedFrom().get()));
         }
 
-        result.set("assetInformation", transform(
-          that.getAssetInformation()));
+        result.set("assetInformation", transformClass(that.getAssetInformation()));
 
         if (that.getSubmodels().isPresent()) {
-          final ArrayNode arraySubmodels = serializeArray(
-            that.getSubmodels().get(),
-            this::transform);
-          result.set("submodels", arraySubmodels);
+          result.set("submodels", serializeListOf_IClass(that.getSubmodels().get()));
         }
 
         result.put("modelType", "AssetAdministrationShell");
@@ -6781,8 +6744,7 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("assetKind", Serialize.assetKindToJsonValue(
-          that.getAssetKind()));
+        result.set("assetKind", Serialize.toJsonValue(that.getAssetKind()));
 
         if (that.getGlobalAssetId().isPresent()) {
           result.set("globalAssetId", JsonNodeFactory.instance.textNode(
@@ -6790,20 +6752,15 @@ public class Jsonization {
         }
 
         if (that.getSpecificAssetIds().isPresent()) {
-          final ArrayNode arraySpecificAssetIds = serializeArray(
-            that.getSpecificAssetIds().get(),
-            this::transform);
-          result.set("specificAssetIds", arraySpecificAssetIds);
+          result.set("specificAssetIds", serializeListOf_IClass(that.getSpecificAssetIds().get()));
         }
 
         if (that.getAssetType().isPresent()) {
-          result.set("assetType", JsonNodeFactory.instance.textNode(
-            that.getAssetType().get()));
+          result.set("assetType", JsonNodeFactory.instance.textNode(that.getAssetType().get()));
         }
 
         if (that.getDefaultThumbnail().isPresent()) {
-          result.set("defaultThumbnail", transform(
-            that.getDefaultThumbnail().get()));
+          result.set("defaultThumbnail", transformClass(that.getDefaultThumbnail().get()));
         }
 
         return result;
@@ -6815,12 +6772,10 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("path", JsonNodeFactory.instance.textNode(
-          that.getPath()));
+        result.set("path", JsonNodeFactory.instance.textNode(that.getPath()));
 
         if (that.getContentType().isPresent()) {
-          result.set("contentType", JsonNodeFactory.instance.textNode(
-            that.getContentType().get()));
+          result.set("contentType", JsonNodeFactory.instance.textNode(that.getContentType().get()));
         }
 
         return result;
@@ -6833,26 +6788,20 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transform(
-            that.getSemanticId().get()));
+          result.set("semanticId", transformClass(that.getSemanticId().get()));
         }
 
         if (that.getSupplementalSemanticIds().isPresent()) {
-          final ArrayNode arraySupplementalSemanticIds = serializeArray(
-            that.getSupplementalSemanticIds().get(),
-            this::transform);
-          result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
+          result.set("supplementalSemanticIds", serializeListOf_IClass(
+            that.getSupplementalSemanticIds().get()));
         }
 
-        result.set("name", JsonNodeFactory.instance.textNode(
-          that.getName()));
+        result.set("name", JsonNodeFactory.instance.textNode(that.getName()));
 
-        result.set("value", JsonNodeFactory.instance.textNode(
-          that.getValue()));
+        result.set("value", JsonNodeFactory.instance.textNode(that.getValue()));
 
         if (that.getExternalSubjectId().isPresent()) {
-          result.set("externalSubjectId", transform(
-            that.getExternalSubjectId().get()));
+          result.set("externalSubjectId", transformClass(that.getExternalSubjectId().get()));
         }
 
         return result;
@@ -6865,80 +6814,55 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getExtensions().isPresent()) {
-          final ArrayNode arrayExtensions = serializeArray(
-            that.getExtensions().get(),
-            this::transform);
-          result.set("extensions", arrayExtensions);
+          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
         }
 
         if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(
-            that.getCategory().get()));
+          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
         }
 
         if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(
-            that.getIdShort().get()));
+          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
         }
 
         if (that.getDisplayName().isPresent()) {
-          final ArrayNode arrayDisplayName = serializeArray(
-            that.getDisplayName().get(),
-            this::transform);
-          result.set("displayName", arrayDisplayName);
+          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
         }
 
         if (that.getDescription().isPresent()) {
-          final ArrayNode arrayDescription = serializeArray(
-            that.getDescription().get(),
-            this::transform);
-          result.set("description", arrayDescription);
+          result.set("description", serializeListOf_IClass(that.getDescription().get()));
         }
 
         if (that.getAdministration().isPresent()) {
-          result.set("administration", transform(
-            that.getAdministration().get()));
+          result.set("administration", transformClass(that.getAdministration().get()));
         }
 
-        result.set("id", JsonNodeFactory.instance.textNode(
-          that.getId()));
+        result.set("id", JsonNodeFactory.instance.textNode(that.getId()));
 
         if (that.getKind().isPresent()) {
-          result.set("kind", Serialize.modellingKindToJsonValue(
-            that.getKind().get()));
+          result.set("kind", Serialize.toJsonValue(that.getKind().get()));
         }
 
         if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transform(
-            that.getSemanticId().get()));
+          result.set("semanticId", transformClass(that.getSemanticId().get()));
         }
 
         if (that.getSupplementalSemanticIds().isPresent()) {
-          final ArrayNode arraySupplementalSemanticIds = serializeArray(
-            that.getSupplementalSemanticIds().get(),
-            this::transform);
-          result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
+          result.set("supplementalSemanticIds", serializeListOf_IClass(
+            that.getSupplementalSemanticIds().get()));
         }
 
         if (that.getQualifiers().isPresent()) {
-          final ArrayNode arrayQualifiers = serializeArray(
-            that.getQualifiers().get(),
-            this::transform);
-          result.set("qualifiers", arrayQualifiers);
+          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
-          final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
-            that.getEmbeddedDataSpecifications().get(),
-            this::transform);
-          result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
+          result.set("embeddedDataSpecifications", serializeListOf_IClass(
+            that.getEmbeddedDataSpecifications().get()));
         }
 
         if (that.getSubmodelElements().isPresent()) {
-          final ArrayNode arraySubmodelElements = serializeArray(
-            that.getSubmodelElements().get(),
-            this::transform);
-          result.set("submodelElements", arraySubmodelElements);
+          result.set("submodelElements", serializeListOf_IClass(that.getSubmodelElements().get()));
         }
 
         result.put("modelType", "Submodel");
@@ -6953,67 +6877,46 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getExtensions().isPresent()) {
-          final ArrayNode arrayExtensions = serializeArray(
-            that.getExtensions().get(),
-            this::transform);
-          result.set("extensions", arrayExtensions);
+          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
         }
 
         if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(
-            that.getCategory().get()));
+          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
         }
 
         if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(
-            that.getIdShort().get()));
+          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
         }
 
         if (that.getDisplayName().isPresent()) {
-          final ArrayNode arrayDisplayName = serializeArray(
-            that.getDisplayName().get(),
-            this::transform);
-          result.set("displayName", arrayDisplayName);
+          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
         }
 
         if (that.getDescription().isPresent()) {
-          final ArrayNode arrayDescription = serializeArray(
-            that.getDescription().get(),
-            this::transform);
-          result.set("description", arrayDescription);
+          result.set("description", serializeListOf_IClass(that.getDescription().get()));
         }
 
         if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transform(
-            that.getSemanticId().get()));
+          result.set("semanticId", transformClass(that.getSemanticId().get()));
         }
 
         if (that.getSupplementalSemanticIds().isPresent()) {
-          final ArrayNode arraySupplementalSemanticIds = serializeArray(
-            that.getSupplementalSemanticIds().get(),
-            this::transform);
-          result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
+          result.set("supplementalSemanticIds", serializeListOf_IClass(
+            that.getSupplementalSemanticIds().get()));
         }
 
         if (that.getQualifiers().isPresent()) {
-          final ArrayNode arrayQualifiers = serializeArray(
-            that.getQualifiers().get(),
-            this::transform);
-          result.set("qualifiers", arrayQualifiers);
+          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
-          final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
-            that.getEmbeddedDataSpecifications().get(),
-            this::transform);
-          result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
+          result.set("embeddedDataSpecifications", serializeListOf_IClass(
+            that.getEmbeddedDataSpecifications().get()));
         }
 
-        result.set("first", transform(
-          that.getFirst()));
+        result.set("first", transformClass(that.getFirst()));
 
-        result.set("second", transform(
-          that.getSecond()));
+        result.set("second", transformClass(that.getSecond()));
 
         result.put("modelType", "RelationshipElement");
 
@@ -7027,60 +6930,41 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getExtensions().isPresent()) {
-          final ArrayNode arrayExtensions = serializeArray(
-            that.getExtensions().get(),
-            this::transform);
-          result.set("extensions", arrayExtensions);
+          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
         }
 
         if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(
-            that.getCategory().get()));
+          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
         }
 
         if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(
-            that.getIdShort().get()));
+          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
         }
 
         if (that.getDisplayName().isPresent()) {
-          final ArrayNode arrayDisplayName = serializeArray(
-            that.getDisplayName().get(),
-            this::transform);
-          result.set("displayName", arrayDisplayName);
+          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
         }
 
         if (that.getDescription().isPresent()) {
-          final ArrayNode arrayDescription = serializeArray(
-            that.getDescription().get(),
-            this::transform);
-          result.set("description", arrayDescription);
+          result.set("description", serializeListOf_IClass(that.getDescription().get()));
         }
 
         if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transform(
-            that.getSemanticId().get()));
+          result.set("semanticId", transformClass(that.getSemanticId().get()));
         }
 
         if (that.getSupplementalSemanticIds().isPresent()) {
-          final ArrayNode arraySupplementalSemanticIds = serializeArray(
-            that.getSupplementalSemanticIds().get(),
-            this::transform);
-          result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
+          result.set("supplementalSemanticIds", serializeListOf_IClass(
+            that.getSupplementalSemanticIds().get()));
         }
 
         if (that.getQualifiers().isPresent()) {
-          final ArrayNode arrayQualifiers = serializeArray(
-            that.getQualifiers().get(),
-            this::transform);
-          result.set("qualifiers", arrayQualifiers);
+          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
-          final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
-            that.getEmbeddedDataSpecifications().get(),
-            this::transform);
-          result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
+          result.set("embeddedDataSpecifications", serializeListOf_IClass(
+            that.getEmbeddedDataSpecifications().get()));
         }
 
         if (that.getOrderRelevant().isPresent()) {
@@ -7089,23 +6973,18 @@ public class Jsonization {
         }
 
         if (that.getSemanticIdListElement().isPresent()) {
-          result.set("semanticIdListElement", transform(
-            that.getSemanticIdListElement().get()));
+          result.set("semanticIdListElement", transformClass(that.getSemanticIdListElement().get()));
         }
 
-        result.set("typeValueListElement", Serialize.aasSubmodelElementsToJsonValue(
-          that.getTypeValueListElement()));
+        result.set("typeValueListElement", Serialize.toJsonValue(that.getTypeValueListElement()));
 
         if (that.getValueTypeListElement().isPresent()) {
-          result.set("valueTypeListElement", Serialize.dataTypeDefXsdToJsonValue(
+          result.set("valueTypeListElement", Serialize.toJsonValue(
             that.getValueTypeListElement().get()));
         }
 
         if (that.getValue().isPresent()) {
-          final ArrayNode arrayValue = serializeArray(
-            that.getValue().get(),
-            this::transform);
-          result.set("value", arrayValue);
+          result.set("value", serializeListOf_IClass(that.getValue().get()));
         }
 
         result.put("modelType", "SubmodelElementList");
@@ -7120,67 +6999,45 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getExtensions().isPresent()) {
-          final ArrayNode arrayExtensions = serializeArray(
-            that.getExtensions().get(),
-            this::transform);
-          result.set("extensions", arrayExtensions);
+          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
         }
 
         if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(
-            that.getCategory().get()));
+          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
         }
 
         if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(
-            that.getIdShort().get()));
+          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
         }
 
         if (that.getDisplayName().isPresent()) {
-          final ArrayNode arrayDisplayName = serializeArray(
-            that.getDisplayName().get(),
-            this::transform);
-          result.set("displayName", arrayDisplayName);
+          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
         }
 
         if (that.getDescription().isPresent()) {
-          final ArrayNode arrayDescription = serializeArray(
-            that.getDescription().get(),
-            this::transform);
-          result.set("description", arrayDescription);
+          result.set("description", serializeListOf_IClass(that.getDescription().get()));
         }
 
         if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transform(
-            that.getSemanticId().get()));
+          result.set("semanticId", transformClass(that.getSemanticId().get()));
         }
 
         if (that.getSupplementalSemanticIds().isPresent()) {
-          final ArrayNode arraySupplementalSemanticIds = serializeArray(
-            that.getSupplementalSemanticIds().get(),
-            this::transform);
-          result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
+          result.set("supplementalSemanticIds", serializeListOf_IClass(
+            that.getSupplementalSemanticIds().get()));
         }
 
         if (that.getQualifiers().isPresent()) {
-          final ArrayNode arrayQualifiers = serializeArray(
-            that.getQualifiers().get(),
-            this::transform);
-          result.set("qualifiers", arrayQualifiers);
+          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
-          final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
-            that.getEmbeddedDataSpecifications().get(),
-            this::transform);
-          result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
+          result.set("embeddedDataSpecifications", serializeListOf_IClass(
+            that.getEmbeddedDataSpecifications().get()));
         }
 
         if (that.getValue().isPresent()) {
-          final ArrayNode arrayValue = serializeArray(
-            that.getValue().get(),
-            this::transform);
-          result.set("value", arrayValue);
+          result.set("value", serializeListOf_IClass(that.getValue().get()));
         }
 
         result.put("modelType", "SubmodelElementCollection");
@@ -7195,73 +7052,51 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getExtensions().isPresent()) {
-          final ArrayNode arrayExtensions = serializeArray(
-            that.getExtensions().get(),
-            this::transform);
-          result.set("extensions", arrayExtensions);
+          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
         }
 
         if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(
-            that.getCategory().get()));
+          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
         }
 
         if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(
-            that.getIdShort().get()));
+          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
         }
 
         if (that.getDisplayName().isPresent()) {
-          final ArrayNode arrayDisplayName = serializeArray(
-            that.getDisplayName().get(),
-            this::transform);
-          result.set("displayName", arrayDisplayName);
+          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
         }
 
         if (that.getDescription().isPresent()) {
-          final ArrayNode arrayDescription = serializeArray(
-            that.getDescription().get(),
-            this::transform);
-          result.set("description", arrayDescription);
+          result.set("description", serializeListOf_IClass(that.getDescription().get()));
         }
 
         if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transform(
-            that.getSemanticId().get()));
+          result.set("semanticId", transformClass(that.getSemanticId().get()));
         }
 
         if (that.getSupplementalSemanticIds().isPresent()) {
-          final ArrayNode arraySupplementalSemanticIds = serializeArray(
-            that.getSupplementalSemanticIds().get(),
-            this::transform);
-          result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
+          result.set("supplementalSemanticIds", serializeListOf_IClass(
+            that.getSupplementalSemanticIds().get()));
         }
 
         if (that.getQualifiers().isPresent()) {
-          final ArrayNode arrayQualifiers = serializeArray(
-            that.getQualifiers().get(),
-            this::transform);
-          result.set("qualifiers", arrayQualifiers);
+          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
-          final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
-            that.getEmbeddedDataSpecifications().get(),
-            this::transform);
-          result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
+          result.set("embeddedDataSpecifications", serializeListOf_IClass(
+            that.getEmbeddedDataSpecifications().get()));
         }
 
-        result.set("valueType", Serialize.dataTypeDefXsdToJsonValue(
-          that.getValueType()));
+        result.set("valueType", Serialize.toJsonValue(that.getValueType()));
 
         if (that.getValue().isPresent()) {
-          result.set("value", JsonNodeFactory.instance.textNode(
-            that.getValue().get()));
+          result.set("value", JsonNodeFactory.instance.textNode(that.getValue().get()));
         }
 
         if (that.getValueId().isPresent()) {
-          result.set("valueId", transform(
-            that.getValueId().get()));
+          result.set("valueId", transformClass(that.getValueId().get()));
         }
 
         result.put("modelType", "Property");
@@ -7276,72 +7111,49 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getExtensions().isPresent()) {
-          final ArrayNode arrayExtensions = serializeArray(
-            that.getExtensions().get(),
-            this::transform);
-          result.set("extensions", arrayExtensions);
+          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
         }
 
         if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(
-            that.getCategory().get()));
+          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
         }
 
         if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(
-            that.getIdShort().get()));
+          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
         }
 
         if (that.getDisplayName().isPresent()) {
-          final ArrayNode arrayDisplayName = serializeArray(
-            that.getDisplayName().get(),
-            this::transform);
-          result.set("displayName", arrayDisplayName);
+          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
         }
 
         if (that.getDescription().isPresent()) {
-          final ArrayNode arrayDescription = serializeArray(
-            that.getDescription().get(),
-            this::transform);
-          result.set("description", arrayDescription);
+          result.set("description", serializeListOf_IClass(that.getDescription().get()));
         }
 
         if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transform(
-            that.getSemanticId().get()));
+          result.set("semanticId", transformClass(that.getSemanticId().get()));
         }
 
         if (that.getSupplementalSemanticIds().isPresent()) {
-          final ArrayNode arraySupplementalSemanticIds = serializeArray(
-            that.getSupplementalSemanticIds().get(),
-            this::transform);
-          result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
+          result.set("supplementalSemanticIds", serializeListOf_IClass(
+            that.getSupplementalSemanticIds().get()));
         }
 
         if (that.getQualifiers().isPresent()) {
-          final ArrayNode arrayQualifiers = serializeArray(
-            that.getQualifiers().get(),
-            this::transform);
-          result.set("qualifiers", arrayQualifiers);
+          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
-          final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
-            that.getEmbeddedDataSpecifications().get(),
-            this::transform);
-          result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
+          result.set("embeddedDataSpecifications", serializeListOf_IClass(
+            that.getEmbeddedDataSpecifications().get()));
         }
 
         if (that.getValue().isPresent()) {
-          final ArrayNode arrayValue = serializeArray(
-            that.getValue().get(),
-            this::transform);
-          result.set("value", arrayValue);
+          result.set("value", serializeListOf_IClass(that.getValue().get()));
         }
 
         if (that.getValueId().isPresent()) {
-          result.set("valueId", transform(
-            that.getValueId().get()));
+          result.set("valueId", transformClass(that.getValueId().get()));
         }
 
         result.put("modelType", "MultiLanguageProperty");
@@ -7356,73 +7168,51 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getExtensions().isPresent()) {
-          final ArrayNode arrayExtensions = serializeArray(
-            that.getExtensions().get(),
-            this::transform);
-          result.set("extensions", arrayExtensions);
+          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
         }
 
         if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(
-            that.getCategory().get()));
+          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
         }
 
         if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(
-            that.getIdShort().get()));
+          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
         }
 
         if (that.getDisplayName().isPresent()) {
-          final ArrayNode arrayDisplayName = serializeArray(
-            that.getDisplayName().get(),
-            this::transform);
-          result.set("displayName", arrayDisplayName);
+          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
         }
 
         if (that.getDescription().isPresent()) {
-          final ArrayNode arrayDescription = serializeArray(
-            that.getDescription().get(),
-            this::transform);
-          result.set("description", arrayDescription);
+          result.set("description", serializeListOf_IClass(that.getDescription().get()));
         }
 
         if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transform(
-            that.getSemanticId().get()));
+          result.set("semanticId", transformClass(that.getSemanticId().get()));
         }
 
         if (that.getSupplementalSemanticIds().isPresent()) {
-          final ArrayNode arraySupplementalSemanticIds = serializeArray(
-            that.getSupplementalSemanticIds().get(),
-            this::transform);
-          result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
+          result.set("supplementalSemanticIds", serializeListOf_IClass(
+            that.getSupplementalSemanticIds().get()));
         }
 
         if (that.getQualifiers().isPresent()) {
-          final ArrayNode arrayQualifiers = serializeArray(
-            that.getQualifiers().get(),
-            this::transform);
-          result.set("qualifiers", arrayQualifiers);
+          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
-          final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
-            that.getEmbeddedDataSpecifications().get(),
-            this::transform);
-          result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
+          result.set("embeddedDataSpecifications", serializeListOf_IClass(
+            that.getEmbeddedDataSpecifications().get()));
         }
 
-        result.set("valueType", Serialize.dataTypeDefXsdToJsonValue(
-          that.getValueType()));
+        result.set("valueType", Serialize.toJsonValue(that.getValueType()));
 
         if (that.getMin().isPresent()) {
-          result.set("min", JsonNodeFactory.instance.textNode(
-            that.getMin().get()));
+          result.set("min", JsonNodeFactory.instance.textNode(that.getMin().get()));
         }
 
         if (that.getMax().isPresent()) {
-          result.set("max", JsonNodeFactory.instance.textNode(
-            that.getMax().get()));
+          result.set("max", JsonNodeFactory.instance.textNode(that.getMax().get()));
         }
 
         result.put("modelType", "Range");
@@ -7437,65 +7227,45 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getExtensions().isPresent()) {
-          final ArrayNode arrayExtensions = serializeArray(
-            that.getExtensions().get(),
-            this::transform);
-          result.set("extensions", arrayExtensions);
+          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
         }
 
         if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(
-            that.getCategory().get()));
+          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
         }
 
         if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(
-            that.getIdShort().get()));
+          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
         }
 
         if (that.getDisplayName().isPresent()) {
-          final ArrayNode arrayDisplayName = serializeArray(
-            that.getDisplayName().get(),
-            this::transform);
-          result.set("displayName", arrayDisplayName);
+          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
         }
 
         if (that.getDescription().isPresent()) {
-          final ArrayNode arrayDescription = serializeArray(
-            that.getDescription().get(),
-            this::transform);
-          result.set("description", arrayDescription);
+          result.set("description", serializeListOf_IClass(that.getDescription().get()));
         }
 
         if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transform(
-            that.getSemanticId().get()));
+          result.set("semanticId", transformClass(that.getSemanticId().get()));
         }
 
         if (that.getSupplementalSemanticIds().isPresent()) {
-          final ArrayNode arraySupplementalSemanticIds = serializeArray(
-            that.getSupplementalSemanticIds().get(),
-            this::transform);
-          result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
+          result.set("supplementalSemanticIds", serializeListOf_IClass(
+            that.getSupplementalSemanticIds().get()));
         }
 
         if (that.getQualifiers().isPresent()) {
-          final ArrayNode arrayQualifiers = serializeArray(
-            that.getQualifiers().get(),
-            this::transform);
-          result.set("qualifiers", arrayQualifiers);
+          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
-          final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
-            that.getEmbeddedDataSpecifications().get(),
-            this::transform);
-          result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
+          result.set("embeddedDataSpecifications", serializeListOf_IClass(
+            that.getEmbeddedDataSpecifications().get()));
         }
 
         if (that.getValue().isPresent()) {
-          result.set("value", transform(
-            that.getValue().get()));
+          result.set("value", transformClass(that.getValue().get()));
         }
 
         result.put("modelType", "ReferenceElement");
@@ -7510,69 +7280,48 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getExtensions().isPresent()) {
-          final ArrayNode arrayExtensions = serializeArray(
-            that.getExtensions().get(),
-            this::transform);
-          result.set("extensions", arrayExtensions);
+          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
         }
 
         if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(
-            that.getCategory().get()));
+          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
         }
 
         if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(
-            that.getIdShort().get()));
+          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
         }
 
         if (that.getDisplayName().isPresent()) {
-          final ArrayNode arrayDisplayName = serializeArray(
-            that.getDisplayName().get(),
-            this::transform);
-          result.set("displayName", arrayDisplayName);
+          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
         }
 
         if (that.getDescription().isPresent()) {
-          final ArrayNode arrayDescription = serializeArray(
-            that.getDescription().get(),
-            this::transform);
-          result.set("description", arrayDescription);
+          result.set("description", serializeListOf_IClass(that.getDescription().get()));
         }
 
         if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transform(
-            that.getSemanticId().get()));
+          result.set("semanticId", transformClass(that.getSemanticId().get()));
         }
 
         if (that.getSupplementalSemanticIds().isPresent()) {
-          final ArrayNode arraySupplementalSemanticIds = serializeArray(
-            that.getSupplementalSemanticIds().get(),
-            this::transform);
-          result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
+          result.set("supplementalSemanticIds", serializeListOf_IClass(
+            that.getSupplementalSemanticIds().get()));
         }
 
         if (that.getQualifiers().isPresent()) {
-          final ArrayNode arrayQualifiers = serializeArray(
-            that.getQualifiers().get(),
-            this::transform);
-          result.set("qualifiers", arrayQualifiers);
+          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
-          final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
-            that.getEmbeddedDataSpecifications().get(),
-            this::transform);
-          result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
+          result.set("embeddedDataSpecifications", serializeListOf_IClass(
+            that.getEmbeddedDataSpecifications().get()));
         }
 
         if (that.getValue().isPresent()) {
-          result.set("value", _Transformer.bytesToJsonNode(
-            that.getValue().get()));
+          result.set("value", bytesToJsonNode(that.getValue().get()));
         }
 
-        result.set("contentType", JsonNodeFactory.instance.textNode(
-          that.getContentType()));
+        result.set("contentType", JsonNodeFactory.instance.textNode(that.getContentType()));
 
         result.put("modelType", "Blob");
 
@@ -7586,69 +7335,48 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getExtensions().isPresent()) {
-          final ArrayNode arrayExtensions = serializeArray(
-            that.getExtensions().get(),
-            this::transform);
-          result.set("extensions", arrayExtensions);
+          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
         }
 
         if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(
-            that.getCategory().get()));
+          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
         }
 
         if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(
-            that.getIdShort().get()));
+          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
         }
 
         if (that.getDisplayName().isPresent()) {
-          final ArrayNode arrayDisplayName = serializeArray(
-            that.getDisplayName().get(),
-            this::transform);
-          result.set("displayName", arrayDisplayName);
+          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
         }
 
         if (that.getDescription().isPresent()) {
-          final ArrayNode arrayDescription = serializeArray(
-            that.getDescription().get(),
-            this::transform);
-          result.set("description", arrayDescription);
+          result.set("description", serializeListOf_IClass(that.getDescription().get()));
         }
 
         if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transform(
-            that.getSemanticId().get()));
+          result.set("semanticId", transformClass(that.getSemanticId().get()));
         }
 
         if (that.getSupplementalSemanticIds().isPresent()) {
-          final ArrayNode arraySupplementalSemanticIds = serializeArray(
-            that.getSupplementalSemanticIds().get(),
-            this::transform);
-          result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
+          result.set("supplementalSemanticIds", serializeListOf_IClass(
+            that.getSupplementalSemanticIds().get()));
         }
 
         if (that.getQualifiers().isPresent()) {
-          final ArrayNode arrayQualifiers = serializeArray(
-            that.getQualifiers().get(),
-            this::transform);
-          result.set("qualifiers", arrayQualifiers);
+          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
-          final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
-            that.getEmbeddedDataSpecifications().get(),
-            this::transform);
-          result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
+          result.set("embeddedDataSpecifications", serializeListOf_IClass(
+            that.getEmbeddedDataSpecifications().get()));
         }
 
         if (that.getValue().isPresent()) {
-          result.set("value", JsonNodeFactory.instance.textNode(
-            that.getValue().get()));
+          result.set("value", JsonNodeFactory.instance.textNode(that.getValue().get()));
         }
 
-        result.set("contentType", JsonNodeFactory.instance.textNode(
-          that.getContentType()));
+        result.set("contentType", JsonNodeFactory.instance.textNode(that.getContentType()));
 
         result.put("modelType", "File");
 
@@ -7662,73 +7390,49 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getExtensions().isPresent()) {
-          final ArrayNode arrayExtensions = serializeArray(
-            that.getExtensions().get(),
-            this::transform);
-          result.set("extensions", arrayExtensions);
+          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
         }
 
         if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(
-            that.getCategory().get()));
+          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
         }
 
         if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(
-            that.getIdShort().get()));
+          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
         }
 
         if (that.getDisplayName().isPresent()) {
-          final ArrayNode arrayDisplayName = serializeArray(
-            that.getDisplayName().get(),
-            this::transform);
-          result.set("displayName", arrayDisplayName);
+          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
         }
 
         if (that.getDescription().isPresent()) {
-          final ArrayNode arrayDescription = serializeArray(
-            that.getDescription().get(),
-            this::transform);
-          result.set("description", arrayDescription);
+          result.set("description", serializeListOf_IClass(that.getDescription().get()));
         }
 
         if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transform(
-            that.getSemanticId().get()));
+          result.set("semanticId", transformClass(that.getSemanticId().get()));
         }
 
         if (that.getSupplementalSemanticIds().isPresent()) {
-          final ArrayNode arraySupplementalSemanticIds = serializeArray(
-            that.getSupplementalSemanticIds().get(),
-            this::transform);
-          result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
+          result.set("supplementalSemanticIds", serializeListOf_IClass(
+            that.getSupplementalSemanticIds().get()));
         }
 
         if (that.getQualifiers().isPresent()) {
-          final ArrayNode arrayQualifiers = serializeArray(
-            that.getQualifiers().get(),
-            this::transform);
-          result.set("qualifiers", arrayQualifiers);
+          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
-          final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
-            that.getEmbeddedDataSpecifications().get(),
-            this::transform);
-          result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
+          result.set("embeddedDataSpecifications", serializeListOf_IClass(
+            that.getEmbeddedDataSpecifications().get()));
         }
 
-        result.set("first", transform(
-          that.getFirst()));
+        result.set("first", transformClass(that.getFirst()));
 
-        result.set("second", transform(
-          that.getSecond()));
+        result.set("second", transformClass(that.getSecond()));
 
         if (that.getAnnotations().isPresent()) {
-          final ArrayNode arrayAnnotations = serializeArray(
-            that.getAnnotations().get(),
-            this::transform);
-          result.set("annotations", arrayAnnotations);
+          result.set("annotations", serializeListOf_IClass(that.getAnnotations().get()));
         }
 
         result.put("modelType", "AnnotatedRelationshipElement");
@@ -7743,71 +7447,48 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getExtensions().isPresent()) {
-          final ArrayNode arrayExtensions = serializeArray(
-            that.getExtensions().get(),
-            this::transform);
-          result.set("extensions", arrayExtensions);
+          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
         }
 
         if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(
-            that.getCategory().get()));
+          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
         }
 
         if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(
-            that.getIdShort().get()));
+          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
         }
 
         if (that.getDisplayName().isPresent()) {
-          final ArrayNode arrayDisplayName = serializeArray(
-            that.getDisplayName().get(),
-            this::transform);
-          result.set("displayName", arrayDisplayName);
+          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
         }
 
         if (that.getDescription().isPresent()) {
-          final ArrayNode arrayDescription = serializeArray(
-            that.getDescription().get(),
-            this::transform);
-          result.set("description", arrayDescription);
+          result.set("description", serializeListOf_IClass(that.getDescription().get()));
         }
 
         if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transform(
-            that.getSemanticId().get()));
+          result.set("semanticId", transformClass(that.getSemanticId().get()));
         }
 
         if (that.getSupplementalSemanticIds().isPresent()) {
-          final ArrayNode arraySupplementalSemanticIds = serializeArray(
-            that.getSupplementalSemanticIds().get(),
-            this::transform);
-          result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
+          result.set("supplementalSemanticIds", serializeListOf_IClass(
+            that.getSupplementalSemanticIds().get()));
         }
 
         if (that.getQualifiers().isPresent()) {
-          final ArrayNode arrayQualifiers = serializeArray(
-            that.getQualifiers().get(),
-            this::transform);
-          result.set("qualifiers", arrayQualifiers);
+          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
-          final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
-            that.getEmbeddedDataSpecifications().get(),
-            this::transform);
-          result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
+          result.set("embeddedDataSpecifications", serializeListOf_IClass(
+            that.getEmbeddedDataSpecifications().get()));
         }
 
         if (that.getStatements().isPresent()) {
-          final ArrayNode arrayStatements = serializeArray(
-            that.getStatements().get(),
-            this::transform);
-          result.set("statements", arrayStatements);
+          result.set("statements", serializeListOf_IClass(that.getStatements().get()));
         }
 
-        result.set("entityType", Serialize.entityTypeToJsonValue(
-          that.getEntityType()));
+        result.set("entityType", Serialize.toJsonValue(that.getEntityType()));
 
         if (that.getGlobalAssetId().isPresent()) {
           result.set("globalAssetId", JsonNodeFactory.instance.textNode(
@@ -7815,10 +7496,7 @@ public class Jsonization {
         }
 
         if (that.getSpecificAssetIds().isPresent()) {
-          final ArrayNode arraySpecificAssetIds = serializeArray(
-            that.getSpecificAssetIds().get(),
-            this::transform);
-          result.set("specificAssetIds", arraySpecificAssetIds);
+          result.set("specificAssetIds", serializeListOf_IClass(that.getSpecificAssetIds().get()));
         }
 
         result.put("modelType", "Entity");
@@ -7832,38 +7510,30 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("source", transform(
-          that.getSource()));
+        result.set("source", transformClass(that.getSource()));
 
         if (that.getSourceSemanticId().isPresent()) {
-          result.set("sourceSemanticId", transform(
-            that.getSourceSemanticId().get()));
+          result.set("sourceSemanticId", transformClass(that.getSourceSemanticId().get()));
         }
 
-        result.set("observableReference", transform(
-          that.getObservableReference()));
+        result.set("observableReference", transformClass(that.getObservableReference()));
 
         if (that.getObservableSemanticId().isPresent()) {
-          result.set("observableSemanticId", transform(
-            that.getObservableSemanticId().get()));
+          result.set("observableSemanticId", transformClass(that.getObservableSemanticId().get()));
         }
 
         if (that.getTopic().isPresent()) {
-          result.set("topic", JsonNodeFactory.instance.textNode(
-            that.getTopic().get()));
+          result.set("topic", JsonNodeFactory.instance.textNode(that.getTopic().get()));
         }
 
         if (that.getSubjectId().isPresent()) {
-          result.set("subjectId", transform(
-            that.getSubjectId().get()));
+          result.set("subjectId", transformClass(that.getSubjectId().get()));
         }
 
-        result.set("timeStamp", JsonNodeFactory.instance.textNode(
-          that.getTimeStamp()));
+        result.set("timeStamp", JsonNodeFactory.instance.textNode(that.getTimeStamp()));
 
         if (that.getPayload().isPresent()) {
-          result.set("payload", _Transformer.bytesToJsonNode(
-            that.getPayload().get()));
+          result.set("payload", bytesToJsonNode(that.getPayload().get()));
         }
 
         return result;
@@ -7876,94 +7546,67 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getExtensions().isPresent()) {
-          final ArrayNode arrayExtensions = serializeArray(
-            that.getExtensions().get(),
-            this::transform);
-          result.set("extensions", arrayExtensions);
+          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
         }
 
         if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(
-            that.getCategory().get()));
+          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
         }
 
         if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(
-            that.getIdShort().get()));
+          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
         }
 
         if (that.getDisplayName().isPresent()) {
-          final ArrayNode arrayDisplayName = serializeArray(
-            that.getDisplayName().get(),
-            this::transform);
-          result.set("displayName", arrayDisplayName);
+          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
         }
 
         if (that.getDescription().isPresent()) {
-          final ArrayNode arrayDescription = serializeArray(
-            that.getDescription().get(),
-            this::transform);
-          result.set("description", arrayDescription);
+          result.set("description", serializeListOf_IClass(that.getDescription().get()));
         }
 
         if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transform(
-            that.getSemanticId().get()));
+          result.set("semanticId", transformClass(that.getSemanticId().get()));
         }
 
         if (that.getSupplementalSemanticIds().isPresent()) {
-          final ArrayNode arraySupplementalSemanticIds = serializeArray(
-            that.getSupplementalSemanticIds().get(),
-            this::transform);
-          result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
+          result.set("supplementalSemanticIds", serializeListOf_IClass(
+            that.getSupplementalSemanticIds().get()));
         }
 
         if (that.getQualifiers().isPresent()) {
-          final ArrayNode arrayQualifiers = serializeArray(
-            that.getQualifiers().get(),
-            this::transform);
-          result.set("qualifiers", arrayQualifiers);
+          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
-          final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
-            that.getEmbeddedDataSpecifications().get(),
-            this::transform);
-          result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
+          result.set("embeddedDataSpecifications", serializeListOf_IClass(
+            that.getEmbeddedDataSpecifications().get()));
         }
 
-        result.set("observed", transform(
-          that.getObserved()));
+        result.set("observed", transformClass(that.getObserved()));
 
-        result.set("direction", Serialize.directionToJsonValue(
-          that.getDirection()));
+        result.set("direction", Serialize.toJsonValue(that.getDirection()));
 
-        result.set("state", Serialize.stateOfEventToJsonValue(
-          that.getState()));
+        result.set("state", Serialize.toJsonValue(that.getState()));
 
         if (that.getMessageTopic().isPresent()) {
-          result.set("messageTopic", JsonNodeFactory.instance.textNode(
-            that.getMessageTopic().get()));
+          result.set("messageTopic", JsonNodeFactory.instance.textNode(that.getMessageTopic().get()));
         }
 
         if (that.getMessageBroker().isPresent()) {
-          result.set("messageBroker", transform(
-            that.getMessageBroker().get()));
+          result.set("messageBroker", transformClass(that.getMessageBroker().get()));
         }
 
         if (that.getLastUpdate().isPresent()) {
-          result.set("lastUpdate", JsonNodeFactory.instance.textNode(
-            that.getLastUpdate().get()));
+          result.set("lastUpdate", JsonNodeFactory.instance.textNode(that.getLastUpdate().get()));
         }
 
         if (that.getMinInterval().isPresent()) {
-          result.set("minInterval", JsonNodeFactory.instance.textNode(
-            that.getMinInterval().get()));
+          result.set("minInterval", JsonNodeFactory.instance.textNode(that.getMinInterval().get()));
         }
 
         if (that.getMaxInterval().isPresent()) {
-          result.set("maxInterval", JsonNodeFactory.instance.textNode(
-            that.getMaxInterval().get()));
+          result.set("maxInterval", JsonNodeFactory.instance.textNode(that.getMaxInterval().get()));
         }
 
         result.put("modelType", "BasicEventElement");
@@ -7978,81 +7621,54 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getExtensions().isPresent()) {
-          final ArrayNode arrayExtensions = serializeArray(
-            that.getExtensions().get(),
-            this::transform);
-          result.set("extensions", arrayExtensions);
+          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
         }
 
         if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(
-            that.getCategory().get()));
+          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
         }
 
         if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(
-            that.getIdShort().get()));
+          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
         }
 
         if (that.getDisplayName().isPresent()) {
-          final ArrayNode arrayDisplayName = serializeArray(
-            that.getDisplayName().get(),
-            this::transform);
-          result.set("displayName", arrayDisplayName);
+          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
         }
 
         if (that.getDescription().isPresent()) {
-          final ArrayNode arrayDescription = serializeArray(
-            that.getDescription().get(),
-            this::transform);
-          result.set("description", arrayDescription);
+          result.set("description", serializeListOf_IClass(that.getDescription().get()));
         }
 
         if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transform(
-            that.getSemanticId().get()));
+          result.set("semanticId", transformClass(that.getSemanticId().get()));
         }
 
         if (that.getSupplementalSemanticIds().isPresent()) {
-          final ArrayNode arraySupplementalSemanticIds = serializeArray(
-            that.getSupplementalSemanticIds().get(),
-            this::transform);
-          result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
+          result.set("supplementalSemanticIds", serializeListOf_IClass(
+            that.getSupplementalSemanticIds().get()));
         }
 
         if (that.getQualifiers().isPresent()) {
-          final ArrayNode arrayQualifiers = serializeArray(
-            that.getQualifiers().get(),
-            this::transform);
-          result.set("qualifiers", arrayQualifiers);
+          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
-          final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
-            that.getEmbeddedDataSpecifications().get(),
-            this::transform);
-          result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
+          result.set("embeddedDataSpecifications", serializeListOf_IClass(
+            that.getEmbeddedDataSpecifications().get()));
         }
 
         if (that.getInputVariables().isPresent()) {
-          final ArrayNode arrayInputVariables = serializeArray(
-            that.getInputVariables().get(),
-            this::transform);
-          result.set("inputVariables", arrayInputVariables);
+          result.set("inputVariables", serializeListOf_IClass(that.getInputVariables().get()));
         }
 
         if (that.getOutputVariables().isPresent()) {
-          final ArrayNode arrayOutputVariables = serializeArray(
-            that.getOutputVariables().get(),
-            this::transform);
-          result.set("outputVariables", arrayOutputVariables);
+          result.set("outputVariables", serializeListOf_IClass(that.getOutputVariables().get()));
         }
 
         if (that.getInoutputVariables().isPresent()) {
-          final ArrayNode arrayInoutputVariables = serializeArray(
-            that.getInoutputVariables().get(),
-            this::transform);
-          result.set("inoutputVariables", arrayInoutputVariables);
+          result.set("inoutputVariables", serializeListOf_IClass(
+            that.getInoutputVariables().get()));
         }
 
         result.put("modelType", "Operation");
@@ -8066,8 +7682,7 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("value", transform(
-          that.getValue()));
+        result.set("value", transformClass(that.getValue()));
 
         return result;
       }
@@ -8079,60 +7694,41 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getExtensions().isPresent()) {
-          final ArrayNode arrayExtensions = serializeArray(
-            that.getExtensions().get(),
-            this::transform);
-          result.set("extensions", arrayExtensions);
+          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
         }
 
         if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(
-            that.getCategory().get()));
+          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
         }
 
         if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(
-            that.getIdShort().get()));
+          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
         }
 
         if (that.getDisplayName().isPresent()) {
-          final ArrayNode arrayDisplayName = serializeArray(
-            that.getDisplayName().get(),
-            this::transform);
-          result.set("displayName", arrayDisplayName);
+          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
         }
 
         if (that.getDescription().isPresent()) {
-          final ArrayNode arrayDescription = serializeArray(
-            that.getDescription().get(),
-            this::transform);
-          result.set("description", arrayDescription);
+          result.set("description", serializeListOf_IClass(that.getDescription().get()));
         }
 
         if (that.getSemanticId().isPresent()) {
-          result.set("semanticId", transform(
-            that.getSemanticId().get()));
+          result.set("semanticId", transformClass(that.getSemanticId().get()));
         }
 
         if (that.getSupplementalSemanticIds().isPresent()) {
-          final ArrayNode arraySupplementalSemanticIds = serializeArray(
-            that.getSupplementalSemanticIds().get(),
-            this::transform);
-          result.set("supplementalSemanticIds", arraySupplementalSemanticIds);
+          result.set("supplementalSemanticIds", serializeListOf_IClass(
+            that.getSupplementalSemanticIds().get()));
         }
 
         if (that.getQualifiers().isPresent()) {
-          final ArrayNode arrayQualifiers = serializeArray(
-            that.getQualifiers().get(),
-            this::transform);
-          result.set("qualifiers", arrayQualifiers);
+          result.set("qualifiers", serializeListOf_IClass(that.getQualifiers().get()));
         }
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
-          final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
-            that.getEmbeddedDataSpecifications().get(),
-            this::transform);
-          result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
+          result.set("embeddedDataSpecifications", serializeListOf_IClass(
+            that.getEmbeddedDataSpecifications().get()));
         }
 
         result.put("modelType", "Capability");
@@ -8147,56 +7743,38 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getExtensions().isPresent()) {
-          final ArrayNode arrayExtensions = serializeArray(
-            that.getExtensions().get(),
-            this::transform);
-          result.set("extensions", arrayExtensions);
+          result.set("extensions", serializeListOf_IClass(that.getExtensions().get()));
         }
 
         if (that.getCategory().isPresent()) {
-          result.set("category", JsonNodeFactory.instance.textNode(
-            that.getCategory().get()));
+          result.set("category", JsonNodeFactory.instance.textNode(that.getCategory().get()));
         }
 
         if (that.getIdShort().isPresent()) {
-          result.set("idShort", JsonNodeFactory.instance.textNode(
-            that.getIdShort().get()));
+          result.set("idShort", JsonNodeFactory.instance.textNode(that.getIdShort().get()));
         }
 
         if (that.getDisplayName().isPresent()) {
-          final ArrayNode arrayDisplayName = serializeArray(
-            that.getDisplayName().get(),
-            this::transform);
-          result.set("displayName", arrayDisplayName);
+          result.set("displayName", serializeListOf_IClass(that.getDisplayName().get()));
         }
 
         if (that.getDescription().isPresent()) {
-          final ArrayNode arrayDescription = serializeArray(
-            that.getDescription().get(),
-            this::transform);
-          result.set("description", arrayDescription);
+          result.set("description", serializeListOf_IClass(that.getDescription().get()));
         }
 
         if (that.getAdministration().isPresent()) {
-          result.set("administration", transform(
-            that.getAdministration().get()));
+          result.set("administration", transformClass(that.getAdministration().get()));
         }
 
-        result.set("id", JsonNodeFactory.instance.textNode(
-          that.getId()));
+        result.set("id", JsonNodeFactory.instance.textNode(that.getId()));
 
         if (that.getEmbeddedDataSpecifications().isPresent()) {
-          final ArrayNode arrayEmbeddedDataSpecifications = serializeArray(
-            that.getEmbeddedDataSpecifications().get(),
-            this::transform);
-          result.set("embeddedDataSpecifications", arrayEmbeddedDataSpecifications);
+          result.set("embeddedDataSpecifications", serializeListOf_IClass(
+            that.getEmbeddedDataSpecifications().get()));
         }
 
         if (that.getIsCaseOf().isPresent()) {
-          final ArrayNode arrayIsCaseOf = serializeArray(
-            that.getIsCaseOf().get(),
-            this::transform);
-          result.set("isCaseOf", arrayIsCaseOf);
+          result.set("isCaseOf", serializeListOf_IClass(that.getIsCaseOf().get()));
         }
 
         result.put("modelType", "ConceptDescription");
@@ -8210,18 +7788,13 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("type", Serialize.referenceTypesToJsonValue(
-          that.getType()));
+        result.set("type", Serialize.toJsonValue(that.getType()));
 
         if (that.getReferredSemanticId().isPresent()) {
-          result.set("referredSemanticId", transform(
-            that.getReferredSemanticId().get()));
+          result.set("referredSemanticId", transformClass(that.getReferredSemanticId().get()));
         }
 
-        final ArrayNode arrayKeys = serializeArray(
-          that.getKeys(),
-          this::transform);
-        result.set("keys", arrayKeys);
+        result.set("keys", serializeListOf_IClass(that.getKeys()));
 
         return result;
       }
@@ -8232,11 +7805,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("type", Serialize.keyTypesToJsonValue(
-          that.getType()));
+        result.set("type", Serialize.toJsonValue(that.getType()));
 
-        result.set("value", JsonNodeFactory.instance.textNode(
-          that.getValue()));
+        result.set("value", JsonNodeFactory.instance.textNode(that.getValue()));
 
         return result;
       }
@@ -8247,11 +7818,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("language", JsonNodeFactory.instance.textNode(
-          that.getLanguage()));
+        result.set("language", JsonNodeFactory.instance.textNode(that.getLanguage()));
 
-        result.set("text", JsonNodeFactory.instance.textNode(
-          that.getText()));
+        result.set("text", JsonNodeFactory.instance.textNode(that.getText()));
 
         return result;
       }
@@ -8262,11 +7831,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("language", JsonNodeFactory.instance.textNode(
-          that.getLanguage()));
+        result.set("language", JsonNodeFactory.instance.textNode(that.getLanguage()));
 
-        result.set("text", JsonNodeFactory.instance.textNode(
-          that.getText()));
+        result.set("text", JsonNodeFactory.instance.textNode(that.getText()));
 
         return result;
       }
@@ -8278,24 +7845,17 @@ public class Jsonization {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
         if (that.getAssetAdministrationShells().isPresent()) {
-          final ArrayNode arrayAssetAdministrationShells = serializeArray(
-            that.getAssetAdministrationShells().get(),
-            this::transform);
-          result.set("assetAdministrationShells", arrayAssetAdministrationShells);
+          result.set("assetAdministrationShells", serializeListOf_IClass(
+            that.getAssetAdministrationShells().get()));
         }
 
         if (that.getSubmodels().isPresent()) {
-          final ArrayNode arraySubmodels = serializeArray(
-            that.getSubmodels().get(),
-            this::transform);
-          result.set("submodels", arraySubmodels);
+          result.set("submodels", serializeListOf_IClass(that.getSubmodels().get()));
         }
 
         if (that.getConceptDescriptions().isPresent()) {
-          final ArrayNode arrayConceptDescriptions = serializeArray(
-            that.getConceptDescriptions().get(),
-            this::transform);
-          result.set("conceptDescriptions", arrayConceptDescriptions);
+          result.set("conceptDescriptions", serializeListOf_IClass(
+            that.getConceptDescriptions().get()));
         }
 
         return result;
@@ -8307,11 +7867,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("dataSpecification", transform(
-          that.getDataSpecification()));
+        result.set("dataSpecification", transformClass(that.getDataSpecification()));
 
-        result.set("dataSpecificationContent", transform(
-          that.getDataSpecificationContent()));
+        result.set("dataSpecificationContent", transformClass(that.getDataSpecificationContent()));
 
         return result;
       }
@@ -8322,17 +7880,13 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("min", JsonNodeFactory.instance.booleanNode(
-          that.getMin()));
+        result.set("min", JsonNodeFactory.instance.booleanNode(that.getMin()));
 
-        result.set("nom", JsonNodeFactory.instance.booleanNode(
-          that.getNom()));
+        result.set("nom", JsonNodeFactory.instance.booleanNode(that.getNom()));
 
-        result.set("typ", JsonNodeFactory.instance.booleanNode(
-          that.getTyp()));
+        result.set("typ", JsonNodeFactory.instance.booleanNode(that.getTyp()));
 
-        result.set("max", JsonNodeFactory.instance.booleanNode(
-          that.getMax()));
+        result.set("max", JsonNodeFactory.instance.booleanNode(that.getMax()));
 
         return result;
       }
@@ -8343,11 +7897,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("value", JsonNodeFactory.instance.textNode(
-          that.getValue()));
+        result.set("value", JsonNodeFactory.instance.textNode(that.getValue()));
 
-        result.set("valueId", transform(
-          that.getValueId()));
+        result.set("valueId", transformClass(that.getValueId()));
 
         return result;
       }
@@ -8358,10 +7910,7 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        final ArrayNode arrayValueReferencePairs = serializeArray(
-          that.getValueReferencePairs(),
-          this::transform);
-        result.set("valueReferencePairs", arrayValueReferencePairs);
+        result.set("valueReferencePairs", serializeListOf_IClass(that.getValueReferencePairs()));
 
         return result;
       }
@@ -8372,11 +7921,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("language", JsonNodeFactory.instance.textNode(
-          that.getLanguage()));
+        result.set("language", JsonNodeFactory.instance.textNode(that.getLanguage()));
 
-        result.set("text", JsonNodeFactory.instance.textNode(
-          that.getText()));
+        result.set("text", JsonNodeFactory.instance.textNode(that.getText()));
 
         return result;
       }
@@ -8387,11 +7934,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("language", JsonNodeFactory.instance.textNode(
-          that.getLanguage()));
+        result.set("language", JsonNodeFactory.instance.textNode(that.getLanguage()));
 
-        result.set("text", JsonNodeFactory.instance.textNode(
-          that.getText()));
+        result.set("text", JsonNodeFactory.instance.textNode(that.getText()));
 
         return result;
       }
@@ -8402,11 +7947,9 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("language", JsonNodeFactory.instance.textNode(
-          that.getLanguage()));
+        result.set("language", JsonNodeFactory.instance.textNode(that.getLanguage()));
 
-        result.set("text", JsonNodeFactory.instance.textNode(
-          that.getText()));
+        result.set("text", JsonNodeFactory.instance.textNode(that.getText()));
 
         return result;
       }
@@ -8417,26 +7960,18 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        final ArrayNode arrayPreferredName = serializeArray(
-          that.getPreferredName(),
-          this::transform);
-        result.set("preferredName", arrayPreferredName);
+        result.set("preferredName", serializeListOf_IClass(that.getPreferredName()));
 
         if (that.getShortName().isPresent()) {
-          final ArrayNode arrayShortName = serializeArray(
-            that.getShortName().get(),
-            this::transform);
-          result.set("shortName", arrayShortName);
+          result.set("shortName", serializeListOf_IClass(that.getShortName().get()));
         }
 
         if (that.getUnit().isPresent()) {
-          result.set("unit", JsonNodeFactory.instance.textNode(
-            that.getUnit().get()));
+          result.set("unit", JsonNodeFactory.instance.textNode(that.getUnit().get()));
         }
 
         if (that.getUnitId().isPresent()) {
-          result.set("unitId", transform(
-            that.getUnitId().get()));
+          result.set("unitId", transformClass(that.getUnitId().get()));
         }
 
         if (that.getSourceOfDefinition().isPresent()) {
@@ -8445,40 +7980,31 @@ public class Jsonization {
         }
 
         if (that.getSymbol().isPresent()) {
-          result.set("symbol", JsonNodeFactory.instance.textNode(
-            that.getSymbol().get()));
+          result.set("symbol", JsonNodeFactory.instance.textNode(that.getSymbol().get()));
         }
 
         if (that.getDataType().isPresent()) {
-          result.set("dataType", Serialize.dataTypeIec61360ToJsonValue(
-            that.getDataType().get()));
+          result.set("dataType", Serialize.toJsonValue(that.getDataType().get()));
         }
 
         if (that.getDefinition().isPresent()) {
-          final ArrayNode arrayDefinition = serializeArray(
-            that.getDefinition().get(),
-            this::transform);
-          result.set("definition", arrayDefinition);
+          result.set("definition", serializeListOf_IClass(that.getDefinition().get()));
         }
 
         if (that.getValueFormat().isPresent()) {
-          result.set("valueFormat", JsonNodeFactory.instance.textNode(
-            that.getValueFormat().get()));
+          result.set("valueFormat", JsonNodeFactory.instance.textNode(that.getValueFormat().get()));
         }
 
         if (that.getValueList().isPresent()) {
-          result.set("valueList", transform(
-            that.getValueList().get()));
+          result.set("valueList", transformClass(that.getValueList().get()));
         }
 
         if (that.getValue().isPresent()) {
-          result.set("value", JsonNodeFactory.instance.textNode(
-            that.getValue().get()));
+          result.set("value", JsonNodeFactory.instance.textNode(that.getValue().get()));
         }
 
         if (that.getLevelType().isPresent()) {
-          result.set("levelType", transform(
-            that.getLevelType().get()));
+          result.set("levelType", transformClass(that.getLevelType().get()));
         }
 
         result.put("modelType", "DataSpecificationIec61360");
@@ -8501,13 +8027,11 @@ public class Jsonization {
      */
     public static class Serialize
     {
-      private static final _Transformer transformer = new _Transformer();
-
       /**
        * Serialize an instance of the meta-model into a JSON object.
        */
       public static JsonNode toJsonObject(IClass that) {
-        return transformer.transform(that);
+        return _Transformer.transformClass(that);
       }
 
       /**
