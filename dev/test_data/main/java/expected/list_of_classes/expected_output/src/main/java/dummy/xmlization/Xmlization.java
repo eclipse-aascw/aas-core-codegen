@@ -1164,28 +1164,12 @@ public class Xmlization {
       writer.writeCharacters(that.toString());
     }
 
-    private static void writeListOf_IAbstractItem(
-      List<IAbstractItem> that,
+    private static void writeListOf_IClass(
+      List<? extends IClass> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
-        for (IAbstractItem item : that) {
-          writeClass(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_ISimple(
-      List<ISimple> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (ISimple item : that) {
+        for (IClass item : that) {
           writeClass(item, writer);
           index++;
         }
@@ -1269,13 +1253,13 @@ public class Xmlization {
         "someItems",
         that.getSomeItems(),
         writer,
-        _VisitorWithWriter::writeListOf_IAbstractItem);
+        _VisitorWithWriter::writeListOf_IClass);
 
       writeProperty(
         "someSimples",
         that.getSomeSimples(),
         writer,
-        _VisitorWithWriter::writeListOf_ISimple);
+        _VisitorWithWriter::writeListOf_IClass);
     }
 
     @Override

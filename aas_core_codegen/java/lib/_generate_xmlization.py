@@ -1,5 +1,6 @@
 """Generate the code for XML de/serialization."""
 
+import enum
 import io
 import textwrap
 
@@ -171,6 +172,136 @@ def _element_reader_name(
 _VISITOR_NAME: Final[Identifier] = Identifier("_VisitorWithWriter")
 
 
+class _Kind(enum.Enum):
+    """
+    Enumerate what a value can be written *through*.
+
+    Once a value is at hand, nothing about the writing follows from its
+    declared type any more: a scalar is rendered through ``toString``, a byte
+    array through base64, an enumeration literal through the text it carries,
+    and an instance through the element its run-time type names. So the
+    writers are indexed by these few kinds rather than by the type, and one
+    writer serves every type of its kind.
+
+    The reading can not be indexed this way. It has to decide what to
+    construct before it has read anything, and only the declared type says
+    what that is -- hence one reader per type there, against one writer per
+    kind here.
+
+    The value is the moniker, which names the writers of that kind. It is
+    free of underscores, as the moniker grammar requires (see
+    :py:func:`aas_core_codegen.java.common.list_moniker`), and it can not be
+    confused with the moniker of one of our types: ``IClass``, ``IEnum`` and
+    ``IUnion`` are the fixed names of our own interfaces and are never
+    generated from the meta-model, and ``stringified`` and ``bytes`` are
+    lower-case (see
+    :py:attr:`aas_core_codegen.java.common.PRIMITIVE_TYPE_TO_MONIKER`).
+    """
+
+    #: A ``boolean``, a ``long``, a ``double`` or a ``String``
+    STRINGIFIED = "stringified"
+
+    #: A ``byte[]``
+    BYTES = "bytes"
+
+    #: A literal of any enumeration
+    ENUM = "IEnum"
+
+    #: An instance of any class
+    CLASS = "IClass"
+
+    #: An instance of any named union
+    UNION = "IUnion"
+
+
+#: Type of a value of the kind, as a parameter and as a loop variable
+_VALUE_TYPE_BY_KIND: Final[Mapping[_Kind, Stripped]] = {
+    _Kind.STRINGIFIED: Stripped("Object"),
+    _Kind.BYTES: Stripped("byte[]"),
+    _Kind.ENUM: Stripped("IEnum"),
+    _Kind.CLASS: Stripped("IClass"),
+    _Kind.UNION: Stripped("IUnion<?>"),
+}
+assert all(kind in _VALUE_TYPE_BY_KIND for kind in _Kind)
+
+#: Type of a value of the kind as an argument of ``List`` or of ``Tuple{N}``.
+#:
+#: Java generics are invariant, so a ``List<IExtension>`` is *not*
+#: a ``List<IClass>`` and a ``Tuple2<IExtension, IKey>`` is *not*
+#: a ``Tuple2<IClass, IClass>``. The bound has to be spelled out for the
+#: container to accept the list or the tuple which a property actually holds.
+_ARGUMENT_TYPE_BY_KIND: Final[Mapping[_Kind, Stripped]] = {
+    _Kind.STRINGIFIED: Stripped("?"),
+    _Kind.BYTES: Stripped("byte[]"),
+    _Kind.ENUM: Stripped("? extends IEnum"),
+    _Kind.CLASS: Stripped("? extends IClass"),
+    _Kind.UNION: Stripped("? extends IUnion<?>"),
+}
+assert all(kind in _ARGUMENT_TYPE_BY_KIND for kind in _Kind)
+
+#: Name the writer rendering a value of the kind as the content of an element.
+#: An instance is not written as a content at all -- it writes its own,
+#: self-describing element -- so the two instance kinds are absent.
+_CONTENT_WRITER_BY_KIND: Final[Mapping[_Kind, Identifier]] = {
+    _Kind.STRINGIFIED: Identifier("writeStringifiedContent"),
+    _Kind.BYTES: Identifier("writeByteArrayContent"),
+    _Kind.ENUM: Identifier("writeEnum"),
+}
+
+
+@require(
+    lambda type_anno: not isinstance(
+        type_anno,
+        (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
+    ),
+    "A list and a tuple are containers of kinds, and not a kind of their own",
+)
+def _kind_of(type_anno: intermediate.TypeAnnotationUnion) -> _Kind:
+    """Determine what a value of ``type_anno`` is written through."""
+    primitive_type = intermediate.try_primitive_type(type_anno)
+
+    if primitive_type is intermediate.PrimitiveType.BYTEARRAY:
+        return _Kind.BYTES
+
+    if primitive_type is not None:
+        return _Kind.STRINGIFIED
+
+    assert isinstance(
+        type_anno, intermediate.OurTypeAnnotation
+    ), f"Expected a primitive, a constrained primitive or one of our types, but got: {type_anno}"
+
+    our_type = type_anno.our_type
+
+    if isinstance(our_type, intermediate.Enumeration):
+        return _Kind.ENUM
+
+    if isinstance(our_type, intermediate.NamedUnion):
+        return _Kind.UNION
+
+    assert isinstance(
+        our_type, (intermediate.AbstractClass, intermediate.ConcreteClass)
+    ), f"Expected a class, but got: {our_type}"
+
+    return _Kind.CLASS
+
+
+def _item_kinds(type_anno: intermediate.TypeAnnotationUnion) -> List[_Kind]:
+    """
+    Determine what the items of the list or of the tuple ``type_anno`` are written through.
+
+    A list gives a single kind, a tuple one per item, in order. This is
+    the whole of what a container's writer depends on.
+    """
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        return [_kind_of(type_anno.items)]
+
+    assert isinstance(
+        type_anno, intermediate.TupleTypeAnnotation
+    ), f"Expected a list or a tuple, but got: {type_anno}"
+
+    return [_kind_of(item_type_anno) for item_type_anno in type_anno.items]
+
+
 def _as_sequence_name(cls: intermediate.ConcreteClass) -> Identifier:
     """Name the function writing the properties of ``cls`` as their sequence."""
     return Identifier(f"write{java_naming.class_name(cls.name)}AsSequence")
@@ -181,28 +312,23 @@ def _content_writer_name(type_anno: intermediate.TypeAnnotationUnion) -> Identif
     """
     Name the function writing ``type_anno`` as the content of an element.
 
-    There is no writer per leaf type to match the reading side: once the value
-    is at hand, nothing type-specific is left to do with it, so all four
-    primitives rendered through ``toString`` share a single writer, the byte
-    array has its own, and every enumeration shares ``writeEnum`` -- a literal
-    carries its own text, so one non-generic method renders any of them. Only
-    a list and a tuple have something of their own to write, and hence get
-    a function each.
+    Only a list and a tuple have something of their own to write, and hence
+    get a function each; every leaf is written by the shared writer of its
+    kind. Either way the name follows the kind and not the type, so one
+    function serves every type which is written the same way -- see
+    :py:class:`_Kind`.
     """
-    if isinstance(
-        type_anno, (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation)
-    ):
-        return Identifier(f"write{java_common.type_moniker(type_anno)}")
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        return Identifier(
+            f"write{java_common.list_moniker(_kind_of(type_anno.items).value)}"
+        )
 
-    primitive_type = intermediate.try_primitive_type(type_anno)
+    if isinstance(type_anno, intermediate.TupleTypeAnnotation):
+        return Identifier(
+            f"write{java_common.tuple_moniker([kind.value for kind in _item_kinds(type_anno)])}"
+        )
 
-    if primitive_type is intermediate.PrimitiveType.BYTEARRAY:
-        return Identifier("writeByteArrayContent")
-
-    if primitive_type is not None:
-        return Identifier("writeStringifiedContent")
-
-    return Identifier("writeEnum")
+    return _CONTENT_WRITER_BY_KIND[_kind_of(type_anno)]
 
 
 @require(lambda v_name: v_name.startswith("v"))
@@ -211,7 +337,7 @@ def _at_v_writer_name(
     type_anno: intermediate.TypeAnnotationUnion, v_name: str
 ) -> Identifier:
     """Name the function writing ``type_anno`` as an element called ``v_name``."""
-    return Identifier(f"writeAtV{v_name[1:]}_{java_common.type_moniker(type_anno)}")
+    return Identifier(f"writeAtV{v_name[1:]}_{_kind_of(type_anno).value}")
 
 
 def _element_writer_name(
@@ -278,7 +404,7 @@ def _content_writer_reference(type_anno: intermediate.TypeAnnotationUnion) -> St
 
 
 class _Needed:
-    """Track which shared helpers and which readers the meta-model reaches."""
+    """Track which shared helpers, readers and writers the meta-model reaches."""
 
     def __init__(self) -> None:
         """Initialize with nothing needed."""
@@ -297,50 +423,98 @@ class _Needed:
             dict()
         )  # type: MutableMapping[str, Tuple[intermediate.TypeAnnotationUnion, str]]
 
+        # NOTE (mristin):
+        # The writers are collected separately from the readers, although both
+        # are reached by the very same walk. A writer is named after the kind
+        # it writes and not after the type (see :py:class:`_Kind`), so several
+        # types collapse onto one writer where each of them still needs
+        # a reader of its own. The annotation kept here is therefore only the
+        # first representative registered for that name -- everything the
+        # writer is generated from is derived from its kinds.
+
+        #: Content writers to emit, keyed by their function name
+        self.content_writers = (
+            dict()
+        )  # type: MutableMapping[str, intermediate.TypeAnnotationUnion]
+
+        #: Positional item writers to emit, keyed by their function name
+        self.at_v_writers = (
+            dict()
+        )  # type: MutableMapping[str, Tuple[intermediate.TypeAnnotationUnion, str]]
+
+        #: Kinds written as the content of an element, be it of a property,
+        #: of a list item or of a tuple item
+        self.written_kinds = set()  # type: Set[_Kind]
+
 
 def _collect_needed(symbol_table: intermediate.SymbolTable) -> _Needed:
     """
-    Determine which shared helpers and which readers have to be generated.
+    Determine which shared helpers, readers and writers have to be generated.
 
-    The pass recurses into the items of a list and of a tuple: an item is read
-    by the same readers, only one nesting level deeper, and the reader it needs
-    may occur nowhere else in the model. Without the recursion, a model whose
-    only ``str`` sits in a ``List[List[str]]`` would emit a reader composed of
-    helpers which were never generated.
+    The pass recurses into the items of a list and of a tuple: an item is
+    de/serialized by the same functions, only one nesting level deeper, and
+    the function it needs may occur nowhere else in the model. Without
+    the recursion, a model whose only ``str`` sits in a ``List[List[str]]``
+    would emit a reader composed of helpers which were never generated.
+
+    One walk answers for both directions, since the reading and the writing
+    reach a value over the very same path. What they need at the end of that
+    path differs, though: a reader per type against a writer per kind (see
+    :py:class:`_Kind`), so the two are collected side by side.
+
+    A step is taken at most once per type, which is what the reader
+    de-duplication keys on. That is never too coarse for the writers: every
+    writer key is derived from the type reached, so a type seen twice yields
+    the very same keys, and two types which share a writer are each still
+    walked, as their reader keys differ.
 
     Only the properties of the concrete classes matter, as they are the only
-    thing de-serialized as a sequence of XML elements.
+    thing de/serialized as a sequence of XML elements.
     """
     needed = _Needed()
 
     def register_item(type_anno: intermediate.TypeAnnotationUnion, v_name: str) -> None:
-        """Register the reader of a single element holding ``type_anno``."""
+        """Register the de/serialization of a single element of ``type_anno``."""
         if _is_instance_type(type_anno):
             # NOTE (mristin):
-            # An instance reads its own, self-describing element, so it needs
-            # neither a positional reader nor a content reader.
+            # An instance de/serializes its own, self-describing element, so
+            # it needs neither a positional nor a content function.
             return
 
         register_content(type_anno)
 
-        name = _at_v_reader_name(type_anno, v_name)
-        if name not in needed.at_v_readers:
-            needed.at_v_readers[name] = (type_anno, v_name)
+        reader_name = _at_v_reader_name(type_anno, v_name)
+        if reader_name not in needed.at_v_readers:
+            needed.at_v_readers[reader_name] = (type_anno, v_name)
+
+        writer_name = _at_v_writer_name(type_anno, v_name)
+        if writer_name not in needed.at_v_writers:
+            needed.at_v_writers[writer_name] = (type_anno, v_name)
 
     @require(lambda type_anno: not _is_instance_type(type_anno))
     def register_content(type_anno: intermediate.TypeAnnotationUnion) -> None:
-        """Register the reader of the content of an element as ``type_anno``."""
+        """Register the de/serialization of the content of an element."""
         moniker = java_common.type_moniker(type_anno)
         if moniker in needed.content_readers:
             return
 
-        if isinstance(type_anno, intermediate.ListTypeAnnotation):
-            needed.lists = True
-            register_item(type_anno.items, "v")
-        elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
-            for i, item_type_anno in enumerate(type_anno.items):
-                register_item(item_type_anno, f"v{i + 1}")
+        if isinstance(
+            type_anno,
+            (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
+        ):
+            writer_name = _content_writer_name(type_anno)
+            if writer_name not in needed.content_writers:
+                needed.content_writers[writer_name] = type_anno
+
+            if isinstance(type_anno, intermediate.ListTypeAnnotation):
+                needed.lists = True
+                register_item(type_anno.items, "v")
+            else:
+                for i, item_type_anno in enumerate(type_anno.items):
+                    register_item(item_type_anno, f"v{i + 1}")
         else:
+            needed.written_kinds.add(_kind_of(type_anno))
+
             primitive_type = intermediate.try_primitive_type(type_anno)
             if primitive_type is not None:
                 needed.primitive_types.add(primitive_type)
@@ -352,7 +526,10 @@ def _collect_needed(symbol_table: intermediate.SymbolTable) -> _Needed:
                 needed.enumerations = True
 
                 # NOTE (mristin):
-                # ``readEnum`` is built on the text path.
+                # ``readEnum`` is built on the text path. ``writeEnum`` is
+                # not -- a literal carries its own text -- so the writing
+                # needs no ``stringified`` kind on the account of
+                # an enumeration.
                 needed.primitive_types.add(intermediate.PrimitiveType.STR)
 
         needed.content_readers[moniker] = type_anno
@@ -2273,6 +2450,31 @@ private static void writeByteArrayContent(
 
 
 # fmt: off
+@require(
+    lambda type_anno: isinstance(
+        type_anno,
+        (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation)
+    )
+)
+# fmt: on
+def _container_type(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
+    """
+    Render the type of the list or of the tuple ``type_anno`` as its writer takes it.
+
+    The items are spelled by the kind they are written through, so that
+    the writer of that kind accepts every list, and every tuple, of that
+    shape -- see :py:data:`_ARGUMENT_TYPE_BY_KIND` for why the bound has to
+    be written out.
+    """
+    kinds = _item_kinds(type_anno)
+
+    if isinstance(type_anno, intermediate.ListTypeAnnotation):
+        return Stripped(f"List<{_ARGUMENT_TYPE_BY_KIND[kinds[0]]}>")
+
+    return java_common.tuple_type([_ARGUMENT_TYPE_BY_KIND[kind] for kind in kinds])
+
+
+# fmt: off
 @require(lambda type_anno: not _is_instance_type(type_anno))
 @require(
     lambda type_anno: isinstance(
@@ -2284,14 +2486,30 @@ private static void writeByteArrayContent(
 )
 # fmt: on
 def _generate_content_writer(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
-    """Generate the function writing ``type_anno`` as the content of an element."""
+    """
+    Generate the function writing ``type_anno`` as the content of an element.
+
+    Everything here is derived from the kinds of the items and never from
+    their types, so that the one function really does serve every list, and
+    every tuple, whose items are written the same way -- ``type_anno`` is only
+    the first representative which reached this writer.
+
+    The parameter is therefore wider than the list or the tuple a property
+    holds, which means ``javac`` no longer rejects a value handed to
+    the writer of the wrong kind: a ``List<byte[]>`` passed to
+    ``writeListOf_stringified`` compiles, and would render ``[B@1a2b3c``
+    instead of base64. What keeps that from happening is that a single
+    :py:func:`_kind_of` decides both the name of the writer and its body, and
+    that a byte array is a kind of its own -- the same discipline
+    :py:func:`aas_core_codegen.java.common.leaf_moniker` already relies on.
+    """
     name = _content_writer_name(type_anno)
-    value_type = java_common.generate_type(type_anno)
+    value_type = _container_type(type_anno)
 
     body: Stripped
 
     if isinstance(type_anno, intermediate.ListTypeAnnotation):
-        item_type = java_common.generate_type(type_anno.items)
+        item_type = _VALUE_TYPE_BY_KIND[_kind_of(type_anno.items)]
         item_writer = _element_writer_name(type_anno.items, "v")
 
         # NOTE (mristin):
@@ -2356,16 +2574,22 @@ private static void {name}(
 def _generate_at_v_writer(
     type_anno: intermediate.TypeAnnotationUnion, v_name: str
 ) -> Stripped:
-    """Generate the function writing ``type_anno`` as a ``v``-element."""
+    """
+    Generate the function writing ``type_anno`` as a ``v``-element.
+
+    Only the kind of the value decides what is written, so this is one
+    function per kind and position, and ``type_anno`` is merely the first
+    representative which reached it.
+    """
     name = _at_v_writer_name(type_anno, v_name)
-    value_type = java_common.generate_type(type_anno)
+    value_type = _VALUE_TYPE_BY_KIND[_kind_of(type_anno)]
     v_name_literal = java_common.string_literal(v_name)
     content_writer = _content_writer_reference(type_anno)
 
     return Stripped(
         f"""\
 private static void {name}(
-{I}{indent_but_first_line(value_type, I)} that,
+{I}{value_type} that,
 {I}XMLStreamWriter writer) {{
 {I}writeElement(
 {II}{v_name_literal},
@@ -2471,8 +2695,11 @@ def _generate_visitor(
     errors = []  # type: List[Error]
 
     # NOTE (mristin):
-    # The reading and the writing are composed out of the same shapes, so
-    # the very same gating pass answers for both.
+    # One gating pass answers for both directions, since the reading and
+    # the writing reach a value over the same path. It keeps a collection per
+    # direction, though, because a writer is named after the kind it writes
+    # and a reader after the type it reads, so the writers are strictly
+    # fewer -- see :py:class:`_Kind`.
     needed = _collect_needed(symbol_table)
 
     write_classes, write_unions = _collect_dispatching_writers(symbol_table)
@@ -2499,36 +2726,19 @@ def _generate_visitor(
     if write_unions:
         blocks.append(_generate_write_union())
 
-    written_primitives = set()  # type: Set[intermediate.PrimitiveType]
-    for type_anno in needed.content_readers.values():
-        primitive_type = intermediate.try_primitive_type(type_anno)
-        if primitive_type is not None:
-            written_primitives.add(primitive_type)
-
-    if any(
-        primitive_type is not intermediate.PrimitiveType.BYTEARRAY
-        for primitive_type in written_primitives
-    ):
+    if _Kind.STRINGIFIED in needed.written_kinds:
         blocks.append(_generate_write_stringified_content())
 
-    if intermediate.PrimitiveType.BYTEARRAY in written_primitives:
+    if _Kind.BYTES in needed.written_kinds:
         blocks.append(_generate_write_byte_array_content())
 
-    if needed.enumerations:
+    if _Kind.ENUM in needed.written_kinds:
         blocks.append(_generate_write_enum())
 
-    for type_anno in needed.content_readers.values():
-        if intermediate.try_primitive_type(type_anno) is not None:
-            continue
-
-        if isinstance(type_anno, intermediate.OurTypeAnnotation) and isinstance(
-            type_anno.our_type, intermediate.Enumeration
-        ):
-            continue
-
+    for type_anno in needed.content_writers.values():
         blocks.append(_generate_content_writer(type_anno))
 
-    for type_anno, v_name in needed.at_v_readers.values():
+    for type_anno, v_name in needed.at_v_writers.values():
         blocks.append(_generate_at_v_writer(type_anno, v_name))
 
     # The abstract classes are directly dispatched by the transformer,

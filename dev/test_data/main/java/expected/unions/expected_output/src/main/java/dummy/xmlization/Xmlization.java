@@ -2259,12 +2259,12 @@ public class Xmlization {
       writer.writeCharacters(that.toString());
     }
 
-    private static void writeListOf_StructuralUnion(
-      List<StructuralUnion> that,
+    private static void writeListOf_IUnion(
+      List<? extends IUnion<?>> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
-        for (StructuralUnion item : that) {
+        for (IUnion<?> item : that) {
           writeUnion(item, writer);
           index++;
         }
@@ -2275,40 +2275,11 @@ public class Xmlization {
       }
     }
 
-    private static void writeListOf_MixedUnion(
-      List<MixedUnion> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (MixedUnion item : that) {
-          writeUnion(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeListOf_ModelTypedUnion(
-      List<ModelTypedUnion> that,
-      XMLStreamWriter writer) {
-      int index = 0;
-      try {
-        for (ModelTypedUnion item : that) {
-          writeUnion(item, writer);
-          index++;
-        }
-      } catch (_SerializeFailure failure) {
-        failure.getError().prependSegment(
-          new Reporting.IndexSegment(index));
-        throw failure;
-      }
-    }
-
-    private static void writeTupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(
-      Tuple3<StructuralUnion, MixedUnion, ModelTypedUnion> that,
+    private static void writeTupleOf3_IUnion_IUnion_IUnion(
+      Tuple3<
+        ? extends IUnion<?>,
+        ? extends IUnion<?>,
+        ? extends IUnion<?>> that,
       XMLStreamWriter writer) {
       int index = 0;
       try {
@@ -2553,25 +2524,25 @@ public class Xmlization {
         "listStructuralProperty",
         that.getListStructuralProperty(),
         writer,
-        _VisitorWithWriter::writeListOf_StructuralUnion);
+        _VisitorWithWriter::writeListOf_IUnion);
 
       writeProperty(
         "listMixedProperty",
         that.getListMixedProperty(),
         writer,
-        _VisitorWithWriter::writeListOf_MixedUnion);
+        _VisitorWithWriter::writeListOf_IUnion);
 
       writeProperty(
         "listModelTypedProperty",
         that.getListModelTypedProperty(),
         writer,
-        _VisitorWithWriter::writeListOf_ModelTypedUnion);
+        _VisitorWithWriter::writeListOf_IUnion);
 
       writeProperty(
         "tupleProperty",
         that.getTupleProperty(),
         writer,
-        _VisitorWithWriter::writeTupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion);
+        _VisitorWithWriter::writeTupleOf3_IUnion_IUnion_IUnion);
 
       writeOptionalProperty(
         "optionalStructuralProperty",
