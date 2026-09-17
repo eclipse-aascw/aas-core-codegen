@@ -249,14 +249,7 @@ _CONTENT_WRITER_BY_KIND: Final[Mapping[_Kind, Identifier]] = {
 }
 
 
-@require(
-    lambda type_anno: not isinstance(
-        type_anno,
-        (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation),
-    ),
-    "A list and a tuple are containers of kinds, and not a kind of their own",
-)
-def _kind_of(type_anno: intermediate.TypeAnnotationUnion) -> _Kind:
+def _kind_of(type_anno: intermediate.AtomicTypeAnnotation) -> _Kind:
     """Determine what a value of ``type_anno`` is written through."""
     primitive_type = intermediate.try_primitive_type(type_anno)
 
@@ -285,21 +278,48 @@ def _kind_of(type_anno: intermediate.TypeAnnotationUnion) -> _Kind:
     return _Kind.CLASS
 
 
-def _item_kinds(type_anno: intermediate.TypeAnnotationUnion) -> List[_Kind]:
+def _item_type_annotations(
+    type_anno: intermediate.ContainerTypeAnnotation,
+) -> List[intermediate.AtomicTypeAnnotation]:
+    """
+    Give the items of the list or of the tuple ``type_anno``, in order.
+
+    An item is atomic, which
+    :py:func:`aas_core_codegen.intermediate._translate._verify_only_simple_type_patterns`
+    guarantees for a tuple and which the code generators assume for a list. We
+    narrow it here, once, so that everything downstream can simply say so in
+    its signature.
+    """
+    items = (
+        [type_anno.items]
+        if isinstance(type_anno, intermediate.ListTypeAnnotation)
+        else list(type_anno.items)
+    )
+
+    result = []  # type: List[intermediate.AtomicTypeAnnotation]
+    for item in items:
+        assert isinstance(item, intermediate.AtomicTypeAnnotationAsTuple), (
+            f"We only support lists and tuples of atomic values (primitives, "
+            f"constrained primitives, enumeration literals), of classes or of "
+            f"named unions when de/serializing to XML, but got the nested "
+            f"type {item}. Please contact the developers if you need this "
+            f"feature."
+        )
+        result.append(item)
+
+    return result
+
+
+def _item_kinds(type_anno: intermediate.ContainerTypeAnnotation) -> List[_Kind]:
     """
     Determine what the items of the list or of the tuple ``type_anno`` are written through.
 
     A list gives a single kind, a tuple one per item, in order. This is
     the whole of what a container's writer depends on.
     """
-    if isinstance(type_anno, intermediate.ListTypeAnnotation):
-        return [_kind_of(type_anno.items)]
-
-    assert isinstance(
-        type_anno, intermediate.TupleTypeAnnotation
-    ), f"Expected a list or a tuple, but got: {type_anno}"
-
-    return [_kind_of(item_type_anno) for item_type_anno in type_anno.items]
+    return [
+        _kind_of(item_type_anno) for item_type_anno in _item_type_annotations(type_anno)
+    ]
 
 
 def _as_sequence_name(cls: intermediate.ConcreteClass) -> Identifier:
@@ -320,7 +340,7 @@ def _content_writer_name(type_anno: intermediate.TypeAnnotationUnion) -> Identif
     """
     if isinstance(type_anno, intermediate.ListTypeAnnotation):
         return Identifier(
-            f"write{java_common.list_moniker(_kind_of(type_anno.items).value)}"
+            f"write{java_common.list_moniker(_item_kinds(type_anno)[0].value)}"
         )
 
     if isinstance(type_anno, intermediate.TupleTypeAnnotation):
@@ -328,20 +348,24 @@ def _content_writer_name(type_anno: intermediate.TypeAnnotationUnion) -> Identif
             f"write{java_common.tuple_moniker([kind.value for kind in _item_kinds(type_anno)])}"
         )
 
+    assert isinstance(
+        type_anno, intermediate.AtomicTypeAnnotationAsTuple
+    ), f"Expected an atomic type annotation, but got: {type_anno}"
+
     return _CONTENT_WRITER_BY_KIND[_kind_of(type_anno)]
 
 
 @require(lambda v_name: v_name.startswith("v"))
 @require(lambda type_anno: not _is_instance_type(type_anno))
 def _at_v_writer_name(
-    type_anno: intermediate.TypeAnnotationUnion, v_name: str
+    type_anno: intermediate.AtomicTypeAnnotation, v_name: str
 ) -> Identifier:
     """Name the function writing ``type_anno`` as an element called ``v_name``."""
     return Identifier(f"writeAtV{v_name[1:]}_{_kind_of(type_anno).value}")
 
 
 def _element_writer_name(
-    type_anno: intermediate.TypeAnnotationUnion, v_name: str
+    type_anno: intermediate.AtomicTypeAnnotation, v_name: str
 ) -> Identifier:
     """
     Name the function writing a single element holding ``type_anno``.
@@ -435,12 +459,12 @@ class _Needed:
         #: Content writers to emit, keyed by their function name
         self.content_writers = (
             dict()
-        )  # type: MutableMapping[str, intermediate.TypeAnnotationUnion]
+        )  # type: MutableMapping[str, intermediate.ContainerTypeAnnotation]
 
         #: Positional item writers to emit, keyed by their function name
         self.at_v_writers = (
             dict()
-        )  # type: MutableMapping[str, Tuple[intermediate.TypeAnnotationUnion, str]]
+        )  # type: MutableMapping[str, Tuple[intermediate.AtomicTypeAnnotation, str]]
 
         #: Kinds written as the content of an element, be it of a property,
         #: of a list item or of a tuple item
@@ -473,7 +497,9 @@ def _collect_needed(symbol_table: intermediate.SymbolTable) -> _Needed:
     """
     needed = _Needed()
 
-    def register_item(type_anno: intermediate.TypeAnnotationUnion, v_name: str) -> None:
+    def register_item(
+        type_anno: intermediate.AtomicTypeAnnotation, v_name: str
+    ) -> None:
         """Register the de/serialization of a single element of ``type_anno``."""
         if _is_instance_type(type_anno):
             # NOTE (mristin):
@@ -506,13 +532,19 @@ def _collect_needed(symbol_table: intermediate.SymbolTable) -> _Needed:
             if writer_name not in needed.content_writers:
                 needed.content_writers[writer_name] = type_anno
 
+            item_type_annos = _item_type_annotations(type_anno)
+
             if isinstance(type_anno, intermediate.ListTypeAnnotation):
                 needed.lists = True
-                register_item(type_anno.items, "v")
+                register_item(item_type_annos[0], "v")
             else:
-                for i, item_type_anno in enumerate(type_anno.items):
+                for i, item_type_anno in enumerate(item_type_annos):
                     register_item(item_type_anno, f"v{i + 1}")
         else:
+            assert isinstance(
+                type_anno, intermediate.AtomicTypeAnnotationAsTuple
+            ), f"Expected an atomic type annotation, but got: {type_anno}"
+
             needed.written_kinds.add(_kind_of(type_anno))
 
             primitive_type = intermediate.try_primitive_type(type_anno)
@@ -2449,15 +2481,7 @@ private static void writeByteArrayContent(
 # region Writers of a single type
 
 
-# fmt: off
-@require(
-    lambda type_anno: isinstance(
-        type_anno,
-        (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation)
-    )
-)
-# fmt: on
-def _container_type(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
+def _container_type(type_anno: intermediate.ContainerTypeAnnotation) -> Stripped:
     """
     Render the type of the list or of the tuple ``type_anno`` as its writer takes it.
 
@@ -2474,18 +2498,10 @@ def _container_type(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
     return java_common.tuple_type([_ARGUMENT_TYPE_BY_KIND[kind] for kind in kinds])
 
 
-# fmt: off
 @require(lambda type_anno: not _is_instance_type(type_anno))
-@require(
-    lambda type_anno: isinstance(
-        type_anno,
-        (intermediate.ListTypeAnnotation, intermediate.TupleTypeAnnotation)
-    ),
-    "A primitive and an enumeration are written by one of the shared content "
-    "writers, so only a list and a tuple are left with a writer of their own",
-)
-# fmt: on
-def _generate_content_writer(type_anno: intermediate.TypeAnnotationUnion) -> Stripped:
+def _generate_content_writer(
+    type_anno: intermediate.ContainerTypeAnnotation,
+) -> Stripped:
     """
     Generate the function writing ``type_anno`` as the content of an element.
 
@@ -2505,12 +2521,13 @@ def _generate_content_writer(type_anno: intermediate.TypeAnnotationUnion) -> Str
     """
     name = _content_writer_name(type_anno)
     value_type = _container_type(type_anno)
+    item_type_annos = _item_type_annotations(type_anno)
 
     body: Stripped
 
     if isinstance(type_anno, intermediate.ListTypeAnnotation):
-        item_type = _VALUE_TYPE_BY_KIND[_kind_of(type_anno.items)]
-        item_writer = _element_writer_name(type_anno.items, "v")
+        item_type = _VALUE_TYPE_BY_KIND[_kind_of(item_type_annos[0])]
+        item_writer = _element_writer_name(item_type_annos[0], "v")
 
         # NOTE (mristin):
         # The ``try`` sits outside the loop, and the index is advanced only
@@ -2537,7 +2554,7 @@ try {{
         ), f"Expected a tuple, but got: {type_anno}"
 
         item_writes = []  # type: List[str]
-        for i, item_type_anno in enumerate(type_anno.items):
+        for i, item_type_anno in enumerate(item_type_annos):
             if i > 0:
                 item_writes.append(f"{I}index = {i};")
 
@@ -2572,7 +2589,7 @@ private static void {name}(
 
 @require(lambda type_anno: not _is_instance_type(type_anno))
 def _generate_at_v_writer(
-    type_anno: intermediate.TypeAnnotationUnion, v_name: str
+    type_anno: intermediate.AtomicTypeAnnotation, v_name: str
 ) -> Stripped:
     """
     Generate the function writing ``type_anno`` as a ``v``-element.
@@ -2735,11 +2752,11 @@ def _generate_visitor(
     if _Kind.ENUM in needed.written_kinds:
         blocks.append(_generate_write_enum())
 
-    for type_anno in needed.content_writers.values():
-        blocks.append(_generate_content_writer(type_anno))
+    for container_type_anno in needed.content_writers.values():
+        blocks.append(_generate_content_writer(container_type_anno))
 
-    for type_anno, v_name in needed.at_v_writers.values():
-        blocks.append(_generate_at_v_writer(type_anno, v_name))
+    for item_type_anno, v_name in needed.at_v_writers.values():
+        blocks.append(_generate_at_v_writer(item_type_anno, v_name))
 
     # The abstract classes are directly dispatched by the transformer,
     # so we do not need to handle them separately.
