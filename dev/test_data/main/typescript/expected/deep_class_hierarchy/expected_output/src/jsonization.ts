@@ -1307,203 +1307,213 @@ function integerToJsonable(that: number): number {
 }
 
 /**
- * Serialize every item of `items` with `serializeItem` into a JSON-able
- * array.
+ * Serialize `that` to a JSON-able representation.
  *
- * @param items - to be serialized
- * @param serializeItem - to serialize a single item of `items`
- * @returns JSON-able array
- * @typeParam T - type of a single item to be serialized
- * @typeParam J - type of a single item once serialized
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
  */
-/**
- * Serialize `items` one by one, recording the index of the one which is refused.
- */
-function serializeArray<T, J extends JsonValue>(
-  items: Iterable<T>,
-  serializeItem: (item: T) => J
-): Array<J> {
-  const result = new Array<J>();
-  let i = 0;
-  for (const item of items) {
-    try {
-      result.push(serializeItem(item));
-    } catch (error) {
-      if (error instanceof SerializationError) {
-        error.prependIndex(i);
-      }
-      throw error;
-    }
-    i++;
-  }
-  return result;
+function serializeBranch(
+  that: AasTypes.Branch
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  jsonable["identifier"] =
+    that.identifier;
+
+  jsonable["description"] =
+    that.description;
+
+  jsonable["modelType"] = "Branch";
+
+  return jsonable;
 }
 
 /**
- * Transform the instance to its JSON-able representation.
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
  */
-class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
+function serializeLeaf(
+  that: AasTypes.Leaf
+): JsonObject {
+  const jsonable: JsonObject = {};
 
-
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformBranch(
-    that: AasTypes.Branch
-  ): JsonObject {
-    const jsonable: JsonObject = {};
-
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     jsonable["identifier"] =
       that.identifier;
 
     jsonable["description"] =
       that.description;
 
-    jsonable["modelType"] = "Branch";
-
-    return jsonable;
+    prop = "value";
+    jsonable["value"] =
+      integerToJsonable(that.value);
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformLeaf(
-    that: AasTypes.Leaf
-  ): JsonObject {
-    const jsonable: JsonObject = {};
+  jsonable["modelType"] = "Leaf";
 
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeBlossom(
+  that: AasTypes.Blossom
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
     jsonable["identifier"] =
       that.identifier;
 
     jsonable["description"] =
       that.description;
 
-    try {
-      jsonable["value"] =
-        integerToJsonable(that.value);
-    } catch (error) {
-      if (error instanceof SerializationError) {
-        error.prependProperty("value");
-      }
-      throw error;
-    }
-
-    jsonable["modelType"] = "Leaf";
-
-    return jsonable;
-  }
-
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
-  transformBlossom(
-    that: AasTypes.Blossom
-  ): JsonObject {
-    const jsonable: JsonObject = {};
-
-    jsonable["identifier"] =
-      that.identifier;
-
-    jsonable["description"] =
-      that.description;
-
-    try {
-      jsonable["value"] =
-        integerToJsonable(that.value);
-    } catch (error) {
-      if (error instanceof SerializationError) {
-        error.prependProperty("value");
-      }
-      throw error;
-    }
+    prop = "value";
+    jsonable["value"] =
+      integerToJsonable(that.value);
 
     jsonable["details"] =
       that.details;
-
-    jsonable["modelType"] = "Blossom";
-
-    return jsonable;
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
+  jsonable["modelType"] = "Blossom";
+
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeSomething(
+  that: AasTypes.Something
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
+    prop = "someChoice";
+    jsonable["someChoice"] =
+      serializeClass(that.someChoice);
+
+    prop = "somethingWithoutChoice";
+    jsonable["somethingWithoutChoice"] =
+      serializeClass(that.somethingWithoutChoice);
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
+
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeContainer(
+  that: AasTypes.Container
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  // Only a property which can be refused records its name.
+  let prop = "";
+  try {
+    prop = "node";
+    jsonable["node"] =
+      serializeClass(that.node);
+
+    prop = "something";
+    jsonable["something"] =
+      serializeSomething(that.something);
+  } catch (error) {
+    if (error instanceof SerializationError) {
+      error.prependProperty(prop);
+    }
+    throw error;
+  }
+
+  return jsonable;
+}
+
+/**
+ * Dispatch the serialization on the run-time type of an instance.
+ */
+class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
+  transformBranch(
+    that: AasTypes.Branch
+  ): JsonObject {
+    return serializeBranch(that);
+  }
+
+  transformLeaf(
+    that: AasTypes.Leaf
+  ): JsonObject {
+    return serializeLeaf(that);
+  }
+
+  transformBlossom(
+    that: AasTypes.Blossom
+  ): JsonObject {
+    return serializeBlossom(that);
+  }
+
   transformSomething(
     that: AasTypes.Something
   ): JsonObject {
-    const jsonable: JsonObject = {};
-
-    try {
-      jsonable["someChoice"] =
-        this.transform(that.someChoice);
-    } catch (error) {
-      if (error instanceof SerializationError) {
-        error.prependProperty("someChoice");
-      }
-      throw error;
-    }
-
-    try {
-      jsonable["somethingWithoutChoice"] =
-        this.transform(that.somethingWithoutChoice);
-    } catch (error) {
-      if (error instanceof SerializationError) {
-        error.prependProperty("somethingWithoutChoice");
-      }
-      throw error;
-    }
-
-    return jsonable;
+    return serializeSomething(that);
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
   transformContainer(
     that: AasTypes.Container
   ): JsonObject {
-    const jsonable: JsonObject = {};
-
-    try {
-      jsonable["node"] =
-        this.transform(that.node);
-    } catch (error) {
-      if (error instanceof SerializationError) {
-        error.prependProperty("node");
-      }
-      throw error;
-    }
-
-    try {
-      jsonable["something"] =
-        this.transform(that.something);
-    } catch (error) {
-      if (error instanceof SerializationError) {
-        error.prependProperty("something");
-      }
-      throw error;
-    }
-
-    return jsonable;
+    return serializeContainer(that);
   }
 }
 
 const SERIALIZER = new Serializer();
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * Which JSON object that is, is decided by the run-time type of `that`, so this
+ * one function serves an abstract class, a concrete class with descendants and
+ * a named union alike. The de-serialization, which has to decide what to construct
+ * before it has read anything, needs a dispatcher per type instead.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeClass(that: AasTypes.Class): JsonObject {
+  return that.transform(SERIALIZER);
+}
 
 /**
  * Convert `that` to a JSON-able structure.
@@ -1514,7 +1524,7 @@ const SERIALIZER = new Serializer();
  * {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify|JSON.stringify})
  */
 export function toJsonable(that: AasTypes.Class): JsonObject {
-  return SERIALIZER.transform(that);
+  return serializeClass(that);
 }
 
 // endregion

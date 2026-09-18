@@ -2096,269 +2096,364 @@ export class SerializationError extends Error {
 }
 
 /**
- * Serialize every item of `items` with `serializeItem` into a JSON-able
- * array.
+ * Serialize `that` to a JSON-able representation.
  *
- * @param items - to be serialized
- * @param serializeItem - to serialize a single item of `items`
- * @returns JSON-able array
- * @typeParam T - type of a single item to be serialized
- * @typeParam J - type of a single item once serialized
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
  */
+function serializeStructuralFirst(
+  that: AasTypes.StructuralFirst
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  jsonable["uniqueToFirst"] =
+    that.uniqueToFirst;
+
+  return jsonable;
+}
+
 /**
- * Serialize `items` one by one, recording the index of the one which is refused.
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
  */
-function serializeArray<T, J extends JsonValue>(
-  items: Iterable<T>,
-  serializeItem: (item: T) => J
-): Array<J> {
-  const result = new Array<J>();
-  let i = 0;
-  for (const item of items) {
-    try {
-      result.push(serializeItem(item));
-    } catch (error) {
-      if (error instanceof SerializationError) {
-        error.prependIndex(i);
-      }
-      throw error;
-    }
-    i++;
+function serializeStructuralSecond(
+  that: AasTypes.StructuralSecond
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  jsonable["uniqueToSecond"] =
+    that.uniqueToSecond;
+
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeMixedAbstractDescendantOne(
+  that: AasTypes.MixedAbstractDescendantOne
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  jsonable["uniqueToAbstractDescendantOne"] =
+    that.uniqueToAbstractDescendantOne;
+
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeMixedAbstractDescendantTwo(
+  that: AasTypes.MixedAbstractDescendantTwo
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  jsonable["uniqueToAbstractDescendantTwo"] =
+    that.uniqueToAbstractDescendantTwo;
+
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeMixedConcreteWithDescendants(
+  that: AasTypes.MixedConcreteWithDescendants
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  jsonable["someBaseProperty"] =
+    that.someBaseProperty;
+
+  jsonable["modelType"] = "MixedConcreteWithDescendants";
+
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeMixedConcreteWithDescendantsChild(
+  that: AasTypes.MixedConcreteWithDescendantsChild
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  jsonable["someBaseProperty"] =
+    that.someBaseProperty;
+
+  jsonable["someChildProperty"] =
+    that.someChildProperty;
+
+  jsonable["modelType"] = "MixedConcreteWithDescendantsChild";
+
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeMixedConcreteLeaf(
+  that: AasTypes.MixedConcreteLeaf
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  jsonable["uniqueToConcreteLeaf"] =
+    that.uniqueToConcreteLeaf;
+
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeModelTypedFirst(
+  that: AasTypes.ModelTypedFirst
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  jsonable["someProperty"] =
+    that.someProperty;
+
+  jsonable["modelType"] = "ModelTypedFirst";
+
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeModelTypedSecond(
+  that: AasTypes.ModelTypedSecond
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  jsonable["someProperty"] =
+    that.someProperty;
+
+  jsonable["modelType"] = "ModelTypedSecond";
+
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeSomething(
+  that: AasTypes.Something
+): JsonObject {
+  const jsonable: JsonObject = {};
+
+  jsonable["structuralProperty"] =
+    serializeClass(that.structuralProperty);
+
+  jsonable["mixedProperty"] =
+    serializeClass(that.mixedProperty);
+
+  jsonable["modelTypedProperty"] =
+    serializeClass(that.modelTypedProperty);
+
+  jsonable["listStructuralProperty"] =
+    serialize_ListOf_StructuralUnion(that.listStructuralProperty);
+
+  jsonable["listMixedProperty"] =
+    serialize_ListOf_MixedUnion(that.listMixedProperty);
+
+  jsonable["listModelTypedProperty"] =
+    serialize_ListOf_ModelTypedUnion(that.listModelTypedProperty);
+
+  jsonable["tupleProperty"] =
+    serialize_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(that.tupleProperty);
+
+  if (that.optionalStructuralProperty !== null) {
+    jsonable["optionalStructuralProperty"] =
+      serializeClass(that.optionalStructuralProperty);
+  }
+
+  if (that.optionalMixedProperty !== null) {
+    jsonable["optionalMixedProperty"] =
+      serializeClass(that.optionalMixedProperty);
+  }
+
+  if (that.optionalModelTypedProperty !== null) {
+    jsonable["optionalModelTypedProperty"] =
+      serializeClass(that.optionalModelTypedProperty);
+  }
+
+  return jsonable;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_StructuralUnion(
+  that: ReadonlyArray<AasTypes.StructuralUnion>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  for (let i = 0; i < that.length; i++) {
+    result[i] = serializeClass(that[i]);
   }
   return result;
 }
 
 /**
- * Transform the instance to its JSON-able representation.
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_MixedUnion(
+  that: ReadonlyArray<AasTypes.MixedUnion>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  for (let i = 0; i < that.length; i++) {
+    result[i] = serializeClass(that[i]);
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - list to be serialized
+ * @returns JSON-able array
+ */
+function serialize_ListOf_ModelTypedUnion(
+  that: ReadonlyArray<AasTypes.ModelTypedUnion>
+): Array<JsonObject> {
+  const result = new Array<JsonObject>(that.length);
+  for (let i = 0; i < that.length; i++) {
+    result[i] = serializeClass(that[i]);
+  }
+  return result;
+}
+
+/**
+ * Serialize `that` to a JSON-able array.
+ *
+ * @param that - tuple to be serialized
+ * @returns JSON-able array
+ */
+function serialize_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(
+  that: readonly [AasTypes.StructuralUnion, AasTypes.MixedUnion, AasTypes.ModelTypedUnion]
+): Array<JsonValue> {
+  const result = new Array<JsonValue>(3);
+  result[0] = serializeClass(that[0]);
+  result[1] = serializeClass(that[1]);
+  result[2] = serializeClass(that[2]);
+  return result;
+}
+
+/**
+ * Dispatch the serialization on the run-time type of an instance.
  */
 class Serializer extends AasTypes.AbstractTransformer<JsonObject> {
-
-
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
   transformStructuralFirst(
     that: AasTypes.StructuralFirst
   ): JsonObject {
-    const jsonable: JsonObject = {};
-
-    jsonable["uniqueToFirst"] =
-      that.uniqueToFirst;
-
-    return jsonable;
+    return serializeStructuralFirst(that);
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
   transformStructuralSecond(
     that: AasTypes.StructuralSecond
   ): JsonObject {
-    const jsonable: JsonObject = {};
-
-    jsonable["uniqueToSecond"] =
-      that.uniqueToSecond;
-
-    return jsonable;
+    return serializeStructuralSecond(that);
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
   transformMixedAbstractDescendantOne(
     that: AasTypes.MixedAbstractDescendantOne
   ): JsonObject {
-    const jsonable: JsonObject = {};
-
-    jsonable["uniqueToAbstractDescendantOne"] =
-      that.uniqueToAbstractDescendantOne;
-
-    return jsonable;
+    return serializeMixedAbstractDescendantOne(that);
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
   transformMixedAbstractDescendantTwo(
     that: AasTypes.MixedAbstractDescendantTwo
   ): JsonObject {
-    const jsonable: JsonObject = {};
-
-    jsonable["uniqueToAbstractDescendantTwo"] =
-      that.uniqueToAbstractDescendantTwo;
-
-    return jsonable;
+    return serializeMixedAbstractDescendantTwo(that);
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
   transformMixedConcreteWithDescendants(
     that: AasTypes.MixedConcreteWithDescendants
   ): JsonObject {
-    const jsonable: JsonObject = {};
-
-    jsonable["someBaseProperty"] =
-      that.someBaseProperty;
-
-    jsonable["modelType"] = "MixedConcreteWithDescendants";
-
-    return jsonable;
+    return serializeMixedConcreteWithDescendants(that);
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
   transformMixedConcreteWithDescendantsChild(
     that: AasTypes.MixedConcreteWithDescendantsChild
   ): JsonObject {
-    const jsonable: JsonObject = {};
-
-    jsonable["someBaseProperty"] =
-      that.someBaseProperty;
-
-    jsonable["someChildProperty"] =
-      that.someChildProperty;
-
-    jsonable["modelType"] = "MixedConcreteWithDescendantsChild";
-
-    return jsonable;
+    return serializeMixedConcreteWithDescendantsChild(that);
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
   transformMixedConcreteLeaf(
     that: AasTypes.MixedConcreteLeaf
   ): JsonObject {
-    const jsonable: JsonObject = {};
-
-    jsonable["uniqueToConcreteLeaf"] =
-      that.uniqueToConcreteLeaf;
-
-    return jsonable;
+    return serializeMixedConcreteLeaf(that);
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
   transformModelTypedFirst(
     that: AasTypes.ModelTypedFirst
   ): JsonObject {
-    const jsonable: JsonObject = {};
-
-    jsonable["someProperty"] =
-      that.someProperty;
-
-    jsonable["modelType"] = "ModelTypedFirst";
-
-    return jsonable;
+    return serializeModelTypedFirst(that);
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
   transformModelTypedSecond(
     that: AasTypes.ModelTypedSecond
   ): JsonObject {
-    const jsonable: JsonObject = {};
-
-    jsonable["someProperty"] =
-      that.someProperty;
-
-    jsonable["modelType"] = "ModelTypedSecond";
-
-    return jsonable;
+    return serializeModelTypedSecond(that);
   }
 
-  /**
-   * Serialize `that` to a JSON-able representation.
-   *
-   * @param that - instance to be serialization
-   * @returns JSON-able representation
-   */
   transformSomething(
     that: AasTypes.Something
   ): JsonObject {
-    const jsonable: JsonObject = {};
-
-    jsonable["structuralProperty"] =
-      this.transform(that.structuralProperty);
-
-    jsonable["mixedProperty"] =
-      this.transform(that.mixedProperty);
-
-    jsonable["modelTypedProperty"] =
-      this.transform(that.modelTypedProperty);
-
-    jsonable["listStructuralProperty"] = serializeArray(
-      that.listStructuralProperty,
-      (item) => this.transform(item)
-    );
-
-    jsonable["listMixedProperty"] = serializeArray(
-      that.listMixedProperty,
-      (item) => this.transform(item)
-    );
-
-    jsonable["listModelTypedProperty"] = serializeArray(
-      that.listModelTypedProperty,
-      (item) => this.transform(item)
-    );
-
-    jsonable["tupleProperty"] = [
-      this.transform(that.tupleProperty[0]),
-      this.transform(that.tupleProperty[1]),
-      this.transform(that.tupleProperty[2])
-    ];
-
-    if (that.optionalStructuralProperty !== null) {
-      jsonable["optionalStructuralProperty"] =
-        this.transform(that.optionalStructuralProperty);
-    }
-
-    if (that.optionalMixedProperty !== null) {
-      jsonable["optionalMixedProperty"] =
-        this.transform(that.optionalMixedProperty);
-    }
-
-    if (that.optionalModelTypedProperty !== null) {
-      jsonable["optionalModelTypedProperty"] =
-        this.transform(that.optionalModelTypedProperty);
-    }
-
-    return jsonable;
+    return serializeSomething(that);
   }
 }
 
 const SERIALIZER = new Serializer();
+
+/**
+ * Serialize `that` to a JSON-able representation.
+ *
+ * Which JSON object that is, is decided by the run-time type of `that`, so this
+ * one function serves an abstract class, a concrete class with descendants and
+ * a named union alike. The de-serialization, which has to decide what to construct
+ * before it has read anything, needs a dispatcher per type instead.
+ *
+ * @param that - instance to be serialized
+ * @returns JSON-able representation
+ */
+function serializeClass(that: AasTypes.Class): JsonObject {
+  return that.transform(SERIALIZER);
+}
 
 /**
  * Convert `that` to a JSON-able structure.
@@ -2369,7 +2464,7 @@ const SERIALIZER = new Serializer();
  * {@link https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/JSON/stringify|JSON.stringify})
  */
 export function toJsonable(that: AasTypes.Class): JsonObject {
-  return SERIALIZER.transform(that);
+  return serializeClass(that);
 }
 
 // endregion

@@ -83,6 +83,10 @@ first_class_of_only_required_primitives = _types.first_class_of_only_required_pr
 first_class_with_a_required_property = _types.first_class_with_a_required_property
 collect_ids_of_types_reaching_a_number = _types.collect_ids_of_types_reaching_a_number
 reaches_a_number = _types.reaches_a_number
+collect_ids_of_types_reaching_an_enumeration = (
+    _types.collect_ids_of_types_reaching_an_enumeration
+)
+reaches_an_enumeration = _types.reaches_an_enumeration
 
 RuntimeId = _types.RuntimeId
 IdOfOurType = _types.IdOfOurType

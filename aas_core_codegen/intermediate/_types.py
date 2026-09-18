@@ -3,6 +3,7 @@ import abc
 import enum
 import pathlib
 from typing import (
+    Callable,
     Sequence,
     Optional,
     Union,
@@ -3751,28 +3752,64 @@ def reaches_a_number(
 
     if isinstance(type_anno, OurTypeAnnotation):
         # NOTE (mristin):
-        # An enumeration literal goes on the wire as a string, so it can not fail.
-        # Everything else is reported by the fixed point.
+        # An enumeration is a leaf here -- a literal is not a number -- and every
+        # other one of our types is reported by the fixed point.
         return runtime_id(type_anno.our_type) in ids_of_types_reaching_a_number
 
     return False
 
 
-def collect_ids_of_types_reaching_a_number(
+def reaches_an_enumeration(
+    type_annotation: "TypeAnnotationUnion",
+    ids_of_types_reaching_an_enumeration: Set[IdOfOurType],
+) -> bool:
+    """
+    Check whether an enumeration can be reached from a value of ``type_annotation``.
+
+    The ``ids_of_types_reaching_an_enumeration`` comes from
+    :py:func:`collect_ids_of_types_reaching_an_enumeration`.
+    """
+    type_anno = beneath_optional(type_annotation)
+
+    # NOTE (mristin):
+    # A constrained primitive answers here as well, and it is never an enumeration.
+    if try_primitive_type(type_anno) is not None:
+        return False
+
+    if isinstance(type_anno, ListTypeAnnotation):
+        return reaches_an_enumeration(
+            type_anno.items, ids_of_types_reaching_an_enumeration
+        )
+
+    if isinstance(type_anno, TupleTypeAnnotation):
+        return any(
+            reaches_an_enumeration(item, ids_of_types_reaching_an_enumeration)
+            for item in type_anno.items
+        )
+
+    if isinstance(type_anno, OurTypeAnnotation):
+        if isinstance(type_anno.our_type, Enumeration):
+            return True
+
+        return runtime_id(type_anno.our_type) in ids_of_types_reaching_an_enumeration
+
+    return False
+
+
+def _collect_ids_of_types_reaching(
     symbol_table: SymbolTable,
+    reaches: Callable[["TypeAnnotationUnion", Set[IdOfOurType]], bool],
 ) -> Set[IdOfOurType]:
     """
-    Collect the IDs of our types from which a number can be reached.
-
-    The IDs refer to IDs of the Python objects in this context.
-
-    Only a number can be refused by a JSON serialization, so only a value from
-    which one is reachable can fail at all. Everything else -- a boolean,
-    a string, a byte array, an enumeration literal, and any collection of them
-    -- goes on the wire as it comes.
+    Collect the IDs of our types from which ``reaches`` answers true.
 
     This is a fixed point, as the classes refer to each other and a cycle must
-    not be walked twice. Pass the result to :py:func:`reaches_a_number`.
+    not be walked twice. The set handed to ``reaches`` is the one being built, so
+    it answers only for the types already in it, which is all the fixed point
+    needs and is why it grows until nothing changes.
+
+    Only the leaf rule differs between the queries, and that rule lives in
+    ``reaches`` itself, so the iteration is written once here.
     """
     result = set()  # type: Set[IdOfOurType]
 
@@ -3785,8 +3822,7 @@ def collect_ids_of_types_reaching_a_number(
                 continue
 
             if any(
-                reaches_a_number(prop.type_annotation, result)
-                for prop in cls.properties
+                reaches(prop.type_annotation, result) for prop in cls.properties
             ) or any(
                 runtime_id(descendant) in result
                 for descendant in cls.concrete_descendants
@@ -3805,6 +3841,39 @@ def collect_ids_of_types_reaching_a_number(
                 changed = True
 
     return result
+
+
+def collect_ids_of_types_reaching_a_number(
+    symbol_table: SymbolTable,
+) -> Set[IdOfOurType]:
+    """
+    Collect the IDs of our types from which a number can be reached.
+
+    A number is one of the values a serialization may have to refuse: JSON holds
+    neither an infinity nor a not-a-number, and an integer only within
+    [-2^53 + 1, 2^53 - 1]. *Which* values a given target refuses is that target's
+    own business -- see :py:func:`reaches_an_enumeration` for the other kind --
+    and all this says is where a number can be reached from.
+
+    Pass the result to :py:func:`reaches_a_number`.
+    """
+    return _collect_ids_of_types_reaching(symbol_table, reaches_a_number)
+
+
+def collect_ids_of_types_reaching_an_enumeration(
+    symbol_table: SymbolTable,
+) -> Set[IdOfOurType]:
+    """
+    Collect the IDs of our types from which an enumeration can be reached.
+
+    Whether an enumeration literal can be refused at all depends on the target:
+    a literal of a Java or of a Python enumeration can not be invalid, while
+    a TypeScript, a C# or a Go enumeration is an integer at run time, so a value
+    outside the enumeration is possible and has to be reported.
+
+    Pass the result to :py:func:`reaches_an_enumeration`.
+    """
+    return _collect_ids_of_types_reaching(symbol_table, reaches_an_enumeration)
 
 
 def first_class_of_only_required_primitives(
