@@ -1560,6 +1560,8 @@ def _read_properties(
 
     The end element corresponding to :paramref:`element` will be read as well.
 
+    A property may come at most once, and an unknown tag is refused outright.
+
     The property is marked on the error path here, once for all the properties,
     instead of in every reader: the tag of the child element *is* the XML name of
     the property which we are reading.
@@ -1609,6 +1611,14 @@ def _read_properties(
 
         try:
             tag_wo_ns = _parse_element_tag(prop_element)
+
+            # NOTE (mristin):
+            # A tag already in ``values`` can only have got there by being read,
+            # so its presence means that the property comes a second time.
+            if tag_wo_ns in values:
+                raise DeserializationException(
+                    f"Property {tag_wo_ns!r} occurred more than once"
+                )
 
             reader = readers.get(tag_wo_ns, None)
             if reader is None:

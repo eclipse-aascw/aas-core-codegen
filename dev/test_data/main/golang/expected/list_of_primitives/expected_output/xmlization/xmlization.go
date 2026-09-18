@@ -680,6 +680,17 @@ func missingProperty(name string) error {
 	)
 }
 
+// Report that the property with the given `local` name has been observed more
+// than once.
+func duplicatePropertyError(local string) error {
+	return newDeserializationError(
+		fmt.Sprintf(
+			"Property %s occurred more than once",
+			local,
+		),
+	)
+}
+
 // Report that we got a start element with the `local` name, but expected a start
 // element with the `expectedLocal` name.
 func unexpectedStartElement(local string, expectedLocal string) error {
@@ -1087,26 +1098,46 @@ func readSomethingAsSequence(
 		var valueErr error
 		switch local {
 		case "someBools":
+			if foundSomeBools {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSomeBools, current, valueErr = readListOf(
 				decoder, current, readAtV_bool,
 			)
 			foundSomeBools = true
 		case "someInts":
+			if foundSomeInts {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSomeInts, current, valueErr = readListOf(
 				decoder, current, readAtV_long,
 			)
 			foundSomeInts = true
 		case "someFloats":
+			if foundSomeFloats {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSomeFloats, current, valueErr = readListOf(
 				decoder, current, readAtV_double,
 			)
 			foundSomeFloats = true
 		case "someStrings":
+			if foundSomeStrings {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSomeStrings, current, valueErr = readListOf(
 				decoder, current, readAtV_string,
 			)
 			foundSomeStrings = true
 		case "someBytes":
+			if foundSomeBytes {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSomeBytes, current, valueErr = readListOf(
 				decoder, current, readAtV_bytes,
 			)

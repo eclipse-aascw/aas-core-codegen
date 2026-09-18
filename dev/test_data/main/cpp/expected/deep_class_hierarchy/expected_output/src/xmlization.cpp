@@ -1476,6 +1476,18 @@ template <
   );
 }
 
+DeserializationError DuplicatePropertyError(
+  const std::string& name
+) {
+  return DeserializationError(
+    common::Concat(
+      L"Property ",
+      common::Utf8ToWstring(name),
+      L" occurred more than once"
+    )
+  );
+}
+
 DeserializationError DeserializationErrorFromReader(
   ReaderMergingText& reader
 ) {
@@ -3018,6 +3030,11 @@ std::pair<
 
     switch (property) {
       case properties::OfBranch::kIdentifier: {
+        if (the_identifier.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_identifier,
           error
@@ -3025,6 +3042,11 @@ std::pair<
         break;
       }
       case properties::OfBranch::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -3267,6 +3289,11 @@ std::pair<
 
     switch (property) {
       case properties::OfLeaf::kIdentifier: {
+        if (the_identifier.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_identifier,
           error
@@ -3274,6 +3301,11 @@ std::pair<
         break;
       }
       case properties::OfLeaf::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -3281,6 +3313,11 @@ std::pair<
         break;
       }
       case properties::OfLeaf::kValue: {
+        if (the_value.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value,
           error
@@ -3534,6 +3571,11 @@ std::pair<
 
     switch (property) {
       case properties::OfBlossom::kIdentifier: {
+        if (the_identifier.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_identifier,
           error
@@ -3541,6 +3583,11 @@ std::pair<
         break;
       }
       case properties::OfBlossom::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -3548,6 +3595,11 @@ std::pair<
         break;
       }
       case properties::OfBlossom::kValue: {
+        if (the_value.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value,
           error
@@ -3555,6 +3607,11 @@ std::pair<
         break;
       }
       case properties::OfBlossom::kDetails: {
+        if (the_details.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_details,
           error
@@ -3813,6 +3870,11 @@ std::pair<
 
     switch (property) {
       case properties::OfSomething::kSomeChoice: {
+        if (the_some_choice.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_some_choice,
           error
@@ -3820,6 +3882,11 @@ std::pair<
         break;
       }
       case properties::OfSomething::kSomethingWithoutChoice: {
+        if (the_something_without_choice.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_something_without_choice,
           error
@@ -4060,6 +4127,11 @@ std::pair<
 
     switch (property) {
       case properties::OfContainer::kNode: {
+        if (the_node.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_node,
           error
@@ -4067,6 +4139,11 @@ std::pair<
         break;
       }
       case properties::OfContainer::kSomething: {
+        if (the_something.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_something,
           error

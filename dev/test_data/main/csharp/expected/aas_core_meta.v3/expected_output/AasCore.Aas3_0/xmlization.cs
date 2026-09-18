@@ -545,6 +545,15 @@ namespace AasCore.Aas3_0
             }
 
             /// <summary>
+            /// Report a property which the sequence of the properties gave more than once.
+            /// </summary>
+            private static Reporting.Error DuplicatePropertyError(string elementName)
+            {
+                return new Reporting.Error(
+                    $"Property {elementName} occurred more than once");
+            }
+
+            /// <summary>
             /// Parse the text of a literal of <typeparamref name="T" />.
             /// </summary>
             /// <remarks>
@@ -1332,26 +1341,56 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "semanticId":
+                                if (theSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
+                                if (theSupplementalSemanticIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "name":
+                                if (theName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theName = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueType":
+                                if (theValueType != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValueType = Read_DataTypeDefXsd(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
+                                if (theValue != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValue = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "refersTo":
+                                if (theRefersTo != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theRefersTo = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -1740,22 +1779,47 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "embeddedDataSpecifications":
+                                if (theEmbeddedDataSpecifications != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "version":
+                                if (theVersion != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theVersion = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "revision":
+                                if (theRevision != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theRevision = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "creator":
+                                if (theCreator != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theCreator = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "templateId":
+                                if (theTemplateId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theTemplateId = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -1916,30 +1980,65 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "semanticId":
+                                if (theSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
+                                if (theSupplementalSemanticIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "kind":
+                                if (theKind != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theKind = Read_QualifierKind(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "type":
+                                if (theType != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theType = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueType":
+                                if (theValueType != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValueType = Read_DataTypeDefXsd(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
+                                if (theValue != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValue = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueId":
+                                if (theValueId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValueId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -2057,46 +2156,101 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
+                                if (theExtensions != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
+                                if (theCategory != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
+                                if (theIdShort != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
+                                if (theDisplayName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
+                                if (theDescription != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "administration":
+                                if (theAdministration != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theAdministration = Read_IAdministrativeInformation(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "id":
+                                if (theId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theId = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
+                                if (theEmbeddedDataSpecifications != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "derivedFrom":
+                                if (theDerivedFrom != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDerivedFrom = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "assetInformation":
+                                if (theAssetInformation != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theAssetInformation = Read_IAssetInformation(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "submodels":
+                                if (theSubmodels != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSubmodels = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -2212,22 +2366,47 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "assetKind":
+                                if (theAssetKind != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theAssetKind = Read_AssetKind(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "globalAssetId":
+                                if (theGlobalAssetId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theGlobalAssetId = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "specificAssetIds":
+                                if (theSpecificAssetIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSpecificAssetIds = Read_ListOf_ISpecificAssetId(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "assetType":
+                                if (theAssetType != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theAssetType = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "defaultThumbnail":
+                                if (theDefaultThumbnail != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDefaultThumbnail = Read_IResource(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -2324,10 +2503,20 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "path":
+                                if (thePath != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 thePath = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "contentType":
+                                if (theContentType != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theContentType = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -2424,22 +2613,47 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "semanticId":
+                                if (theSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
+                                if (theSupplementalSemanticIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "name":
+                                if (theName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theName = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
+                                if (theValue != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValue = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "externalSubjectId":
+                                if (theExternalSubjectId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theExternalSubjectId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -2557,54 +2771,119 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
+                                if (theExtensions != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
+                                if (theCategory != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
+                                if (theIdShort != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
+                                if (theDisplayName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
+                                if (theDescription != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "administration":
+                                if (theAdministration != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theAdministration = Read_IAdministrativeInformation(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "id":
+                                if (theId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theId = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "kind":
+                                if (theKind != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theKind = Read_ModellingKind(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
+                                if (theSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
+                                if (theSupplementalSemanticIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
+                                if (theQualifiers != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
+                                if (theEmbeddedDataSpecifications != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "submodelElements":
+                                if (theSubmodelElements != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSubmodelElements = Read_ListOf_ISubmodelElement(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -2784,46 +3063,101 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
+                                if (theExtensions != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
+                                if (theCategory != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
+                                if (theIdShort != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
+                                if (theDisplayName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
+                                if (theDescription != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
+                                if (theSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
+                                if (theSupplementalSemanticIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
+                                if (theQualifiers != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
+                                if (theEmbeddedDataSpecifications != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "first":
+                                if (theFirst != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theFirst = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "second":
+                                if (theSecond != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSecond = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -2978,58 +3312,128 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
+                                if (theExtensions != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
+                                if (theCategory != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
+                                if (theIdShort != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
+                                if (theDisplayName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
+                                if (theDescription != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
+                                if (theSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
+                                if (theSupplementalSemanticIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
+                                if (theQualifiers != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
+                                if (theEmbeddedDataSpecifications != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "orderRelevant":
+                                if (theOrderRelevant != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theOrderRelevant = Read_bool(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticIdListElement":
+                                if (theSemanticIdListElement != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSemanticIdListElement = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "typeValueListElement":
+                                if (theTypeValueListElement != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theTypeValueListElement = Read_AasSubmodelElements(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueTypeListElement":
+                                if (theValueTypeListElement != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValueTypeListElement = Read_DataTypeDefXsd(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
+                                if (theValue != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValue = Read_ListOf_ISubmodelElement(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -3143,42 +3547,92 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
+                                if (theExtensions != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
+                                if (theCategory != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
+                                if (theIdShort != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
+                                if (theDisplayName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
+                                if (theDescription != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
+                                if (theSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
+                                if (theSupplementalSemanticIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
+                                if (theQualifiers != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
+                                if (theEmbeddedDataSpecifications != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
+                                if (theValue != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValue = Read_ListOf_ISubmodelElement(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -3322,50 +3776,110 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
+                                if (theExtensions != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
+                                if (theCategory != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
+                                if (theIdShort != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
+                                if (theDisplayName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
+                                if (theDescription != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
+                                if (theSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
+                                if (theSupplementalSemanticIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
+                                if (theQualifiers != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
+                                if (theEmbeddedDataSpecifications != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueType":
+                                if (theValueType != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValueType = Read_DataTypeDefXsd(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
+                                if (theValue != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValue = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueId":
+                                if (theValueId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValueId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -3478,46 +3992,101 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
+                                if (theExtensions != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
+                                if (theCategory != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
+                                if (theIdShort != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
+                                if (theDisplayName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
+                                if (theDescription != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
+                                if (theSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
+                                if (theSupplementalSemanticIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
+                                if (theQualifiers != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
+                                if (theEmbeddedDataSpecifications != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
+                                if (theValue != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValue = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueId":
+                                if (theValueId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValueId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -3620,50 +4189,110 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
+                                if (theExtensions != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
+                                if (theCategory != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
+                                if (theIdShort != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
+                                if (theDisplayName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
+                                if (theDescription != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
+                                if (theSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
+                                if (theSupplementalSemanticIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
+                                if (theQualifiers != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
+                                if (theEmbeddedDataSpecifications != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueType":
+                                if (theValueType != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValueType = Read_DataTypeDefXsd(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "min":
+                                if (theMin != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theMin = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "max":
+                                if (theMax != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theMax = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -3775,42 +4404,92 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
+                                if (theExtensions != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
+                                if (theCategory != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
+                                if (theIdShort != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
+                                if (theDisplayName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
+                                if (theDescription != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
+                                if (theSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
+                                if (theSupplementalSemanticIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
+                                if (theQualifiers != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
+                                if (theEmbeddedDataSpecifications != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
+                                if (theValue != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValue = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -3911,46 +4590,101 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
+                                if (theExtensions != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
+                                if (theCategory != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
+                                if (theIdShort != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
+                                if (theDisplayName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
+                                if (theDescription != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
+                                if (theSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
+                                if (theSupplementalSemanticIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
+                                if (theQualifiers != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
+                                if (theEmbeddedDataSpecifications != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
+                                if (theValue != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValue = Read_bytes(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "contentType":
+                                if (theContentType != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theContentType = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -4062,46 +4796,101 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
+                                if (theExtensions != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
+                                if (theCategory != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
+                                if (theIdShort != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
+                                if (theDisplayName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
+                                if (theDescription != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
+                                if (theSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
+                                if (theSupplementalSemanticIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
+                                if (theQualifiers != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
+                                if (theEmbeddedDataSpecifications != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
+                                if (theValue != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValue = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "contentType":
+                                if (theContentType != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theContentType = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -4214,50 +5003,110 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
+                                if (theExtensions != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
+                                if (theCategory != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
+                                if (theIdShort != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
+                                if (theDisplayName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
+                                if (theDescription != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
+                                if (theSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
+                                if (theSupplementalSemanticIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
+                                if (theQualifiers != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
+                                if (theEmbeddedDataSpecifications != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "first":
+                                if (theFirst != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theFirst = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "second":
+                                if (theSecond != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSecond = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "annotations":
+                                if (theAnnotations != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theAnnotations = Read_ListOf_IDataElement(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -4382,54 +5231,119 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
+                                if (theExtensions != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
+                                if (theCategory != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
+                                if (theIdShort != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
+                                if (theDisplayName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
+                                if (theDescription != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
+                                if (theSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
+                                if (theSupplementalSemanticIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
+                                if (theQualifiers != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
+                                if (theEmbeddedDataSpecifications != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "statements":
+                                if (theStatements != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theStatements = Read_ListOf_ISubmodelElement(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "entityType":
+                                if (theEntityType != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theEntityType = Read_EntityType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "globalAssetId":
+                                if (theGlobalAssetId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theGlobalAssetId = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "specificAssetIds":
+                                if (theSpecificAssetIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSpecificAssetIds = Read_ListOf_ISpecificAssetId(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -4540,34 +5454,74 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "source":
+                                if (theSource != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSource = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "sourceSemanticId":
+                                if (theSourceSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSourceSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "observableReference":
+                                if (theObservableReference != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theObservableReference = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "observableSemanticId":
+                                if (theObservableSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theObservableSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "topic":
+                                if (theTopic != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theTopic = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "subjectId":
+                                if (theSubjectId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSubjectId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "timeStamp":
+                                if (theTimeStamp != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theTimeStamp = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "payload":
+                                if (thePayload != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 thePayload = Read_bytes(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -4729,70 +5683,155 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
+                                if (theExtensions != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
+                                if (theCategory != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
+                                if (theIdShort != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
+                                if (theDisplayName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
+                                if (theDescription != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
+                                if (theSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
+                                if (theSupplementalSemanticIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
+                                if (theQualifiers != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
+                                if (theEmbeddedDataSpecifications != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "observed":
+                                if (theObserved != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theObserved = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "direction":
+                                if (theDirection != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDirection = Read_Direction(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "state":
+                                if (theState != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theState = Read_StateOfEvent(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "messageTopic":
+                                if (theMessageTopic != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theMessageTopic = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "messageBroker":
+                                if (theMessageBroker != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theMessageBroker = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "lastUpdate":
+                                if (theLastUpdate != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theLastUpdate = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "minInterval":
+                                if (theMinInterval != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theMinInterval = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "maxInterval":
+                                if (theMaxInterval != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theMaxInterval = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -4931,50 +5970,110 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
+                                if (theExtensions != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
+                                if (theCategory != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
+                                if (theIdShort != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
+                                if (theDisplayName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
+                                if (theDescription != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
+                                if (theSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
+                                if (theSupplementalSemanticIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
+                                if (theQualifiers != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
+                                if (theEmbeddedDataSpecifications != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "inputVariables":
+                                if (theInputVariables != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theInputVariables = Read_ListOf_IOperationVariable(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "outputVariables":
+                                if (theOutputVariables != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theOutputVariables = Read_ListOf_IOperationVariable(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "inoutputVariables":
+                                if (theInoutputVariables != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theInoutputVariables = Read_ListOf_IOperationVariable(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -5067,6 +6166,11 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "value":
+                                if (theValue != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValue = Read_ISubmodelElement(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -5166,38 +6270,83 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
+                                if (theExtensions != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
+                                if (theCategory != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
+                                if (theIdShort != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
+                                if (theDisplayName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
+                                if (theDescription != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "semanticId":
+                                if (theSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "supplementalSemanticIds":
+                                if (theSupplementalSemanticIds != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSupplementalSemanticIds = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "qualifiers":
+                                if (theQualifiers != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theQualifiers = Read_ListOf_IQualifier(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
+                                if (theEmbeddedDataSpecifications != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -5295,38 +6444,83 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "extensions":
+                                if (theExtensions != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theExtensions = Read_ListOf_IExtension(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "category":
+                                if (theCategory != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theCategory = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "idShort":
+                                if (theIdShort != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theIdShort = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "displayName":
+                                if (theDisplayName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDisplayName = Read_ListOf_ILangStringNameType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "description":
+                                if (theDescription != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDescription = Read_ListOf_ILangStringTextType(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "administration":
+                                if (theAdministration != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theAdministration = Read_IAdministrativeInformation(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "id":
+                                if (theId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theId = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "embeddedDataSpecifications":
+                                if (theEmbeddedDataSpecifications != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theEmbeddedDataSpecifications = Read_ListOf_IEmbeddedDataSpecification(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "isCaseOf":
+                                if (theIsCaseOf != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theIsCaseOf = Read_ListOf_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -5428,14 +6622,29 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "type":
+                                if (theType != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theType = Read_ReferenceTypes(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "referredSemanticId":
+                                if (theReferredSemanticId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theReferredSemanticId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "keys":
+                                if (theKeys != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theKeys = Read_ListOf_IKey(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -5540,10 +6749,20 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "type":
+                                if (theType != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theType = Read_KeyTypes(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
+                                if (theValue != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValue = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -5686,10 +6905,20 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "language":
+                                if (theLanguage != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theLanguage = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "text":
+                                if (theText != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theText = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -5793,10 +7022,20 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "language":
+                                if (theLanguage != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theLanguage = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "text":
+                                if (theText != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theText = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -5901,14 +7140,29 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "assetAdministrationShells":
+                                if (theAssetAdministrationShells != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theAssetAdministrationShells = Read_ListOf_IAssetAdministrationShell(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "submodels":
+                                if (theSubmodels != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSubmodels = Read_ListOf_ISubmodel(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "conceptDescriptions":
+                                if (theConceptDescriptions != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theConceptDescriptions = Read_ListOf_IConceptDescription(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -6020,10 +7274,20 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "dataSpecification":
+                                if (theDataSpecification != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDataSpecification = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "dataSpecificationContent":
+                                if (theDataSpecificationContent != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDataSpecificationContent = Read_IDataSpecificationContent(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -6129,18 +7393,38 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "min":
+                                if (theMin != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theMin = Read_bool(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "nom":
+                                if (theNom != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theNom = Read_bool(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "typ":
+                                if (theTyp != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theTyp = Read_bool(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "max":
+                                if (theMax != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theMax = Read_bool(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -6266,10 +7550,20 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "value":
+                                if (theValue != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValue = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueId":
+                                if (theValueId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValueId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -6372,6 +7666,11 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "valueReferencePairs":
+                                if (theValueReferencePairs != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValueReferencePairs = Read_ListOf_IValueReferencePair(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -6464,10 +7763,20 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "language":
+                                if (theLanguage != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theLanguage = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "text":
+                                if (theText != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theText = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -6571,10 +7880,20 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "language":
+                                if (theLanguage != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theLanguage = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "text":
+                                if (theText != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theText = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -6678,10 +7997,20 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "language":
+                                if (theLanguage != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theLanguage = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "text":
+                                if (theText != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theText = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -6795,50 +8124,110 @@ namespace AasCore.Aas3_0
                         switch (elementName)
                         {
                             case "preferredName":
+                                if (thePreferredName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 thePreferredName = Read_ListOf_ILangStringPreferredNameTypeIec61360(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "shortName":
+                                if (theShortName != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theShortName = Read_ListOf_ILangStringShortNameTypeIec61360(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "unit":
+                                if (theUnit != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theUnit = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "unitId":
+                                if (theUnitId != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theUnitId = Read_IReference(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "sourceOfDefinition":
+                                if (theSourceOfDefinition != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSourceOfDefinition = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "symbol":
+                                if (theSymbol != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSymbol = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "dataType":
+                                if (theDataType != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDataType = Read_DataTypeIec61360(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "definition":
+                                if (theDefinition != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theDefinition = Read_ListOf_ILangStringDefinitionTypeIec61360(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueFormat":
+                                if (theValueFormat != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValueFormat = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "valueList":
+                                if (theValueList != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValueList = Read_IValueList(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "value":
+                                if (theValue != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theValue = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "levelType":
+                                if (theLevelType != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theLevelType = Read_ILevelType(
                                     reader, isEmptyProperty, out error);
                                 break;

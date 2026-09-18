@@ -483,6 +483,14 @@ public class Xmlization {
     }
 
     /**
+     * Report a property which the sequence of the properties gave more than once.
+     */
+    private static Reporting.Error duplicatePropertyError(String elementName) {
+      return new Reporting.Error(
+        "Property " + elementName + " occurred more than once");
+    }
+
+    /**
      * Report a required property of the class {@code className} which the
      * sequence of the properties did not give.
      */
@@ -543,6 +551,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "someNames": {
+              if (theSomeNames != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<List<String>> value =
                 readListOf_string(reader, isEmptyProperty);
               if (value.isError()) {

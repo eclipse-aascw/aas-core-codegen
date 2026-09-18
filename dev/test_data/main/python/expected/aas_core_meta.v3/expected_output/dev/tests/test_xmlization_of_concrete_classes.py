@@ -2351,6 +2351,46 @@ class TestLexicalForms(unittest.TestCase):
         self.assertIs(False, instance.min)
 
 
+class TestDuplicateProperty(unittest.TestCase):
+    """Test that a property given more than once is refused."""
+
+    def test_duplicate_property(self) -> None:
+        path = (
+            tests.common.TEST_DATA_DIR
+            / "Xml"
+            / "Expected"
+            / 'extension'
+            / "minimal.xml"
+        )
+
+        text = path.read_text(encoding="utf-8")
+
+        start = text.find('<name>')
+        if start >= 0:
+            end = text.find('</name>', start)
+            duplicated = text[start:end + 7]
+        else:
+            # The element is written self-closing in the example, an empty list
+            # being the usual reason. We write that very element out ourselves.
+            duplicated = '<name/>'
+
+        insertion_index = text.rfind('</extension>')
+
+        self.assertGreaterEqual(
+            insertion_index,
+            0,
+            "Expected the recorded example to contain the closing tag "
+            f"</extension>, but it does not: {path}",
+        )
+
+        broken_text = (
+            text[:insertion_index] + duplicated + text[insertion_index:]
+        )
+
+        with self.assertRaises(aas_xmlization.DeserializationException):
+            aas_xmlization.extension_from_str(broken_text)
+
+
 if __name__ == "__main__":
     unittest.main()
 

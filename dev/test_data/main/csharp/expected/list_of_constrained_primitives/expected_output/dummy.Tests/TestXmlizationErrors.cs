@@ -71,6 +71,83 @@ namespace dummy.Tests
                 "with MoveToContent at: the beginning",
                 message);
         }
+
+        [Test]
+        public void Test_error_on_duplicate_property()
+        {
+            string path = Path.Combine(
+                Aas.Tests.Common.TestDataDir,
+                "Xml",
+                "Expected",
+                "something",
+                "minimal.xml");
+
+            var text = System.IO.File.ReadAllText(path, System.Text.Encoding.UTF8);
+
+            // We cut the element of the property out of the recorded example and put it
+            // in a second time, just before the closing tag of the instance.
+            int start = text.IndexOf(
+                "<someNames>",
+                System.StringComparison.Ordinal);
+
+            string property;
+            if (start >= 0)
+            {
+                int end = text.IndexOf(
+                    "</someNames>",
+                    start,
+                    System.StringComparison.Ordinal);
+
+                property = text.Substring(start, end + 12 - start);
+            }
+            else
+            {
+                // The element is written self-closing in the example, an empty list being
+                // the usual reason. We write that very element out ourselves.
+                property = "<someNames/>";
+            }
+
+            int insertionIndex = text.LastIndexOf(
+                "</something>",
+                System.StringComparison.Ordinal);
+
+            if (insertionIndex < 0)
+            {
+                throw new System.InvalidOperationException(
+                    "We expect the recorded example to contain the closing tag "
+                        + $"</something>, but it does not: {path}");
+            }
+
+            string brokenText = (
+                text.Substring(0, insertionIndex)
+                    + property
+                    + text.Substring(insertionIndex));
+
+            using var stringReader = new System.IO.StringReader(
+                brokenText);
+
+            using var xmlReader = System.Xml.XmlReader.Create(
+                stringReader);
+
+            string? message = null;
+
+            try
+            {
+                Aas.Xmlization.Deserialize.SomethingFrom(
+                    xmlReader);
+            }
+            catch (Aas.Xmlization.Exception exception)
+            {
+                message = exception.Message;
+            }
+
+            if (message == null)
+            {
+                throw new AssertionException(
+                    "Expected an exception when the property "
+                        + "someNames is given twice, but got none");
+            }
+        }
     }  // class TestXmlizationErrors
 }  // namespace dummy.Tests
 

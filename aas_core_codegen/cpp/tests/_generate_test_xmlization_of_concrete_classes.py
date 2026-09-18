@@ -356,6 +356,76 @@ TEST_CASE("Test the de-serialization failure on an unexpected {cls_name}") {{
             )
         )
 
+    duplicate_candidate = intermediate.first_class_with_a_required_property(
+        symbol_table
+    )
+    if duplicate_candidate is not None:
+        duplicate_cls, duplicate_prop = duplicate_candidate
+
+        duplicate_cls_name_xml = naming.xml_class_name(duplicate_cls.name)
+
+        open_tag = f"<{duplicate_prop.xml_name}>"
+        close_tag = f"</{duplicate_prop.xml_name}>"
+        self_closing_tag = f"<{duplicate_prop.xml_name}/>"
+        root_close_tag = f"</{duplicate_cls_name_xml}>"
+
+        blocks.append(
+            Stripped(
+                f"""\
+TEST_CASE("Test the de-serialization failure on a duplicate property") {{
+{I}const std::filesystem::path path(
+{II}DetermineXmlDir()
+{III}/ "Expected"
+{III}/ {cpp_common.string_literal(duplicate_cls_name_xml)}
+{III}/ "minimal.xml"
+{I});
+
+{I}const std::string original(test::common::MustReadString(path));
+
+{I}// We cut the element of the property out of the recorded example and put it
+{I}// in a second time, just before the closing tag of the instance.
+{I}const std::size_t start(
+{II}original.find({cpp_common.string_literal(open_tag)})
+{I});
+
+{I}std::string property;
+{I}if (start != std::string::npos) {{
+{II}const std::size_t end(
+{III}original.find({cpp_common.string_literal(close_tag)}, start)
+{II});
+{II}property = original.substr(start, end + {len(close_tag)} - start);
+{I}}} else {{
+{II}// The element is written self-closing in the example, an empty list being
+{II}// the usual reason. We write that very element out ourselves.
+{II}property = {cpp_common.string_literal(self_closing_tag)};
+{I}}}
+
+{I}const std::size_t insertion_index(
+{II}original.rfind({cpp_common.string_literal(root_close_tag)})
+{I});
+
+{I}INFO(aas::common::Concat("Looking for {root_close_tag} in ", path.string()))
+{I}REQUIRE(insertion_index != std::string::npos);
+
+{I}const std::string broken(
+{II}original.substr(0, insertion_index)
+{III}+ property
+{III}+ original.substr(insertion_index)
+{I});
+
+{I}std::istringstream iss(broken);
+
+{I}aas::common::expected<
+{II}std::shared_ptr<aas::types::IClass>,
+{II}aas::xmlization::DeserializationError
+{I}> deserialized = aas::xmlization::From(iss);
+
+{I}INFO(aas::common::Concat("De-serializing: ", broken))
+{I}REQUIRE(!deserialized.has_value());
+}}"""
+            )
+        )
+
     blocks.extend(_generate_lexical_tests(symbol_table))
 
     blocks.append(cpp_common.WARNING)

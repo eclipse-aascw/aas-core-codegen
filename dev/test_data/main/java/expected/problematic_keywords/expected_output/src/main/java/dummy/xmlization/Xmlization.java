@@ -443,6 +443,14 @@ public class Xmlization {
     }
 
     /**
+     * Report a property which the sequence of the properties gave more than once.
+     */
+    private static Reporting.Error duplicatePropertyError(String elementName) {
+      return new Reporting.Error(
+        "Property " + elementName + " occurred more than once");
+    }
+
+    /**
      * Report a required property of the class {@code className} which the
      * sequence of the properties did not give.
      */
@@ -492,6 +500,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "interface": {
+              if (theInterface != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -502,6 +515,11 @@ public class Xmlization {
               break;
             }
             case "type": {
+              if (theType != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -512,6 +530,11 @@ public class Xmlization {
               break;
             }
             case "range": {
+              if (theRange != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -522,6 +545,11 @@ public class Xmlization {
               break;
             }
             case "void": {
+              if (theVoid != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {

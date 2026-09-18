@@ -19,6 +19,7 @@ from typing import (
     get_args,
     Dict,
     Any,
+    Tuple,
 )
 
 import docutils.nodes
@@ -3678,6 +3679,28 @@ def first_class_of_only_required_primitives(
             for prop in cls.properties
         ):
             return cls
+
+    return None
+
+
+def first_class_with_a_required_property(
+    symbol_table: SymbolTable,
+) -> Optional[Tuple[ConcreteClass, Property]]:
+    """
+    Give out the first concrete class with a required property, and that property.
+
+    A generated test which has to break a recorded example works on the smallest
+    one, as that is the example with the least about it that the test has to know.
+    The smallest example holds the required properties and nothing else, so only
+    a required property is certain to have an element in it.
+
+    ``None`` is given out when no concrete class has a required property, in which
+    case the tests which need one are simply not generated.
+    """
+    for cls in symbol_table.concrete_classes:
+        for prop in cls.properties:
+            if not isinstance(prop.type_annotation, OptionalTypeAnnotation):
+                return cls, prop
 
     return None
 

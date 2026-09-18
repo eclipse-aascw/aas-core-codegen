@@ -794,6 +794,21 @@ private static bool TryNextProperty(
     )
 
 
+def _generate_duplicate_property_error() -> Stripped:
+    """Generate the shared helper reporting a property given more than once."""
+    return Stripped(
+        f"""\
+/// <summary>
+/// Report a property which the sequence of the properties gave more than once.
+/// </summary>
+private static Reporting.Error DuplicatePropertyError(string elementName)
+{{
+{I}return new Reporting.Error(
+{II}$"Property {{elementName}} occurred more than once");
+}}"""
+    )
+
+
 def _generate_at_element_combinator() -> Stripped:
     """
     Generate the combinator reading a whole element of an expected name.
@@ -1590,9 +1605,19 @@ def _generate_deserialize_property(
     target_var = csharp_naming.variable_name(Identifier(f"the_{prop.name}"))
     reader_name = _content_reader_name(type_anno)
 
+    # NOTE (mristin):
+    # A variable which is not null can only have been set by an earlier turn of
+    # the property loop, so it tells us that the property comes a second time.
+    # The check precedes the read, so the duplicate is refused without its
+    # content ever being looked at.
     return (
         Stripped(
             f"""\
+if ({target_var} != null)
+{{
+{I}error = DuplicatePropertyError(elementName);
+{I}break;
+}}
 {target_var} = {reader_name}(
 {I}reader, isEmptyProperty, out error);"""
         ),
@@ -1693,7 +1718,7 @@ if (reader.EOF)
 
         # NOTE (mristin):
         # No braces are necessary, as no case declares a local of its own --
-        # every one of them is a single assignment.
+        # every one of them only guards against a duplicate and assigns.
         case_blocks.append(
             Stripped(
                 f"""\
@@ -2121,15 +2146,26 @@ def _generate_deserialize_impl(
     spec_impls: specific_implementations.SpecificImplementations,
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the implementation for deserialization functions."""
+    needed_readers = _needed_combinators(symbol_table)
+
     blocks = [
         _generate_skip_whitespace_and_comments(),
-        _generate_read_whole_content_as_base_64(),
-        _generate_extract_element_name(),
-        _generate_peek_element_name(),
-        _generate_element_reader_delegates(),
     ]  # type: List[Stripped]
 
-    needed_readers = _needed_combinators(symbol_table)
+    # NOTE (mristin):
+    # The base-64 reader leans on ``WhitespaceRunRegex`` and
+    # ``MatchesXsBase64Binary``, which are only generated for a meta-model with
+    # a byte array in it, so the reader has to be gated on the very same thing.
+    if intermediate.PrimitiveType.BYTEARRAY in needed_readers.primitive_types:
+        blocks.append(_generate_read_whole_content_as_base_64())
+
+    blocks.extend(
+        [
+            _generate_extract_element_name(),
+            _generate_peek_element_name(),
+            _generate_element_reader_delegates(),
+        ]
+    )
     from_element_fields = _generate_from_element_fields(symbol_table)
 
     blocks.extend(_generate_as_text_combinators(needed=needed_readers))
@@ -2150,6 +2186,7 @@ def _generate_deserialize_impl(
         if not cls.is_implementation_specific
     ):
         blocks.append(_generate_try_next_property())
+        blocks.append(_generate_duplicate_property_error())
 
     if needed_readers.enumerations:
         blocks.append(_generate_literal_parser_delegate())

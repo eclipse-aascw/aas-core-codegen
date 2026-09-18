@@ -1363,6 +1363,18 @@ template <
   );
 }
 
+DeserializationError DuplicatePropertyError(
+  const std::string& name
+) {
+  return DeserializationError(
+    common::Concat(
+      L"Property ",
+      common::Utf8ToWstring(name),
+      L" occurred more than once"
+    )
+  );
+}
+
 DeserializationError DeserializationErrorFromReader(
   ReaderMergingText& reader
 ) {
@@ -2592,6 +2604,11 @@ std::pair<
 
     switch (property) {
       case properties::OfSomething::kInterface: {
+        if (the_interface.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_interface,
           error
@@ -2599,6 +2616,11 @@ std::pair<
         break;
       }
       case properties::OfSomething::kType: {
+        if (the_type.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_type,
           error
@@ -2606,6 +2628,11 @@ std::pair<
         break;
       }
       case properties::OfSomething::kRange: {
+        if (the_range.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_range,
           error
@@ -2613,6 +2640,11 @@ std::pair<
         break;
       }
       case properties::OfSomething::kVoid: {
+        if (the_void.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_void,
           error

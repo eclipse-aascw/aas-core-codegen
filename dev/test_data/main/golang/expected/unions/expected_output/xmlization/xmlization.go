@@ -680,6 +680,17 @@ func missingProperty(name string) error {
 	)
 }
 
+// Report that the property with the given `local` name has been observed more
+// than once.
+func duplicatePropertyError(local string) error {
+	return newDeserializationError(
+		fmt.Sprintf(
+			"Property %s occurred more than once",
+			local,
+		),
+	)
+}
+
 // Report that we got a start element with the `local` name, but expected a start
 // element with the `expectedLocal` name.
 func unexpectedStartElement(local string, expectedLocal string) error {
@@ -1052,6 +1063,10 @@ func readStructuralFirstAsSequence(
 		var valueErr error
 		switch local {
 		case "uniqueToFirst":
+			if foundUniqueToFirst {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theUniqueToFirst, current, valueErr = readText(
 				decoder, current,
 			)
@@ -1112,6 +1127,10 @@ func readStructuralSecondAsSequence(
 		var valueErr error
 		switch local {
 		case "uniqueToSecond":
+			if foundUniqueToSecond {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theUniqueToSecond, current, valueErr = readText(
 				decoder, current,
 			)
@@ -1204,6 +1223,10 @@ func readMixedAbstractDescendantOneAsSequence(
 		var valueErr error
 		switch local {
 		case "uniqueToAbstractDescendantOne":
+			if foundUniqueToAbstractDescendantOne {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theUniqueToAbstractDescendantOne, current, valueErr = readText(
 				decoder, current,
 			)
@@ -1264,6 +1287,10 @@ func readMixedAbstractDescendantTwoAsSequence(
 		var valueErr error
 		switch local {
 		case "uniqueToAbstractDescendantTwo":
+			if foundUniqueToAbstractDescendantTwo {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theUniqueToAbstractDescendantTwo, current, valueErr = readText(
 				decoder, current,
 			)
@@ -1324,6 +1351,10 @@ func readMixedConcreteWithDescendantsAsSequence(
 		var valueErr error
 		switch local {
 		case "someBaseProperty":
+			if foundSomeBaseProperty {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSomeBaseProperty, current, valueErr = readText(
 				decoder, current,
 			)
@@ -1386,11 +1417,19 @@ func readMixedConcreteWithDescendantsChildAsSequence(
 		var valueErr error
 		switch local {
 		case "someBaseProperty":
+			if foundSomeBaseProperty {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSomeBaseProperty, current, valueErr = readText(
 				decoder, current,
 			)
 			foundSomeBaseProperty = true
 		case "someChildProperty":
+			if foundSomeChildProperty {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSomeChildProperty, current, valueErr = readText(
 				decoder, current,
 			)
@@ -1457,6 +1496,10 @@ func readMixedConcreteLeafAsSequence(
 		var valueErr error
 		switch local {
 		case "uniqueToConcreteLeaf":
+			if foundUniqueToConcreteLeaf {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theUniqueToConcreteLeaf, current, valueErr = readText(
 				decoder, current,
 			)
@@ -1567,6 +1610,10 @@ func readModelTypedFirstAsSequence(
 		var valueErr error
 		switch local {
 		case "someProperty":
+			if foundSomeProperty {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSomeProperty, current, valueErr = readText(
 				decoder, current,
 			)
@@ -1627,6 +1674,10 @@ func readModelTypedSecondAsSequence(
 		var valueErr error
 		switch local {
 		case "someProperty":
+			if foundSomeProperty {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSomeProperty, current, valueErr = readText(
 				decoder, current,
 			)
@@ -1719,6 +1770,9 @@ func readSomethingAsSequence(
 	foundListMixedProperty := false
 	foundListModelTypedProperty := false
 	foundTupleProperty := false
+	foundOptionalStructuralProperty := false
+	foundOptionalMixedProperty := false
+	foundOptionalModelTypedProperty := false
 
 	for {
 		var local string
@@ -1734,36 +1788,64 @@ func readSomethingAsSequence(
 		var valueErr error
 		switch local {
 		case "structuralProperty":
+			if foundStructuralProperty {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theStructuralProperty, current, valueErr = readElementDispatched(
 				decoder, current, readStructuralUnionDispatched,
 			)
 			foundStructuralProperty = true
 		case "mixedProperty":
+			if foundMixedProperty {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theMixedProperty, current, valueErr = readElementDispatched(
 				decoder, current, readMixedUnionDispatched,
 			)
 			foundMixedProperty = true
 		case "modelTypedProperty":
+			if foundModelTypedProperty {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theModelTypedProperty, current, valueErr = readElementDispatched(
 				decoder, current, readModelTypedUnionDispatched,
 			)
 			foundModelTypedProperty = true
 		case "listStructuralProperty":
+			if foundListStructuralProperty {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theListStructuralProperty, current, valueErr = readListOf(
 				decoder, current, readStructuralUnionDispatched,
 			)
 			foundListStructuralProperty = true
 		case "listMixedProperty":
+			if foundListMixedProperty {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theListMixedProperty, current, valueErr = readListOf(
 				decoder, current, readMixedUnionDispatched,
 			)
 			foundListMixedProperty = true
 		case "listModelTypedProperty":
+			if foundListModelTypedProperty {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theListModelTypedProperty, current, valueErr = readListOf(
 				decoder, current, readModelTypedUnionDispatched,
 			)
 			foundListModelTypedProperty = true
 		case "tupleProperty":
+			if foundTupleProperty {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theTupleProperty, current, valueErr = readTuple3(
 				decoder, current,
 				readStructuralUnionDispatched,
@@ -1772,17 +1854,32 @@ func readSomethingAsSequence(
 			)
 			foundTupleProperty = true
 		case "optionalStructuralProperty":
+			if foundOptionalStructuralProperty {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theOptionalStructuralProperty, current, valueErr = readElementDispatched(
 				decoder, current, readStructuralUnionDispatched,
 			)
+			foundOptionalStructuralProperty = true
 		case "optionalMixedProperty":
+			if foundOptionalMixedProperty {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theOptionalMixedProperty, current, valueErr = readElementDispatched(
 				decoder, current, readMixedUnionDispatched,
 			)
+			foundOptionalMixedProperty = true
 		case "optionalModelTypedProperty":
+			if foundOptionalModelTypedProperty {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theOptionalModelTypedProperty, current, valueErr = readElementDispatched(
 				decoder, current, readModelTypedUnionDispatched,
 			)
+			foundOptionalModelTypedProperty = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",

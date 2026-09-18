@@ -490,6 +490,84 @@ public void test{cls_name_java}VerificationFail() throws IOException, XMLStreamE
             )
         )
 
+    duplicate_candidate = intermediate.first_class_with_a_required_property(
+        symbol_table
+    )
+    if duplicate_candidate is not None:
+        duplicate_cls, duplicate_prop = duplicate_candidate
+
+        duplicate_cls_name_java = java_naming.class_name(duplicate_cls.name)
+        duplicate_cls_name_xml = naming.xml_class_name(duplicate_cls.name)
+
+        open_tag = f"<{duplicate_prop.xml_name}>"
+        close_tag = f"</{duplicate_prop.xml_name}>"
+        self_closing_tag = f"<{duplicate_prop.xml_name}/>"
+        root_close_tag = f"</{duplicate_cls_name_xml}>"
+
+        blocks.append(
+            Stripped(
+                f"""\
+@Test
+public void testDuplicatePropertyFails() throws IOException, XMLStreamException {{
+{I}final Path path =
+{II}Paths.get(
+{III}Common.TEST_DATA_DIR,
+{III}"Xml",
+{III}"Expected",
+{III}{java_common.string_literal(duplicate_cls_name_xml)},
+{III}"minimal.xml");
+
+{I}final String text =
+{II}new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+
+{I}// We cut the element of the property out of the recorded example and put it
+{I}// in a second time, just before the closing tag of the instance.
+{I}final int start = text.indexOf({java_common.string_literal(open_tag)});
+
+{I}final String property;
+{I}if (start >= 0) {{
+{II}final int end = text.indexOf({java_common.string_literal(close_tag)}, start);
+{II}property = text.substring(start, end + {len(close_tag)});
+{I}}} else {{
+{II}// The element is written self-closing in the example, an empty list being
+{II}// the usual reason. We write that very element out ourselves.
+{II}property = {java_common.string_literal(self_closing_tag)};
+{I}}}
+
+{I}final int insertionIndex =
+{II}text.lastIndexOf({java_common.string_literal(root_close_tag)});
+
+{I}if (insertionIndex < 0) {{
+{II}throw new IllegalStateException(
+{III}"We expect the recorded example to contain the closing tag "
+{IIII}+ {java_common.string_literal(root_close_tag)} + ", but it does not: " + path);
+{I}}}
+
+{I}final String brokenText =
+{II}text.substring(0, insertionIndex) + property + text.substring(insertionIndex);
+
+{I}final XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
+{I}final XMLEventReader xmlReader =
+{II}xmlInputFactory.createXMLEventReader(new StringReader(brokenText));
+
+{I}Xmlization.DeserializeException exception = null;
+
+{I}try {{
+{II}Xmlization.Deserialize.deserialize{duplicate_cls_name_java}(xmlReader);
+{I}}} catch (Xmlization.DeserializeException observedException) {{
+{II}exception = observedException;
+{I}}}
+
+{I}if (exception == null) {{
+{II}fail(
+{III}"Expected an exception when the property "
+{IIII}+ {java_common.string_literal(duplicate_prop.xml_name)}
+{IIII}+ " is given twice, but got none");
+{I}}}
+}} // public void testDuplicatePropertyFails"""
+            )
+        )
+
     blocks.extend(_generate_lexical_tests(symbol_table))
 
     blocks_joined = "\n\n".join(blocks)

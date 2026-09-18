@@ -674,6 +674,14 @@ public class Xmlization {
     }
 
     /**
+     * Report a property which the sequence of the properties gave more than once.
+     */
+    private static Reporting.Error duplicatePropertyError(String elementName) {
+      return new Reporting.Error(
+        "Property " + elementName + " occurred more than once");
+    }
+
+    /**
      * Report a required property of the class {@code className} which the
      * sequence of the properties did not give.
      */
@@ -761,6 +769,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "someBool": {
+              if (theSomeBool != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Boolean> value =
                 readTextAs_bool(reader, isEmptyProperty);
               if (value.isError()) {
@@ -771,6 +784,11 @@ public class Xmlization {
               break;
             }
             case "someInt": {
+              if (theSomeInt != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Long> value =
                 readTextAs_long(reader, isEmptyProperty);
               if (value.isError()) {
@@ -781,6 +799,11 @@ public class Xmlization {
               break;
             }
             case "someFloat": {
+              if (theSomeFloat != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<Double> value =
                 readTextAs_double(reader, isEmptyProperty);
               if (value.isError()) {
@@ -791,6 +814,11 @@ public class Xmlization {
               break;
             }
             case "someString": {
+              if (theSomeString != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -801,6 +829,11 @@ public class Xmlization {
               break;
             }
             case "someBytes": {
+              if (theSomeBytes != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<byte[]> value =
                 readTextAs_bytes(reader, isEmptyProperty);
               if (value.isError()) {

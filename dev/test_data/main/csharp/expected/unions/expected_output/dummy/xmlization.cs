@@ -55,29 +55,6 @@ namespace dummy
             }
 
             /// <summary>
-            /// Read the whole content of an element into memory.
-            /// </summary>
-            private static byte[] ReadWholeContentAsBase64(
-                Xml.XmlReader reader)
-            {
-                // NOTE (mristin):
-                // The content is read as a text and only then decoded, instead of
-                // streaming it through XmlReader.ReadContentAsBase64. That decoder is
-                // lenient in ways XSD is not -- it reads "SGk" although it is three
-                // characters long -- and it gives us nothing to check before it has
-                // already decoded.
-                string text = WhitespaceRunRegex.Replace(reader.ReadContentAsString(), "");
-
-                if (!MatchesXsBase64Binary(text))
-                {
-                    throw new System.FormatException(
-                        $"Expected a text as base64-encoded bytes, but got: {text}");
-                }
-
-                return System.Convert.FromBase64String(text);
-            }
-
-            /// <summary>
             /// Check the namespace and extract the element's name.
             /// </summary>
             private static string TryElementName(
@@ -448,6 +425,15 @@ namespace dummy
             }
 
             /// <summary>
+            /// Report a property which the sequence of the properties gave more than once.
+            /// </summary>
+            private static Reporting.Error DuplicatePropertyError(string elementName)
+            {
+                return new Reporting.Error(
+                    $"Property {elementName} occurred more than once");
+            }
+
+            /// <summary>
             /// Read a sequence of list items with <paramref name="readItem" />,
             /// stopping (without consuming) at the first non-element node.
             /// </summary>
@@ -813,6 +799,11 @@ namespace dummy
                         switch (elementName)
                         {
                             case "uniqueToFirst":
+                                if (theUniqueToFirst != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theUniqueToFirst = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -904,6 +895,11 @@ namespace dummy
                         switch (elementName)
                         {
                             case "uniqueToSecond":
+                                if (theUniqueToSecond != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theUniqueToSecond = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -1025,6 +1021,11 @@ namespace dummy
                         switch (elementName)
                         {
                             case "uniqueToAbstractDescendantOne":
+                                if (theUniqueToAbstractDescendantOne != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theUniqueToAbstractDescendantOne = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -1116,6 +1117,11 @@ namespace dummy
                         switch (elementName)
                         {
                             case "uniqueToAbstractDescendantTwo":
+                                if (theUniqueToAbstractDescendantTwo != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theUniqueToAbstractDescendantTwo = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -1207,6 +1213,11 @@ namespace dummy
                         switch (elementName)
                         {
                             case "someBaseProperty":
+                                if (theSomeBaseProperty != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSomeBaseProperty = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -1329,10 +1340,20 @@ namespace dummy
                         switch (elementName)
                         {
                             case "someBaseProperty":
+                                if (theSomeBaseProperty != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSomeBaseProperty = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "someChildProperty":
+                                if (theSomeChildProperty != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSomeChildProperty = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -1435,6 +1456,11 @@ namespace dummy
                         switch (elementName)
                         {
                             case "uniqueToConcreteLeaf":
+                                if (theUniqueToConcreteLeaf != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theUniqueToConcreteLeaf = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -1526,6 +1552,11 @@ namespace dummy
                         switch (elementName)
                         {
                             case "someProperty":
+                                if (theSomeProperty != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSomeProperty = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -1617,6 +1648,11 @@ namespace dummy
                         switch (elementName)
                         {
                             case "someProperty":
+                                if (theSomeProperty != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theSomeProperty = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
@@ -1717,42 +1753,92 @@ namespace dummy
                         switch (elementName)
                         {
                             case "structuralProperty":
+                                if (theStructuralProperty != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theStructuralProperty = Read_StructuralUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "mixedProperty":
+                                if (theMixedProperty != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theMixedProperty = Read_MixedUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "modelTypedProperty":
+                                if (theModelTypedProperty != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theModelTypedProperty = Read_ModelTypedUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "listStructuralProperty":
+                                if (theListStructuralProperty != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theListStructuralProperty = Read_ListOf_StructuralUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "listMixedProperty":
+                                if (theListMixedProperty != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theListMixedProperty = Read_ListOf_MixedUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "listModelTypedProperty":
+                                if (theListModelTypedProperty != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theListModelTypedProperty = Read_ListOf_ModelTypedUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "tupleProperty":
+                                if (theTupleProperty != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theTupleProperty = Read_TupleOf3_StructuralUnion_MixedUnion_ModelTypedUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "optionalStructuralProperty":
+                                if (theOptionalStructuralProperty != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theOptionalStructuralProperty = Read_StructuralUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "optionalMixedProperty":
+                                if (theOptionalMixedProperty != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theOptionalMixedProperty = Read_MixedUnion(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "optionalModelTypedProperty":
+                                if (theOptionalModelTypedProperty != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theOptionalModelTypedProperty = Read_ModelTypedUnion(
                                     reader, isEmptyProperty, out error);
                                 break;

@@ -2434,6 +2434,18 @@ template <
   );
 }
 
+DeserializationError DuplicatePropertyError(
+  const std::string& name
+) {
+  return DeserializationError(
+    common::Concat(
+      L"Property ",
+      common::Utf8ToWstring(name),
+      L" occurred more than once"
+    )
+  );
+}
+
 DeserializationError DeserializationErrorFromReader(
   ReaderMergingText& reader
 ) {
@@ -8590,6 +8602,11 @@ std::pair<
 
     switch (property) {
       case properties::OfExtension::kSemanticId: {
+        if (the_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_semantic_id,
           error
@@ -8599,6 +8616,11 @@ std::pair<
         break;
       }
       case properties::OfExtension::kSupplementalSemanticIds: {
+        if (the_supplemental_semantic_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_supplemental_semantic_ids,
           error
@@ -8611,6 +8633,11 @@ std::pair<
         break;
       }
       case properties::OfExtension::kName: {
+        if (the_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_name,
           error
@@ -8618,6 +8645,11 @@ std::pair<
         break;
       }
       case properties::OfExtension::kValueType: {
+        if (the_value_type.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value_type,
           error
@@ -8625,6 +8657,11 @@ std::pair<
         break;
       }
       case properties::OfExtension::kValue: {
+        if (the_value.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value,
           error
@@ -8632,6 +8669,11 @@ std::pair<
         break;
       }
       case properties::OfExtension::kRefersTo: {
+        if (the_refers_to.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_refers_to,
           error
@@ -8885,6 +8927,11 @@ std::pair<
 
     switch (property) {
       case properties::OfAdministrativeInformation::kEmbeddedDataSpecifications: {
+        if (the_embedded_data_specifications.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_embedded_data_specifications,
           error
@@ -8897,6 +8944,11 @@ std::pair<
         break;
       }
       case properties::OfAdministrativeInformation::kVersion: {
+        if (the_version.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_version,
           error
@@ -8904,6 +8956,11 @@ std::pair<
         break;
       }
       case properties::OfAdministrativeInformation::kRevision: {
+        if (the_revision.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_revision,
           error
@@ -8911,6 +8968,11 @@ std::pair<
         break;
       }
       case properties::OfAdministrativeInformation::kCreator: {
+        if (the_creator.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_creator,
           error
@@ -8920,6 +8982,11 @@ std::pair<
         break;
       }
       case properties::OfAdministrativeInformation::kTemplateId: {
+        if (the_template_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_template_id,
           error
@@ -9161,6 +9228,11 @@ std::pair<
 
     switch (property) {
       case properties::OfQualifier::kSemanticId: {
+        if (the_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_semantic_id,
           error
@@ -9170,6 +9242,11 @@ std::pair<
         break;
       }
       case properties::OfQualifier::kSupplementalSemanticIds: {
+        if (the_supplemental_semantic_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_supplemental_semantic_ids,
           error
@@ -9182,6 +9259,11 @@ std::pair<
         break;
       }
       case properties::OfQualifier::kKind: {
+        if (the_kind.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_kind,
           error
@@ -9189,6 +9271,11 @@ std::pair<
         break;
       }
       case properties::OfQualifier::kType: {
+        if (the_type.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_type,
           error
@@ -9196,6 +9283,11 @@ std::pair<
         break;
       }
       case properties::OfQualifier::kValueType: {
+        if (the_value_type.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value_type,
           error
@@ -9203,6 +9295,11 @@ std::pair<
         break;
       }
       case properties::OfQualifier::kValue: {
+        if (the_value.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value,
           error
@@ -9210,6 +9307,11 @@ std::pair<
         break;
       }
       case properties::OfQualifier::kValueId: {
+        if (the_value_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value_id,
           error
@@ -9499,6 +9601,11 @@ std::pair<
 
     switch (property) {
       case properties::OfAssetAdministrationShell::kExtensions: {
+        if (the_extensions.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_extensions,
           error
@@ -9511,6 +9618,11 @@ std::pair<
         break;
       }
       case properties::OfAssetAdministrationShell::kCategory: {
+        if (the_category.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_category,
           error
@@ -9518,6 +9630,11 @@ std::pair<
         break;
       }
       case properties::OfAssetAdministrationShell::kIdShort: {
+        if (the_id_short.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id_short,
           error
@@ -9525,6 +9642,11 @@ std::pair<
         break;
       }
       case properties::OfAssetAdministrationShell::kDisplayName: {
+        if (the_display_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_display_name,
           error
@@ -9537,6 +9659,11 @@ std::pair<
         break;
       }
       case properties::OfAssetAdministrationShell::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -9549,6 +9676,11 @@ std::pair<
         break;
       }
       case properties::OfAssetAdministrationShell::kAdministration: {
+        if (the_administration.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_administration,
           error
@@ -9558,6 +9690,11 @@ std::pair<
         break;
       }
       case properties::OfAssetAdministrationShell::kId: {
+        if (the_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id,
           error
@@ -9565,6 +9702,11 @@ std::pair<
         break;
       }
       case properties::OfAssetAdministrationShell::kEmbeddedDataSpecifications: {
+        if (the_embedded_data_specifications.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_embedded_data_specifications,
           error
@@ -9577,6 +9719,11 @@ std::pair<
         break;
       }
       case properties::OfAssetAdministrationShell::kDerivedFrom: {
+        if (the_derived_from.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_derived_from,
           error
@@ -9586,6 +9733,11 @@ std::pair<
         break;
       }
       case properties::OfAssetAdministrationShell::kAssetInformation: {
+        if (the_asset_information.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_asset_information,
           error
@@ -9595,6 +9747,11 @@ std::pair<
         break;
       }
       case properties::OfAssetAdministrationShell::kSubmodels: {
+        if (the_submodels.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_submodels,
           error
@@ -9861,6 +10018,11 @@ std::pair<
 
     switch (property) {
       case properties::OfAssetInformation::kAssetKind: {
+        if (the_asset_kind.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_asset_kind,
           error
@@ -9868,6 +10030,11 @@ std::pair<
         break;
       }
       case properties::OfAssetInformation::kGlobalAssetId: {
+        if (the_global_asset_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_global_asset_id,
           error
@@ -9875,6 +10042,11 @@ std::pair<
         break;
       }
       case properties::OfAssetInformation::kSpecificAssetIds: {
+        if (the_specific_asset_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_specific_asset_ids,
           error
@@ -9887,6 +10059,11 @@ std::pair<
         break;
       }
       case properties::OfAssetInformation::kAssetType: {
+        if (the_asset_type.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_asset_type,
           error
@@ -9894,6 +10071,11 @@ std::pair<
         break;
       }
       case properties::OfAssetInformation::kDefaultThumbnail: {
+        if (the_default_thumbnail.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_default_thumbnail,
           error
@@ -10131,6 +10313,11 @@ std::pair<
 
     switch (property) {
       case properties::OfResource::kPath: {
+        if (the_path.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_path,
           error
@@ -10138,6 +10325,11 @@ std::pair<
         break;
       }
       case properties::OfResource::kContentType: {
+        if (the_content_type.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_content_type,
           error
@@ -10384,6 +10576,11 @@ std::pair<
 
     switch (property) {
       case properties::OfSpecificAssetId::kSemanticId: {
+        if (the_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_semantic_id,
           error
@@ -10393,6 +10590,11 @@ std::pair<
         break;
       }
       case properties::OfSpecificAssetId::kSupplementalSemanticIds: {
+        if (the_supplemental_semantic_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_supplemental_semantic_ids,
           error
@@ -10405,6 +10607,11 @@ std::pair<
         break;
       }
       case properties::OfSpecificAssetId::kName: {
+        if (the_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_name,
           error
@@ -10412,6 +10619,11 @@ std::pair<
         break;
       }
       case properties::OfSpecificAssetId::kValue: {
+        if (the_value.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value,
           error
@@ -10419,6 +10631,11 @@ std::pair<
         break;
       }
       case properties::OfSpecificAssetId::kExternalSubjectId: {
+        if (the_external_subject_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_external_subject_id,
           error
@@ -10718,6 +10935,11 @@ std::pair<
 
     switch (property) {
       case properties::OfSubmodel::kExtensions: {
+        if (the_extensions.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_extensions,
           error
@@ -10730,6 +10952,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodel::kCategory: {
+        if (the_category.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_category,
           error
@@ -10737,6 +10964,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodel::kIdShort: {
+        if (the_id_short.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id_short,
           error
@@ -10744,6 +10976,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodel::kDisplayName: {
+        if (the_display_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_display_name,
           error
@@ -10756,6 +10993,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodel::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -10768,6 +11010,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodel::kAdministration: {
+        if (the_administration.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_administration,
           error
@@ -10777,6 +11024,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodel::kId: {
+        if (the_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id,
           error
@@ -10784,6 +11036,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodel::kKind: {
+        if (the_kind.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_kind,
           error
@@ -10791,6 +11048,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodel::kSemanticId: {
+        if (the_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_semantic_id,
           error
@@ -10800,6 +11062,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodel::kSupplementalSemanticIds: {
+        if (the_supplemental_semantic_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_supplemental_semantic_ids,
           error
@@ -10812,6 +11079,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodel::kQualifiers: {
+        if (the_qualifiers.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_qualifiers,
           error
@@ -10824,6 +11096,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodel::kEmbeddedDataSpecifications: {
+        if (the_embedded_data_specifications.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_embedded_data_specifications,
           error
@@ -10836,6 +11113,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodel::kSubmodelElements: {
+        if (the_submodel_elements.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_submodel_elements,
           error
@@ -11128,6 +11410,11 @@ std::pair<
 
     switch (property) {
       case properties::OfRelationshipElement::kExtensions: {
+        if (the_extensions.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_extensions,
           error
@@ -11140,6 +11427,11 @@ std::pair<
         break;
       }
       case properties::OfRelationshipElement::kCategory: {
+        if (the_category.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_category,
           error
@@ -11147,6 +11439,11 @@ std::pair<
         break;
       }
       case properties::OfRelationshipElement::kIdShort: {
+        if (the_id_short.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id_short,
           error
@@ -11154,6 +11451,11 @@ std::pair<
         break;
       }
       case properties::OfRelationshipElement::kDisplayName: {
+        if (the_display_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_display_name,
           error
@@ -11166,6 +11468,11 @@ std::pair<
         break;
       }
       case properties::OfRelationshipElement::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -11178,6 +11485,11 @@ std::pair<
         break;
       }
       case properties::OfRelationshipElement::kSemanticId: {
+        if (the_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_semantic_id,
           error
@@ -11187,6 +11499,11 @@ std::pair<
         break;
       }
       case properties::OfRelationshipElement::kSupplementalSemanticIds: {
+        if (the_supplemental_semantic_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_supplemental_semantic_ids,
           error
@@ -11199,6 +11516,11 @@ std::pair<
         break;
       }
       case properties::OfRelationshipElement::kQualifiers: {
+        if (the_qualifiers.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_qualifiers,
           error
@@ -11211,6 +11533,11 @@ std::pair<
         break;
       }
       case properties::OfRelationshipElement::kEmbeddedDataSpecifications: {
+        if (the_embedded_data_specifications.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_embedded_data_specifications,
           error
@@ -11223,6 +11550,11 @@ std::pair<
         break;
       }
       case properties::OfRelationshipElement::kFirst: {
+        if (the_first.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_first,
           error
@@ -11232,6 +11564,11 @@ std::pair<
         break;
       }
       case properties::OfRelationshipElement::kSecond: {
+        if (the_second.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_second,
           error
@@ -11539,6 +11876,11 @@ std::pair<
 
     switch (property) {
       case properties::OfSubmodelElementList::kExtensions: {
+        if (the_extensions.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_extensions,
           error
@@ -11551,6 +11893,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementList::kCategory: {
+        if (the_category.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_category,
           error
@@ -11558,6 +11905,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementList::kIdShort: {
+        if (the_id_short.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id_short,
           error
@@ -11565,6 +11917,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementList::kDisplayName: {
+        if (the_display_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_display_name,
           error
@@ -11577,6 +11934,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementList::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -11589,6 +11951,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementList::kSemanticId: {
+        if (the_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_semantic_id,
           error
@@ -11598,6 +11965,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementList::kSupplementalSemanticIds: {
+        if (the_supplemental_semantic_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_supplemental_semantic_ids,
           error
@@ -11610,6 +11982,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementList::kQualifiers: {
+        if (the_qualifiers.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_qualifiers,
           error
@@ -11622,6 +11999,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementList::kEmbeddedDataSpecifications: {
+        if (the_embedded_data_specifications.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_embedded_data_specifications,
           error
@@ -11634,6 +12016,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementList::kOrderRelevant: {
+        if (the_order_relevant.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_order_relevant,
           error
@@ -11641,6 +12028,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementList::kSemanticIdListElement: {
+        if (the_semantic_id_list_element.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_semantic_id_list_element,
           error
@@ -11650,6 +12042,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementList::kTypeValueListElement: {
+        if (the_type_value_list_element.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_type_value_list_element,
           error
@@ -11657,6 +12054,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementList::kValueTypeListElement: {
+        if (the_value_type_list_element.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value_type_list_element,
           error
@@ -11664,6 +12066,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementList::kValue: {
+        if (the_value.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value,
           error
@@ -11959,6 +12366,11 @@ std::pair<
 
     switch (property) {
       case properties::OfSubmodelElementCollection::kExtensions: {
+        if (the_extensions.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_extensions,
           error
@@ -11971,6 +12383,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementCollection::kCategory: {
+        if (the_category.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_category,
           error
@@ -11978,6 +12395,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementCollection::kIdShort: {
+        if (the_id_short.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id_short,
           error
@@ -11985,6 +12407,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementCollection::kDisplayName: {
+        if (the_display_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_display_name,
           error
@@ -11997,6 +12424,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementCollection::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -12009,6 +12441,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementCollection::kSemanticId: {
+        if (the_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_semantic_id,
           error
@@ -12018,6 +12455,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementCollection::kSupplementalSemanticIds: {
+        if (the_supplemental_semantic_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_supplemental_semantic_ids,
           error
@@ -12030,6 +12472,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementCollection::kQualifiers: {
+        if (the_qualifiers.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_qualifiers,
           error
@@ -12042,6 +12489,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementCollection::kEmbeddedDataSpecifications: {
+        if (the_embedded_data_specifications.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_embedded_data_specifications,
           error
@@ -12054,6 +12506,11 @@ std::pair<
         break;
       }
       case properties::OfSubmodelElementCollection::kValue: {
+        if (the_value.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value,
           error
@@ -12335,6 +12792,11 @@ std::pair<
 
     switch (property) {
       case properties::OfProperty::kExtensions: {
+        if (the_extensions.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_extensions,
           error
@@ -12347,6 +12809,11 @@ std::pair<
         break;
       }
       case properties::OfProperty::kCategory: {
+        if (the_category.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_category,
           error
@@ -12354,6 +12821,11 @@ std::pair<
         break;
       }
       case properties::OfProperty::kIdShort: {
+        if (the_id_short.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id_short,
           error
@@ -12361,6 +12833,11 @@ std::pair<
         break;
       }
       case properties::OfProperty::kDisplayName: {
+        if (the_display_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_display_name,
           error
@@ -12373,6 +12850,11 @@ std::pair<
         break;
       }
       case properties::OfProperty::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -12385,6 +12867,11 @@ std::pair<
         break;
       }
       case properties::OfProperty::kSemanticId: {
+        if (the_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_semantic_id,
           error
@@ -12394,6 +12881,11 @@ std::pair<
         break;
       }
       case properties::OfProperty::kSupplementalSemanticIds: {
+        if (the_supplemental_semantic_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_supplemental_semantic_ids,
           error
@@ -12406,6 +12898,11 @@ std::pair<
         break;
       }
       case properties::OfProperty::kQualifiers: {
+        if (the_qualifiers.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_qualifiers,
           error
@@ -12418,6 +12915,11 @@ std::pair<
         break;
       }
       case properties::OfProperty::kEmbeddedDataSpecifications: {
+        if (the_embedded_data_specifications.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_embedded_data_specifications,
           error
@@ -12430,6 +12932,11 @@ std::pair<
         break;
       }
       case properties::OfProperty::kValueType: {
+        if (the_value_type.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value_type,
           error
@@ -12437,6 +12944,11 @@ std::pair<
         break;
       }
       case properties::OfProperty::kValue: {
+        if (the_value.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value,
           error
@@ -12444,6 +12956,11 @@ std::pair<
         break;
       }
       case properties::OfProperty::kValueId: {
+        if (the_value_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value_id,
           error
@@ -12738,6 +13255,11 @@ std::pair<
 
     switch (property) {
       case properties::OfMultiLanguageProperty::kExtensions: {
+        if (the_extensions.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_extensions,
           error
@@ -12750,6 +13272,11 @@ std::pair<
         break;
       }
       case properties::OfMultiLanguageProperty::kCategory: {
+        if (the_category.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_category,
           error
@@ -12757,6 +13284,11 @@ std::pair<
         break;
       }
       case properties::OfMultiLanguageProperty::kIdShort: {
+        if (the_id_short.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id_short,
           error
@@ -12764,6 +13296,11 @@ std::pair<
         break;
       }
       case properties::OfMultiLanguageProperty::kDisplayName: {
+        if (the_display_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_display_name,
           error
@@ -12776,6 +13313,11 @@ std::pair<
         break;
       }
       case properties::OfMultiLanguageProperty::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -12788,6 +13330,11 @@ std::pair<
         break;
       }
       case properties::OfMultiLanguageProperty::kSemanticId: {
+        if (the_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_semantic_id,
           error
@@ -12797,6 +13344,11 @@ std::pair<
         break;
       }
       case properties::OfMultiLanguageProperty::kSupplementalSemanticIds: {
+        if (the_supplemental_semantic_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_supplemental_semantic_ids,
           error
@@ -12809,6 +13361,11 @@ std::pair<
         break;
       }
       case properties::OfMultiLanguageProperty::kQualifiers: {
+        if (the_qualifiers.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_qualifiers,
           error
@@ -12821,6 +13378,11 @@ std::pair<
         break;
       }
       case properties::OfMultiLanguageProperty::kEmbeddedDataSpecifications: {
+        if (the_embedded_data_specifications.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_embedded_data_specifications,
           error
@@ -12833,6 +13395,11 @@ std::pair<
         break;
       }
       case properties::OfMultiLanguageProperty::kValue: {
+        if (the_value.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value,
           error
@@ -12845,6 +13412,11 @@ std::pair<
         break;
       }
       case properties::OfMultiLanguageProperty::kValueId: {
+        if (the_value_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value_id,
           error
@@ -13122,6 +13694,11 @@ std::pair<
 
     switch (property) {
       case properties::OfRange::kExtensions: {
+        if (the_extensions.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_extensions,
           error
@@ -13134,6 +13711,11 @@ std::pair<
         break;
       }
       case properties::OfRange::kCategory: {
+        if (the_category.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_category,
           error
@@ -13141,6 +13723,11 @@ std::pair<
         break;
       }
       case properties::OfRange::kIdShort: {
+        if (the_id_short.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id_short,
           error
@@ -13148,6 +13735,11 @@ std::pair<
         break;
       }
       case properties::OfRange::kDisplayName: {
+        if (the_display_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_display_name,
           error
@@ -13160,6 +13752,11 @@ std::pair<
         break;
       }
       case properties::OfRange::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -13172,6 +13769,11 @@ std::pair<
         break;
       }
       case properties::OfRange::kSemanticId: {
+        if (the_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_semantic_id,
           error
@@ -13181,6 +13783,11 @@ std::pair<
         break;
       }
       case properties::OfRange::kSupplementalSemanticIds: {
+        if (the_supplemental_semantic_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_supplemental_semantic_ids,
           error
@@ -13193,6 +13800,11 @@ std::pair<
         break;
       }
       case properties::OfRange::kQualifiers: {
+        if (the_qualifiers.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_qualifiers,
           error
@@ -13205,6 +13817,11 @@ std::pair<
         break;
       }
       case properties::OfRange::kEmbeddedDataSpecifications: {
+        if (the_embedded_data_specifications.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_embedded_data_specifications,
           error
@@ -13217,6 +13834,11 @@ std::pair<
         break;
       }
       case properties::OfRange::kValueType: {
+        if (the_value_type.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value_type,
           error
@@ -13224,6 +13846,11 @@ std::pair<
         break;
       }
       case properties::OfRange::kMin: {
+        if (the_min.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_min,
           error
@@ -13231,6 +13858,11 @@ std::pair<
         break;
       }
       case properties::OfRange::kMax: {
+        if (the_max.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_max,
           error
@@ -13517,6 +14149,11 @@ std::pair<
 
     switch (property) {
       case properties::OfReferenceElement::kExtensions: {
+        if (the_extensions.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_extensions,
           error
@@ -13529,6 +14166,11 @@ std::pair<
         break;
       }
       case properties::OfReferenceElement::kCategory: {
+        if (the_category.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_category,
           error
@@ -13536,6 +14178,11 @@ std::pair<
         break;
       }
       case properties::OfReferenceElement::kIdShort: {
+        if (the_id_short.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id_short,
           error
@@ -13543,6 +14190,11 @@ std::pair<
         break;
       }
       case properties::OfReferenceElement::kDisplayName: {
+        if (the_display_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_display_name,
           error
@@ -13555,6 +14207,11 @@ std::pair<
         break;
       }
       case properties::OfReferenceElement::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -13567,6 +14224,11 @@ std::pair<
         break;
       }
       case properties::OfReferenceElement::kSemanticId: {
+        if (the_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_semantic_id,
           error
@@ -13576,6 +14238,11 @@ std::pair<
         break;
       }
       case properties::OfReferenceElement::kSupplementalSemanticIds: {
+        if (the_supplemental_semantic_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_supplemental_semantic_ids,
           error
@@ -13588,6 +14255,11 @@ std::pair<
         break;
       }
       case properties::OfReferenceElement::kQualifiers: {
+        if (the_qualifiers.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_qualifiers,
           error
@@ -13600,6 +14272,11 @@ std::pair<
         break;
       }
       case properties::OfReferenceElement::kEmbeddedDataSpecifications: {
+        if (the_embedded_data_specifications.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_embedded_data_specifications,
           error
@@ -13612,6 +14289,11 @@ std::pair<
         break;
       }
       case properties::OfReferenceElement::kValue: {
+        if (the_value.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value,
           error
@@ -13888,6 +14570,11 @@ std::pair<
 
     switch (property) {
       case properties::OfBlob::kExtensions: {
+        if (the_extensions.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_extensions,
           error
@@ -13900,6 +14587,11 @@ std::pair<
         break;
       }
       case properties::OfBlob::kCategory: {
+        if (the_category.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_category,
           error
@@ -13907,6 +14599,11 @@ std::pair<
         break;
       }
       case properties::OfBlob::kIdShort: {
+        if (the_id_short.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id_short,
           error
@@ -13914,6 +14611,11 @@ std::pair<
         break;
       }
       case properties::OfBlob::kDisplayName: {
+        if (the_display_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_display_name,
           error
@@ -13926,6 +14628,11 @@ std::pair<
         break;
       }
       case properties::OfBlob::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -13938,6 +14645,11 @@ std::pair<
         break;
       }
       case properties::OfBlob::kSemanticId: {
+        if (the_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_semantic_id,
           error
@@ -13947,6 +14659,11 @@ std::pair<
         break;
       }
       case properties::OfBlob::kSupplementalSemanticIds: {
+        if (the_supplemental_semantic_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_supplemental_semantic_ids,
           error
@@ -13959,6 +14676,11 @@ std::pair<
         break;
       }
       case properties::OfBlob::kQualifiers: {
+        if (the_qualifiers.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_qualifiers,
           error
@@ -13971,6 +14693,11 @@ std::pair<
         break;
       }
       case properties::OfBlob::kEmbeddedDataSpecifications: {
+        if (the_embedded_data_specifications.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_embedded_data_specifications,
           error
@@ -13983,6 +14710,11 @@ std::pair<
         break;
       }
       case properties::OfBlob::kValue: {
+        if (the_value.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value,
           error
@@ -13990,6 +14722,11 @@ std::pair<
         break;
       }
       case properties::OfBlob::kContentType: {
+        if (the_content_type.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_content_type,
           error
@@ -14275,6 +15012,11 @@ std::pair<
 
     switch (property) {
       case properties::OfFile::kExtensions: {
+        if (the_extensions.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_extensions,
           error
@@ -14287,6 +15029,11 @@ std::pair<
         break;
       }
       case properties::OfFile::kCategory: {
+        if (the_category.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_category,
           error
@@ -14294,6 +15041,11 @@ std::pair<
         break;
       }
       case properties::OfFile::kIdShort: {
+        if (the_id_short.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id_short,
           error
@@ -14301,6 +15053,11 @@ std::pair<
         break;
       }
       case properties::OfFile::kDisplayName: {
+        if (the_display_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_display_name,
           error
@@ -14313,6 +15070,11 @@ std::pair<
         break;
       }
       case properties::OfFile::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -14325,6 +15087,11 @@ std::pair<
         break;
       }
       case properties::OfFile::kSemanticId: {
+        if (the_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_semantic_id,
           error
@@ -14334,6 +15101,11 @@ std::pair<
         break;
       }
       case properties::OfFile::kSupplementalSemanticIds: {
+        if (the_supplemental_semantic_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_supplemental_semantic_ids,
           error
@@ -14346,6 +15118,11 @@ std::pair<
         break;
       }
       case properties::OfFile::kQualifiers: {
+        if (the_qualifiers.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_qualifiers,
           error
@@ -14358,6 +15135,11 @@ std::pair<
         break;
       }
       case properties::OfFile::kEmbeddedDataSpecifications: {
+        if (the_embedded_data_specifications.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_embedded_data_specifications,
           error
@@ -14370,6 +15152,11 @@ std::pair<
         break;
       }
       case properties::OfFile::kValue: {
+        if (the_value.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value,
           error
@@ -14377,6 +15164,11 @@ std::pair<
         break;
       }
       case properties::OfFile::kContentType: {
+        if (the_content_type.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_content_type,
           error
@@ -14668,6 +15460,11 @@ std::pair<
 
     switch (property) {
       case properties::OfAnnotatedRelationshipElement::kExtensions: {
+        if (the_extensions.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_extensions,
           error
@@ -14680,6 +15477,11 @@ std::pair<
         break;
       }
       case properties::OfAnnotatedRelationshipElement::kCategory: {
+        if (the_category.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_category,
           error
@@ -14687,6 +15489,11 @@ std::pair<
         break;
       }
       case properties::OfAnnotatedRelationshipElement::kIdShort: {
+        if (the_id_short.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id_short,
           error
@@ -14694,6 +15501,11 @@ std::pair<
         break;
       }
       case properties::OfAnnotatedRelationshipElement::kDisplayName: {
+        if (the_display_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_display_name,
           error
@@ -14706,6 +15518,11 @@ std::pair<
         break;
       }
       case properties::OfAnnotatedRelationshipElement::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -14718,6 +15535,11 @@ std::pair<
         break;
       }
       case properties::OfAnnotatedRelationshipElement::kSemanticId: {
+        if (the_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_semantic_id,
           error
@@ -14727,6 +15549,11 @@ std::pair<
         break;
       }
       case properties::OfAnnotatedRelationshipElement::kSupplementalSemanticIds: {
+        if (the_supplemental_semantic_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_supplemental_semantic_ids,
           error
@@ -14739,6 +15566,11 @@ std::pair<
         break;
       }
       case properties::OfAnnotatedRelationshipElement::kQualifiers: {
+        if (the_qualifiers.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_qualifiers,
           error
@@ -14751,6 +15583,11 @@ std::pair<
         break;
       }
       case properties::OfAnnotatedRelationshipElement::kEmbeddedDataSpecifications: {
+        if (the_embedded_data_specifications.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_embedded_data_specifications,
           error
@@ -14763,6 +15600,11 @@ std::pair<
         break;
       }
       case properties::OfAnnotatedRelationshipElement::kFirst: {
+        if (the_first.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_first,
           error
@@ -14772,6 +15614,11 @@ std::pair<
         break;
       }
       case properties::OfAnnotatedRelationshipElement::kSecond: {
+        if (the_second.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_second,
           error
@@ -14781,6 +15628,11 @@ std::pair<
         break;
       }
       case properties::OfAnnotatedRelationshipElement::kAnnotations: {
+        if (the_annotations.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_annotations,
           error
@@ -15092,6 +15944,11 @@ std::pair<
 
     switch (property) {
       case properties::OfEntity::kExtensions: {
+        if (the_extensions.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_extensions,
           error
@@ -15104,6 +15961,11 @@ std::pair<
         break;
       }
       case properties::OfEntity::kCategory: {
+        if (the_category.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_category,
           error
@@ -15111,6 +15973,11 @@ std::pair<
         break;
       }
       case properties::OfEntity::kIdShort: {
+        if (the_id_short.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id_short,
           error
@@ -15118,6 +15985,11 @@ std::pair<
         break;
       }
       case properties::OfEntity::kDisplayName: {
+        if (the_display_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_display_name,
           error
@@ -15130,6 +16002,11 @@ std::pair<
         break;
       }
       case properties::OfEntity::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -15142,6 +16019,11 @@ std::pair<
         break;
       }
       case properties::OfEntity::kSemanticId: {
+        if (the_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_semantic_id,
           error
@@ -15151,6 +16033,11 @@ std::pair<
         break;
       }
       case properties::OfEntity::kSupplementalSemanticIds: {
+        if (the_supplemental_semantic_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_supplemental_semantic_ids,
           error
@@ -15163,6 +16050,11 @@ std::pair<
         break;
       }
       case properties::OfEntity::kQualifiers: {
+        if (the_qualifiers.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_qualifiers,
           error
@@ -15175,6 +16067,11 @@ std::pair<
         break;
       }
       case properties::OfEntity::kEmbeddedDataSpecifications: {
+        if (the_embedded_data_specifications.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_embedded_data_specifications,
           error
@@ -15187,6 +16084,11 @@ std::pair<
         break;
       }
       case properties::OfEntity::kStatements: {
+        if (the_statements.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_statements,
           error
@@ -15199,6 +16101,11 @@ std::pair<
         break;
       }
       case properties::OfEntity::kEntityType: {
+        if (the_entity_type.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_entity_type,
           error
@@ -15206,6 +16113,11 @@ std::pair<
         break;
       }
       case properties::OfEntity::kGlobalAssetId: {
+        if (the_global_asset_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_global_asset_id,
           error
@@ -15213,6 +16125,11 @@ std::pair<
         break;
       }
       case properties::OfEntity::kSpecificAssetIds: {
+        if (the_specific_asset_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_specific_asset_ids,
           error
@@ -15481,6 +16398,11 @@ std::pair<
 
     switch (property) {
       case properties::OfEventPayload::kSource: {
+        if (the_source.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_source,
           error
@@ -15490,6 +16412,11 @@ std::pair<
         break;
       }
       case properties::OfEventPayload::kSourceSemanticId: {
+        if (the_source_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_source_semantic_id,
           error
@@ -15499,6 +16426,11 @@ std::pair<
         break;
       }
       case properties::OfEventPayload::kObservableReference: {
+        if (the_observable_reference.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_observable_reference,
           error
@@ -15508,6 +16440,11 @@ std::pair<
         break;
       }
       case properties::OfEventPayload::kObservableSemanticId: {
+        if (the_observable_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_observable_semantic_id,
           error
@@ -15517,6 +16454,11 @@ std::pair<
         break;
       }
       case properties::OfEventPayload::kTopic: {
+        if (the_topic.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_topic,
           error
@@ -15524,6 +16466,11 @@ std::pair<
         break;
       }
       case properties::OfEventPayload::kSubjectId: {
+        if (the_subject_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_subject_id,
           error
@@ -15533,6 +16480,11 @@ std::pair<
         break;
       }
       case properties::OfEventPayload::kTimeStamp: {
+        if (the_time_stamp.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_time_stamp,
           error
@@ -15540,6 +16492,11 @@ std::pair<
         break;
       }
       case properties::OfEventPayload::kPayload: {
+        if (the_payload.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_payload,
           error
@@ -15852,6 +16809,11 @@ std::pair<
 
     switch (property) {
       case properties::OfBasicEventElement::kExtensions: {
+        if (the_extensions.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_extensions,
           error
@@ -15864,6 +16826,11 @@ std::pair<
         break;
       }
       case properties::OfBasicEventElement::kCategory: {
+        if (the_category.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_category,
           error
@@ -15871,6 +16838,11 @@ std::pair<
         break;
       }
       case properties::OfBasicEventElement::kIdShort: {
+        if (the_id_short.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id_short,
           error
@@ -15878,6 +16850,11 @@ std::pair<
         break;
       }
       case properties::OfBasicEventElement::kDisplayName: {
+        if (the_display_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_display_name,
           error
@@ -15890,6 +16867,11 @@ std::pair<
         break;
       }
       case properties::OfBasicEventElement::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -15902,6 +16884,11 @@ std::pair<
         break;
       }
       case properties::OfBasicEventElement::kSemanticId: {
+        if (the_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_semantic_id,
           error
@@ -15911,6 +16898,11 @@ std::pair<
         break;
       }
       case properties::OfBasicEventElement::kSupplementalSemanticIds: {
+        if (the_supplemental_semantic_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_supplemental_semantic_ids,
           error
@@ -15923,6 +16915,11 @@ std::pair<
         break;
       }
       case properties::OfBasicEventElement::kQualifiers: {
+        if (the_qualifiers.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_qualifiers,
           error
@@ -15935,6 +16932,11 @@ std::pair<
         break;
       }
       case properties::OfBasicEventElement::kEmbeddedDataSpecifications: {
+        if (the_embedded_data_specifications.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_embedded_data_specifications,
           error
@@ -15947,6 +16949,11 @@ std::pair<
         break;
       }
       case properties::OfBasicEventElement::kObserved: {
+        if (the_observed.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_observed,
           error
@@ -15956,6 +16963,11 @@ std::pair<
         break;
       }
       case properties::OfBasicEventElement::kDirection: {
+        if (the_direction.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_direction,
           error
@@ -15963,6 +16975,11 @@ std::pair<
         break;
       }
       case properties::OfBasicEventElement::kState: {
+        if (the_state.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_state,
           error
@@ -15970,6 +16987,11 @@ std::pair<
         break;
       }
       case properties::OfBasicEventElement::kMessageTopic: {
+        if (the_message_topic.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_message_topic,
           error
@@ -15977,6 +16999,11 @@ std::pair<
         break;
       }
       case properties::OfBasicEventElement::kMessageBroker: {
+        if (the_message_broker.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_message_broker,
           error
@@ -15986,6 +17013,11 @@ std::pair<
         break;
       }
       case properties::OfBasicEventElement::kLastUpdate: {
+        if (the_last_update.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_last_update,
           error
@@ -15993,6 +17025,11 @@ std::pair<
         break;
       }
       case properties::OfBasicEventElement::kMinInterval: {
+        if (the_min_interval.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_min_interval,
           error
@@ -16000,6 +17037,11 @@ std::pair<
         break;
       }
       case properties::OfBasicEventElement::kMaxInterval: {
+        if (the_max_interval.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_max_interval,
           error
@@ -16321,6 +17363,11 @@ std::pair<
 
     switch (property) {
       case properties::OfOperation::kExtensions: {
+        if (the_extensions.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_extensions,
           error
@@ -16333,6 +17380,11 @@ std::pair<
         break;
       }
       case properties::OfOperation::kCategory: {
+        if (the_category.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_category,
           error
@@ -16340,6 +17392,11 @@ std::pair<
         break;
       }
       case properties::OfOperation::kIdShort: {
+        if (the_id_short.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id_short,
           error
@@ -16347,6 +17404,11 @@ std::pair<
         break;
       }
       case properties::OfOperation::kDisplayName: {
+        if (the_display_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_display_name,
           error
@@ -16359,6 +17421,11 @@ std::pair<
         break;
       }
       case properties::OfOperation::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -16371,6 +17438,11 @@ std::pair<
         break;
       }
       case properties::OfOperation::kSemanticId: {
+        if (the_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_semantic_id,
           error
@@ -16380,6 +17452,11 @@ std::pair<
         break;
       }
       case properties::OfOperation::kSupplementalSemanticIds: {
+        if (the_supplemental_semantic_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_supplemental_semantic_ids,
           error
@@ -16392,6 +17469,11 @@ std::pair<
         break;
       }
       case properties::OfOperation::kQualifiers: {
+        if (the_qualifiers.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_qualifiers,
           error
@@ -16404,6 +17486,11 @@ std::pair<
         break;
       }
       case properties::OfOperation::kEmbeddedDataSpecifications: {
+        if (the_embedded_data_specifications.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_embedded_data_specifications,
           error
@@ -16416,6 +17503,11 @@ std::pair<
         break;
       }
       case properties::OfOperation::kInputVariables: {
+        if (the_input_variables.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_input_variables,
           error
@@ -16428,6 +17520,11 @@ std::pair<
         break;
       }
       case properties::OfOperation::kOutputVariables: {
+        if (the_output_variables.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_output_variables,
           error
@@ -16440,6 +17537,11 @@ std::pair<
         break;
       }
       case properties::OfOperation::kInoutputVariables: {
+        if (the_inoutput_variables.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_inoutput_variables,
           error
@@ -16673,6 +17775,11 @@ std::pair<
 
     switch (property) {
       case properties::OfOperationVariable::kValue: {
+        if (the_value.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value,
           error
@@ -16944,6 +18051,11 @@ std::pair<
 
     switch (property) {
       case properties::OfCapability::kExtensions: {
+        if (the_extensions.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_extensions,
           error
@@ -16956,6 +18068,11 @@ std::pair<
         break;
       }
       case properties::OfCapability::kCategory: {
+        if (the_category.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_category,
           error
@@ -16963,6 +18080,11 @@ std::pair<
         break;
       }
       case properties::OfCapability::kIdShort: {
+        if (the_id_short.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id_short,
           error
@@ -16970,6 +18092,11 @@ std::pair<
         break;
       }
       case properties::OfCapability::kDisplayName: {
+        if (the_display_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_display_name,
           error
@@ -16982,6 +18109,11 @@ std::pair<
         break;
       }
       case properties::OfCapability::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -16994,6 +18126,11 @@ std::pair<
         break;
       }
       case properties::OfCapability::kSemanticId: {
+        if (the_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_semantic_id,
           error
@@ -17003,6 +18140,11 @@ std::pair<
         break;
       }
       case properties::OfCapability::kSupplementalSemanticIds: {
+        if (the_supplemental_semantic_ids.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_supplemental_semantic_ids,
           error
@@ -17015,6 +18157,11 @@ std::pair<
         break;
       }
       case properties::OfCapability::kQualifiers: {
+        if (the_qualifiers.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_qualifiers,
           error
@@ -17027,6 +18174,11 @@ std::pair<
         break;
       }
       case properties::OfCapability::kEmbeddedDataSpecifications: {
+        if (the_embedded_data_specifications.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_embedded_data_specifications,
           error
@@ -17295,6 +18447,11 @@ std::pair<
 
     switch (property) {
       case properties::OfConceptDescription::kExtensions: {
+        if (the_extensions.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_extensions,
           error
@@ -17307,6 +18464,11 @@ std::pair<
         break;
       }
       case properties::OfConceptDescription::kCategory: {
+        if (the_category.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_category,
           error
@@ -17314,6 +18476,11 @@ std::pair<
         break;
       }
       case properties::OfConceptDescription::kIdShort: {
+        if (the_id_short.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id_short,
           error
@@ -17321,6 +18488,11 @@ std::pair<
         break;
       }
       case properties::OfConceptDescription::kDisplayName: {
+        if (the_display_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_display_name,
           error
@@ -17333,6 +18505,11 @@ std::pair<
         break;
       }
       case properties::OfConceptDescription::kDescription: {
+        if (the_description.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_description,
           error
@@ -17345,6 +18522,11 @@ std::pair<
         break;
       }
       case properties::OfConceptDescription::kAdministration: {
+        if (the_administration.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_administration,
           error
@@ -17354,6 +18536,11 @@ std::pair<
         break;
       }
       case properties::OfConceptDescription::kId: {
+        if (the_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_id,
           error
@@ -17361,6 +18548,11 @@ std::pair<
         break;
       }
       case properties::OfConceptDescription::kEmbeddedDataSpecifications: {
+        if (the_embedded_data_specifications.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_embedded_data_specifications,
           error
@@ -17373,6 +18565,11 @@ std::pair<
         break;
       }
       case properties::OfConceptDescription::kIsCaseOf: {
+        if (the_is_case_of.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_is_case_of,
           error
@@ -17625,6 +18822,11 @@ std::pair<
 
     switch (property) {
       case properties::OfReference::kType: {
+        if (the_type.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_type,
           error
@@ -17632,6 +18834,11 @@ std::pair<
         break;
       }
       case properties::OfReference::kReferredSemanticId: {
+        if (the_referred_semantic_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_referred_semantic_id,
           error
@@ -17641,6 +18848,11 @@ std::pair<
         break;
       }
       case properties::OfReference::kKeys: {
+        if (the_keys.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_keys,
           error
@@ -17887,6 +19099,11 @@ std::pair<
 
     switch (property) {
       case properties::OfKey::kType: {
+        if (the_type.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_type,
           error
@@ -17894,6 +19111,11 @@ std::pair<
         break;
       }
       case properties::OfKey::kValue: {
+        if (the_value.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value,
           error
@@ -18134,6 +19356,11 @@ std::pair<
 
     switch (property) {
       case properties::OfLangStringNameType::kLanguage: {
+        if (the_language.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_language,
           error
@@ -18141,6 +19368,11 @@ std::pair<
         break;
       }
       case properties::OfLangStringNameType::kText: {
+        if (the_text.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_text,
           error
@@ -18381,6 +19613,11 @@ std::pair<
 
     switch (property) {
       case properties::OfLangStringTextType::kLanguage: {
+        if (the_language.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_language,
           error
@@ -18388,6 +19625,11 @@ std::pair<
         break;
       }
       case properties::OfLangStringTextType::kText: {
+        if (the_text.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_text,
           error
@@ -18642,6 +19884,11 @@ std::pair<
 
     switch (property) {
       case properties::OfEnvironment::kAssetAdministrationShells: {
+        if (the_asset_administration_shells.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_asset_administration_shells,
           error
@@ -18654,6 +19901,11 @@ std::pair<
         break;
       }
       case properties::OfEnvironment::kSubmodels: {
+        if (the_submodels.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_submodels,
           error
@@ -18666,6 +19918,11 @@ std::pair<
         break;
       }
       case properties::OfEnvironment::kConceptDescriptions: {
+        if (the_concept_descriptions.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_concept_descriptions,
           error
@@ -18892,6 +20149,11 @@ std::pair<
 
     switch (property) {
       case properties::OfEmbeddedDataSpecification::kDataSpecification: {
+        if (the_data_specification.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_data_specification,
           error
@@ -18901,6 +20163,11 @@ std::pair<
         break;
       }
       case properties::OfEmbeddedDataSpecification::kDataSpecificationContent: {
+        if (the_data_specification_content.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_data_specification_content,
           error
@@ -19145,6 +20412,11 @@ std::pair<
 
     switch (property) {
       case properties::OfLevelType::kMin: {
+        if (the_min.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_min,
           error
@@ -19152,6 +20424,11 @@ std::pair<
         break;
       }
       case properties::OfLevelType::kNom: {
+        if (the_nom.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_nom,
           error
@@ -19159,6 +20436,11 @@ std::pair<
         break;
       }
       case properties::OfLevelType::kTyp: {
+        if (the_typ.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_typ,
           error
@@ -19166,6 +20448,11 @@ std::pair<
         break;
       }
       case properties::OfLevelType::kMax: {
+        if (the_max.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_max,
           error
@@ -19424,6 +20711,11 @@ std::pair<
 
     switch (property) {
       case properties::OfValueReferencePair::kValue: {
+        if (the_value.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value,
           error
@@ -19431,6 +20723,11 @@ std::pair<
         break;
       }
       case properties::OfValueReferencePair::kValueId: {
+        if (the_value_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value_id,
           error
@@ -19675,6 +20972,11 @@ std::pair<
 
     switch (property) {
       case properties::OfValueList::kValueReferencePairs: {
+        if (the_value_reference_pairs.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value_reference_pairs,
           error
@@ -19911,6 +21213,11 @@ std::pair<
 
     switch (property) {
       case properties::OfLangStringPreferredNameTypeIec61360::kLanguage: {
+        if (the_language.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_language,
           error
@@ -19918,6 +21225,11 @@ std::pair<
         break;
       }
       case properties::OfLangStringPreferredNameTypeIec61360::kText: {
+        if (the_text.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_text,
           error
@@ -20158,6 +21470,11 @@ std::pair<
 
     switch (property) {
       case properties::OfLangStringShortNameTypeIec61360::kLanguage: {
+        if (the_language.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_language,
           error
@@ -20165,6 +21482,11 @@ std::pair<
         break;
       }
       case properties::OfLangStringShortNameTypeIec61360::kText: {
+        if (the_text.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_text,
           error
@@ -20405,6 +21727,11 @@ std::pair<
 
     switch (property) {
       case properties::OfLangStringDefinitionTypeIec61360::kLanguage: {
+        if (the_language.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_language,
           error
@@ -20412,6 +21739,11 @@ std::pair<
         break;
       }
       case properties::OfLangStringDefinitionTypeIec61360::kText: {
+        if (the_text.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_text,
           error
@@ -20690,6 +22022,11 @@ std::pair<
 
     switch (property) {
       case properties::OfDataSpecificationIec61360::kPreferredName: {
+        if (the_preferred_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_preferred_name,
           error
@@ -20702,6 +22039,11 @@ std::pair<
         break;
       }
       case properties::OfDataSpecificationIec61360::kShortName: {
+        if (the_short_name.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_short_name,
           error
@@ -20714,6 +22056,11 @@ std::pair<
         break;
       }
       case properties::OfDataSpecificationIec61360::kUnit: {
+        if (the_unit.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_unit,
           error
@@ -20721,6 +22068,11 @@ std::pair<
         break;
       }
       case properties::OfDataSpecificationIec61360::kUnitId: {
+        if (the_unit_id.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_unit_id,
           error
@@ -20730,6 +22082,11 @@ std::pair<
         break;
       }
       case properties::OfDataSpecificationIec61360::kSourceOfDefinition: {
+        if (the_source_of_definition.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_source_of_definition,
           error
@@ -20737,6 +22094,11 @@ std::pair<
         break;
       }
       case properties::OfDataSpecificationIec61360::kSymbol: {
+        if (the_symbol.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_symbol,
           error
@@ -20744,6 +22106,11 @@ std::pair<
         break;
       }
       case properties::OfDataSpecificationIec61360::kDataType: {
+        if (the_data_type.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_data_type,
           error
@@ -20751,6 +22118,11 @@ std::pair<
         break;
       }
       case properties::OfDataSpecificationIec61360::kDefinition: {
+        if (the_definition.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_definition,
           error
@@ -20763,6 +22135,11 @@ std::pair<
         break;
       }
       case properties::OfDataSpecificationIec61360::kValueFormat: {
+        if (the_value_format.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value_format,
           error
@@ -20770,6 +22147,11 @@ std::pair<
         break;
       }
       case properties::OfDataSpecificationIec61360::kValueList: {
+        if (the_value_list.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value_list,
           error
@@ -20779,6 +22161,11 @@ std::pair<
         break;
       }
       case properties::OfDataSpecificationIec61360::kValue: {
+        if (the_value.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_value,
           error
@@ -20786,6 +22173,11 @@ std::pair<
         break;
       }
       case properties::OfDataSpecificationIec61360::kLevelType: {
+        if (the_level_type.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_level_type,
           error

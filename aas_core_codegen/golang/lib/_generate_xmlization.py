@@ -1054,6 +1054,19 @@ func missingProperty(name string) error {{
         ),
         Stripped(
             f"""\
+// Report that the property with the given `local` name has been observed more
+// than once.
+func duplicatePropertyError(local string) error {{
+{I}return newDeserializationError(
+{II}fmt.Sprintf(
+{III}"Property %s occurred more than once",
+{III}local,
+{II}),
+{I})
+}}"""
+        ),
+        Stripped(
+            f"""\
 // Report that we got a start element with the `local` name, but expected a start
 // element with the `expectedLocal` name.
 func unexpectedStartElement(local string, expectedLocal string) error {{
@@ -1727,9 +1740,24 @@ readTuple{arity}(
 
         assert case_body is not None
 
-        if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-            found_var = golang_naming.variable_name(Identifier(f"found_{prop.name}"))
-            case_body = Stripped(f"{case_body}\n{found_var} = true")
+        # NOTE (mristin):
+        # A nil value does not tell a property apart which has not been read from one
+        # which has: a list which came empty is read as a nil slice. The flag is what
+        # tells the two apart, so every property has one, and not only the required
+        # ones which have to be checked for at the end.
+        #
+        # The guard precedes the read, so a duplicate is refused without its content
+        # ever being looked at.
+        found_var = golang_naming.variable_name(Identifier(f"found_{prop.name}"))
+        case_body = Stripped(
+            f"""\
+if {found_var} {{
+{I}valueErr = duplicatePropertyError(local)
+{I}break
+}}
+{case_body}
+{found_var} = true"""
+        )
 
         case_blocks.append(
             Stripped(
@@ -1783,9 +1811,6 @@ def _generate_read_as_sequence(cls: intermediate.ConcreteClass) -> Stripped:
 
     found_var_initializations = []  # type: List[Stripped]
     for prop in cls.properties:
-        if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
-            continue
-
         found_var = golang_naming.variable_name(Identifier(f"found_{prop.name}"))
 
         found_var_initializations.append(Stripped(f"{found_var} := false"))

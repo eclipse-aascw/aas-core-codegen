@@ -680,6 +680,17 @@ func missingProperty(name string) error {
 	)
 }
 
+// Report that the property with the given `local` name has been observed more
+// than once.
+func duplicatePropertyError(local string) error {
+	return newDeserializationError(
+		fmt.Sprintf(
+			"Property %s occurred more than once",
+			local,
+		),
+	)
+}
+
 // Report that we got a start element with the `local` name, but expected a start
 // element with the `expectedLocal` name.
 func unexpectedStartElement(local string, expectedLocal string) error {
@@ -968,7 +979,12 @@ func readExtensionAsSequence(
 	var theValue *string
 	var theRefersTo []aastypes.IReference
 
+	foundSemanticID := false
+	foundSupplementalSemanticIDs := false
 	foundName := false
+	foundValueType := false
+	foundValue := false
+	foundRefersTo := false
 
 	for {
 		var local string
@@ -984,30 +1000,59 @@ func readExtensionAsSequence(
 		var valueErr error
 		switch local {
 		case "semanticId":
+			if foundSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSemanticID = true
 		case "supplementalSemanticIds":
+			if foundSupplementalSemanticIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSupplementalSemanticIDs, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundSupplementalSemanticIDs = true
 		case "name":
+			if foundName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theName, current, valueErr = readText(
 				decoder, current,
 			)
 			foundName = true
 		case "valueType":
+			if foundValueType {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValueType, current, valueErr = readOptional(
 				readTextAs_DataTypeDefXSD(decoder, current),
 			)
+			foundValueType = true
 		case "value":
+			if foundValue {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValue, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundValue = true
 		case "refersTo":
+			if foundRefersTo {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theRefersTo, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundRefersTo = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -1116,6 +1161,12 @@ func readAdministrativeInformationAsSequence(
 	var theCreator aastypes.IReference
 	var theTemplateID *string
 
+	foundEmbeddedDataSpecifications := false
+	foundVersion := false
+	foundRevision := false
+	foundCreator := false
+	foundTemplateID := false
+
 	for {
 		var local string
 		var ok bool
@@ -1130,25 +1181,50 @@ func readAdministrativeInformationAsSequence(
 		var valueErr error
 		switch local {
 		case "embeddedDataSpecifications":
+			if foundEmbeddedDataSpecifications {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theEmbeddedDataSpecifications, current, valueErr = readListOf(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
+			foundEmbeddedDataSpecifications = true
 		case "version":
+			if foundVersion {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theVersion, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundVersion = true
 		case "revision":
+			if foundRevision {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theRevision, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundRevision = true
 		case "creator":
+			if foundCreator {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theCreator, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundCreator = true
 		case "templateId":
+			if foundTemplateID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theTemplateID, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundTemplateID = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -1230,8 +1306,13 @@ func readQualifierAsSequence(
 	var theValue *string
 	var theValueID aastypes.IReference
 
+	foundSemanticID := false
+	foundSupplementalSemanticIDs := false
+	foundKind := false
 	foundType := false
 	foundValueType := false
+	foundValue := false
+	foundValueID := false
 
 	for {
 		var local string
@@ -1247,35 +1328,68 @@ func readQualifierAsSequence(
 		var valueErr error
 		switch local {
 		case "semanticId":
+			if foundSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSemanticID = true
 		case "supplementalSemanticIds":
+			if foundSupplementalSemanticIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSupplementalSemanticIDs, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundSupplementalSemanticIDs = true
 		case "kind":
+			if foundKind {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theKind, current, valueErr = readOptional(
 				readTextAs_QualifierKind(decoder, current),
 			)
+			foundKind = true
 		case "type":
+			if foundType {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theType, current, valueErr = readText(
 				decoder, current,
 			)
 			foundType = true
 		case "valueType":
+			if foundValueType {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValueType, current, valueErr = readTextAs_DataTypeDefXSD(
 				decoder, current,
 			)
 			foundValueType = true
 		case "value":
+			if foundValue {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValue, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundValue = true
 		case "valueId":
+			if foundValueID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValueID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundValueID = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -1359,8 +1473,17 @@ func readAssetAdministrationShellAsSequence(
 	var theAssetInformation aastypes.IAssetInformation
 	var theSubmodels []aastypes.IReference
 
+	foundExtensions := false
+	foundCategory := false
+	foundIDShort := false
+	foundDisplayName := false
+	foundDescription := false
+	foundAdministration := false
 	foundID := false
+	foundEmbeddedDataSpecifications := false
+	foundDerivedFrom := false
 	foundAssetInformation := false
+	foundSubmodels := false
 
 	for {
 		var local string
@@ -1376,51 +1499,104 @@ func readAssetAdministrationShellAsSequence(
 		var valueErr error
 		switch local {
 		case "extensions":
+			if foundExtensions {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theExtensions, current, valueErr = readListOf(
 				decoder, current, readExtensionDispatched,
 			)
+			foundExtensions = true
 		case "category":
+			if foundCategory {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theCategory, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundCategory = true
 		case "idShort":
+			if foundIDShort {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIDShort, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundIDShort = true
 		case "displayName":
+			if foundDisplayName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDisplayName, current, valueErr = readListOf(
 				decoder, current, readLangStringNameTypeDispatched,
 			)
+			foundDisplayName = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readListOf(
 				decoder, current, readLangStringTextTypeDispatched,
 			)
+			foundDescription = true
 		case "administration":
+			if foundAdministration {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theAdministration, current, valueErr = readAdministrativeInformationAsSequence(
 				decoder, current,
 			)
+			foundAdministration = true
 		case "id":
+			if foundID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theID, current, valueErr = readText(
 				decoder, current,
 			)
 			foundID = true
 		case "embeddedDataSpecifications":
+			if foundEmbeddedDataSpecifications {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theEmbeddedDataSpecifications, current, valueErr = readListOf(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
+			foundEmbeddedDataSpecifications = true
 		case "derivedFrom":
+			if foundDerivedFrom {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDerivedFrom, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundDerivedFrom = true
 		case "assetInformation":
+			if foundAssetInformation {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theAssetInformation, current, valueErr = readAssetInformationAsSequence(
 				decoder, current,
 			)
 			foundAssetInformation = true
 		case "submodels":
+			if foundSubmodels {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSubmodels, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundSubmodels = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -1503,6 +1679,10 @@ func readAssetInformationAsSequence(
 	var theDefaultThumbnail aastypes.IResource
 
 	foundAssetKind := false
+	foundGlobalAssetID := false
+	foundSpecificAssetIDs := false
+	foundAssetType := false
+	foundDefaultThumbnail := false
 
 	for {
 		var local string
@@ -1518,26 +1698,50 @@ func readAssetInformationAsSequence(
 		var valueErr error
 		switch local {
 		case "assetKind":
+			if foundAssetKind {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theAssetKind, current, valueErr = readTextAs_AssetKind(
 				decoder, current,
 			)
 			foundAssetKind = true
 		case "globalAssetId":
+			if foundGlobalAssetID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theGlobalAssetID, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundGlobalAssetID = true
 		case "specificAssetIds":
+			if foundSpecificAssetIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSpecificAssetIDs, current, valueErr = readListOf(
 				decoder, current, readSpecificAssetIDDispatched,
 			)
+			foundSpecificAssetIDs = true
 		case "assetType":
+			if foundAssetType {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theAssetType, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundAssetType = true
 		case "defaultThumbnail":
+			if foundDefaultThumbnail {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDefaultThumbnail, current, valueErr = readResourceAsSequence(
 				decoder, current,
 			)
+			foundDefaultThumbnail = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -1584,6 +1788,7 @@ func readResourceAsSequence(
 	var theContentType *string
 
 	foundPath := false
+	foundContentType := false
 
 	for {
 		var local string
@@ -1599,14 +1804,23 @@ func readResourceAsSequence(
 		var valueErr error
 		switch local {
 		case "path":
+			if foundPath {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			thePath, current, valueErr = readText(
 				decoder, current,
 			)
 			foundPath = true
 		case "contentType":
+			if foundContentType {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theContentType, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundContentType = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -1689,8 +1903,11 @@ func readSpecificAssetIDAsSequence(
 	var theValue string
 	var theExternalSubjectID aastypes.IReference
 
+	foundSemanticID := false
+	foundSupplementalSemanticIDs := false
 	foundName := false
 	foundValue := false
+	foundExternalSubjectID := false
 
 	for {
 		var local string
@@ -1706,27 +1923,50 @@ func readSpecificAssetIDAsSequence(
 		var valueErr error
 		switch local {
 		case "semanticId":
+			if foundSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSemanticID = true
 		case "supplementalSemanticIds":
+			if foundSupplementalSemanticIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSupplementalSemanticIDs, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundSupplementalSemanticIDs = true
 		case "name":
+			if foundName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theName, current, valueErr = readText(
 				decoder, current,
 			)
 			foundName = true
 		case "value":
+			if foundValue {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValue, current, valueErr = readText(
 				decoder, current,
 			)
 			foundValue = true
 		case "externalSubjectId":
+			if foundExternalSubjectID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theExternalSubjectID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundExternalSubjectID = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -1810,7 +2050,19 @@ func readSubmodelAsSequence(
 	var theEmbeddedDataSpecifications []aastypes.IEmbeddedDataSpecification
 	var theSubmodelElements []aastypes.ISubmodelElement
 
+	foundExtensions := false
+	foundCategory := false
+	foundIDShort := false
+	foundDisplayName := false
+	foundDescription := false
+	foundAdministration := false
 	foundID := false
+	foundKind := false
+	foundSemanticID := false
+	foundSupplementalSemanticIDs := false
+	foundQualifiers := false
+	foundEmbeddedDataSpecifications := false
+	foundSubmodelElements := false
 
 	for {
 		var local string
@@ -1826,58 +2078,122 @@ func readSubmodelAsSequence(
 		var valueErr error
 		switch local {
 		case "extensions":
+			if foundExtensions {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theExtensions, current, valueErr = readListOf(
 				decoder, current, readExtensionDispatched,
 			)
+			foundExtensions = true
 		case "category":
+			if foundCategory {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theCategory, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundCategory = true
 		case "idShort":
+			if foundIDShort {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIDShort, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundIDShort = true
 		case "displayName":
+			if foundDisplayName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDisplayName, current, valueErr = readListOf(
 				decoder, current, readLangStringNameTypeDispatched,
 			)
+			foundDisplayName = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readListOf(
 				decoder, current, readLangStringTextTypeDispatched,
 			)
+			foundDescription = true
 		case "administration":
+			if foundAdministration {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theAdministration, current, valueErr = readAdministrativeInformationAsSequence(
 				decoder, current,
 			)
+			foundAdministration = true
 		case "id":
+			if foundID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theID, current, valueErr = readText(
 				decoder, current,
 			)
 			foundID = true
 		case "kind":
+			if foundKind {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theKind, current, valueErr = readOptional(
 				readTextAs_ModellingKind(decoder, current),
 			)
+			foundKind = true
 		case "semanticId":
+			if foundSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSemanticID = true
 		case "supplementalSemanticIds":
+			if foundSupplementalSemanticIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSupplementalSemanticIDs, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundSupplementalSemanticIDs = true
 		case "qualifiers":
+			if foundQualifiers {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theQualifiers, current, valueErr = readListOf(
 				decoder, current, readQualifierDispatched,
 			)
+			foundQualifiers = true
 		case "embeddedDataSpecifications":
+			if foundEmbeddedDataSpecifications {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theEmbeddedDataSpecifications, current, valueErr = readListOf(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
+			foundEmbeddedDataSpecifications = true
 		case "submodelElements":
+			if foundSubmodelElements {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSubmodelElements, current, valueErr = readListOf(
 				decoder, current, readSubmodelElementDispatched,
 			)
+			foundSubmodelElements = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -2010,6 +2326,15 @@ func readRelationshipElementAsSequence(
 	var theFirst aastypes.IReference
 	var theSecond aastypes.IReference
 
+	foundExtensions := false
+	foundCategory := false
+	foundIDShort := false
+	foundDisplayName := false
+	foundDescription := false
+	foundSemanticID := false
+	foundSupplementalSemanticIDs := false
+	foundQualifiers := false
+	foundEmbeddedDataSpecifications := false
 	foundFirst := false
 	foundSecond := false
 
@@ -2027,47 +2352,100 @@ func readRelationshipElementAsSequence(
 		var valueErr error
 		switch local {
 		case "extensions":
+			if foundExtensions {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theExtensions, current, valueErr = readListOf(
 				decoder, current, readExtensionDispatched,
 			)
+			foundExtensions = true
 		case "category":
+			if foundCategory {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theCategory, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundCategory = true
 		case "idShort":
+			if foundIDShort {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIDShort, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundIDShort = true
 		case "displayName":
+			if foundDisplayName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDisplayName, current, valueErr = readListOf(
 				decoder, current, readLangStringNameTypeDispatched,
 			)
+			foundDisplayName = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readListOf(
 				decoder, current, readLangStringTextTypeDispatched,
 			)
+			foundDescription = true
 		case "semanticId":
+			if foundSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSemanticID = true
 		case "supplementalSemanticIds":
+			if foundSupplementalSemanticIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSupplementalSemanticIDs, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundSupplementalSemanticIDs = true
 		case "qualifiers":
+			if foundQualifiers {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theQualifiers, current, valueErr = readListOf(
 				decoder, current, readQualifierDispatched,
 			)
+			foundQualifiers = true
 		case "embeddedDataSpecifications":
+			if foundEmbeddedDataSpecifications {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theEmbeddedDataSpecifications, current, valueErr = readListOf(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
+			foundEmbeddedDataSpecifications = true
 		case "first":
+			if foundFirst {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theFirst, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
 			foundFirst = true
 		case "second":
+			if foundSecond {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSecond, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
@@ -2177,7 +2555,20 @@ func readSubmodelElementListAsSequence(
 	var theValueTypeListElement *aastypes.DataTypeDefXSD
 	var theValue []aastypes.ISubmodelElement
 
+	foundExtensions := false
+	foundCategory := false
+	foundIDShort := false
+	foundDisplayName := false
+	foundDescription := false
+	foundSemanticID := false
+	foundSupplementalSemanticIDs := false
+	foundQualifiers := false
+	foundEmbeddedDataSpecifications := false
+	foundOrderRelevant := false
+	foundSemanticIDListElement := false
 	foundTypeValueListElement := false
+	foundValueTypeListElement := false
+	foundValue := false
 
 	for {
 		var local string
@@ -2193,62 +2584,131 @@ func readSubmodelElementListAsSequence(
 		var valueErr error
 		switch local {
 		case "extensions":
+			if foundExtensions {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theExtensions, current, valueErr = readListOf(
 				decoder, current, readExtensionDispatched,
 			)
+			foundExtensions = true
 		case "category":
+			if foundCategory {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theCategory, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundCategory = true
 		case "idShort":
+			if foundIDShort {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIDShort, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundIDShort = true
 		case "displayName":
+			if foundDisplayName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDisplayName, current, valueErr = readListOf(
 				decoder, current, readLangStringNameTypeDispatched,
 			)
+			foundDisplayName = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readListOf(
 				decoder, current, readLangStringTextTypeDispatched,
 			)
+			foundDescription = true
 		case "semanticId":
+			if foundSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSemanticID = true
 		case "supplementalSemanticIds":
+			if foundSupplementalSemanticIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSupplementalSemanticIDs, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundSupplementalSemanticIDs = true
 		case "qualifiers":
+			if foundQualifiers {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theQualifiers, current, valueErr = readListOf(
 				decoder, current, readQualifierDispatched,
 			)
+			foundQualifiers = true
 		case "embeddedDataSpecifications":
+			if foundEmbeddedDataSpecifications {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theEmbeddedDataSpecifications, current, valueErr = readListOf(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
+			foundEmbeddedDataSpecifications = true
 		case "orderRelevant":
+			if foundOrderRelevant {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theOrderRelevant, current, valueErr = readOptional(
 				readTextAs_bool(decoder, current),
 			)
+			foundOrderRelevant = true
 		case "semanticIdListElement":
+			if foundSemanticIDListElement {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSemanticIDListElement, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSemanticIDListElement = true
 		case "typeValueListElement":
+			if foundTypeValueListElement {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theTypeValueListElement, current, valueErr = readTextAs_AASSubmodelElements(
 				decoder, current,
 			)
 			foundTypeValueListElement = true
 		case "valueTypeListElement":
+			if foundValueTypeListElement {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValueTypeListElement, current, valueErr = readOptional(
 				readTextAs_DataTypeDefXSD(decoder, current),
 			)
+			foundValueTypeListElement = true
 		case "value":
+			if foundValue {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValue, current, valueErr = readListOf(
 				decoder, current, readSubmodelElementDispatched,
 			)
+			foundValue = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -2311,6 +2771,17 @@ func readSubmodelElementCollectionAsSequence(
 	var theEmbeddedDataSpecifications []aastypes.IEmbeddedDataSpecification
 	var theValue []aastypes.ISubmodelElement
 
+	foundExtensions := false
+	foundCategory := false
+	foundIDShort := false
+	foundDisplayName := false
+	foundDescription := false
+	foundSemanticID := false
+	foundSupplementalSemanticIDs := false
+	foundQualifiers := false
+	foundEmbeddedDataSpecifications := false
+	foundValue := false
+
 	for {
 		var local string
 		var ok bool
@@ -2325,45 +2796,95 @@ func readSubmodelElementCollectionAsSequence(
 		var valueErr error
 		switch local {
 		case "extensions":
+			if foundExtensions {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theExtensions, current, valueErr = readListOf(
 				decoder, current, readExtensionDispatched,
 			)
+			foundExtensions = true
 		case "category":
+			if foundCategory {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theCategory, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundCategory = true
 		case "idShort":
+			if foundIDShort {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIDShort, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundIDShort = true
 		case "displayName":
+			if foundDisplayName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDisplayName, current, valueErr = readListOf(
 				decoder, current, readLangStringNameTypeDispatched,
 			)
+			foundDisplayName = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readListOf(
 				decoder, current, readLangStringTextTypeDispatched,
 			)
+			foundDescription = true
 		case "semanticId":
+			if foundSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSemanticID = true
 		case "supplementalSemanticIds":
+			if foundSupplementalSemanticIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSupplementalSemanticIDs, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundSupplementalSemanticIDs = true
 		case "qualifiers":
+			if foundQualifiers {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theQualifiers, current, valueErr = readListOf(
 				decoder, current, readQualifierDispatched,
 			)
+			foundQualifiers = true
 		case "embeddedDataSpecifications":
+			if foundEmbeddedDataSpecifications {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theEmbeddedDataSpecifications, current, valueErr = readListOf(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
+			foundEmbeddedDataSpecifications = true
 		case "value":
+			if foundValue {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValue, current, valueErr = readListOf(
 				decoder, current, readSubmodelElementDispatched,
 			)
+			foundValue = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -2450,7 +2971,18 @@ func readPropertyAsSequence(
 	var theValue *string
 	var theValueID aastypes.IReference
 
+	foundExtensions := false
+	foundCategory := false
+	foundIDShort := false
+	foundDisplayName := false
+	foundDescription := false
+	foundSemanticID := false
+	foundSupplementalSemanticIDs := false
+	foundQualifiers := false
+	foundEmbeddedDataSpecifications := false
 	foundValueType := false
+	foundValue := false
+	foundValueID := false
 
 	for {
 		var local string
@@ -2466,54 +2998,113 @@ func readPropertyAsSequence(
 		var valueErr error
 		switch local {
 		case "extensions":
+			if foundExtensions {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theExtensions, current, valueErr = readListOf(
 				decoder, current, readExtensionDispatched,
 			)
+			foundExtensions = true
 		case "category":
+			if foundCategory {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theCategory, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundCategory = true
 		case "idShort":
+			if foundIDShort {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIDShort, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundIDShort = true
 		case "displayName":
+			if foundDisplayName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDisplayName, current, valueErr = readListOf(
 				decoder, current, readLangStringNameTypeDispatched,
 			)
+			foundDisplayName = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readListOf(
 				decoder, current, readLangStringTextTypeDispatched,
 			)
+			foundDescription = true
 		case "semanticId":
+			if foundSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSemanticID = true
 		case "supplementalSemanticIds":
+			if foundSupplementalSemanticIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSupplementalSemanticIDs, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundSupplementalSemanticIDs = true
 		case "qualifiers":
+			if foundQualifiers {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theQualifiers, current, valueErr = readListOf(
 				decoder, current, readQualifierDispatched,
 			)
+			foundQualifiers = true
 		case "embeddedDataSpecifications":
+			if foundEmbeddedDataSpecifications {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theEmbeddedDataSpecifications, current, valueErr = readListOf(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
+			foundEmbeddedDataSpecifications = true
 		case "valueType":
+			if foundValueType {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValueType, current, valueErr = readTextAs_DataTypeDefXSD(
 				decoder, current,
 			)
 			foundValueType = true
 		case "value":
+			if foundValue {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValue, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundValue = true
 		case "valueId":
+			if foundValueID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValueID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundValueID = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -2575,6 +3166,18 @@ func readMultiLanguagePropertyAsSequence(
 	var theValue []aastypes.ILangStringTextType
 	var theValueID aastypes.IReference
 
+	foundExtensions := false
+	foundCategory := false
+	foundIDShort := false
+	foundDisplayName := false
+	foundDescription := false
+	foundSemanticID := false
+	foundSupplementalSemanticIDs := false
+	foundQualifiers := false
+	foundEmbeddedDataSpecifications := false
+	foundValue := false
+	foundValueID := false
+
 	for {
 		var local string
 		var ok bool
@@ -2589,49 +3192,104 @@ func readMultiLanguagePropertyAsSequence(
 		var valueErr error
 		switch local {
 		case "extensions":
+			if foundExtensions {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theExtensions, current, valueErr = readListOf(
 				decoder, current, readExtensionDispatched,
 			)
+			foundExtensions = true
 		case "category":
+			if foundCategory {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theCategory, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundCategory = true
 		case "idShort":
+			if foundIDShort {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIDShort, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundIDShort = true
 		case "displayName":
+			if foundDisplayName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDisplayName, current, valueErr = readListOf(
 				decoder, current, readLangStringNameTypeDispatched,
 			)
+			foundDisplayName = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readListOf(
 				decoder, current, readLangStringTextTypeDispatched,
 			)
+			foundDescription = true
 		case "semanticId":
+			if foundSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSemanticID = true
 		case "supplementalSemanticIds":
+			if foundSupplementalSemanticIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSupplementalSemanticIDs, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundSupplementalSemanticIDs = true
 		case "qualifiers":
+			if foundQualifiers {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theQualifiers, current, valueErr = readListOf(
 				decoder, current, readQualifierDispatched,
 			)
+			foundQualifiers = true
 		case "embeddedDataSpecifications":
+			if foundEmbeddedDataSpecifications {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theEmbeddedDataSpecifications, current, valueErr = readListOf(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
+			foundEmbeddedDataSpecifications = true
 		case "value":
+			if foundValue {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValue, current, valueErr = readListOf(
 				decoder, current, readLangStringTextTypeDispatched,
 			)
+			foundValue = true
 		case "valueId":
+			if foundValueID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValueID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundValueID = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -2687,7 +3345,18 @@ func readRangeAsSequence(
 	var theMin *string
 	var theMax *string
 
+	foundExtensions := false
+	foundCategory := false
+	foundIDShort := false
+	foundDisplayName := false
+	foundDescription := false
+	foundSemanticID := false
+	foundSupplementalSemanticIDs := false
+	foundQualifiers := false
+	foundEmbeddedDataSpecifications := false
 	foundValueType := false
+	foundMin := false
+	foundMax := false
 
 	for {
 		var local string
@@ -2703,54 +3372,113 @@ func readRangeAsSequence(
 		var valueErr error
 		switch local {
 		case "extensions":
+			if foundExtensions {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theExtensions, current, valueErr = readListOf(
 				decoder, current, readExtensionDispatched,
 			)
+			foundExtensions = true
 		case "category":
+			if foundCategory {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theCategory, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundCategory = true
 		case "idShort":
+			if foundIDShort {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIDShort, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundIDShort = true
 		case "displayName":
+			if foundDisplayName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDisplayName, current, valueErr = readListOf(
 				decoder, current, readLangStringNameTypeDispatched,
 			)
+			foundDisplayName = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readListOf(
 				decoder, current, readLangStringTextTypeDispatched,
 			)
+			foundDescription = true
 		case "semanticId":
+			if foundSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSemanticID = true
 		case "supplementalSemanticIds":
+			if foundSupplementalSemanticIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSupplementalSemanticIDs, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundSupplementalSemanticIDs = true
 		case "qualifiers":
+			if foundQualifiers {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theQualifiers, current, valueErr = readListOf(
 				decoder, current, readQualifierDispatched,
 			)
+			foundQualifiers = true
 		case "embeddedDataSpecifications":
+			if foundEmbeddedDataSpecifications {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theEmbeddedDataSpecifications, current, valueErr = readListOf(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
+			foundEmbeddedDataSpecifications = true
 		case "valueType":
+			if foundValueType {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValueType, current, valueErr = readTextAs_DataTypeDefXSD(
 				decoder, current,
 			)
 			foundValueType = true
 		case "min":
+			if foundMin {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theMin, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundMin = true
 		case "max":
+			if foundMax {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theMax, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundMax = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -2811,6 +3539,17 @@ func readReferenceElementAsSequence(
 	var theEmbeddedDataSpecifications []aastypes.IEmbeddedDataSpecification
 	var theValue aastypes.IReference
 
+	foundExtensions := false
+	foundCategory := false
+	foundIDShort := false
+	foundDisplayName := false
+	foundDescription := false
+	foundSemanticID := false
+	foundSupplementalSemanticIDs := false
+	foundQualifiers := false
+	foundEmbeddedDataSpecifications := false
+	foundValue := false
+
 	for {
 		var local string
 		var ok bool
@@ -2825,45 +3564,95 @@ func readReferenceElementAsSequence(
 		var valueErr error
 		switch local {
 		case "extensions":
+			if foundExtensions {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theExtensions, current, valueErr = readListOf(
 				decoder, current, readExtensionDispatched,
 			)
+			foundExtensions = true
 		case "category":
+			if foundCategory {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theCategory, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundCategory = true
 		case "idShort":
+			if foundIDShort {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIDShort, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundIDShort = true
 		case "displayName":
+			if foundDisplayName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDisplayName, current, valueErr = readListOf(
 				decoder, current, readLangStringNameTypeDispatched,
 			)
+			foundDisplayName = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readListOf(
 				decoder, current, readLangStringTextTypeDispatched,
 			)
+			foundDescription = true
 		case "semanticId":
+			if foundSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSemanticID = true
 		case "supplementalSemanticIds":
+			if foundSupplementalSemanticIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSupplementalSemanticIDs, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundSupplementalSemanticIDs = true
 		case "qualifiers":
+			if foundQualifiers {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theQualifiers, current, valueErr = readListOf(
 				decoder, current, readQualifierDispatched,
 			)
+			foundQualifiers = true
 		case "embeddedDataSpecifications":
+			if foundEmbeddedDataSpecifications {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theEmbeddedDataSpecifications, current, valueErr = readListOf(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
+			foundEmbeddedDataSpecifications = true
 		case "value":
+			if foundValue {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValue, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundValue = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -2917,6 +3706,16 @@ func readBlobAsSequence(
 	var theValue []byte
 	var theContentType string
 
+	foundExtensions := false
+	foundCategory := false
+	foundIDShort := false
+	foundDisplayName := false
+	foundDescription := false
+	foundSemanticID := false
+	foundSupplementalSemanticIDs := false
+	foundQualifiers := false
+	foundEmbeddedDataSpecifications := false
+	foundValue := false
 	foundContentType := false
 
 	for {
@@ -2933,46 +3732,100 @@ func readBlobAsSequence(
 		var valueErr error
 		switch local {
 		case "extensions":
+			if foundExtensions {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theExtensions, current, valueErr = readListOf(
 				decoder, current, readExtensionDispatched,
 			)
+			foundExtensions = true
 		case "category":
+			if foundCategory {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theCategory, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundCategory = true
 		case "idShort":
+			if foundIDShort {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIDShort, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundIDShort = true
 		case "displayName":
+			if foundDisplayName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDisplayName, current, valueErr = readListOf(
 				decoder, current, readLangStringNameTypeDispatched,
 			)
+			foundDisplayName = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readListOf(
 				decoder, current, readLangStringTextTypeDispatched,
 			)
+			foundDescription = true
 		case "semanticId":
+			if foundSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSemanticID = true
 		case "supplementalSemanticIds":
+			if foundSupplementalSemanticIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSupplementalSemanticIDs, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundSupplementalSemanticIDs = true
 		case "qualifiers":
+			if foundQualifiers {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theQualifiers, current, valueErr = readListOf(
 				decoder, current, readQualifierDispatched,
 			)
+			foundQualifiers = true
 		case "embeddedDataSpecifications":
+			if foundEmbeddedDataSpecifications {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theEmbeddedDataSpecifications, current, valueErr = readListOf(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
+			foundEmbeddedDataSpecifications = true
 		case "value":
+			if foundValue {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValue, current, valueErr = readTextAs_bytes(
 				decoder, current,
 			)
+			foundValue = true
 		case "contentType":
+			if foundContentType {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theContentType, current, valueErr = readText(
 				decoder, current,
 			)
@@ -3037,6 +3890,16 @@ func readFileAsSequence(
 	var theValue *string
 	var theContentType string
 
+	foundExtensions := false
+	foundCategory := false
+	foundIDShort := false
+	foundDisplayName := false
+	foundDescription := false
+	foundSemanticID := false
+	foundSupplementalSemanticIDs := false
+	foundQualifiers := false
+	foundEmbeddedDataSpecifications := false
+	foundValue := false
 	foundContentType := false
 
 	for {
@@ -3053,46 +3916,100 @@ func readFileAsSequence(
 		var valueErr error
 		switch local {
 		case "extensions":
+			if foundExtensions {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theExtensions, current, valueErr = readListOf(
 				decoder, current, readExtensionDispatched,
 			)
+			foundExtensions = true
 		case "category":
+			if foundCategory {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theCategory, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundCategory = true
 		case "idShort":
+			if foundIDShort {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIDShort, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundIDShort = true
 		case "displayName":
+			if foundDisplayName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDisplayName, current, valueErr = readListOf(
 				decoder, current, readLangStringNameTypeDispatched,
 			)
+			foundDisplayName = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readListOf(
 				decoder, current, readLangStringTextTypeDispatched,
 			)
+			foundDescription = true
 		case "semanticId":
+			if foundSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSemanticID = true
 		case "supplementalSemanticIds":
+			if foundSupplementalSemanticIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSupplementalSemanticIDs, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundSupplementalSemanticIDs = true
 		case "qualifiers":
+			if foundQualifiers {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theQualifiers, current, valueErr = readListOf(
 				decoder, current, readQualifierDispatched,
 			)
+			foundQualifiers = true
 		case "embeddedDataSpecifications":
+			if foundEmbeddedDataSpecifications {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theEmbeddedDataSpecifications, current, valueErr = readListOf(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
+			foundEmbeddedDataSpecifications = true
 		case "value":
+			if foundValue {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValue, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundValue = true
 		case "contentType":
+			if foundContentType {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theContentType, current, valueErr = readText(
 				decoder, current,
 			)
@@ -3158,8 +4075,18 @@ func readAnnotatedRelationshipElementAsSequence(
 	var theSecond aastypes.IReference
 	var theAnnotations []aastypes.IDataElement
 
+	foundExtensions := false
+	foundCategory := false
+	foundIDShort := false
+	foundDisplayName := false
+	foundDescription := false
+	foundSemanticID := false
+	foundSupplementalSemanticIDs := false
+	foundQualifiers := false
+	foundEmbeddedDataSpecifications := false
 	foundFirst := false
 	foundSecond := false
+	foundAnnotations := false
 
 	for {
 		var local string
@@ -3175,55 +4102,113 @@ func readAnnotatedRelationshipElementAsSequence(
 		var valueErr error
 		switch local {
 		case "extensions":
+			if foundExtensions {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theExtensions, current, valueErr = readListOf(
 				decoder, current, readExtensionDispatched,
 			)
+			foundExtensions = true
 		case "category":
+			if foundCategory {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theCategory, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundCategory = true
 		case "idShort":
+			if foundIDShort {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIDShort, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundIDShort = true
 		case "displayName":
+			if foundDisplayName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDisplayName, current, valueErr = readListOf(
 				decoder, current, readLangStringNameTypeDispatched,
 			)
+			foundDisplayName = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readListOf(
 				decoder, current, readLangStringTextTypeDispatched,
 			)
+			foundDescription = true
 		case "semanticId":
+			if foundSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSemanticID = true
 		case "supplementalSemanticIds":
+			if foundSupplementalSemanticIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSupplementalSemanticIDs, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundSupplementalSemanticIDs = true
 		case "qualifiers":
+			if foundQualifiers {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theQualifiers, current, valueErr = readListOf(
 				decoder, current, readQualifierDispatched,
 			)
+			foundQualifiers = true
 		case "embeddedDataSpecifications":
+			if foundEmbeddedDataSpecifications {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theEmbeddedDataSpecifications, current, valueErr = readListOf(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
+			foundEmbeddedDataSpecifications = true
 		case "first":
+			if foundFirst {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theFirst, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
 			foundFirst = true
 		case "second":
+			if foundSecond {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSecond, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
 			foundSecond = true
 		case "annotations":
+			if foundAnnotations {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theAnnotations, current, valueErr = readListOf(
 				decoder, current, readDataElementDispatched,
 			)
+			foundAnnotations = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -3292,7 +4277,19 @@ func readEntityAsSequence(
 	var theGlobalAssetID *string
 	var theSpecificAssetIDs []aastypes.ISpecificAssetID
 
+	foundExtensions := false
+	foundCategory := false
+	foundIDShort := false
+	foundDisplayName := false
+	foundDescription := false
+	foundSemanticID := false
+	foundSupplementalSemanticIDs := false
+	foundQualifiers := false
+	foundEmbeddedDataSpecifications := false
+	foundStatements := false
 	foundEntityType := false
+	foundGlobalAssetID := false
+	foundSpecificAssetIDs := false
 
 	for {
 		var local string
@@ -3308,58 +4305,122 @@ func readEntityAsSequence(
 		var valueErr error
 		switch local {
 		case "extensions":
+			if foundExtensions {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theExtensions, current, valueErr = readListOf(
 				decoder, current, readExtensionDispatched,
 			)
+			foundExtensions = true
 		case "category":
+			if foundCategory {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theCategory, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundCategory = true
 		case "idShort":
+			if foundIDShort {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIDShort, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundIDShort = true
 		case "displayName":
+			if foundDisplayName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDisplayName, current, valueErr = readListOf(
 				decoder, current, readLangStringNameTypeDispatched,
 			)
+			foundDisplayName = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readListOf(
 				decoder, current, readLangStringTextTypeDispatched,
 			)
+			foundDescription = true
 		case "semanticId":
+			if foundSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSemanticID = true
 		case "supplementalSemanticIds":
+			if foundSupplementalSemanticIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSupplementalSemanticIDs, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundSupplementalSemanticIDs = true
 		case "qualifiers":
+			if foundQualifiers {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theQualifiers, current, valueErr = readListOf(
 				decoder, current, readQualifierDispatched,
 			)
+			foundQualifiers = true
 		case "embeddedDataSpecifications":
+			if foundEmbeddedDataSpecifications {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theEmbeddedDataSpecifications, current, valueErr = readListOf(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
+			foundEmbeddedDataSpecifications = true
 		case "statements":
+			if foundStatements {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theStatements, current, valueErr = readListOf(
 				decoder, current, readSubmodelElementDispatched,
 			)
+			foundStatements = true
 		case "entityType":
+			if foundEntityType {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theEntityType, current, valueErr = readTextAs_EntityType(
 				decoder, current,
 			)
 			foundEntityType = true
 		case "globalAssetId":
+			if foundGlobalAssetID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theGlobalAssetID, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundGlobalAssetID = true
 		case "specificAssetIds":
+			if foundSpecificAssetIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSpecificAssetIDs, current, valueErr = readListOf(
 				decoder, current, readSpecificAssetIDDispatched,
 			)
+			foundSpecificAssetIDs = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -3531,8 +4592,13 @@ func readEventPayloadAsSequence(
 	var thePayload []byte
 
 	foundSource := false
+	foundSourceSemanticID := false
 	foundObservableReference := false
+	foundObservableSemanticID := false
+	foundTopic := false
+	foundSubjectID := false
 	foundTimeStamp := false
+	foundPayload := false
 
 	for {
 		var local string
@@ -3548,40 +4614,77 @@ func readEventPayloadAsSequence(
 		var valueErr error
 		switch local {
 		case "source":
+			if foundSource {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSource, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
 			foundSource = true
 		case "sourceSemanticId":
+			if foundSourceSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSourceSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSourceSemanticID = true
 		case "observableReference":
+			if foundObservableReference {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theObservableReference, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
 			foundObservableReference = true
 		case "observableSemanticId":
+			if foundObservableSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theObservableSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundObservableSemanticID = true
 		case "topic":
+			if foundTopic {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theTopic, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundTopic = true
 		case "subjectId":
+			if foundSubjectID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSubjectID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSubjectID = true
 		case "timeStamp":
+			if foundTimeStamp {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theTimeStamp, current, valueErr = readText(
 				decoder, current,
 			)
 			foundTimeStamp = true
 		case "payload":
+			if foundPayload {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			thePayload, current, valueErr = readTextAs_bytes(
 				decoder, current,
 			)
+			foundPayload = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -3655,9 +4758,23 @@ func readBasicEventElementAsSequence(
 	var theMinInterval *string
 	var theMaxInterval *string
 
+	foundExtensions := false
+	foundCategory := false
+	foundIDShort := false
+	foundDisplayName := false
+	foundDescription := false
+	foundSemanticID := false
+	foundSupplementalSemanticIDs := false
+	foundQualifiers := false
+	foundEmbeddedDataSpecifications := false
 	foundObserved := false
 	foundDirection := false
 	foundState := false
+	foundMessageTopic := false
+	foundMessageBroker := false
+	foundLastUpdate := false
+	foundMinInterval := false
+	foundMaxInterval := false
 
 	for {
 		var local string
@@ -3673,76 +4790,158 @@ func readBasicEventElementAsSequence(
 		var valueErr error
 		switch local {
 		case "extensions":
+			if foundExtensions {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theExtensions, current, valueErr = readListOf(
 				decoder, current, readExtensionDispatched,
 			)
+			foundExtensions = true
 		case "category":
+			if foundCategory {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theCategory, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundCategory = true
 		case "idShort":
+			if foundIDShort {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIDShort, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundIDShort = true
 		case "displayName":
+			if foundDisplayName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDisplayName, current, valueErr = readListOf(
 				decoder, current, readLangStringNameTypeDispatched,
 			)
+			foundDisplayName = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readListOf(
 				decoder, current, readLangStringTextTypeDispatched,
 			)
+			foundDescription = true
 		case "semanticId":
+			if foundSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSemanticID = true
 		case "supplementalSemanticIds":
+			if foundSupplementalSemanticIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSupplementalSemanticIDs, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundSupplementalSemanticIDs = true
 		case "qualifiers":
+			if foundQualifiers {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theQualifiers, current, valueErr = readListOf(
 				decoder, current, readQualifierDispatched,
 			)
+			foundQualifiers = true
 		case "embeddedDataSpecifications":
+			if foundEmbeddedDataSpecifications {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theEmbeddedDataSpecifications, current, valueErr = readListOf(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
+			foundEmbeddedDataSpecifications = true
 		case "observed":
+			if foundObserved {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theObserved, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
 			foundObserved = true
 		case "direction":
+			if foundDirection {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDirection, current, valueErr = readTextAs_Direction(
 				decoder, current,
 			)
 			foundDirection = true
 		case "state":
+			if foundState {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theState, current, valueErr = readTextAs_StateOfEvent(
 				decoder, current,
 			)
 			foundState = true
 		case "messageTopic":
+			if foundMessageTopic {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theMessageTopic, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundMessageTopic = true
 		case "messageBroker":
+			if foundMessageBroker {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theMessageBroker, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundMessageBroker = true
 		case "lastUpdate":
+			if foundLastUpdate {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theLastUpdate, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundLastUpdate = true
 		case "minInterval":
+			if foundMinInterval {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theMinInterval, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundMinInterval = true
 		case "maxInterval":
+			if foundMaxInterval {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theMaxInterval, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundMaxInterval = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -3820,6 +5019,19 @@ func readOperationAsSequence(
 	var theOutputVariables []aastypes.IOperationVariable
 	var theInoutputVariables []aastypes.IOperationVariable
 
+	foundExtensions := false
+	foundCategory := false
+	foundIDShort := false
+	foundDisplayName := false
+	foundDescription := false
+	foundSemanticID := false
+	foundSupplementalSemanticIDs := false
+	foundQualifiers := false
+	foundEmbeddedDataSpecifications := false
+	foundInputVariables := false
+	foundOutputVariables := false
+	foundInoutputVariables := false
+
 	for {
 		var local string
 		var ok bool
@@ -3834,53 +5046,113 @@ func readOperationAsSequence(
 		var valueErr error
 		switch local {
 		case "extensions":
+			if foundExtensions {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theExtensions, current, valueErr = readListOf(
 				decoder, current, readExtensionDispatched,
 			)
+			foundExtensions = true
 		case "category":
+			if foundCategory {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theCategory, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundCategory = true
 		case "idShort":
+			if foundIDShort {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIDShort, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundIDShort = true
 		case "displayName":
+			if foundDisplayName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDisplayName, current, valueErr = readListOf(
 				decoder, current, readLangStringNameTypeDispatched,
 			)
+			foundDisplayName = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readListOf(
 				decoder, current, readLangStringTextTypeDispatched,
 			)
+			foundDescription = true
 		case "semanticId":
+			if foundSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSemanticID = true
 		case "supplementalSemanticIds":
+			if foundSupplementalSemanticIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSupplementalSemanticIDs, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundSupplementalSemanticIDs = true
 		case "qualifiers":
+			if foundQualifiers {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theQualifiers, current, valueErr = readListOf(
 				decoder, current, readQualifierDispatched,
 			)
+			foundQualifiers = true
 		case "embeddedDataSpecifications":
+			if foundEmbeddedDataSpecifications {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theEmbeddedDataSpecifications, current, valueErr = readListOf(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
+			foundEmbeddedDataSpecifications = true
 		case "inputVariables":
+			if foundInputVariables {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theInputVariables, current, valueErr = readListOf(
 				decoder, current, readOperationVariableDispatched,
 			)
+			foundInputVariables = true
 		case "outputVariables":
+			if foundOutputVariables {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theOutputVariables, current, valueErr = readListOf(
 				decoder, current, readOperationVariableDispatched,
 			)
+			foundOutputVariables = true
 		case "inoutputVariables":
+			if foundInoutputVariables {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theInoutputVariables, current, valueErr = readListOf(
 				decoder, current, readOperationVariableDispatched,
 			)
+			foundInoutputVariables = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -3942,6 +5214,10 @@ func readOperationVariableAsSequence(
 		var valueErr error
 		switch local {
 		case "value":
+			if foundValue {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValue, current, valueErr = readElementDispatched(
 				decoder, current, readSubmodelElementDispatched,
 			)
@@ -4016,6 +5292,16 @@ func readCapabilityAsSequence(
 	var theQualifiers []aastypes.IQualifier
 	var theEmbeddedDataSpecifications []aastypes.IEmbeddedDataSpecification
 
+	foundExtensions := false
+	foundCategory := false
+	foundIDShort := false
+	foundDisplayName := false
+	foundDescription := false
+	foundSemanticID := false
+	foundSupplementalSemanticIDs := false
+	foundQualifiers := false
+	foundEmbeddedDataSpecifications := false
+
 	for {
 		var local string
 		var ok bool
@@ -4030,41 +5316,86 @@ func readCapabilityAsSequence(
 		var valueErr error
 		switch local {
 		case "extensions":
+			if foundExtensions {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theExtensions, current, valueErr = readListOf(
 				decoder, current, readExtensionDispatched,
 			)
+			foundExtensions = true
 		case "category":
+			if foundCategory {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theCategory, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundCategory = true
 		case "idShort":
+			if foundIDShort {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIDShort, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundIDShort = true
 		case "displayName":
+			if foundDisplayName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDisplayName, current, valueErr = readListOf(
 				decoder, current, readLangStringNameTypeDispatched,
 			)
+			foundDisplayName = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readListOf(
 				decoder, current, readLangStringTextTypeDispatched,
 			)
+			foundDescription = true
 		case "semanticId":
+			if foundSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundSemanticID = true
 		case "supplementalSemanticIds":
+			if foundSupplementalSemanticIDs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSupplementalSemanticIDs, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundSupplementalSemanticIDs = true
 		case "qualifiers":
+			if foundQualifiers {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theQualifiers, current, valueErr = readListOf(
 				decoder, current, readQualifierDispatched,
 			)
+			foundQualifiers = true
 		case "embeddedDataSpecifications":
+			if foundEmbeddedDataSpecifications {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theEmbeddedDataSpecifications, current, valueErr = readListOf(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
+			foundEmbeddedDataSpecifications = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -4115,7 +5446,15 @@ func readConceptDescriptionAsSequence(
 	var theEmbeddedDataSpecifications []aastypes.IEmbeddedDataSpecification
 	var theIsCaseOf []aastypes.IReference
 
+	foundExtensions := false
+	foundCategory := false
+	foundIDShort := false
+	foundDisplayName := false
+	foundDescription := false
+	foundAdministration := false
 	foundID := false
+	foundEmbeddedDataSpecifications := false
+	foundIsCaseOf := false
 
 	for {
 		var local string
@@ -4131,42 +5470,86 @@ func readConceptDescriptionAsSequence(
 		var valueErr error
 		switch local {
 		case "extensions":
+			if foundExtensions {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theExtensions, current, valueErr = readListOf(
 				decoder, current, readExtensionDispatched,
 			)
+			foundExtensions = true
 		case "category":
+			if foundCategory {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theCategory, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundCategory = true
 		case "idShort":
+			if foundIDShort {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIDShort, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundIDShort = true
 		case "displayName":
+			if foundDisplayName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDisplayName, current, valueErr = readListOf(
 				decoder, current, readLangStringNameTypeDispatched,
 			)
+			foundDisplayName = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readListOf(
 				decoder, current, readLangStringTextTypeDispatched,
 			)
+			foundDescription = true
 		case "administration":
+			if foundAdministration {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theAdministration, current, valueErr = readAdministrativeInformationAsSequence(
 				decoder, current,
 			)
+			foundAdministration = true
 		case "id":
+			if foundID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theID, current, valueErr = readText(
 				decoder, current,
 			)
 			foundID = true
 		case "embeddedDataSpecifications":
+			if foundEmbeddedDataSpecifications {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theEmbeddedDataSpecifications, current, valueErr = readListOf(
 				decoder, current, readEmbeddedDataSpecificationDispatched,
 			)
+			foundEmbeddedDataSpecifications = true
 		case "isCaseOf":
+			if foundIsCaseOf {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIsCaseOf, current, valueErr = readListOf(
 				decoder, current, readReferenceDispatched,
 			)
+			foundIsCaseOf = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -4277,6 +5660,7 @@ func readReferenceAsSequence(
 	var theKeys []aastypes.IKey
 
 	foundType := false
+	foundReferredSemanticID := false
 	foundKeys := false
 
 	for {
@@ -4293,15 +5677,28 @@ func readReferenceAsSequence(
 		var valueErr error
 		switch local {
 		case "type":
+			if foundType {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theType, current, valueErr = readTextAs_ReferenceTypes(
 				decoder, current,
 			)
 			foundType = true
 		case "referredSemanticId":
+			if foundReferredSemanticID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theReferredSemanticID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundReferredSemanticID = true
 		case "keys":
+			if foundKeys {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theKeys, current, valueErr = readListOf(
 				decoder, current, readKeyDispatched,
 			)
@@ -4393,11 +5790,19 @@ func readKeyAsSequence(
 		var valueErr error
 		switch local {
 		case "type":
+			if foundType {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theType, current, valueErr = readTextAs_KeyTypes(
 				decoder, current,
 			)
 			foundType = true
 		case "value":
+			if foundValue {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValue, current, valueErr = readText(
 				decoder, current,
 			)
@@ -4562,11 +5967,19 @@ func readLangStringNameTypeAsSequence(
 		var valueErr error
 		switch local {
 		case "language":
+			if foundLanguage {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theLanguage, current, valueErr = readText(
 				decoder, current,
 			)
 			foundLanguage = true
 		case "text":
+			if foundText {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theText, current, valueErr = readText(
 				decoder, current,
 			)
@@ -4657,11 +6070,19 @@ func readLangStringTextTypeAsSequence(
 		var valueErr error
 		switch local {
 		case "language":
+			if foundLanguage {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theLanguage, current, valueErr = readText(
 				decoder, current,
 			)
 			foundLanguage = true
 		case "text":
+			if foundText {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theText, current, valueErr = readText(
 				decoder, current,
 			)
@@ -4736,6 +6157,10 @@ func readEnvironmentAsSequence(
 	var theSubmodels []aastypes.ISubmodel
 	var theConceptDescriptions []aastypes.IConceptDescription
 
+	foundAssetAdministrationShells := false
+	foundSubmodels := false
+	foundConceptDescriptions := false
+
 	for {
 		var local string
 		var ok bool
@@ -4750,17 +6175,32 @@ func readEnvironmentAsSequence(
 		var valueErr error
 		switch local {
 		case "assetAdministrationShells":
+			if foundAssetAdministrationShells {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theAssetAdministrationShells, current, valueErr = readListOf(
 				decoder, current, readAssetAdministrationShellDispatched,
 			)
+			foundAssetAdministrationShells = true
 		case "submodels":
+			if foundSubmodels {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSubmodels, current, valueErr = readListOf(
 				decoder, current, readSubmodelDispatched,
 			)
+			foundSubmodels = true
 		case "conceptDescriptions":
+			if foundConceptDescriptions {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theConceptDescriptions, current, valueErr = readListOf(
 				decoder, current, readConceptDescriptionDispatched,
 			)
+			foundConceptDescriptions = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",
@@ -4837,11 +6277,19 @@ func readEmbeddedDataSpecificationAsSequence(
 		var valueErr error
 		switch local {
 		case "dataSpecification":
+			if foundDataSpecification {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDataSpecification, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
 			foundDataSpecification = true
 		case "dataSpecificationContent":
+			if foundDataSpecificationContent {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDataSpecificationContent, current, valueErr = readElementDispatched(
 				decoder, current, readDataSpecificationContentDispatched,
 			)
@@ -4973,21 +6421,37 @@ func readLevelTypeAsSequence(
 		var valueErr error
 		switch local {
 		case "min":
+			if foundMin {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theMin, current, valueErr = readTextAs_bool(
 				decoder, current,
 			)
 			foundMin = true
 		case "nom":
+			if foundNom {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theNom, current, valueErr = readTextAs_bool(
 				decoder, current,
 			)
 			foundNom = true
 		case "typ":
+			if foundTyp {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theTyp, current, valueErr = readTextAs_bool(
 				decoder, current,
 			)
 			foundTyp = true
 		case "max":
+			if foundMax {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theMax, current, valueErr = readTextAs_bool(
 				decoder, current,
 			)
@@ -5068,11 +6532,19 @@ func readValueReferencePairAsSequence(
 		var valueErr error
 		switch local {
 		case "value":
+			if foundValue {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValue, current, valueErr = readText(
 				decoder, current,
 			)
 			foundValue = true
 		case "valueId":
+			if foundValueID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValueID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
@@ -5161,6 +6633,10 @@ func readValueListAsSequence(
 		var valueErr error
 		switch local {
 		case "valueReferencePairs":
+			if foundValueReferencePairs {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValueReferencePairs, current, valueErr = readListOf(
 				decoder, current, readValueReferencePairDispatched,
 			)
@@ -5223,11 +6699,19 @@ func readLangStringPreferredNameTypeIEC61360AsSequence(
 		var valueErr error
 		switch local {
 		case "language":
+			if foundLanguage {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theLanguage, current, valueErr = readText(
 				decoder, current,
 			)
 			foundLanguage = true
 		case "text":
+			if foundText {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theText, current, valueErr = readText(
 				decoder, current,
 			)
@@ -5318,11 +6802,19 @@ func readLangStringShortNameTypeIEC61360AsSequence(
 		var valueErr error
 		switch local {
 		case "language":
+			if foundLanguage {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theLanguage, current, valueErr = readText(
 				decoder, current,
 			)
 			foundLanguage = true
 		case "text":
+			if foundText {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theText, current, valueErr = readText(
 				decoder, current,
 			)
@@ -5413,11 +6905,19 @@ func readLangStringDefinitionTypeIEC61360AsSequence(
 		var valueErr error
 		switch local {
 		case "language":
+			if foundLanguage {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theLanguage, current, valueErr = readText(
 				decoder, current,
 			)
 			foundLanguage = true
 		case "text":
+			if foundText {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theText, current, valueErr = readText(
 				decoder, current,
 			)
@@ -5502,6 +7002,17 @@ func readDataSpecificationIEC61360AsSequence(
 	var theLevelType aastypes.ILevelType
 
 	foundPreferredName := false
+	foundShortName := false
+	foundUnit := false
+	foundUnitID := false
+	foundSourceOfDefinition := false
+	foundSymbol := false
+	foundDataType := false
+	foundDefinition := false
+	foundValueFormat := false
+	foundValueList := false
+	foundValue := false
+	foundLevelType := false
 
 	for {
 		var local string
@@ -5517,54 +7028,113 @@ func readDataSpecificationIEC61360AsSequence(
 		var valueErr error
 		switch local {
 		case "preferredName":
+			if foundPreferredName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			thePreferredName, current, valueErr = readListOf(
 				decoder, current, readLangStringPreferredNameTypeIEC61360Dispatched,
 			)
 			foundPreferredName = true
 		case "shortName":
+			if foundShortName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theShortName, current, valueErr = readListOf(
 				decoder, current, readLangStringShortNameTypeIEC61360Dispatched,
 			)
+			foundShortName = true
 		case "unit":
+			if foundUnit {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theUnit, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundUnit = true
 		case "unitId":
+			if foundUnitID {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theUnitID, current, valueErr = readReferenceAsSequence(
 				decoder, current,
 			)
+			foundUnitID = true
 		case "sourceOfDefinition":
+			if foundSourceOfDefinition {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSourceOfDefinition, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundSourceOfDefinition = true
 		case "symbol":
+			if foundSymbol {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSymbol, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundSymbol = true
 		case "dataType":
+			if foundDataType {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDataType, current, valueErr = readOptional(
 				readTextAs_DataTypeIEC61360(decoder, current),
 			)
+			foundDataType = true
 		case "definition":
+			if foundDefinition {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDefinition, current, valueErr = readListOf(
 				decoder, current, readLangStringDefinitionTypeIEC61360Dispatched,
 			)
+			foundDefinition = true
 		case "valueFormat":
+			if foundValueFormat {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValueFormat, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundValueFormat = true
 		case "valueList":
+			if foundValueList {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValueList, current, valueErr = readValueListAsSequence(
 				decoder, current,
 			)
+			foundValueList = true
 		case "value":
+			if foundValue {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValue, current, valueErr = readOptional(
 				readText(decoder, current),
 			)
+			foundValue = true
 		case "levelType":
+			if foundLevelType {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theLevelType, current, valueErr = readLevelTypeAsSequence(
 				decoder, current,
 			)
+			foundLevelType = true
 		default:
 			valueErr = newDeserializationError(
 				"Unexpected property",

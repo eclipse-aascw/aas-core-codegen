@@ -409,6 +409,87 @@ import (
     for concrete_cls in symbol_table.concrete_classes:
         blocks.extend(_generate_for_cls(cls=concrete_cls))
 
+    duplicate_candidate = intermediate.first_class_with_a_required_property(
+        symbol_table
+    )
+    if duplicate_candidate is not None:
+        duplicate_cls, duplicate_prop = duplicate_candidate
+
+        duplicate_cls_name_xml = naming.xml_class_name(duplicate_cls.name)
+
+        open_tag = f"<{duplicate_prop.xml_name}>"
+        close_tag = f"</{duplicate_prop.xml_name}>"
+        self_closing_tag = f"<{duplicate_prop.xml_name}/>"
+        root_close_tag = f"</{duplicate_cls_name_xml}>"
+
+        test_name = golang_naming.function_name(
+            Identifier("Test_duplicate_property_fails")
+        )
+
+        unmarshal_function = golang_naming.function_name(Identifier("unmarshal"))
+
+        blocks.append(
+            Stripped(
+                f"""\
+func {test_name}(t *testing.T) {{
+{I}pth := filepath.Join(
+{II}aastesting.TestDataDir,
+{II}"Xml",
+{II}"Expected",
+{II}{golang_common.string_literal(duplicate_cls_name_xml)},
+{II}"minimal.xml",
+{I})
+
+{I}bb, err := os.ReadFile(pth)
+{I}if err != nil {{
+{II}t.Fatalf("Failed to read the file %s: %s", pth, err.Error())
+{I}}}
+
+{I}text := string(bb)
+
+{I}// We cut the element of the property out of the recorded example and put it in
+{I}// a second time, just before the closing tag of the instance.
+{I}start := strings.Index(text, {golang_common.string_literal(open_tag)})
+
+{I}var property string
+{I}if start >= 0 {{
+{II}end := strings.Index(
+{III}text[start:], {golang_common.string_literal(close_tag)},
+{II}) + start
+{II}property = text[start : end+{len(close_tag)}]
+{I}}} else {{
+{II}// The element is written self-closing in the example, an empty list being
+{II}// the usual reason. We write that very element out ourselves.
+{II}property = {golang_common.string_literal(self_closing_tag)}
+{I}}}
+
+{I}insertionIndex := strings.LastIndex(
+{II}text, {golang_common.string_literal(root_close_tag)},
+{I})
+{I}if insertionIndex < 0 {{
+{II}t.Fatalf(
+{III}"We expect the recorded example to contain the closing tag %s, "+
+{IIII}"but it does not: %s",
+{III}{golang_common.string_literal(root_close_tag)}, pth,
+{II})
+{I}}}
+
+{I}brokenText := text[:insertionIndex] + property + text[insertionIndex:]
+
+{I}decoder := xml.NewDecoder(strings.NewReader(brokenText))
+
+{I}_, deseriaErr := aasxmlization.{unmarshal_function}(decoder)
+{I}if deseriaErr == nil {{
+{II}t.Fatalf(
+{III}"Expected a de-serialization error when the property %s is given twice, "+
+{IIII}"but got none",
+{III}{golang_common.string_literal(duplicate_prop.xml_name)},
+{II})
+{I}}}
+}}"""
+            )
+        )
+
     blocks.extend(_generate_lexical_tests(symbol_table))
 
     blocks.append(golang_common.WARNING)

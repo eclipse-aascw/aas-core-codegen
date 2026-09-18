@@ -287,6 +287,73 @@ class TestRoundTrips(unittest.TestCase):
     )
 
 
+def _generate_duplicate_property_test_case(
+    symbol_table: intermediate.SymbolTable,
+) -> Optional[Stripped]:
+    """
+    Generate the test that a property given a second time is refused.
+
+    The element of a required property is cut out of the recorded example and put
+    in a second time, just before the closing tag of the instance.
+    """
+    candidate = intermediate.first_class_with_a_required_property(symbol_table)
+    if candidate is None:
+        return None
+
+    cls, prop = candidate
+
+    xml_class_name = naming.xml_class_name(cls.name)
+
+    from_str = python_naming.function_name(Identifier(f"{cls.name}_from_str"))
+
+    open_tag = f"<{prop.xml_name}>"
+    close_tag = f"</{prop.xml_name}>"
+    self_closing_tag = f"<{prop.xml_name}/>"
+    root_close_tag = f"</{xml_class_name}>"
+
+    return Stripped(
+        f"""\
+class TestDuplicateProperty(unittest.TestCase):
+{I}\"\"\"Test that a property given more than once is refused.\"\"\"
+
+{I}def test_duplicate_property(self) -> None:
+{II}path = (
+{III}tests.common.TEST_DATA_DIR
+{III}/ "Xml"
+{III}/ "Expected"
+{III}/ {xml_class_name!r}
+{III}/ "minimal.xml"
+{II})
+
+{II}text = path.read_text(encoding="utf-8")
+
+{II}start = text.find({open_tag!r})
+{II}if start >= 0:
+{III}end = text.find({close_tag!r}, start)
+{III}duplicated = text[start:end + {len(close_tag)}]
+{II}else:
+{III}# The element is written self-closing in the example, an empty list
+{III}# being the usual reason. We write that very element out ourselves.
+{III}duplicated = {self_closing_tag!r}
+
+{II}insertion_index = text.rfind({root_close_tag!r})
+
+{II}self.assertGreaterEqual(
+{III}insertion_index,
+{III}0,
+{III}"Expected the recorded example to contain the closing tag "
+{III}f"{root_close_tag}, but it does not: {{path}}",
+{II})
+
+{II}broken_text = (
+{III}text[:insertion_index] + duplicated + text[insertion_index:]
+{II})
+
+{II}with self.assertRaises(aas_xmlization.DeserializationException):
+{III}aas_xmlization.{from_str}(broken_text)"""
+    )
+
+
 @ensure(
     lambda result: result.endswith("\n"),
     "Trailing newline mandatory for valid end-of-files",
@@ -343,6 +410,12 @@ if __name__ == "__main__":
         # NOTE (mristin):
         # The class goes right after the round trips, and before the main.
         blocks.insert(-2, lexical_test_case)
+
+    duplicate_property_test_case = _generate_duplicate_property_test_case(
+        symbol_table=symbol_table
+    )
+    if duplicate_property_test_case is not None:
+        blocks.insert(-2, duplicate_property_test_case)
 
     out = io.StringIO()
     for i, block in enumerate(blocks):

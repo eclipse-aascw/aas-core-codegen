@@ -680,6 +680,17 @@ func missingProperty(name string) error {
 	)
 }
 
+// Report that the property with the given `local` name has been observed more
+// than once.
+func duplicatePropertyError(local string) error {
+	return newDeserializationError(
+		fmt.Sprintf(
+			"Property %s occurred more than once",
+			local,
+		),
+	)
+}
+
 // Report that we got a start element with the `local` name, but expected a start
 // element with the `expectedLocal` name.
 func unexpectedStartElement(local string, expectedLocal string) error {
@@ -1324,6 +1335,10 @@ func readSomeItemAsSequence(
 		var valueErr error
 		switch local {
 		case "name":
+			if foundName {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theName, current, valueErr = readText(
 				decoder, current,
 			)
@@ -1406,6 +1421,10 @@ func readAnotherItemAsSequence(
 		var valueErr error
 		switch local {
 		case "serialNumber":
+			if foundSerialNumber {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSerialNumber, current, valueErr = readTextAs_long(
 				decoder, current,
 			)
@@ -1470,6 +1489,10 @@ func readSomethingAsSequence(
 		var valueErr error
 		switch local {
 		case "pair":
+			if foundPair {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			thePair, current, valueErr = readTuple2(
 				decoder, current,
 				readAtV1_string,
@@ -1477,6 +1500,10 @@ func readSomethingAsSequence(
 			)
 			foundPair = true
 		case "items":
+			if foundItems {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theItems, current, valueErr = readTuple2(
 				decoder, current,
 				readAbstractItemDispatched,
@@ -1484,6 +1511,10 @@ func readSomethingAsSequence(
 			)
 			foundItems = true
 		case "tricky":
+			if foundTricky {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theTricky, current, valueErr = readTuple6(
 				decoder, current,
 				readAtV1_long,

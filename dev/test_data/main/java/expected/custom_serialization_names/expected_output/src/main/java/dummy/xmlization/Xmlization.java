@@ -442,6 +442,14 @@ public class Xmlization {
         "with the name " + elementName));
     }
 
+    /**
+     * Report a property which the sequence of the properties gave more than once.
+     */
+    private static Reporting.Error duplicatePropertyError(String elementName) {
+      return new Reporting.Error(
+        "Property " + elementName + " occurred more than once");
+    }
+
     private static Reporting.Result<String> readTextAs_string(
       XMLEventReader reader, boolean isEmpty) {
       return readText(
@@ -479,6 +487,11 @@ public class Xmlization {
 
           switch (elementName) {
             case "eq": {
+              if (theEq != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {
@@ -489,6 +502,11 @@ public class Xmlization {
               break;
             }
             case "not-eq": {
+              if (theNotEq != null) {
+                valueError = duplicatePropertyError(elementName);
+                break;
+              }
+
               final Reporting.Result<String> value =
                 readTextAs_string(reader, isEmptyProperty);
               if (value.isError()) {

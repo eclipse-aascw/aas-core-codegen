@@ -1363,6 +1363,18 @@ template <
   );
 }
 
+DeserializationError DuplicatePropertyError(
+  const std::string& name
+) {
+  return DeserializationError(
+    common::Concat(
+      L"Property ",
+      common::Utf8ToWstring(name),
+      L" occurred more than once"
+    )
+  );
+}
+
 DeserializationError DeserializationErrorFromReader(
   ReaderMergingText& reader
 ) {
@@ -2578,6 +2590,11 @@ std::pair<
 
     switch (property) {
       case properties::OfQueryCondition::kEq: {
+        if (the_eq.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_eq,
           error
@@ -2585,6 +2602,11 @@ std::pair<
         break;
       }
       case properties::OfQueryCondition::kNotEq: {
+        if (the_not_eq.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
         std::tie(
           the_not_eq,
           error

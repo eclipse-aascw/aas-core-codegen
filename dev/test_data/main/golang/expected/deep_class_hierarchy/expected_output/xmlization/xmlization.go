@@ -680,6 +680,17 @@ func missingProperty(name string) error {
 	)
 }
 
+// Report that the property with the given `local` name has been observed more
+// than once.
+func duplicatePropertyError(local string) error {
+	return newDeserializationError(
+		fmt.Sprintf(
+			"Property %s occurred more than once",
+			local,
+		),
+	)
+}
+
 // Report that we got a start element with the `local` name, but expected a start
 // element with the `expectedLocal` name.
 func unexpectedStartElement(local string, expectedLocal string) error {
@@ -1007,11 +1018,19 @@ func readBranchAsSequence(
 		var valueErr error
 		switch local {
 		case "identifier":
+			if foundIdentifier {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIdentifier, current, valueErr = readText(
 				decoder, current,
 			)
 			foundIdentifier = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readText(
 				decoder, current,
 			)
@@ -1108,16 +1127,28 @@ func readLeafAsSequence(
 		var valueErr error
 		switch local {
 		case "identifier":
+			if foundIdentifier {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIdentifier, current, valueErr = readText(
 				decoder, current,
 			)
 			foundIdentifier = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readText(
 				decoder, current,
 			)
 			foundDescription = true
 		case "value":
+			if foundValue {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValue, current, valueErr = readTextAs_long(
 				decoder, current,
 			)
@@ -1196,21 +1227,37 @@ func readBlossomAsSequence(
 		var valueErr error
 		switch local {
 		case "identifier":
+			if foundIdentifier {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theIdentifier, current, valueErr = readText(
 				decoder, current,
 			)
 			foundIdentifier = true
 		case "description":
+			if foundDescription {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDescription, current, valueErr = readText(
 				decoder, current,
 			)
 			foundDescription = true
 		case "value":
+			if foundValue {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theValue, current, valueErr = readTextAs_long(
 				decoder, current,
 			)
 			foundValue = true
 		case "details":
+			if foundDetails {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theDetails, current, valueErr = readText(
 				decoder, current,
 			)
@@ -1291,11 +1338,19 @@ func readSomethingAsSequence(
 		var valueErr error
 		switch local {
 		case "someChoice":
+			if foundSomeChoice {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSomeChoice, current, valueErr = readElementDispatched(
 				decoder, current, readNodeDispatched,
 			)
 			foundSomeChoice = true
 		case "somethingWithoutChoice":
+			if foundSomethingWithoutChoice {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSomethingWithoutChoice, current, valueErr = readElementDispatched(
 				decoder, current, readBranchDispatched,
 			)
@@ -1364,11 +1419,19 @@ func readContainerAsSequence(
 		var valueErr error
 		switch local {
 		case "node":
+			if foundNode {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theNode, current, valueErr = readElementDispatched(
 				decoder, current, readNodeDispatched,
 			)
 			foundNode = true
 		case "something":
+			if foundSomething {
+				valueErr = duplicatePropertyError(local)
+				break
+			}
 			theSomething, current, valueErr = readSomethingAsSequence(
 				decoder, current,
 			)

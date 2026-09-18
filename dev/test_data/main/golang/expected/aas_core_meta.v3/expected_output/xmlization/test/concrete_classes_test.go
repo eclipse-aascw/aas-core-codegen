@@ -4806,6 +4806,63 @@ func TestDataSpecificationIEC61360DeserializationFail(t *testing.T) {
 	}
 }
 
+func TestDuplicatePropertyFails(t *testing.T) {
+	pth := filepath.Join(
+		aastesting.TestDataDir,
+		"Xml",
+		"Expected",
+		"extension",
+		"minimal.xml",
+	)
+
+	bb, err := os.ReadFile(pth)
+	if err != nil {
+		t.Fatalf("Failed to read the file %s: %s", pth, err.Error())
+	}
+
+	text := string(bb)
+
+	// We cut the element of the property out of the recorded example and put it in
+	// a second time, just before the closing tag of the instance.
+	start := strings.Index(text, "<name>")
+
+	var property string
+	if start >= 0 {
+		end := strings.Index(
+			text[start:], "</name>",
+		) + start
+		property = text[start : end+7]
+	} else {
+		// The element is written self-closing in the example, an empty list being
+		// the usual reason. We write that very element out ourselves.
+		property = "<name/>"
+	}
+
+	insertionIndex := strings.LastIndex(
+		text, "</extension>",
+	)
+	if insertionIndex < 0 {
+		t.Fatalf(
+			"We expect the recorded example to contain the closing tag %s, "+
+				"but it does not: %s",
+			"</extension>", pth,
+		)
+	}
+
+	brokenText := text[:insertionIndex] + property + text[insertionIndex:]
+
+	decoder := xml.NewDecoder(strings.NewReader(brokenText))
+
+	_, deseriaErr := aasxmlization.Unmarshal(decoder)
+	if deseriaErr == nil {
+		t.Fatalf(
+			"Expected a de-serialization error when the property %s is given twice, "+
+				"but got none",
+			"name",
+		)
+	}
+}
+
 // Read the first recorded example of ILevelType with the content of
 // the element `xmlName` replaced by `text`.
 func readLevelTypeWith(

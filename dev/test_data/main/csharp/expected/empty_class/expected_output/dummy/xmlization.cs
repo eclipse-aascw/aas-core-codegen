@@ -55,29 +55,6 @@ namespace dummy
             }
 
             /// <summary>
-            /// Read the whole content of an element into memory.
-            /// </summary>
-            private static byte[] ReadWholeContentAsBase64(
-                Xml.XmlReader reader)
-            {
-                // NOTE (mristin):
-                // The content is read as a text and only then decoded, instead of
-                // streaming it through XmlReader.ReadContentAsBase64. That decoder is
-                // lenient in ways XSD is not -- it reads "SGk" although it is three
-                // characters long -- and it gives us nothing to check before it has
-                // already decoded.
-                string text = WhitespaceRunRegex.Replace(reader.ReadContentAsString(), "");
-
-                if (!MatchesXsBase64Binary(text))
-                {
-                    throw new System.FormatException(
-                        $"Expected a text as base64-encoded bytes, but got: {text}");
-                }
-
-                return System.Convert.FromBase64String(text);
-            }
-
-            /// <summary>
             /// Check the namespace and extract the element's name.
             /// </summary>
             private static string TryElementName(

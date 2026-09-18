@@ -55,29 +55,6 @@ namespace dummy
             }
 
             /// <summary>
-            /// Read the whole content of an element into memory.
-            /// </summary>
-            private static byte[] ReadWholeContentAsBase64(
-                Xml.XmlReader reader)
-            {
-                // NOTE (mristin):
-                // The content is read as a text and only then decoded, instead of
-                // streaming it through XmlReader.ReadContentAsBase64. That decoder is
-                // lenient in ways XSD is not -- it reads "SGk" although it is three
-                // characters long -- and it gives us nothing to check before it has
-                // already decoded.
-                string text = WhitespaceRunRegex.Replace(reader.ReadContentAsString(), "");
-
-                if (!MatchesXsBase64Binary(text))
-                {
-                    throw new System.FormatException(
-                        $"Expected a text as base64-encoded bytes, but got: {text}");
-                }
-
-                return System.Convert.FromBase64String(text);
-            }
-
-            /// <summary>
             /// Check the namespace and extract the element's name.
             /// </summary>
             private static string TryElementName(
@@ -448,6 +425,15 @@ namespace dummy
             }
 
             /// <summary>
+            /// Report a property which the sequence of the properties gave more than once.
+            /// </summary>
+            private static Reporting.Error DuplicatePropertyError(string elementName)
+            {
+                return new Reporting.Error(
+                    $"Property {elementName} occurred more than once");
+            }
+
+            /// <summary>
             /// Read an instance of class Something from its XML element.
             /// </summary>
             internal static readonly ElementReader<Aas.Something> SomethingFromElement = (
@@ -497,18 +483,38 @@ namespace dummy
                         switch (elementName)
                         {
                             case "interface":
+                                if (theInterface != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theInterface = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "type":
+                                if (theType != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theType = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "range":
+                                if (theRange != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theRange = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
                             case "void":
+                                if (theVoid != null)
+                                {
+                                    error = DuplicatePropertyError(elementName);
+                                    break;
+                                }
                                 theVoid = Read_string(
                                     reader, isEmptyProperty, out error);
                                 break;
