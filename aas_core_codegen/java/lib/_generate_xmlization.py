@@ -259,29 +259,6 @@ def _written_value_type(type_anno: intermediate.AtomicTypeAnnotation) -> Strippe
     return Stripped("IUnion<?>" if moniker == "IUnion" else moniker)
 
 
-def _written_argument_type(type_anno: intermediate.AtomicTypeAnnotation) -> Stripped:
-    """
-    Render the type of a value of ``type_anno`` as an argument of a container.
-
-    Java generics are invariant, so a ``List<IExtension>`` is *not*
-    a ``List<IClass>`` and a ``Tuple2<IExtension, IKey>`` is *not*
-    a ``Tuple2<IClass, IClass>``. Wherever the value type widens, the bound has
-    to be spelled out for the container to accept the list or the tuple which
-    a property actually holds. A byte array widens to nothing, so it needs
-    none, and a scalar widens all the way up, which the unbounded wildcard
-    already says.
-    """
-    primitive_type = intermediate.try_primitive_type(type_anno)
-
-    if primitive_type is intermediate.PrimitiveType.BYTEARRAY:
-        return Stripped("byte[]")
-
-    if primitive_type is not None:
-        return Stripped("?")
-
-    return Stripped(f"? extends {_written_value_type(type_anno)}")
-
-
 def _item_type_annotations(
     type_anno: intermediate.ContainerTypeAnnotation,
 ) -> List[intermediate.AtomicTypeAnnotation]:
@@ -2757,13 +2734,28 @@ def _container_type(type_anno: intermediate.ContainerTypeAnnotation) -> Stripped
     Render the type of the list or of the tuple ``type_anno`` as its writer takes it.
 
     The items are spelled by what they are written as, so that the writer
-    accepts every list, and every tuple, of that shape -- see
-    :py:func:`_written_argument_type` for why the bound has to be written out.
+    accepts every list, and every tuple, of that shape.
     """
-    argument_types = [
-        _written_argument_type(item_type_anno)
-        for item_type_anno in _item_type_annotations(type_anno)
-    ]
+    # NOTE (mristin):
+    # Java generics are invariant, so a ``List<IExtension>`` is *not*
+    # a ``List<IClass>`` and a ``Tuple2<IExtension, IKey>`` is *not*
+    # a ``Tuple2<IClass, IClass>``. Wherever the value type widens, the bound
+    # has to be spelled out for the container to accept the list or the tuple
+    # which a property actually holds. A byte array widens to nothing, so it
+    # needs none, and a scalar widens all the way up, which the unbounded
+    # wildcard already says.
+    argument_types = []  # type: List[Stripped]
+    for item_type_anno in _item_type_annotations(type_anno):
+        primitive_type = intermediate.try_primitive_type(item_type_anno)
+
+        if primitive_type is intermediate.PrimitiveType.BYTEARRAY:
+            argument_types.append(Stripped("byte[]"))
+        elif primitive_type is not None:
+            argument_types.append(Stripped("?"))
+        else:
+            argument_types.append(
+                Stripped(f"? extends {_written_value_type(item_type_anno)}")
+            )
 
     if isinstance(type_anno, intermediate.ListTypeAnnotation):
         return Stripped(f"List<{argument_types[0]}>")

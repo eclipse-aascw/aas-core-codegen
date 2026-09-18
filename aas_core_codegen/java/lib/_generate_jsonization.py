@@ -1702,24 +1702,6 @@ def _serialized_value_type(type_anno: intermediate.AtomicTypeAnnotation) -> Stri
     return Stripped("IUnion<?>" if moniker == "IUnion" else moniker)
 
 
-def _serialized_argument_type(type_anno: intermediate.AtomicTypeAnnotation) -> Stripped:
-    """
-    Render the type of a value of ``type_anno`` as an argument of a container.
-
-    Java generics are invariant, so a ``List<IExtension>`` is *not*
-    a ``List<IClass>`` and a ``Tuple2<IExtension, IKey>`` is *not*
-    a ``Tuple2<IClass, IClass>``. Wherever the value type widens, the bound has
-    to be spelled out for the container to accept the list or the tuple which
-    a property actually holds. A scalar widens to nothing, so it needs none.
-    """
-    value_type = _serialized_value_type(type_anno)
-
-    if intermediate.try_primitive_type(type_anno) is not None:
-        return value_type
-
-    return Stripped(f"? extends {value_type}")
-
-
 def _item_type_annotations(
     type_anno: intermediate.ContainerTypeAnnotation,
 ) -> List[intermediate.AtomicTypeAnnotation]:
@@ -1775,10 +1757,22 @@ def _serializer_name(type_anno: intermediate.ContainerTypeAnnotation) -> Identif
 
 def _container_type(type_anno: intermediate.ContainerTypeAnnotation) -> Stripped:
     """Render the list or the tuple ``type_anno`` as its serializer takes it."""
-    argument_types = [
-        _serialized_argument_type(item_type_anno)
-        for item_type_anno in _item_type_annotations(type_anno)
-    ]
+    # NOTE (mristin):
+    # Java generics are invariant, so a ``List<IExtension>`` is *not*
+    # a ``List<IClass>`` and a ``Tuple2<IExtension, IKey>`` is *not*
+    # a ``Tuple2<IClass, IClass>``. Wherever the value type widens, the bound
+    # has to be spelled out for the container to accept the list or the tuple
+    # which a property actually holds. A scalar widens to nothing, so it needs
+    # none.
+    argument_types = []  # type: List[Stripped]
+    for item_type_anno in _item_type_annotations(type_anno):
+        value_type = _serialized_value_type(item_type_anno)
+
+        argument_types.append(
+            value_type
+            if intermediate.try_primitive_type(item_type_anno) is not None
+            else Stripped(f"? extends {value_type}")
+        )
 
     if isinstance(type_anno, intermediate.ListTypeAnnotation):
         return Stripped(f"List<{argument_types[0]}>")
