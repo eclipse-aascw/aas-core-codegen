@@ -86,12 +86,29 @@ public class Jsonization {
        * @param node JSON node to be parsed
        */
       private static Reporting.Result<Double> tryDoubleFrom(JsonNode value) {
-        if (!value.isFloatingPointNumber()) {
+        // NOTE (mristin):
+        // We deliberately ask for a number, and not for a floating-point number.
+        // JSON has a single number type, so ``3`` is every bit as good a double as
+        // ``3.0`` is, and every other SDK reads it as one.
+        if (!value.isNumber()) {
           final Reporting.Error error = new Reporting.Error(
             "Expected a JsonValue of Double, but got " + value.getNodeType());
           return Reporting.Result.failure(error);
         }
-        return Reporting.Result.success(value.asDouble());
+
+        // NOTE (mristin):
+        // JSON knows neither an infinity nor a not-a-number, so a conformant parser
+        // can never give us one. Jackson parses them when
+        // JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS is enabled, and the caller can
+        // construct such a node programmatically in any case, so we check here.
+        final double asDouble = value.asDouble();
+        if (!Double.isFinite(asDouble)) {
+          final Reporting.Error error = new Reporting.Error(
+            "Expected a finite number, but got " + asDouble);
+          return Reporting.Result.failure(error);
+        }
+
+        return Reporting.Result.success(asDouble);
       }
 
       private static Reporting.Result<byte[]> tryBytesFrom(JsonNode value) {
@@ -217,6 +234,53 @@ public class Jsonization {
       }
 
     /**
+    * Represent a critical error during the serialization.
+    */
+    @SuppressWarnings("serial")
+      public static class SerializeException extends RuntimeException {
+        private final String path;
+        private final String reason;
+
+        public SerializeException(String path, String reason) {
+          super(reason + " at: " + ("".equals(path) ? "the beginning" : path));
+          this.path = path;
+          this.reason = reason;
+        }
+
+        public Optional<String> getPath() {
+          return Optional.ofNullable(path);
+        }
+
+        public Optional<String> getReason() {
+          return Optional.ofNullable(reason);
+        }
+      }
+
+    /**
+    * Signal a failure of the serialization, carrying the path to the culprit.
+    *
+    * <p>The path is built as the stack unwinds -- every container prepends
+    * the one segment it knows, the property its name and the list the index
+    * of the item -- which is why this can not be a
+    * {@link SerializeException} already: that one renders its message in
+    * its constructor, so its path has to be complete by then.
+    * {@link Serialize#toJsonObject} renders and converts.
+    */
+    @SuppressWarnings("serial")
+      private static class _SerializeFailure extends RuntimeException {
+        private final Reporting.Error error;
+
+        _SerializeFailure(Reporting.Error error) {
+          super(error.getCause());
+          this.error = error;
+        }
+
+        Reporting.Error getError() {
+          return error;
+        }
+      }
+
+    /**
      * Deserialize instances of meta-model classes from JSON nodes.
      *
      * Here is an example how to parse an instance of QueryCondition:
@@ -308,9 +372,19 @@ public class Jsonization {
     {
       /**
        * Serialize an instance of the meta-model into a JSON object.
+       *
+       * @throws SerializeException if a value within {@code that} instance can
+       * not be represented in JSON
        */
       public static JsonNode toJsonObject(IClass that) {
-        return _Transformer.transformClass(that);
+        try {
+          return _Transformer.transformClass(that);
+        } catch (_SerializeFailure failure) {
+          final Reporting.Error error = failure.getError();
+          throw new SerializeException(
+            Reporting.generateJsonPath(error.getPathSegments()),
+            error.getCause());
+        }
       }
     }
 }

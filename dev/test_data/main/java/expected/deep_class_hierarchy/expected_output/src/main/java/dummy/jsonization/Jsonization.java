@@ -86,12 +86,29 @@ public class Jsonization {
        * @param node JSON node to be parsed
        */
       private static Reporting.Result<Double> tryDoubleFrom(JsonNode value) {
-        if (!value.isFloatingPointNumber()) {
+        // NOTE (mristin):
+        // We deliberately ask for a number, and not for a floating-point number.
+        // JSON has a single number type, so ``3`` is every bit as good a double as
+        // ``3.0`` is, and every other SDK reads it as one.
+        if (!value.isNumber()) {
           final Reporting.Error error = new Reporting.Error(
             "Expected a JsonValue of Double, but got " + value.getNodeType());
           return Reporting.Result.failure(error);
         }
-        return Reporting.Result.success(value.asDouble());
+
+        // NOTE (mristin):
+        // JSON knows neither an infinity nor a not-a-number, so a conformant parser
+        // can never give us one. Jackson parses them when
+        // JsonReadFeature.ALLOW_NON_NUMERIC_NUMBERS is enabled, and the caller can
+        // construct such a node programmatically in any case, so we check here.
+        final double asDouble = value.asDouble();
+        if (!Double.isFinite(asDouble)) {
+          final Reporting.Error error = new Reporting.Error(
+            "Expected a finite number, but got " + asDouble);
+          return Reporting.Result.failure(error);
+        }
+
+        return Reporting.Result.success(asDouble);
       }
 
       private static Reporting.Result<byte[]> tryBytesFrom(JsonNode value) {
@@ -685,6 +702,53 @@ public class Jsonization {
       }
 
     /**
+    * Represent a critical error during the serialization.
+    */
+    @SuppressWarnings("serial")
+      public static class SerializeException extends RuntimeException {
+        private final String path;
+        private final String reason;
+
+        public SerializeException(String path, String reason) {
+          super(reason + " at: " + ("".equals(path) ? "the beginning" : path));
+          this.path = path;
+          this.reason = reason;
+        }
+
+        public Optional<String> getPath() {
+          return Optional.ofNullable(path);
+        }
+
+        public Optional<String> getReason() {
+          return Optional.ofNullable(reason);
+        }
+      }
+
+    /**
+    * Signal a failure of the serialization, carrying the path to the culprit.
+    *
+    * <p>The path is built as the stack unwinds -- every container prepends
+    * the one segment it knows, the property its name and the list the index
+    * of the item -- which is why this can not be a
+    * {@link SerializeException} already: that one renders its message in
+    * its constructor, so its path has to be complete by then.
+    * {@link Serialize#toJsonObject} renders and converts.
+    */
+    @SuppressWarnings("serial")
+      private static class _SerializeFailure extends RuntimeException {
+        private final Reporting.Error error;
+
+        _SerializeFailure(Reporting.Error error) {
+          super(error.getCause());
+          this.error = error;
+        }
+
+        Reporting.Error getError() {
+          return error;
+        }
+      }
+
+    /**
      * Deserialize instances of meta-model classes from JSON nodes.
      *
      * Here is an example how to parse an instance of INode:
@@ -866,12 +930,17 @@ public class Jsonization {
        *
        * @param that value to be converted
        */
-      private static JsonNode toJsonNode(Long that) {
-        // We need to check that we can perform a lossless conversion.
-        long primitiveThat = that.longValue();
-        if ((long)((double)primitiveThat) != primitiveThat) {
-          throw new IllegalArgumentException(
-            "The number can not be losslessly represented in JSON: " + that);
+      private static JsonNode longToJsonNode(Long that) {
+        // NOTE (mristin):
+        // Outside this range an integer can not be exactly represented as a 64-bit
+        // floating-point number, which is what the JSON de-serializers of the other
+        // languages read a number into.
+        final long primitiveThat = that.longValue();
+        if (primitiveThat < -9007199254740991L || primitiveThat > 9007199254740991L) {
+          throw new _SerializeFailure(
+            new Reporting.Error(
+              "The integer can not be serialized to JSON as it is outside "
+                + "the range [-2^53 + 1, 2^53 - 1]: " + that));
         }
         return JsonNodeFactory.instance.numberNode(that);
       }
@@ -901,7 +970,13 @@ public class Jsonization {
 
         result.set("description", JsonNodeFactory.instance.textNode(that.getDescription()));
 
-        result.set("value", toJsonNode(that.getValue()));
+        try {
+          result.set("value", longToJsonNode(that.getValue()));
+        } catch (_SerializeFailure failure) {
+          failure.getError().prependSegment(
+            new Reporting.NameSegment("value"));
+          throw failure;
+        }
 
         result.put("modelType", "Leaf");
 
@@ -918,7 +993,13 @@ public class Jsonization {
 
         result.set("description", JsonNodeFactory.instance.textNode(that.getDescription()));
 
-        result.set("value", toJsonNode(that.getValue()));
+        try {
+          result.set("value", longToJsonNode(that.getValue()));
+        } catch (_SerializeFailure failure) {
+          failure.getError().prependSegment(
+            new Reporting.NameSegment("value"));
+          throw failure;
+        }
 
         result.set("details", JsonNodeFactory.instance.textNode(that.getDetails()));
 
@@ -933,9 +1014,21 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("someChoice", transformClass(that.getSomeChoice()));
+        try {
+          result.set("someChoice", transformClass(that.getSomeChoice()));
+        } catch (_SerializeFailure failure) {
+          failure.getError().prependSegment(
+            new Reporting.NameSegment("someChoice"));
+          throw failure;
+        }
 
-        result.set("somethingWithoutChoice", transformClass(that.getSomethingWithoutChoice()));
+        try {
+          result.set("somethingWithoutChoice", transformClass(that.getSomethingWithoutChoice()));
+        } catch (_SerializeFailure failure) {
+          failure.getError().prependSegment(
+            new Reporting.NameSegment("somethingWithoutChoice"));
+          throw failure;
+        }
 
         return result;
       }
@@ -946,9 +1039,21 @@ public class Jsonization {
       ) {
         final ObjectNode result = JsonNodeFactory.instance.objectNode();
 
-        result.set("node", transformClass(that.getNode()));
+        try {
+          result.set("node", transformClass(that.getNode()));
+        } catch (_SerializeFailure failure) {
+          failure.getError().prependSegment(
+            new Reporting.NameSegment("node"));
+          throw failure;
+        }
 
-        result.set("something", transformClass(that.getSomething()));
+        try {
+          result.set("something", transformClass(that.getSomething()));
+        } catch (_SerializeFailure failure) {
+          failure.getError().prependSegment(
+            new Reporting.NameSegment("something"));
+          throw failure;
+        }
 
         return result;
       }
@@ -970,9 +1075,19 @@ public class Jsonization {
     {
       /**
        * Serialize an instance of the meta-model into a JSON object.
+       *
+       * @throws SerializeException if a value within {@code that} instance can
+       * not be represented in JSON
        */
       public static JsonNode toJsonObject(IClass that) {
-        return _Transformer.transformClass(that);
+        try {
+          return _Transformer.transformClass(that);
+        } catch (_SerializeFailure failure) {
+          final Reporting.Error error = failure.getError();
+          throw new SerializeException(
+            Reporting.generateJsonPath(error.getPathSegments()),
+            error.getCause());
+        }
       }
     }
 }

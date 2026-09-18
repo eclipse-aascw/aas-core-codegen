@@ -12,6 +12,9 @@ import dummy.jsonization.Jsonization;
 import dummy.reporting.Reporting;
 import dummy.types.impl.*;
 import dummy.types.model.IClass;
+import dummy.common.*;
+import dummy.types.enums.*;
+import dummy.types.model.*;
 import dummy.verification.Verification;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -23,6 +26,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
@@ -176,6 +180,69 @@ public class TestJsonizationOfConcreteClasses {
       }
     }
   } // public void testSomethingVerificationFail
+
+  private static JsonNode loadTheFirstExpected(String modelType) throws IOException {
+    final List<Path> paths =
+      Common.findPaths(
+        Paths.get(
+          Common.TEST_DATA_DIR,
+          "Json",
+          "Expected",
+          modelType),
+        ".json");
+
+    if (paths.isEmpty()) {
+      fail("Expected at least one recorded example of " + modelType + ", but got none");
+    }
+
+    return CommonJson.readFromFile(paths.get(0));
+  }
+
+  @Test
+  public void testSomethingSomeIntsSerializationOutofrange() throws IOException {
+    for (long value : new long[] {9007199254740992L, -9007199254740992L}) {
+      final Something instance =
+        Jsonization.Deserialize.deserializeSomething(
+          loadTheFirstExpected("Something"));
+
+      instance.setSomeInts(Arrays.asList(0L, value));
+
+      try {
+        Jsonization.Serialize.toJsonObject(instance);
+        fail(
+          "Expected the serialization to fail at "
+            + "someInts[1]"
+            + ", but it succeeded");
+      } catch (Jsonization.SerializeException exception) {
+        assertEquals(
+          "someInts[1]",
+          exception.getPath().orElse(null));
+      }
+    }
+  } // public void testSomethingSomeIntsSerializationOutofrange
+
+  @Test
+  public void testSomethingSomeFloatsSerializationNonfinite() throws IOException {
+    for (double value : new double[] {Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, Double.NaN}) {
+      final Something instance =
+        Jsonization.Deserialize.deserializeSomething(
+          loadTheFirstExpected("Something"));
+
+      instance.setSomeFloats(Arrays.asList(0.0, value));
+
+      try {
+        Jsonization.Serialize.toJsonObject(instance);
+        fail(
+          "Expected the serialization to fail at "
+            + "someFloats[1]"
+            + ", but it succeeded");
+      } catch (Jsonization.SerializeException exception) {
+        assertEquals(
+          "someFloats[1]",
+          exception.getPath().orElse(null));
+      }
+    }
+  } // public void testSomethingSomeFloatsSerializationNonfinite
 } // class TestJsonizationOfConcreteClasses
 
 // package dummy.tests

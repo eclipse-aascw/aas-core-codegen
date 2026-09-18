@@ -12,6 +12,9 @@ import dummy.jsonization.Jsonization;
 import dummy.reporting.Reporting;
 import dummy.types.impl.*;
 import dummy.types.model.IClass;
+import dummy.common.*;
+import dummy.types.enums.*;
+import dummy.types.model.*;
 import dummy.verification.Verification;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -23,6 +26,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
@@ -374,6 +378,108 @@ public class TestJsonizationOfConcreteClasses {
       }
     }
   } // public void testSomethingVerificationFail
+
+  private static JsonNode loadTheFirstExpected(String modelType) throws IOException {
+    final List<Path> paths =
+      Common.findPaths(
+        Paths.get(
+          Common.TEST_DATA_DIR,
+          "Json",
+          "Expected",
+          modelType),
+        ".json");
+
+    if (paths.isEmpty()) {
+      fail("Expected at least one recorded example of " + modelType + ", but got none");
+    }
+
+    return CommonJson.readFromFile(paths.get(0));
+  }
+
+  @Test
+  public void testAnotherItemSerialNumberSerializationOutofrange() throws IOException {
+    for (long value : new long[] {9007199254740992L, -9007199254740992L}) {
+      final AnotherItem instance =
+        Jsonization.Deserialize.deserializeAnotherItem(
+          loadTheFirstExpected("AnotherItem"));
+
+      instance.setSerialNumber(value);
+
+      try {
+        Jsonization.Serialize.toJsonObject(instance);
+        fail(
+          "Expected the serialization to fail at "
+            + "serialNumber"
+            + ", but it succeeded");
+      } catch (Jsonization.SerializeException exception) {
+        assertEquals(
+          "serialNumber",
+          exception.getPath().orElse(null));
+      }
+    }
+  } // public void testAnotherItemSerialNumberSerializationOutofrange
+
+  @Test
+  public void testSomethingPairSerializationOutofrange() throws IOException {
+    for (long value : new long[] {9007199254740992L, -9007199254740992L}) {
+      final Something instance =
+        Jsonization.Deserialize.deserializeSomething(
+          loadTheFirstExpected("Something"));
+
+      instance.setPair(
+        new Tuple2<String, Long>(
+          instance.getPair().item1(),
+          value));
+
+      try {
+        Jsonization.Serialize.toJsonObject(instance);
+        fail(
+          "Expected the serialization to fail at "
+            + "pair[1]"
+            + ", but it succeeded");
+      } catch (Jsonization.SerializeException exception) {
+        assertEquals(
+          "pair[1]",
+          exception.getPath().orElse(null));
+      }
+    }
+  } // public void testSomethingPairSerializationOutofrange
+
+  @Test
+  public void testSomethingTrickySerializationOutofrange() throws IOException {
+    for (long value : new long[] {9007199254740992L, -9007199254740992L}) {
+      final Something instance =
+        Jsonization.Deserialize.deserializeSomething(
+          loadTheFirstExpected("Something"));
+
+      instance.setTricky(
+        new Tuple6<
+        Long,
+        ISomeItem,
+        IAbstractItem,
+        ISomeItem,
+        Long,
+        Result>(
+          value,
+          instance.getTricky().item2(),
+          instance.getTricky().item3(),
+          instance.getTricky().item4(),
+          instance.getTricky().item5(),
+          instance.getTricky().item6()));
+
+      try {
+        Jsonization.Serialize.toJsonObject(instance);
+        fail(
+          "Expected the serialization to fail at "
+            + "tricky[0]"
+            + ", but it succeeded");
+      } catch (Jsonization.SerializeException exception) {
+        assertEquals(
+          "tricky[0]",
+          exception.getPath().orElse(null));
+      }
+    }
+  } // public void testSomethingTrickySerializationOutofrange
 } // class TestJsonizationOfConcreteClasses
 
 // package dummy.tests
