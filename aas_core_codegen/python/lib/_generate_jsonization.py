@@ -1652,7 +1652,9 @@ class _SerializerRegistry:
     give out nothing.
     """
 
-    def __init__(self, ids_of_types_reaching_a_number: Set[int]) -> None:
+    def __init__(
+        self, ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType]
+    ) -> None:
         """Initialize with nothing registered."""
         self._blocks_by_name = dict()  # type: MutableMapping[Identifier, Stripped]
         self._bytes_are_encoded = False
@@ -2027,7 +2029,8 @@ def _float_to_jsonable(
 
 
 def _generate_cls_to_jsonable(
-    cls: intermediate.ConcreteClass, ids_of_types_reaching_a_number: Set[int]
+    cls: intermediate.ConcreteClass,
+    ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType],
 ) -> Stripped:
     """Generate the function to serialize an instance of the ``cls``."""
     cls_name = python_naming.class_name(cls.name)

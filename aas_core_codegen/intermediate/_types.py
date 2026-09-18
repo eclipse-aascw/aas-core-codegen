@@ -12,6 +12,7 @@ from typing import (
     MutableMapping,
     Final,
     FrozenSet,
+    NewType,
     Set,
     Iterator,
     OrderedDict,
@@ -20,6 +21,7 @@ from typing import (
     Dict,
     Any,
     Tuple,
+    overload,
 )
 
 import docutils.nodes
@@ -39,6 +41,135 @@ from aas_core_codegen.intermediate import construction
 from aas_core_codegen.parse import tree as parse_tree
 
 _MODULE_NAME = pathlib.Path(__file__).parent.name
+
+# region Runtime IDs
+
+#: ID of a Python object while it lives, as :py:func:`id` gives it out.
+#:
+#: The types of the intermediate representation are compared by identity, and not by
+#: value -- two properties which agree on the name and on the type annotation are two
+#: different properties -- so a set or a map keyed by the value would conflate them.
+#: We key by the ID of the object instead, which is what all the ``*_id_set``
+#: attributes below hold.
+#:
+#: An ID means something only for as long as the object is alive. Every object we key
+#: by is reachable from the symbol table, so the IDs stay meaningful for as long as
+#: the symbol table does, and a symbol table outlives the generation.
+RuntimeId = NewType("RuntimeId", int)
+
+#: ID of one of our types, see :py:data:`RuntimeId`
+IdOfOurType = NewType("IdOfOurType", RuntimeId)
+
+#: ID of a class, see :py:data:`RuntimeId`
+#:
+#: A class *is* one of our types, so a class ID goes wherever an :py:data:`IdOfOurType`
+#: is expected. The converse does not hold: a container of class IDs refuses the ID of,
+#: say, an enumeration, and mypy reports the mistake.
+IdOfClass = NewType("IdOfClass", IdOfOurType)
+
+#: ID of a constrained primitive, see :py:data:`RuntimeId`
+#:
+#: A constrained primitive is one of our types as well, so the remark on
+#: :py:data:`IdOfClass` holds for it too.
+IdOfConstrainedPrimitive = NewType("IdOfConstrainedPrimitive", IdOfOurType)
+
+#: ID of a property, see :py:data:`RuntimeId`
+IdOfProperty = NewType("IdOfProperty", RuntimeId)
+
+#: ID of a method, see :py:data:`RuntimeId`
+IdOfMethod = NewType("IdOfMethod", RuntimeId)
+
+#: ID of an invariant, see :py:data:`RuntimeId`
+IdOfInvariant = NewType("IdOfInvariant", RuntimeId)
+
+#: ID of an enumeration literal, see :py:data:`RuntimeId`
+IdOfEnumerationLiteral = NewType("IdOfEnumerationLiteral", RuntimeId)
+
+#: ID of a contract, see :py:data:`RuntimeId`
+IdOfContract = NewType("IdOfContract", RuntimeId)
+
+#: ID of a snapshot, see :py:data:`RuntimeId`
+IdOfSnapshot = NewType("IdOfSnapshot", RuntimeId)
+
+#: ID of a type annotation, see :py:data:`RuntimeId`
+IdOfTypeAnnotation = NewType("IdOfTypeAnnotation", RuntimeId)
+
+
+# NOTE (mristin):
+# The overloads are ordered from the most specific to the least, as mypy takes
+# the first one which matches. They are written with forward references so that this
+# whole region can sit at the top of the module, where it is read before anything
+# which uses it, although the types it mentions are defined much further below.
+
+
+@overload
+def runtime_id(something: "Class") -> IdOfClass:
+    ...
+
+
+@overload
+def runtime_id(something: "ConstrainedPrimitive") -> IdOfConstrainedPrimitive:
+    ...
+
+
+@overload
+def runtime_id(something: "OurType") -> IdOfOurType:
+    ...
+
+
+@overload
+def runtime_id(something: "Property") -> IdOfProperty:
+    ...
+
+
+@overload
+def runtime_id(something: "MethodUnion") -> IdOfMethod:
+    ...
+
+
+@overload
+def runtime_id(something: "Invariant") -> IdOfInvariant:
+    ...
+
+
+@overload
+def runtime_id(something: "EnumerationLiteral") -> IdOfEnumerationLiteral:
+    ...
+
+
+@overload
+def runtime_id(something: "Contract") -> IdOfContract:
+    ...
+
+
+@overload
+def runtime_id(something: "Snapshot") -> IdOfSnapshot:
+    ...
+
+
+@overload
+def runtime_id(something: "TypeAnnotationUnion") -> IdOfTypeAnnotation:
+    ...
+
+
+@overload
+def runtime_id(something: object) -> RuntimeId:
+    ...
+
+
+def runtime_id(something: object) -> RuntimeId:
+    """
+    Give out the ID of ``something`` while it lives, see :py:data:`RuntimeId`.
+
+    This is :py:func:`id` with the kind of the object carried over into the type of
+    the ID, so that mypy can tell the ID of a property from the ID of a class and
+    refuse a container, or a check, which mixes the two. A kind which nothing keys by
+    falls back on the bare :py:data:`RuntimeId`.
+    """
+    return RuntimeId(id(something))
+
+
+# endregion
 
 
 class PrimitiveType(enum.Enum):
@@ -1150,7 +1281,7 @@ class Enumeration:
     literals_by_value: Final[Mapping[str, EnumerationLiteral]]
 
     #: Collect IDs (with :py:func:`id`) of the literal objects in a set
-    literal_id_set: Final[FrozenSet[int]]
+    literal_id_set: Final[FrozenSet[IdOfEnumerationLiteral]]
 
     #: Set of all the literal values
     literal_value_set: Final[FrozenSet[str]]
@@ -1181,8 +1312,8 @@ class Enumeration:
     @staticmethod
     def _compute_literal_id_set(
         literals: Sequence[EnumerationLiteral],
-    ) -> FrozenSet[int]:
-        return frozenset(id(literal) for literal in literals)
+    ) -> FrozenSet[IdOfEnumerationLiteral]:
+        return frozenset(runtime_id(literal) for literal in literals)
 
     def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()
@@ -1221,7 +1352,7 @@ class ConstrainedPrimitive:
 
     _inheritances: Sequence["ConstrainedPrimitive"]
 
-    _inheritance_id_set: FrozenSet[int]
+    _inheritance_id_set: FrozenSet[IdOfConstrainedPrimitive]
 
     # endregion
 
@@ -1233,7 +1364,7 @@ class ConstrainedPrimitive:
 
     _ancestors: Sequence["ConstrainedPrimitive"]
 
-    _ancestor_id_set: FrozenSet[int]
+    _ancestor_id_set: FrozenSet[IdOfConstrainedPrimitive]
 
     # endregion
 
@@ -1246,7 +1377,7 @@ class ConstrainedPrimitive:
 
     _descendants: Sequence["ConstrainedPrimitive"]
 
-    _descendant_id_set: FrozenSet[int]
+    _descendant_id_set: FrozenSet[IdOfConstrainedPrimitive]
 
     # endregion
 
@@ -1265,7 +1396,7 @@ class ConstrainedPrimitive:
 
     _invariants: Sequence[Invariant]
 
-    _invariant_id_set: FrozenSet[int]
+    _invariant_id_set: FrozenSet[IdOfInvariant]
 
     # endregion
 
@@ -1350,9 +1481,9 @@ class ConstrainedPrimitive:
     @require(
         lambda ancestors, inheritances:
         (
-            ancestor_id_set := set(id(ancestor) for ancestor in ancestors),
+            ancestor_id_set := set(runtime_id(ancestor) for ancestor in ancestors),
             all(
-                id(inheritance) in ancestor_id_set  # pylint: disable=used-before-assignment
+                runtime_id(inheritance) in ancestor_id_set  # pylint: disable=used-before-assignment
                 for inheritance in inheritances
             )
         )[1],
@@ -1387,24 +1518,26 @@ class ConstrainedPrimitive:
     @staticmethod
     def _compute_ancestor_id_set(
         ancestors: Sequence["ConstrainedPrimitive"],
-    ) -> FrozenSet[int]:
-        return frozenset(id(ancestor) for ancestor in ancestors)
+    ) -> FrozenSet[IdOfConstrainedPrimitive]:
+        return frozenset(runtime_id(ancestor) for ancestor in ancestors)
 
     @staticmethod
     def _compute_descendant_id_set(
         descendants: Sequence["ConstrainedPrimitive"],
-    ) -> FrozenSet[int]:
-        return frozenset(id(descendant) for descendant in descendants)
+    ) -> FrozenSet[IdOfConstrainedPrimitive]:
+        return frozenset(runtime_id(descendant) for descendant in descendants)
 
     @staticmethod
-    def _compute_invariant_id_set(invariants: Sequence[Invariant]) -> FrozenSet[int]:
-        return frozenset(id(inv) for inv in invariants)
+    def _compute_invariant_id_set(
+        invariants: Sequence[Invariant],
+    ) -> FrozenSet[IdOfInvariant]:
+        return frozenset(runtime_id(inv) for inv in invariants)
 
     @staticmethod
     def _compute_inheritance_id_set(
         inheritances: Sequence["ConstrainedPrimitive"],
-    ) -> FrozenSet[int]:
-        return frozenset(id(inheritance) for inheritance in inheritances)
+    ) -> FrozenSet[IdOfConstrainedPrimitive]:
+        return frozenset(runtime_id(inheritance) for inheritance in inheritances)
 
     @property
     def inheritances(self) -> Sequence["ConstrainedPrimitive"]:
@@ -1412,7 +1545,7 @@ class ConstrainedPrimitive:
         return self._inheritances
 
     @property
-    def inheritance_id_set(self) -> FrozenSet[int]:
+    def inheritance_id_set(self) -> FrozenSet[IdOfConstrainedPrimitive]:
         """Collect IDs (with :py:func:`id`) of the inheritance objects in a set."""
         return self._inheritance_id_set
 
@@ -1427,7 +1560,7 @@ class ConstrainedPrimitive:
         return self._ancestors
 
     @property
-    def ancestor_id_set(self) -> FrozenSet[int]:
+    def ancestor_id_set(self) -> FrozenSet[IdOfConstrainedPrimitive]:
         """Collect IDs (with :py:func:`id`) of the ancestors in a set."""
         return self._ancestor_id_set
 
@@ -1441,10 +1574,10 @@ class ConstrainedPrimitive:
         # This function is not used by the aas-core-codegen, but by downstream clients
         # such as aas-core3.0rc02-testgen.
 
-        if id(constrained_primitive) == id(self):
+        if runtime_id(constrained_primitive) == runtime_id(self):
             return True
 
-        return id(constrained_primitive) in self._ancestor_id_set
+        return runtime_id(constrained_primitive) in self._ancestor_id_set
 
     @property
     def descendants(self) -> Sequence["ConstrainedPrimitive"]:
@@ -1457,7 +1590,7 @@ class ConstrainedPrimitive:
         return self._descendants
 
     @property
-    def descendant_id_set(self) -> FrozenSet[int]:
+    def descendant_id_set(self) -> FrozenSet[IdOfConstrainedPrimitive]:
         """List the IDs (as in Python's ``id`` built-in) of the descendants."""
         return self._descendant_id_set
 
@@ -1467,7 +1600,7 @@ class ConstrainedPrimitive:
         return self._invariants
 
     @property
-    def invariant_id_set(self) -> FrozenSet[int]:
+    def invariant_id_set(self) -> FrozenSet[IdOfInvariant]:
         """Collect IDs (with :py:func:`id`) of the invariant objects in a set."""
         return self._invariant_id_set
 
@@ -1526,7 +1659,7 @@ class Class(DBC):
 
     _inheritances: Sequence["ClassUnion"]
 
-    _inheritance_id_set: FrozenSet[int]
+    _inheritance_id_set: FrozenSet[IdOfClass]
 
     # endregion
 
@@ -1538,7 +1671,7 @@ class Class(DBC):
 
     _ancestors: Sequence["ClassUnion"]
 
-    _ancestor_id_set: FrozenSet[int]
+    _ancestor_id_set: FrozenSet[IdOfClass]
 
     # endregion
 
@@ -1558,11 +1691,11 @@ class Class(DBC):
     # ``@property`` so that the translation code is forced to use
     # ``_set_descendants``.
 
-    _descendant_id_set: FrozenSet[int]
+    _descendant_id_set: FrozenSet[IdOfClass]
 
     _descendants: Sequence["ClassUnion"]
 
-    _concrete_descendant_id_set: FrozenSet[int]
+    _concrete_descendant_id_set: FrozenSet[IdOfClass]
 
     _concrete_descendants: Sequence["ConcreteClass"]
 
@@ -1578,7 +1711,7 @@ class Class(DBC):
 
     _properties_by_name: Mapping[Identifier, Property]
 
-    _property_id_set: FrozenSet[int]
+    _property_id_set: FrozenSet[IdOfProperty]
 
     # endregion
 
@@ -1592,7 +1725,7 @@ class Class(DBC):
 
     _methods_by_name: Mapping[Identifier, "MethodUnion"]
 
-    _method_id_set: FrozenSet[int]
+    _method_id_set: FrozenSet[IdOfMethod]
 
     # endregion
 
@@ -1607,7 +1740,7 @@ class Class(DBC):
 
     _invariants: Sequence[Invariant]
 
-    _invariant_id_set: FrozenSet[int]
+    _invariant_id_set: FrozenSet[IdOfInvariant]
 
     # endregion
 
@@ -1718,9 +1851,9 @@ class Class(DBC):
     @require(
         lambda ancestors, inheritances:
         (
-            ancestor_id_set := set(id(ancestor) for ancestor in ancestors),
+            ancestor_id_set := set(runtime_id(ancestor) for ancestor in ancestors),
             all(
-                id(inheritance) in ancestor_id_set  # pylint: disable=used-before-assignment
+                runtime_id(inheritance) in ancestor_id_set  # pylint: disable=used-before-assignment
                 for inheritance in inheritances
             )
         )[1],
@@ -1729,8 +1862,8 @@ class Class(DBC):
     @require(
         lambda ancestors, descendants:
         len(
-            set(id(ancestor) for ancestor in ancestors).difference(
-                id(descendant) for descendant in descendants
+            set(runtime_id(ancestor) for ancestor in ancestors).difference(
+                runtime_id(descendant) for descendant in descendants
             )
         ) == 0,
         "No ancestor is also a descendant"
@@ -1750,7 +1883,7 @@ class Class(DBC):
         lambda descendants, self:
         all(
             (
-                    id(descendant) in self.concrete_descendant_id_set
+                    runtime_id(descendant) in self.concrete_descendant_id_set
                     and descendant in self.descendants
             )
             for descendant in descendants
@@ -1769,7 +1902,7 @@ class Class(DBC):
     @ensure(
         lambda self:
         (
-            id(descendant) in self.concrete_descendant_id_set
+            runtime_id(descendant) in self.concrete_descendant_id_set
             for descendant in self.descendants
             if isinstance(descendant, ConcreteClass)
         ),
@@ -1810,36 +1943,44 @@ class Class(DBC):
     @staticmethod
     def _compute_inheritance_id_set(
         inheritances: Sequence["ClassUnion"],
-    ) -> FrozenSet[int]:
-        return frozenset(id(inheritance) for inheritance in inheritances)
+    ) -> FrozenSet[IdOfClass]:
+        return frozenset(runtime_id(inheritance) for inheritance in inheritances)
 
     @staticmethod
-    def _compute_ancestor_id_set(ancestors: Sequence["ClassUnion"]) -> FrozenSet[int]:
-        return frozenset(id(ancestor) for ancestor in ancestors)
+    def _compute_ancestor_id_set(
+        ancestors: Sequence["ClassUnion"],
+    ) -> FrozenSet[IdOfClass]:
+        return frozenset(runtime_id(ancestor) for ancestor in ancestors)
 
     @staticmethod
     def _compute_descendant_id_set(
         descendants: Sequence["ClassUnion"],
-    ) -> FrozenSet[int]:
-        return frozenset(id(descendant) for descendant in descendants)
+    ) -> FrozenSet[IdOfClass]:
+        return frozenset(runtime_id(descendant) for descendant in descendants)
 
     @staticmethod
     def _compute_concrete_descendant_id_set(
         concrete_descendants: Sequence["ConcreteClass"],
-    ) -> FrozenSet[int]:
-        return frozenset(id(descendant) for descendant in concrete_descendants)
+    ) -> FrozenSet[IdOfClass]:
+        return frozenset(runtime_id(descendant) for descendant in concrete_descendants)
 
     @staticmethod
-    def _compute_property_id_set(properties: Sequence[Property]) -> FrozenSet[int]:
-        return frozenset(id(prop) for prop in properties)
+    def _compute_property_id_set(
+        properties: Sequence[Property],
+    ) -> FrozenSet[IdOfProperty]:
+        return frozenset(runtime_id(prop) for prop in properties)
 
     @staticmethod
-    def _compute_method_id_set(methods: Sequence["MethodUnion"]) -> FrozenSet[int]:
-        return frozenset(id(method) for method in methods)
+    def _compute_method_id_set(
+        methods: Sequence["MethodUnion"],
+    ) -> FrozenSet[IdOfMethod]:
+        return frozenset(runtime_id(method) for method in methods)
 
     @staticmethod
-    def _compute_invariant_id_set(invariants: Sequence[Invariant]) -> FrozenSet[int]:
-        return frozenset(id(inv) for inv in invariants)
+    def _compute_invariant_id_set(
+        invariants: Sequence[Invariant],
+    ) -> FrozenSet[IdOfInvariant]:
+        return frozenset(runtime_id(inv) for inv in invariants)
 
     @property
     def inheritances(self) -> Sequence["ClassUnion"]:
@@ -1847,7 +1988,7 @@ class Class(DBC):
         return self._inheritances
 
     @property
-    def inheritance_id_set(self) -> FrozenSet[int]:
+    def inheritance_id_set(self) -> FrozenSet[IdOfClass]:
         """Collect IDs (with :py:func:`id`) of the inheritance objects in a set."""
         return self._inheritance_id_set
 
@@ -1857,7 +1998,7 @@ class Class(DBC):
         return self._ancestors
 
     @property
-    def ancestor_id_set(self) -> FrozenSet[int]:
+    def ancestor_id_set(self) -> FrozenSet[IdOfClass]:
         """Collect IDs (with :py:func:`id`) of the ancestor classes in a set."""
         return self._ancestor_id_set
 
@@ -1871,10 +2012,10 @@ class Class(DBC):
         # This function is not used by the aas-core-codegen, but by downstream clients
         # such as aas-core3.0rc02-testgen.
 
-        if id(cls) == id(self):
+        if runtime_id(cls) == runtime_id(self):
             return True
 
-        return id(cls) in self._ancestor_id_set
+        return runtime_id(cls) in self._ancestor_id_set
 
     def is_structural_subtype_of(self, cls: "ClassUnion") -> bool:
         """
@@ -1897,7 +2038,7 @@ class Class(DBC):
 
         Every class is a structural subtype of itself.
         """
-        if id(cls) == id(self):
+        if runtime_id(cls) == runtime_id(self):
             return True
 
         for prop_name, cls_prop in cls.properties_by_name.items():
@@ -1913,7 +2054,7 @@ class Class(DBC):
         return True
 
     @property
-    def descendant_id_set(self) -> FrozenSet[int]:
+    def descendant_id_set(self) -> FrozenSet[IdOfClass]:
         """List the IDs (as in Python's ``id`` built-in) of the descendants."""
         return self._descendant_id_set
 
@@ -1923,7 +2064,7 @@ class Class(DBC):
         return self._descendants
 
     @property
-    def concrete_descendant_id_set(self) -> FrozenSet[int]:
+    def concrete_descendant_id_set(self) -> FrozenSet[IdOfClass]:
         """List the IDs (as in Python's ``id`` built-in) of the concrete descendants."""
         return self._concrete_descendant_id_set
 
@@ -1943,7 +2084,7 @@ class Class(DBC):
         return self._properties_by_name
 
     @property
-    def property_id_set(self) -> FrozenSet[int]:
+    def property_id_set(self) -> FrozenSet[IdOfProperty]:
         """Collect IDs (with :py:func:`id`) of the property objects in a set."""
         return self._property_id_set
 
@@ -1963,7 +2104,7 @@ class Class(DBC):
         return self._methods_by_name
 
     @property
-    def method_id_set(self) -> FrozenSet[int]:
+    def method_id_set(self) -> FrozenSet[IdOfMethod]:
         """Collect IDs (with :py:func:`id`) of the method objects in a set."""
         return self._method_id_set
 
@@ -1973,7 +2114,7 @@ class Class(DBC):
         return self._invariants
 
     @property
-    def invariant_id_set(self) -> FrozenSet[int]:
+    def invariant_id_set(self) -> FrozenSet[IdOfInvariant]:
         """Collect IDs (with :py:func:`id`) of the invariant objects in a set."""
         return self._invariant_id_set
 
@@ -2284,7 +2425,7 @@ class ConstantSetOfEnumerationLiterals(Constant):
     parsed: Final[parse.ConstantSet]
 
     #: Set of all the IDs (as in Python objects) of the literals
-    literal_id_set: Final[FrozenSet[int]]
+    literal_id_set: Final[FrozenSet[IdOfEnumerationLiteral]]
 
     #: Set of all the literal values
     literal_value_set: Final[FrozenSet[str]]
@@ -2293,7 +2434,7 @@ class ConstantSetOfEnumerationLiterals(Constant):
     @require(
         lambda literals, enumeration:
         all(
-            id(literal) in enumeration.literal_id_set
+            runtime_id(literal) in enumeration.literal_id_set
             for literal in literals
         ),
         "All literals are members of the same enumeration"
@@ -2301,7 +2442,7 @@ class ConstantSetOfEnumerationLiterals(Constant):
     @ensure(
         lambda literals, self:
         all(
-            id(literal) in self.literal_id_set
+            runtime_id(literal) in self.literal_id_set
             for literal in self.literals
         ) and len(self.literals) == len(self.literal_id_set),
         "Literal set corresponds to literals"
@@ -2334,8 +2475,8 @@ class ConstantSetOfEnumerationLiterals(Constant):
     @staticmethod
     def _compute_literal_id_set(
         literals: Sequence[EnumerationLiteral],
-    ) -> FrozenSet[int]:
-        return frozenset(id(literal) for literal in literals)
+    ) -> FrozenSet[IdOfEnumerationLiteral]:
+        return frozenset(runtime_id(literal) for literal in literals)
 
     def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()
@@ -2653,7 +2794,7 @@ class Interface:
     properties_by_name: Final[Mapping[Identifier, Property]]
 
     #: Collect IDs (with :py:func:`id`) of the property objects in a set
-    property_id_set: Final[FrozenSet[int]]
+    property_id_set: Final[FrozenSet[IdOfProperty]]
 
     def __init__(
         self,
@@ -2700,8 +2841,10 @@ class Interface:
         self.property_id_set = self.__class__._compute_property_id_set(self.properties)
 
     @staticmethod
-    def _compute_property_id_set(properties: Sequence[Property]) -> FrozenSet[int]:
-        return frozenset(id(prop) for prop in properties)
+    def _compute_property_id_set(
+        properties: Sequence[Property],
+    ) -> FrozenSet[IdOfProperty]:
+        return frozenset(runtime_id(prop) for prop in properties)
 
     def __getstate__(self) -> Dict[str, Any]:
         state = self.__dict__.copy()
@@ -2839,7 +2982,7 @@ class NamedUnion:
     )
     @require(
         lambda members:
-        len(members) == len(set(id(member) for member in members)),
+        len(members) == len(set(runtime_id(member) for member in members)),
         "Unique members in the named union"
     )
     # fmt: on
@@ -2950,11 +3093,13 @@ class SymbolTable:
     @require(
         lambda our_types, our_types_topologically_sorted:
         set(
-            id(our_type)
+            runtime_id(our_type)
             for our_type in our_types
             if not isinstance(our_type, Enumeration)
         )
-        == set(id(our_type) for our_type in our_types_topologically_sorted),
+        == set(
+            runtime_id(our_type) for our_type in our_types_topologically_sorted
+        ),
         "Only maybe the order differs between our_types and "
         "our_types_topologically_sorted"
     )
@@ -3384,7 +3529,7 @@ class SymbolTable:
                     f"but got {type(our_type)}: {our_type}"
                 )
 
-            return id(literal) in our_type.literal_id_set
+            return runtime_id(literal) in our_type.literal_id_set
 
         constant = self.constants_by_name.get(enumeration_or_constant_set_name, None)
         if constant is not None:
@@ -3395,7 +3540,7 @@ class SymbolTable:
                     f"but got {type(constant)}: {constant}"
                 )
 
-            return id(literal) in constant.literal_id_set
+            return runtime_id(literal) in constant.literal_id_set
 
         raise KeyError(enumeration_or_constant_set_name)
 
@@ -3560,7 +3705,7 @@ class NumericPlace:
     in_list: Final[bool]
 
     @require(
-        lambda cls, prop: id(prop) in cls.property_id_set,
+        lambda cls, prop: runtime_id(prop) in cls.property_id_set,
         "The property belongs to the class",
     )
     def __init__(
@@ -3580,7 +3725,8 @@ class NumericPlace:
 
 
 def reaches_a_number(
-    type_annotation: "TypeAnnotationUnion", ids_of_types_reaching_a_number: Set[int]
+    type_annotation: "TypeAnnotationUnion",
+    ids_of_types_reaching_a_number: Set[IdOfOurType],
 ) -> bool:
     """
     Check whether a number can be reached from a value of the ``type_annotation``.
@@ -3607,12 +3753,14 @@ def reaches_a_number(
         # NOTE (mristin):
         # An enumeration literal goes on the wire as a string, so it can not fail.
         # Everything else is reported by the fixed point.
-        return id(type_anno.our_type) in ids_of_types_reaching_a_number
+        return runtime_id(type_anno.our_type) in ids_of_types_reaching_a_number
 
     return False
 
 
-def collect_ids_of_types_reaching_a_number(symbol_table: SymbolTable) -> Set[int]:
+def collect_ids_of_types_reaching_a_number(
+    symbol_table: SymbolTable,
+) -> Set[IdOfOurType]:
     """
     Collect the IDs of our types from which a number can be reached.
 
@@ -3626,31 +3774,34 @@ def collect_ids_of_types_reaching_a_number(symbol_table: SymbolTable) -> Set[int
     This is a fixed point, as the classes refer to each other and a cycle must
     not be walked twice. Pass the result to :py:func:`reaches_a_number`.
     """
-    result = set()  # type: Set[int]
+    result = set()  # type: Set[IdOfOurType]
 
     changed = True
     while changed:
         changed = False
 
         for cls in symbol_table.classes:
-            if id(cls) in result:
+            if runtime_id(cls) in result:
                 continue
 
             if any(
                 reaches_a_number(prop.type_annotation, result)
                 for prop in cls.properties
             ) or any(
-                id(descendant) in result for descendant in cls.concrete_descendants
+                runtime_id(descendant) in result
+                for descendant in cls.concrete_descendants
             ):
-                result.add(id(cls))
+                result.add(runtime_id(cls))
                 changed = True
 
         for union in symbol_table.named_unions:
-            if id(union) in result:
+            if runtime_id(union) in result:
                 continue
 
-            if any(id(implementer) in result for implementer in union.implementers):
-                result.add(id(union))
+            if any(
+                runtime_id(implementer) in result for implementer in union.implementers
+            ):
+                result.add(runtime_id(union))
                 changed = True
 
     return result
@@ -3799,13 +3950,15 @@ def tuple_arities(symbol_table: SymbolTable) -> List[int]:
     return sorted(arities)
 
 
-def collect_ids_of_our_types_in_properties(symbol_table: SymbolTable) -> Set[int]:
+def collect_ids_of_our_types_in_properties(
+    symbol_table: SymbolTable,
+) -> Set[IdOfOurType]:
     """
     Collect the IDs of our types occurring in type annotations of the properties.
 
     The IDs refer to IDs of the Python objects in this context.
     """
-    result = set()  # type: Set[int]
+    result = set()  # type: Set[IdOfOurType]
     for cls in symbol_table.classes:
         for prop in cls.properties:
             stack = [prop.type_annotation]  # type: List[TypeAnnotationUnion]
@@ -3821,7 +3974,7 @@ def collect_ids_of_our_types_in_properties(symbol_table: SymbolTable) -> Set[int
                 elif isinstance(type_anno, PrimitiveTypeAnnotation):
                     pass
                 elif isinstance(type_anno, OurTypeAnnotation):
-                    result.add(id(type_anno.our_type))
+                    result.add(runtime_id(type_anno.our_type))
                 else:
                     assert_never(type_anno)
 

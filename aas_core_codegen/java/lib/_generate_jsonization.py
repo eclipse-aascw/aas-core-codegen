@@ -1813,7 +1813,7 @@ def _serialize_call(
 
 def _generate_composed_serializer(
     type_anno: intermediate.ContainerTypeAnnotation,
-    ids_of_types_reaching_a_number: Set[int],
+    ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType],
 ) -> Stripped:
     """
     Generate the serializer of the list or of the tuple ``type_anno``.
@@ -1994,7 +1994,8 @@ private static JsonNode transformUnion(IUnion<?> that) {{
 
 
 def _generate_transform_property(
-    prop: intermediate.Property, ids_of_types_reaching_a_number: Set[int]
+    prop: intermediate.Property,
+    ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType],
 ) -> Stripped:
     """
     Generate the snippet to transform a property into a JSON node.
@@ -2086,7 +2087,8 @@ if (that.{getter_name}().isPresent()) {{
 
 
 def _generate_transform_for_class(
-    cls: intermediate.ConcreteClass, ids_of_types_reaching_a_number: Set[int]
+    cls: intermediate.ConcreteClass,
+    ids_of_types_reaching_a_number: Set[intermediate.IdOfOurType],
 ) -> Stripped:
     """Generate the transform method to a JSON object for the given concrete class."""
     blocks = [

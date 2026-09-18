@@ -22,7 +22,7 @@ from aas_core_codegen.golang.common import (
 )
 
 
-@require(lambda cls, method: id(method) in cls.method_id_set)
+@require(lambda cls, method: intermediate.runtime_id(method) in cls.method_id_set)
 def _generate_method_delegation(
     cls: intermediate.ConcreteClass, method: intermediate.Method
 ) -> Stripped:

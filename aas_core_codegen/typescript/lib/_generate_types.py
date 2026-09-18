@@ -390,7 +390,10 @@ export function *{over_model_type} (
     )
 
 
-@require(lambda enumeration, literal: id(literal) in enumeration.literal_id_set)
+@require(
+    lambda enumeration, literal: intermediate.runtime_id(literal)
+    in enumeration.literal_id_set
+)
 @require(lambda literal: literal.description is not None)
 def _generate_comment_for_enumeration_literal(
     enumeration: intermediate.Enumeration,
@@ -927,7 +930,7 @@ this.{typescript_naming.property_name(stmt.name)} = ({arg_name})
     return Stripped("\n".join(blocks)), None
 
 
-@require(lambda cls, prop: id(prop) in cls.property_id_set)
+@require(lambda cls, prop: intermediate.runtime_id(prop) in cls.property_id_set)
 @require(lambda prop: prop.description is not None)
 def _generate_comment_for_property(
     cls: intermediate.ClassUnion,

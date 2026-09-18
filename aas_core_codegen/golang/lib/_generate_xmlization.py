@@ -198,7 +198,7 @@ class _Requirements:
 
     def __init__(
         self,
-        dispatched_type_ids: Set[int],
+        dispatched_type_ids: Set[intermediate.IdOfOurType],
         scalar_items: List[_ScalarItem],
         list_items_type_annos: List[intermediate.AtomicTypeAnnotation],
         tuple_type_annos: List[intermediate.TupleTypeAnnotation],
@@ -229,7 +229,7 @@ def _collect_requirements(
     a ``read*Dispatched``, a scalar item function and a tuple writer are called only
     from a property.
     """
-    dispatched_type_ids = set()  # type: Set[int]
+    dispatched_type_ids = set()  # type: Set[intermediate.IdOfOurType]
 
     scalar_items = []  # type: List[_ScalarItem]
     observed_scalar_items = set()  # type: Set[Tuple[str, str]]
@@ -252,7 +252,7 @@ def _collect_requirements(
                 intermediate.NamedUnion,
             ),
         ):
-            dispatched_type_ids.add(id(item_type_anno.our_type))
+            dispatched_type_ids.add(intermediate.runtime_id(item_type_anno.our_type))
             return
 
         key = (_leaf_moniker(item_type_anno), element_name)
@@ -291,7 +291,7 @@ def _collect_requirements(
 
             elif _requires_dispatch(type_anno):
                 assert isinstance(type_anno, intermediate.OurTypeAnnotation)
-                dispatched_type_ids.add(id(type_anno.our_type))
+                dispatched_type_ids.add(intermediate.runtime_id(type_anno.our_type))
 
     return _Requirements(
         dispatched_type_ids=dispatched_type_ids,
@@ -3058,7 +3058,7 @@ if err != nil {{
     )
 
 
-@require(lambda prop, cls: id(prop) in cls.property_id_set)
+@require(lambda prop, cls: intermediate.runtime_id(prop) in cls.property_id_set)
 def _generate_snippet_to_serialize_property(
     prop: intermediate.Property, cls: intermediate.ConcreteClass
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
@@ -3417,7 +3417,7 @@ const Namespace = {namespace_literal}"""
         elif isinstance(our_type, intermediate.ConstrainedPrimitive):
             pass
         elif isinstance(our_type, intermediate.AbstractClass):
-            if id(our_type) in requirements.dispatched_type_ids:
+            if intermediate.runtime_id(our_type) in requirements.dispatched_type_ids:
                 blocks.append(_generate_read_dispatched(our_type=our_type))
 
         elif isinstance(our_type, intermediate.ConcreteClass):
@@ -3440,11 +3440,11 @@ const Namespace = {namespace_literal}"""
             else:
                 blocks.append(_generate_read_as_sequence(cls=our_type))
 
-            if id(our_type) in requirements.dispatched_type_ids:
+            if intermediate.runtime_id(our_type) in requirements.dispatched_type_ids:
                 blocks.append(_generate_read_dispatched(our_type=our_type))
 
         elif isinstance(our_type, intermediate.NamedUnion):
-            if id(our_type) in requirements.dispatched_type_ids:
+            if intermediate.runtime_id(our_type) in requirements.dispatched_type_ids:
                 blocks.append(_generate_read_dispatched(our_type=our_type))
 
         else:

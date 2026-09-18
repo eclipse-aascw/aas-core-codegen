@@ -995,7 +995,8 @@ def generate(
                     # region Choice
                     if isinstance(our_type, intermediate.ConcreteClass) or (
                         isinstance(our_type, intermediate.AbstractClass)
-                        and id(our_type) in ids_of_our_types_in_properties
+                        and intermediate.runtime_id(our_type)
+                        in ids_of_our_types_in_properties
                     ):
                         update_error = definitions.update_for(
                             our_type=our_type,

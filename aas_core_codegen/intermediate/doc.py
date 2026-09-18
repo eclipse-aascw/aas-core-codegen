@@ -15,6 +15,7 @@ from aas_core_codegen.intermediate._types import (
     EnumerationLiteral,
     ClassUnion,
     ConstantUnion,
+    runtime_id,
 )
 
 
@@ -41,7 +42,7 @@ class ReferenceToOurType(
 class ReferenceToProperty:
     """Model a reference to a property, usually used in the docstrings."""
 
-    @require(lambda cls, prop: id(prop) in cls.property_id_set)
+    @require(lambda cls, prop: runtime_id(prop) in cls.property_id_set)
     def __init__(self, cls: ClassUnion, prop: Property) -> None:
         self.cls = cls
         self.prop = prop
@@ -50,7 +51,9 @@ class ReferenceToProperty:
 class ReferenceToEnumerationLiteral:
     """Model a reference to an enumeration literal, usually used in the docstrings."""
 
-    @require(lambda enumeration, literal: id(literal) in enumeration.literal_id_set)
+    @require(
+        lambda enumeration, literal: runtime_id(literal) in enumeration.literal_id_set
+    )
     def __init__(self, enumeration: Enumeration, literal: EnumerationLiteral) -> None:
         self.enumeration = enumeration
         self.literal = literal

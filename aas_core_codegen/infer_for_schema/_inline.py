@@ -188,12 +188,16 @@ def _merge_set_of_enumeration_literals_constraints(
                 f"other enumeration is {other.enumeration}."
             )
 
-        literal_by_id: MutableMapping[int, intermediate.EnumerationLiteral] = dict()
+        literal_by_id: MutableMapping[
+            intermediate.IdOfEnumerationLiteral, intermediate.EnumerationLiteral
+        ] = dict()
 
-        literal_id_histo: MutableMapping[int, int] = collections.OrderedDict()
+        literal_id_histo: MutableMapping[
+            intermediate.IdOfEnumerationLiteral, int
+        ] = collections.OrderedDict()
 
         for literal in itertools.chain(that.literals, other.literals):
-            literal_id = id(literal)
+            literal_id = intermediate.runtime_id(literal)
 
             if literal_id not in literal_id_histo:
                 literal_id_histo[literal_id] = 1

@@ -84,6 +84,19 @@ first_class_with_a_required_property = _types.first_class_with_a_required_proper
 collect_ids_of_types_reaching_a_number = _types.collect_ids_of_types_reaching_a_number
 reaches_a_number = _types.reaches_a_number
 
+RuntimeId = _types.RuntimeId
+IdOfOurType = _types.IdOfOurType
+IdOfClass = _types.IdOfClass
+IdOfConstrainedPrimitive = _types.IdOfConstrainedPrimitive
+IdOfProperty = _types.IdOfProperty
+IdOfMethod = _types.IdOfMethod
+IdOfInvariant = _types.IdOfInvariant
+IdOfEnumerationLiteral = _types.IdOfEnumerationLiteral
+IdOfContract = _types.IdOfContract
+IdOfSnapshot = _types.IdOfSnapshot
+IdOfTypeAnnotation = _types.IdOfTypeAnnotation
+runtime_id = _types.runtime_id
+
 translate = _translate.translate
 errors_if_contracts_for_functions_or_methods_defined = (
     _translate.errors_if_contracts_for_functions_or_methods_defined
