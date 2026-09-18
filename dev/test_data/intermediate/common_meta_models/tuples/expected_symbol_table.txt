@@ -307,6 +307,24 @@ SymbolTable(
           specified_for='Reference to ConcreteClass Something',
           json_name='tricky',
           xml_name='tricky',
+          parsed=...),
+        Property(
+          name='optional_pair',
+          type_annotation=OptionalTypeAnnotation(
+            value=TupleTypeAnnotation(
+              items=[
+                PrimitiveTypeAnnotation(
+                  a_type='STR',
+                  parsed=...),
+                OurTypeAnnotation(
+                  our_type='Reference to our type Abstract_item',
+                  parsed=...)],
+              parsed=...),
+            parsed=...),
+          description=None,
+          specified_for='Reference to ConcreteClass Something',
+          json_name='optionalPair',
+          xml_name='optionalPair',
           parsed=...)],
       methods=[],
       constructor=Constructor(
@@ -362,6 +380,23 @@ SymbolTable(
                   parsed=...)],
               parsed=...),
             default=None,
+            parsed=...),
+          Argument(
+            name='optional_pair',
+            type_annotation=OptionalTypeAnnotation(
+              value=TupleTypeAnnotation(
+                items=[
+                  PrimitiveTypeAnnotation(
+                    a_type='STR',
+                    parsed=...),
+                  OurTypeAnnotation(
+                    our_type='Reference to our type Abstract_item',
+                    parsed=...)],
+                parsed=...),
+              parsed=...),
+            default=DefaultPrimitive(
+              value=None,
+              parsed=...),
             parsed=...)],
         returns=None,
         description=None,
@@ -387,6 +422,11 @@ SymbolTable(
             AssignArgument(
               name='tricky',
               argument='tricky',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_pair',
+              argument='optional_pair',
               default=None)""")],
         inlined_statements=[
           textwrap.dedent("""\
@@ -403,6 +443,11 @@ SymbolTable(
             AssignArgument(
               name='tricky',
               argument='tricky',
+              default=None)"""),
+          textwrap.dedent("""\
+            AssignArgument(
+              name='optional_pair',
+              argument='optional_pair',
               default=None)""")]),
       invariants=[
         Invariant(

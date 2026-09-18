@@ -224,6 +224,8 @@ namespace dummy
         public (IAbstractItem, IAbstractItem) Items { get; set; }
 
         public (long, ISomeItem, IAbstractItem, ISomeItem, long, Result) Tricky { get; set; }
+
+        public (string, IAbstractItem)? OptionalPair { get; set; }
     }
 
     public class Something : ISomething
@@ -233,6 +235,8 @@ namespace dummy
         public (IAbstractItem, IAbstractItem) Items { get; set; }
 
         public (long, ISomeItem, IAbstractItem, ISomeItem, long, Result) Tricky { get; set; }
+
+        public (string, IAbstractItem)? OptionalPair { get; set; }
 
         /// <summary>
         /// Iterate over all the class instances referenced from this instance
@@ -249,6 +253,11 @@ namespace dummy
             yield return Tricky.Item3;
 
             yield return Tricky.Item4;
+
+            if (OptionalPair.HasValue)
+            {
+                yield return OptionalPair.Value.Item2;
+            }
         }
 
         /// <summary>
@@ -295,6 +304,17 @@ namespace dummy
             {
                 yield return anItem;
             }
+
+            if (OptionalPair.HasValue)
+            {
+                yield return OptionalPair.Value.Item2;
+
+                // Recurse
+                foreach (var anItem in OptionalPair.Value.Item2.Descend())
+                {
+                    yield return anItem;
+                }
+            }
         }
 
         /// <summary>
@@ -340,11 +360,13 @@ namespace dummy
         public Something(
             (string, long) pair,
             (IAbstractItem, IAbstractItem) items,
-            (long, ISomeItem, IAbstractItem, ISomeItem, long, Result) tricky)
+            (long, ISomeItem, IAbstractItem, ISomeItem, long, Result) tricky,
+            (string, IAbstractItem)? optionalPair = null)
         {
             Pair = pair;
             Items = items;
             Tricky = tricky;
+            OptionalPair = optionalPair;
         }
     }
 }  // namespace dummy

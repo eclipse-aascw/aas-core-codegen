@@ -227,6 +227,17 @@ that.{prop_name}.Count == casted.{prop_name}.Count
         elif isinstance(type_anno, intermediate.TupleTypeAnnotation):
             item_exprs = []  # type: List[Stripped]
 
+            # NOTE (mristin):
+            # A tuple is a ``System.ValueTuple``, so an optional tuple is
+            # a ``System.Nullable`` which has to be unwrapped before we can access
+            # its items.
+            if optional:
+                that_expr = Stripped(f"that.{prop_name}.Value")
+                casted_expr = Stripped(f"casted.{prop_name}.Value")
+            else:
+                that_expr = Stripped(f"that.{prop_name}")
+                casted_expr = Stripped(f"casted.{prop_name}")
+
             for i, item_type_anno in enumerate(type_anno.items):
                 assert isinstance(
                     item_type_anno, intermediate.AtomicTypeAnnotationAsTuple
@@ -238,8 +249,8 @@ that.{prop_name}.Count == casted.{prop_name}.Count
                     f"intermediate._translate._verify_only_simple_type_patterns."
                 )
 
-                item_that = f"that.{prop_name}.Item{i + 1}"
-                item_casted = f"casted.{prop_name}.Item{i + 1}"
+                item_that = f"{that_expr}.Item{i + 1}"
+                item_casted = f"{casted_expr}.Item{i + 1}"
 
                 item_primitive_type = intermediate.try_primitive_type(item_type_anno)
 
@@ -326,11 +337,30 @@ Transform(
             assert_never(type_anno)
 
         if optional and primitive_type is None:
+            # NOTE (mristin):
+            # An optional of a value type, an enumeration or a tuple here, is
+            # a ``System.Nullable``, which is probed with ``HasValue`` instead of
+            # being compared against ``null``.
+            if csharp_common.is_value_type(type_anno):
+                that_check = f"that.{prop_name}.HasValue"
+                casted_check = f"casted.{prop_name}.HasValue"
+                that_absent = f"!that.{prop_name}.HasValue"
+                casted_absent = f"!casted.{prop_name}.HasValue"
+            else:
+                that_check = f"that.{prop_name} != null"
+                casted_check = f"casted.{prop_name} != null"
+                that_absent = f"that.{prop_name} == null"
+                casted_absent = f"casted.{prop_name} == null"
+
+            # NOTE (mristin):
+            # The conditional has to be parenthesized. Otherwise, it would swallow
+            # the conjunction of all the preceding properties into its condition
+            # as the conditional operator binds weaker than the conjunction.
             expr = Stripped(
                 f"""\
-(that.{prop_name} != null && casted.{prop_name} != null)
+(({that_check} && {casted_check})
 {I}? {indent_but_first_line(expr, II)}
-{I}: that.{prop_name} == null && casted.{prop_name} == null"""
+{I}: {that_absent} && {casted_absent})"""
             )
 
         exprs.append(expr)

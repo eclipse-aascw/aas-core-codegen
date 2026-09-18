@@ -198,21 +198,21 @@ namespace dummy.Tests
                         && Transform(
                             that.TupleProperty.Item3,
                             casted.TupleProperty.Item3))
-                    && (that.OptionalStructuralProperty != null && casted.OptionalStructuralProperty != null)
+                    && ((that.OptionalStructuralProperty != null && casted.OptionalStructuralProperty != null)
                         ? Transform(
                                 that.OptionalStructuralProperty,
                                 casted.OptionalStructuralProperty)
-                        : that.OptionalStructuralProperty == null && casted.OptionalStructuralProperty == null
-                    && (that.OptionalMixedProperty != null && casted.OptionalMixedProperty != null)
+                        : that.OptionalStructuralProperty == null && casted.OptionalStructuralProperty == null)
+                    && ((that.OptionalMixedProperty != null && casted.OptionalMixedProperty != null)
                         ? Transform(
                                 that.OptionalMixedProperty,
                                 casted.OptionalMixedProperty)
-                        : that.OptionalMixedProperty == null && casted.OptionalMixedProperty == null
-                    && (that.OptionalModelTypedProperty != null && casted.OptionalModelTypedProperty != null)
+                        : that.OptionalMixedProperty == null && casted.OptionalMixedProperty == null)
+                    && ((that.OptionalModelTypedProperty != null && casted.OptionalModelTypedProperty != null)
                         ? Transform(
                                 that.OptionalModelTypedProperty,
                                 casted.OptionalModelTypedProperty)
-                        : that.OptionalModelTypedProperty == null && casted.OptionalModelTypedProperty == null);
+                        : that.OptionalModelTypedProperty == null && casted.OptionalModelTypedProperty == null));
             }
 
             private bool Transform(Aas.IUnion that, Aas.IUnion other)

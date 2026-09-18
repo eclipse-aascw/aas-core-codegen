@@ -765,6 +765,7 @@ func somethingFromMapWithoutDispatch(
 	var thePair aascommon.Tuple2[string, int64]
 	var theItems aascommon.Tuple2[aastypes.IAbstractItem, aastypes.IAbstractItem]
 	var theTricky aascommon.Tuple6[int64, aastypes.ISomeItem, aastypes.IAbstractItem, aastypes.ISomeItem, int64, aastypes.Result]
+	var theOptionalPair *aascommon.Tuple2[string, aastypes.IAbstractItem]
 
 	foundPair := false
 	foundItems := false
@@ -793,6 +794,11 @@ func somethingFromMapWithoutDispatch(
 				ResultFromJsonable,
 			)
 			foundTricky = true
+
+		case "optionalPair":
+			theOptionalPair, err = parseOptional(
+				parseTuple2(v, stringFromJsonable, AbstractItemFromJsonable),
+			)
 
 		default:
 			err = newDeserializationError(
@@ -835,6 +841,9 @@ func somethingFromMapWithoutDispatch(
 		thePair,
 		theItems,
 		theTricky,
+	)
+	result.SetOptionalPair(
+		theOptionalPair,
 	)
 
 	return
@@ -1254,6 +1263,18 @@ func somethingToMap(
 	if err != nil {
 		mustSerializationError(err).prependName("Tricky()")
 		return
+	}
+
+	if that.OptionalPair() != nil {
+		result["optionalPair"], err = serializeTuple2(
+			*(that.OptionalPair()),
+			directToJsonable[string],
+			classAsJsonableInterface[aastypes.IAbstractItem],
+		)
+		if err != nil {
+			mustSerializationError(err).prependName("OptionalPair()")
+			return
+		}
 	}
 
 	return

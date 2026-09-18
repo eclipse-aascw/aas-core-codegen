@@ -72,7 +72,8 @@ public class Copying
             return new Something(
                 that.getPair(),
                 that.getItems(),
-                that.getTricky());
+                that.getTricky(),
+                that.getOptionalPair().orElse(null));
         }
     }
 
@@ -118,10 +119,19 @@ public class Copying
                   that.getTricky().item5(),
                   that.getTricky().item6());
 
+            Tuple2<String, IAbstractItem> thatOptionalPair =
+                that.getOptionalPair().orElse(null);
+            Tuple2<String, IAbstractItem> theOptionalPair = (thatOptionalPair == null)
+                ? null
+                : new Tuple2<>(
+                  thatOptionalPair.item1(),
+                  deep(thatOptionalPair.item2()));
+
             return new Something(
                 that.getPair(),
                 theItems,
-                theTricky
+                theTricky,
+                theOptionalPair
             );
         }
     }

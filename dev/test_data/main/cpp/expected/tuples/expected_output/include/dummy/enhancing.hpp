@@ -294,6 +294,35 @@ class EnhancedSomething
     instance_->set_tricky(value);
   }
 
+  const common::optional<
+    std::tuple<
+      std::wstring,
+      std::shared_ptr<types::IAbstractItem>
+    >
+  >& optional_pair() const override {
+    return instance_->optional_pair();
+  }
+
+  common::optional<
+    std::tuple<
+      std::wstring,
+      std::shared_ptr<types::IAbstractItem>
+    >
+  >& mutable_optional_pair() override {
+    return instance_->mutable_optional_pair();
+  }
+
+  void set_optional_pair(
+    common::optional<
+      std::tuple<
+        std::wstring,
+        std::shared_ptr<types::IAbstractItem>
+      >
+    > value
+  ) override {
+    instance_->set_optional_pair(value);
+  }
+
   const std::shared_ptr<E>& enhancement() const {
     return enhancement_;
   }
@@ -483,6 +512,31 @@ std::shared_ptr<types::ISomething> WrapSomething(
 
     that->set_tricky(
       std::move(wrapped)
+    );
+  }
+
+  if (that->optional_pair().has_value()) {
+    const std::tuple<
+        std::wstring,
+        std::shared_ptr<types::IAbstractItem>
+      >& value(
+      that->optional_pair().value()
+    );
+
+    std::tuple<
+      std::wstring,
+      std::shared_ptr<types::IAbstractItem>
+    > wrapped(value);
+
+    std::get<1>(wrapped) = Wrap<E>(
+      std::get<1>(value),
+      factory
+    );
+
+    that->set_optional_pair(
+      common::make_optional(
+        std::move(wrapped)
+      )
     );
   }
 

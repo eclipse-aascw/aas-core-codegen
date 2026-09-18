@@ -473,6 +473,13 @@ namespace dummy
                     LongFrom,
                     ResultFrom));
 
+            private static readonly Deserializer<
+                (string, IAbstractItem)
+            > Parse_TupleOf2_string_IAbstractItem = (
+                AsTuple2<string, IAbstractItem>(
+                    StringFrom,
+                    IAbstractItemFrom));
+
             /// <summary>
             /// Deserialize the enumeration Result from the <paramref name="node" />.
             /// </summary>
@@ -713,6 +720,7 @@ namespace dummy
                 (string, long)? thePair = null;
                 (IAbstractItem, IAbstractItem)? theItems = null;
                 (long, ISomeItem, IAbstractItem, ISomeItem, long, Result)? theTricky = null;
+                (string, IAbstractItem)? theOptionalPair = null;
 
                 foreach (var keyValue in obj)
                 {
@@ -728,6 +736,10 @@ namespace dummy
                             break;
                         case "tricky":
                             theTricky = Parse_TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result(
+                                keyValue.Value, out error);
+                            break;
+                        case "optionalPair":
+                            theOptionalPair = Parse_TupleOf2_string_IAbstractItem(
                                 keyValue.Value, out error);
                             break;
                         default:
@@ -775,7 +787,8 @@ namespace dummy
                             "Unexpected null, had to be handled before"),
                     theTricky
                          ?? throw new System.InvalidOperationException(
-                            "Unexpected null, had to be handled before"));
+                            "Unexpected null, had to be handled before"),
+                    theOptionalPair);
             }  // internal static SomethingFrom
         }  // public static class DeserializeImplementation
 
@@ -1206,6 +1219,13 @@ namespace dummy
                     ToJsonValue,
                     Serialize.ResultToJsonValue));
 
+            private static readonly Serializer<
+                (string, IAbstractItem)
+            > Serialize_TupleOf2_string_IAbstractItem = (
+                SerializeTuple2<string, IAbstractItem>(
+                    ToJsonValue,
+                    TransformIClass));
+
             public override Nodes.JsonObject TransformSomeItem(
                 Aas.ISomeItem that
             )
@@ -1283,6 +1303,21 @@ namespace dummy
                     failure.Error.PrependSegment(
                         new Reporting.NameSegment("tricky"));
                     throw;
+                }
+
+                if (that.OptionalPair.HasValue)
+                {
+                    try
+                    {
+                        result["optionalPair"] = Serialize_TupleOf2_string_IAbstractItem(
+                            that.OptionalPair.Value);
+                    }
+                    catch (SerializationFailure failure)
+                    {
+                        failure.Error.PrependSegment(
+                            new Reporting.NameSegment("optionalPair"));
+                        throw;
+                    }
                 }
 
                 return result;

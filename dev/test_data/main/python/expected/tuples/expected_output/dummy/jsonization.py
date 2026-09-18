@@ -510,6 +510,23 @@ def _tuple2_of__abstract_item__abstract_item_from_jsonable(
     )
 
 
+def _tuple2_of__str__abstract_item_from_jsonable(
+    jsonable: Jsonable
+) -> Tuple[str, aas_types.AbstractItem]:
+    """
+    Parse :paramref:`jsonable` as a tuple of 2 item(s).
+
+    :param jsonable: JSON-able structure to be parsed
+    :return: parsed tuple
+    :raise: :py:class:`DeserializationException` if unexpected :paramref:`jsonable`
+    """
+    return _tuple2_from_jsonable(
+        jsonable,
+        _str_from_jsonable,
+        abstract_item_from_jsonable
+    )
+
+
 def _tuple2_of__str__int_from_jsonable(
     jsonable: Jsonable
 ) -> Tuple[str, int]:
@@ -722,6 +739,7 @@ def something_from_jsonable(
             aas_types.Result,
         ]
     ] = None
+    the_optional_pair: Optional[Tuple[str, aas_types.AbstractItem]] = None
 
     try:
         for key, jsonable_value in mapping.items():
@@ -737,6 +755,10 @@ def something_from_jsonable(
             elif key == 'tricky':
                 the_tricky = (
                     _tuple6_of__int__some_item__abstract_item__some_item__int__result_from_jsonable(jsonable_value)
+                )
+            elif key == 'optionalPair':
+                the_optional_pair = (
+                    _tuple2_of__str__abstract_item_from_jsonable(jsonable_value)
                 )
             else:
                 raise DeserializationException(
@@ -766,7 +788,8 @@ def something_from_jsonable(
     return aas_types.Something(
         the_pair,
         the_items,
-        the_tricky
+        the_tricky,
+        the_optional_pair
     )
 
 
@@ -868,6 +891,29 @@ def _tuple2_of__abstract_item__abstract_item_to_jsonable(
     except SerializationException as exception:
         exception._prepend_index(0)
         raise
+    try:
+        jsonable.append(
+            that[1].transform(_SERIALIZER)
+        )
+    except SerializationException as exception:
+        exception._prepend_index(1)
+        raise
+    return jsonable
+
+
+def _tuple2_of__str__abstract_item_to_jsonable(
+    that: Tuple[str, aas_types.AbstractItem]
+) -> List[MutableJsonable]:
+    """
+    Serialize :paramref:`that` as a tuple of 2 item(s).
+
+    :param that: tuple to be serialized
+    :return: JSON-able representation of :paramref:`that`
+    """
+    jsonable = []  # type: List[MutableJsonable]
+    jsonable.append(
+        that[0]
+    )
     try:
         jsonable.append(
             that[1].transform(_SERIALIZER)
@@ -1013,6 +1059,14 @@ def _something_to_jsonable(
     except SerializationException as exception:
         exception._prepend_property('tricky')
         raise
+    if that.optional_pair is not None:
+        try:
+            jsonable['optionalPair'] = _tuple2_of__str__abstract_item_to_jsonable(
+                that.optional_pair
+            )
+        except SerializationException as exception:
+            exception._prepend_property('optional_pair')
+            raise
     return jsonable
 
 

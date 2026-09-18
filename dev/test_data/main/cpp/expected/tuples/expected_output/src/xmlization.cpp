@@ -3118,7 +3118,8 @@ enum class OfAnotherItem : std::uint32_t {
 enum class OfSomething : std::uint32_t {
   kPair = 0,
   kItems = 1,
-  kTricky = 2
+  kTricky = 2,
+  kOptionalPair = 3
 };  // enum class OfSomething
 
 const std::unordered_map<
@@ -3156,6 +3157,10 @@ const std::unordered_map<
   {
     "tricky",
     OfSomething::kTricky
+  },
+  {
+    "optionalPair",
+    OfSomething::kOptionalPair
   }
 };
 
@@ -3688,6 +3693,13 @@ std::pair<
     >
   > the_tricky;
 
+  common::optional<
+    std::tuple<
+      std::wstring,
+      std::shared_ptr<types::IAbstractItem>
+    >
+  > the_optional_pair;
+
   // endregion Initialization
 
   while (true) {
@@ -3870,6 +3882,33 @@ std::pair<
         );
         break;
       }
+      case properties::OfSomething::kOptionalPair: {
+        if (the_optional_pair.has_value()) {
+          error = DuplicatePropertyError(name);
+          break;
+        }
+
+        std::tie(
+          the_optional_pair,
+          error
+        ) = DeserializeTuple2<
+          std::wstring,
+          std::shared_ptr<types::IAbstractItem>
+        >(
+          reader,
+          [](ReaderMergingText& a_reader) {
+            return DeserializeValueFromVElement<
+              std::wstring
+            >(
+              a_reader,
+              DeserializeWstring,
+              "v1"
+            );
+          },
+          AbstractItemFromElement
+        );
+        break;
+      }
       default:
         throw std::logic_error(
           common::Concat(
@@ -3990,7 +4029,8 @@ std::pair<
       new types::Something(
         std::move(*the_pair),
         std::move(*the_items),
-        std::move(*the_tricky)
+        std::move(*the_tricky),
+        std::move(the_optional_pair)
       )
     ),
     common::nullopt
@@ -5879,6 +5919,61 @@ common::optional<SerializationError> SerializeSomethingAsSequence(
   );
   if (error.has_value()) {
     return error;
+  }
+
+  if (that.optional_pair().has_value()) {
+    error = SerializePropertyAsElement(
+      "optionalPair",
+      *(that.optional_pair()),
+      writer,
+      iteration::Property::kOptionalPair,
+      [](
+        const std::tuple<
+          std::wstring,
+          std::shared_ptr<types::IAbstractItem>
+        >& a_tuple,
+        SelfClosingWriter& a_writer
+      ) {
+        return SerializeTuple2(
+          a_tuple,
+          a_writer,
+          [](
+            const std::wstring& item,
+            SelfClosingWriter& a_writer
+          ) -> common::optional<SerializationError> {
+            a_writer.StartElement(
+              "v1"
+            );
+            if (a_writer.error().has_value()) {
+              common::optional<SerializationError>&& error = a_writer.move_error();
+              return error;
+            }
+
+            common::optional<SerializationError> error = SerializeWstring(
+              item,
+              a_writer
+            );
+            if (error.has_value()) {
+              return error;
+            }
+
+            a_writer.StopElement(
+              "v1"
+            );
+            if (a_writer.error().has_value()) {
+              common::optional<SerializationError>&& error = a_writer.move_error();
+              return error;
+            }
+
+            return common::nullopt;
+          },
+          SerializeAbstractItemPtrAsElement
+        );
+      }
+    );
+    if (error.has_value()) {
+      return error;
+    }
   }
 
   writer.Finish();

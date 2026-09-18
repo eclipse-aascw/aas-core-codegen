@@ -37,6 +37,10 @@ public interface ISomething extends IClass {
     ISomeItem,
     Long,
     Result> tricky);
+
+  Optional<Tuple2<String, IAbstractItem>> getOptionalPair();
+
+  void setOptionalPair(Tuple2<String, IAbstractItem> optionalPair);
 }
 
 /*

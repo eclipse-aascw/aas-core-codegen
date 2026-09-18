@@ -270,6 +270,12 @@ type ISomething interface {
 	SetTricky(
 		value aascommon.Tuple6[int64, ISomeItem, IAbstractItem, ISomeItem, int64, Result],
 	);
+
+	OptionalPair() *aascommon.Tuple2[string, IAbstractItem];
+
+	SetOptionalPair(
+		value *aascommon.Tuple2[string, IAbstractItem],
+	);
 }
 
 // Check whether the instance corresponds to [aastypes.ISomething]
@@ -289,6 +295,7 @@ type Something struct {
 	pair aascommon.Tuple2[string, int64]
 	items aascommon.Tuple2[IAbstractItem, IAbstractItem]
 	tricky aascommon.Tuple6[int64, ISomeItem, IAbstractItem, ISomeItem, int64, Result]
+	optionalPair *aascommon.Tuple2[string, IAbstractItem]
 }
 
 func (s *Something) Pair(
@@ -322,6 +329,17 @@ func (s *Something) SetTricky(
 	value aascommon.Tuple6[int64, ISomeItem, IAbstractItem, ISomeItem, int64, Result],
 ) {
 	s.tricky = value
+}
+
+func (s *Something) OptionalPair(
+) *aascommon.Tuple2[string, IAbstractItem] {
+	return s.optionalPair
+}
+
+func (s *Something) SetOptionalPair(
+	value *aascommon.Tuple2[string, IAbstractItem],
+) {
+	s.optionalPair = value
 }
 
 func (s *Something) ModelType(
@@ -370,6 +388,15 @@ func (s *Something) DescendOnce(
 	)
 	if abort {
 		return
+	}
+
+	if s.optionalPair != nil {
+		abort = action(
+			s.optionalPair.Item2,
+		)
+		if abort {
+			return
+		}
 	}
 
 	return
@@ -446,6 +473,21 @@ func (s *Something) Descend(
 		return
 	}
 
+	if s.optionalPair != nil {
+		abort = action(
+			s.optionalPair.Item2,
+		)
+		if abort {
+			return
+		}
+		abort = s.optionalPair.Item2.Descend(
+			action,
+		)
+		if abort {
+			return
+		}
+	}
+
 	return
 }
 
@@ -460,6 +502,7 @@ func NewSomething(
 		pair: pair,
 		items: items,
 		tricky: tricky,
+		optionalPair: nil,
 	}
 }
 

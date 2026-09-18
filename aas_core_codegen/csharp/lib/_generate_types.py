@@ -615,6 +615,15 @@ def _generate_descend_body(cls: intermediate.ConcreteClass, recurse: bool) -> St
 
         type_anno = intermediate.beneath_optional(prop.type_annotation)
 
+        # NOTE (mristin):
+        # An optional of a value type, such as a tuple, is a ``System.Nullable``,
+        # so we have to unwrap it before we can descend into it.
+        access_expr = Stripped(prop_name)
+        if isinstance(
+            prop.type_annotation, intermediate.OptionalTypeAnnotation
+        ) and csharp_common.is_value_type(type_anno):
+            access_expr = Stripped(f"{prop_name}.Value")
+
         if isinstance(type_anno, intermediate.PrimitiveTypeAnnotation):
             continue
 
@@ -629,12 +638,12 @@ def _generate_descend_body(cls: intermediate.ConcreteClass, recurse: bool) -> St
                 type_anno.our_type,
                 (intermediate.AbstractClass, intermediate.ConcreteClass),
             ):
-                prop_blocks.append(Stripped(f"yield return {prop_name};"))
+                prop_blocks.append(Stripped(f"yield return {access_expr};"))
 
                 if recurse:
                     prop_blocks.append(
                         _generate_recurse_snippet(
-                            descendee_expr=prop_name, item_var=_OUTER_ITEM_VAR
+                            descendee_expr=access_expr, item_var=_OUTER_ITEM_VAR
                         )
                     )
 
@@ -645,7 +654,7 @@ def _generate_descend_body(cls: intermediate.ConcreteClass, recurse: bool) -> St
                 # keep this as its own branch, separate from the class branch
                 # above, so that it can diverge independently, *e.g.*, if
                 # primitive alternatives are ever allowed into a named union.
-                underlying_expr = f"{prop_name}.Underlying"
+                underlying_expr = f"{access_expr}.Underlying"
 
                 prop_blocks.append(Stripped(f"yield return {underlying_expr};"))
 
@@ -709,7 +718,7 @@ def _generate_descend_body(cls: intermediate.ConcreteClass, recurse: bool) -> St
                 prop_blocks.append(
                     Stripped(
                         f"""\
-foreach (var {_OUTER_ITEM_VAR} in {prop_name})
+foreach (var {_OUTER_ITEM_VAR} in {access_expr})
 {{
 {I}{indent_but_first_line(loop_body, I)}
 }}"""
@@ -729,7 +738,7 @@ foreach (var {_OUTER_ITEM_VAR} in {prop_name})
                     item_type_anno.our_type,
                     (intermediate.AbstractClass, intermediate.ConcreteClass),
                 ):
-                    item_expr = Stripped(f"{prop_name}.Item{i + 1}")
+                    item_expr = Stripped(f"{access_expr}.Item{i + 1}")
                 elif isinstance(item_type_anno.our_type, intermediate.NamedUnion):
                     # NOTE (mristin):
                     # A named union is not itself an ``IClass``, so we descend
@@ -738,7 +747,7 @@ foreach (var {_OUTER_ITEM_VAR} in {prop_name})
                     # the class branch above, so that it can diverge
                     # independently, *e.g.*, if primitive alternatives are
                     # ever allowed into a named union.
-                    item_expr = Stripped(f"{prop_name}.Item{i + 1}.Underlying")
+                    item_expr = Stripped(f"{access_expr}.Item{i + 1}.Underlying")
                 else:
                     continue
 
@@ -761,9 +770,15 @@ foreach (var {_OUTER_ITEM_VAR} in {prop_name})
         block = Stripped("\n\n".join(prop_blocks))
 
         if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
+            condition = (
+                f"{prop_name}.HasValue"
+                if csharp_common.is_value_type(type_anno)
+                else f"{prop_name} != null"
+            )
+
             block = Stripped(
                 f"""\
-if ({prop_name} != null)
+if ({condition})
 {{
 {I}{indent_but_first_line(block, I)}
 }}"""

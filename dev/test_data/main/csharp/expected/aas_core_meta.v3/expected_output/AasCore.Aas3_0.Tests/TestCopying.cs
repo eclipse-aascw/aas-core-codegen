@@ -40,12 +40,12 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.SemanticId != null && casted.SemanticId != null)
+                    ((that.SemanticId != null && casted.SemanticId != null)
                         ? Transform(
                                 that.SemanticId,
                                 casted.SemanticId)
-                        : that.SemanticId == null && casted.SemanticId == null
-                    && (that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
+                        : that.SemanticId == null && casted.SemanticId == null)
+                    && ((that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
                         ? that.SupplementalSemanticIds.Count == casted.SupplementalSemanticIds.Count
                             && (
                                 that.SupplementalSemanticIds
@@ -53,13 +53,13 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SupplementalSemanticIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null
+                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null)
                     && that.Name == casted.Name
-                    && (that.ValueType != null && casted.ValueType != null)
+                    && ((that.ValueType.HasValue && casted.ValueType.HasValue)
                         ? that.ValueType == casted.ValueType
-                        : that.ValueType == null && casted.ValueType == null
+                        : !that.ValueType.HasValue && !casted.ValueType.HasValue)
                     && that.Value == casted.Value
-                    && (that.RefersTo != null && casted.RefersTo != null)
+                    && ((that.RefersTo != null && casted.RefersTo != null)
                         ? that.RefersTo.Count == casted.RefersTo.Count
                             && (
                                 that.RefersTo
@@ -67,7 +67,7 @@ namespace AasCore.Aas3_0.Tests
                                         casted.RefersTo,
                                         Transform)
                                     .All(item => item))
-                        : that.RefersTo == null && casted.RefersTo == null);
+                        : that.RefersTo == null && casted.RefersTo == null));
             }
 
             public override bool TransformAdministrativeInformation(
@@ -80,7 +80,7 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
+                    ((that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
                         ? that.EmbeddedDataSpecifications.Count == casted.EmbeddedDataSpecifications.Count
                             && (
                                 that.EmbeddedDataSpecifications
@@ -88,14 +88,14 @@ namespace AasCore.Aas3_0.Tests
                                         casted.EmbeddedDataSpecifications,
                                         Transform)
                                     .All(item => item))
-                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null
+                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null)
                     && that.Version == casted.Version
                     && that.Revision == casted.Revision
-                    && (that.Creator != null && casted.Creator != null)
+                    && ((that.Creator != null && casted.Creator != null)
                         ? Transform(
                                 that.Creator,
                                 casted.Creator)
-                        : that.Creator == null && casted.Creator == null
+                        : that.Creator == null && casted.Creator == null)
                     && that.TemplateId == casted.TemplateId);
             }
 
@@ -109,12 +109,12 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.SemanticId != null && casted.SemanticId != null)
+                    ((that.SemanticId != null && casted.SemanticId != null)
                         ? Transform(
                                 that.SemanticId,
                                 casted.SemanticId)
-                        : that.SemanticId == null && casted.SemanticId == null
-                    && (that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
+                        : that.SemanticId == null && casted.SemanticId == null)
+                    && ((that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
                         ? that.SupplementalSemanticIds.Count == casted.SupplementalSemanticIds.Count
                             && (
                                 that.SupplementalSemanticIds
@@ -122,18 +122,18 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SupplementalSemanticIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null
-                    && (that.Kind != null && casted.Kind != null)
+                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null)
+                    && ((that.Kind.HasValue && casted.Kind.HasValue)
                         ? that.Kind == casted.Kind
-                        : that.Kind == null && casted.Kind == null
+                        : !that.Kind.HasValue && !casted.Kind.HasValue)
                     && that.Type == casted.Type
                     && that.ValueType == casted.ValueType
                     && that.Value == casted.Value
-                    && (that.ValueId != null && casted.ValueId != null)
+                    && ((that.ValueId != null && casted.ValueId != null)
                         ? Transform(
                                 that.ValueId,
                                 casted.ValueId)
-                        : that.ValueId == null && casted.ValueId == null);
+                        : that.ValueId == null && casted.ValueId == null));
             }
 
             public override bool TransformAssetAdministrationShell(
@@ -146,7 +146,7 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.Extensions != null && casted.Extensions != null)
+                    ((that.Extensions != null && casted.Extensions != null)
                         ? that.Extensions.Count == casted.Extensions.Count
                             && (
                                 that.Extensions
@@ -154,10 +154,10 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Extensions,
                                         Transform)
                                     .All(item => item))
-                        : that.Extensions == null && casted.Extensions == null
+                        : that.Extensions == null && casted.Extensions == null)
                     && that.Category == casted.Category
                     && that.IdShort == casted.IdShort
-                    && (that.DisplayName != null && casted.DisplayName != null)
+                    && ((that.DisplayName != null && casted.DisplayName != null)
                         ? that.DisplayName.Count == casted.DisplayName.Count
                             && (
                                 that.DisplayName
@@ -165,8 +165,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.DisplayName,
                                         Transform)
                                     .All(item => item))
-                        : that.DisplayName == null && casted.DisplayName == null
-                    && (that.Description != null && casted.Description != null)
+                        : that.DisplayName == null && casted.DisplayName == null)
+                    && ((that.Description != null && casted.Description != null)
                         ? that.Description.Count == casted.Description.Count
                             && (
                                 that.Description
@@ -174,14 +174,14 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Description,
                                         Transform)
                                     .All(item => item))
-                        : that.Description == null && casted.Description == null
-                    && (that.Administration != null && casted.Administration != null)
+                        : that.Description == null && casted.Description == null)
+                    && ((that.Administration != null && casted.Administration != null)
                         ? Transform(
                                 that.Administration,
                                 casted.Administration)
-                        : that.Administration == null && casted.Administration == null
+                        : that.Administration == null && casted.Administration == null)
                     && that.Id == casted.Id
-                    && (that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
+                    && ((that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
                         ? that.EmbeddedDataSpecifications.Count == casted.EmbeddedDataSpecifications.Count
                             && (
                                 that.EmbeddedDataSpecifications
@@ -189,16 +189,16 @@ namespace AasCore.Aas3_0.Tests
                                         casted.EmbeddedDataSpecifications,
                                         Transform)
                                     .All(item => item))
-                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null
-                    && (that.DerivedFrom != null && casted.DerivedFrom != null)
+                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null)
+                    && ((that.DerivedFrom != null && casted.DerivedFrom != null)
                         ? Transform(
                                 that.DerivedFrom,
                                 casted.DerivedFrom)
-                        : that.DerivedFrom == null && casted.DerivedFrom == null
+                        : that.DerivedFrom == null && casted.DerivedFrom == null)
                     && Transform(
                         that.AssetInformation,
                         casted.AssetInformation)
-                    && (that.Submodels != null && casted.Submodels != null)
+                    && ((that.Submodels != null && casted.Submodels != null)
                         ? that.Submodels.Count == casted.Submodels.Count
                             && (
                                 that.Submodels
@@ -206,7 +206,7 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Submodels,
                                         Transform)
                                     .All(item => item))
-                        : that.Submodels == null && casted.Submodels == null);
+                        : that.Submodels == null && casted.Submodels == null));
             }
 
             public override bool TransformAssetInformation(
@@ -221,7 +221,7 @@ namespace AasCore.Aas3_0.Tests
                 return (
                     that.AssetKind == casted.AssetKind
                     && that.GlobalAssetId == casted.GlobalAssetId
-                    && (that.SpecificAssetIds != null && casted.SpecificAssetIds != null)
+                    && ((that.SpecificAssetIds != null && casted.SpecificAssetIds != null)
                         ? that.SpecificAssetIds.Count == casted.SpecificAssetIds.Count
                             && (
                                 that.SpecificAssetIds
@@ -229,13 +229,13 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SpecificAssetIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SpecificAssetIds == null && casted.SpecificAssetIds == null
+                        : that.SpecificAssetIds == null && casted.SpecificAssetIds == null)
                     && that.AssetType == casted.AssetType
-                    && (that.DefaultThumbnail != null && casted.DefaultThumbnail != null)
+                    && ((that.DefaultThumbnail != null && casted.DefaultThumbnail != null)
                         ? Transform(
                                 that.DefaultThumbnail,
                                 casted.DefaultThumbnail)
-                        : that.DefaultThumbnail == null && casted.DefaultThumbnail == null);
+                        : that.DefaultThumbnail == null && casted.DefaultThumbnail == null));
             }
 
             public override bool TransformResource(
@@ -262,12 +262,12 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.SemanticId != null && casted.SemanticId != null)
+                    ((that.SemanticId != null && casted.SemanticId != null)
                         ? Transform(
                                 that.SemanticId,
                                 casted.SemanticId)
-                        : that.SemanticId == null && casted.SemanticId == null
-                    && (that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
+                        : that.SemanticId == null && casted.SemanticId == null)
+                    && ((that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
                         ? that.SupplementalSemanticIds.Count == casted.SupplementalSemanticIds.Count
                             && (
                                 that.SupplementalSemanticIds
@@ -275,14 +275,14 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SupplementalSemanticIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null
+                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null)
                     && that.Name == casted.Name
                     && that.Value == casted.Value
-                    && (that.ExternalSubjectId != null && casted.ExternalSubjectId != null)
+                    && ((that.ExternalSubjectId != null && casted.ExternalSubjectId != null)
                         ? Transform(
                                 that.ExternalSubjectId,
                                 casted.ExternalSubjectId)
-                        : that.ExternalSubjectId == null && casted.ExternalSubjectId == null);
+                        : that.ExternalSubjectId == null && casted.ExternalSubjectId == null));
             }
 
             public override bool TransformSubmodel(
@@ -295,7 +295,7 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.Extensions != null && casted.Extensions != null)
+                    ((that.Extensions != null && casted.Extensions != null)
                         ? that.Extensions.Count == casted.Extensions.Count
                             && (
                                 that.Extensions
@@ -303,10 +303,10 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Extensions,
                                         Transform)
                                     .All(item => item))
-                        : that.Extensions == null && casted.Extensions == null
+                        : that.Extensions == null && casted.Extensions == null)
                     && that.Category == casted.Category
                     && that.IdShort == casted.IdShort
-                    && (that.DisplayName != null && casted.DisplayName != null)
+                    && ((that.DisplayName != null && casted.DisplayName != null)
                         ? that.DisplayName.Count == casted.DisplayName.Count
                             && (
                                 that.DisplayName
@@ -314,8 +314,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.DisplayName,
                                         Transform)
                                     .All(item => item))
-                        : that.DisplayName == null && casted.DisplayName == null
-                    && (that.Description != null && casted.Description != null)
+                        : that.DisplayName == null && casted.DisplayName == null)
+                    && ((that.Description != null && casted.Description != null)
                         ? that.Description.Count == casted.Description.Count
                             && (
                                 that.Description
@@ -323,22 +323,22 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Description,
                                         Transform)
                                     .All(item => item))
-                        : that.Description == null && casted.Description == null
-                    && (that.Administration != null && casted.Administration != null)
+                        : that.Description == null && casted.Description == null)
+                    && ((that.Administration != null && casted.Administration != null)
                         ? Transform(
                                 that.Administration,
                                 casted.Administration)
-                        : that.Administration == null && casted.Administration == null
+                        : that.Administration == null && casted.Administration == null)
                     && that.Id == casted.Id
-                    && (that.Kind != null && casted.Kind != null)
+                    && ((that.Kind.HasValue && casted.Kind.HasValue)
                         ? that.Kind == casted.Kind
-                        : that.Kind == null && casted.Kind == null
-                    && (that.SemanticId != null && casted.SemanticId != null)
+                        : !that.Kind.HasValue && !casted.Kind.HasValue)
+                    && ((that.SemanticId != null && casted.SemanticId != null)
                         ? Transform(
                                 that.SemanticId,
                                 casted.SemanticId)
-                        : that.SemanticId == null && casted.SemanticId == null
-                    && (that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
+                        : that.SemanticId == null && casted.SemanticId == null)
+                    && ((that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
                         ? that.SupplementalSemanticIds.Count == casted.SupplementalSemanticIds.Count
                             && (
                                 that.SupplementalSemanticIds
@@ -346,8 +346,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SupplementalSemanticIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null
-                    && (that.Qualifiers != null && casted.Qualifiers != null)
+                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null)
+                    && ((that.Qualifiers != null && casted.Qualifiers != null)
                         ? that.Qualifiers.Count == casted.Qualifiers.Count
                             && (
                                 that.Qualifiers
@@ -355,8 +355,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Qualifiers,
                                         Transform)
                                     .All(item => item))
-                        : that.Qualifiers == null && casted.Qualifiers == null
-                    && (that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
+                        : that.Qualifiers == null && casted.Qualifiers == null)
+                    && ((that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
                         ? that.EmbeddedDataSpecifications.Count == casted.EmbeddedDataSpecifications.Count
                             && (
                                 that.EmbeddedDataSpecifications
@@ -364,8 +364,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.EmbeddedDataSpecifications,
                                         Transform)
                                     .All(item => item))
-                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null
-                    && (that.SubmodelElements != null && casted.SubmodelElements != null)
+                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null)
+                    && ((that.SubmodelElements != null && casted.SubmodelElements != null)
                         ? that.SubmodelElements.Count == casted.SubmodelElements.Count
                             && (
                                 that.SubmodelElements
@@ -373,7 +373,7 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SubmodelElements,
                                         Transform)
                                     .All(item => item))
-                        : that.SubmodelElements == null && casted.SubmodelElements == null);
+                        : that.SubmodelElements == null && casted.SubmodelElements == null));
             }
 
             public override bool TransformRelationshipElement(
@@ -386,7 +386,7 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.Extensions != null && casted.Extensions != null)
+                    ((that.Extensions != null && casted.Extensions != null)
                         ? that.Extensions.Count == casted.Extensions.Count
                             && (
                                 that.Extensions
@@ -394,10 +394,10 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Extensions,
                                         Transform)
                                     .All(item => item))
-                        : that.Extensions == null && casted.Extensions == null
+                        : that.Extensions == null && casted.Extensions == null)
                     && that.Category == casted.Category
                     && that.IdShort == casted.IdShort
-                    && (that.DisplayName != null && casted.DisplayName != null)
+                    && ((that.DisplayName != null && casted.DisplayName != null)
                         ? that.DisplayName.Count == casted.DisplayName.Count
                             && (
                                 that.DisplayName
@@ -405,8 +405,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.DisplayName,
                                         Transform)
                                     .All(item => item))
-                        : that.DisplayName == null && casted.DisplayName == null
-                    && (that.Description != null && casted.Description != null)
+                        : that.DisplayName == null && casted.DisplayName == null)
+                    && ((that.Description != null && casted.Description != null)
                         ? that.Description.Count == casted.Description.Count
                             && (
                                 that.Description
@@ -414,13 +414,13 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Description,
                                         Transform)
                                     .All(item => item))
-                        : that.Description == null && casted.Description == null
-                    && (that.SemanticId != null && casted.SemanticId != null)
+                        : that.Description == null && casted.Description == null)
+                    && ((that.SemanticId != null && casted.SemanticId != null)
                         ? Transform(
                                 that.SemanticId,
                                 casted.SemanticId)
-                        : that.SemanticId == null && casted.SemanticId == null
-                    && (that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
+                        : that.SemanticId == null && casted.SemanticId == null)
+                    && ((that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
                         ? that.SupplementalSemanticIds.Count == casted.SupplementalSemanticIds.Count
                             && (
                                 that.SupplementalSemanticIds
@@ -428,8 +428,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SupplementalSemanticIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null
-                    && (that.Qualifiers != null && casted.Qualifiers != null)
+                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null)
+                    && ((that.Qualifiers != null && casted.Qualifiers != null)
                         ? that.Qualifiers.Count == casted.Qualifiers.Count
                             && (
                                 that.Qualifiers
@@ -437,8 +437,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Qualifiers,
                                         Transform)
                                     .All(item => item))
-                        : that.Qualifiers == null && casted.Qualifiers == null
-                    && (that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
+                        : that.Qualifiers == null && casted.Qualifiers == null)
+                    && ((that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
                         ? that.EmbeddedDataSpecifications.Count == casted.EmbeddedDataSpecifications.Count
                             && (
                                 that.EmbeddedDataSpecifications
@@ -446,7 +446,7 @@ namespace AasCore.Aas3_0.Tests
                                         casted.EmbeddedDataSpecifications,
                                         Transform)
                                     .All(item => item))
-                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null
+                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null)
                     && Transform(
                         that.First,
                         casted.First)
@@ -465,7 +465,7 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.Extensions != null && casted.Extensions != null)
+                    ((that.Extensions != null && casted.Extensions != null)
                         ? that.Extensions.Count == casted.Extensions.Count
                             && (
                                 that.Extensions
@@ -473,10 +473,10 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Extensions,
                                         Transform)
                                     .All(item => item))
-                        : that.Extensions == null && casted.Extensions == null
+                        : that.Extensions == null && casted.Extensions == null)
                     && that.Category == casted.Category
                     && that.IdShort == casted.IdShort
-                    && (that.DisplayName != null && casted.DisplayName != null)
+                    && ((that.DisplayName != null && casted.DisplayName != null)
                         ? that.DisplayName.Count == casted.DisplayName.Count
                             && (
                                 that.DisplayName
@@ -484,8 +484,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.DisplayName,
                                         Transform)
                                     .All(item => item))
-                        : that.DisplayName == null && casted.DisplayName == null
-                    && (that.Description != null && casted.Description != null)
+                        : that.DisplayName == null && casted.DisplayName == null)
+                    && ((that.Description != null && casted.Description != null)
                         ? that.Description.Count == casted.Description.Count
                             && (
                                 that.Description
@@ -493,13 +493,13 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Description,
                                         Transform)
                                     .All(item => item))
-                        : that.Description == null && casted.Description == null
-                    && (that.SemanticId != null && casted.SemanticId != null)
+                        : that.Description == null && casted.Description == null)
+                    && ((that.SemanticId != null && casted.SemanticId != null)
                         ? Transform(
                                 that.SemanticId,
                                 casted.SemanticId)
-                        : that.SemanticId == null && casted.SemanticId == null
-                    && (that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
+                        : that.SemanticId == null && casted.SemanticId == null)
+                    && ((that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
                         ? that.SupplementalSemanticIds.Count == casted.SupplementalSemanticIds.Count
                             && (
                                 that.SupplementalSemanticIds
@@ -507,8 +507,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SupplementalSemanticIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null
-                    && (that.Qualifiers != null && casted.Qualifiers != null)
+                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null)
+                    && ((that.Qualifiers != null && casted.Qualifiers != null)
                         ? that.Qualifiers.Count == casted.Qualifiers.Count
                             && (
                                 that.Qualifiers
@@ -516,8 +516,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Qualifiers,
                                         Transform)
                                     .All(item => item))
-                        : that.Qualifiers == null && casted.Qualifiers == null
-                    && (that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
+                        : that.Qualifiers == null && casted.Qualifiers == null)
+                    && ((that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
                         ? that.EmbeddedDataSpecifications.Count == casted.EmbeddedDataSpecifications.Count
                             && (
                                 that.EmbeddedDataSpecifications
@@ -525,18 +525,18 @@ namespace AasCore.Aas3_0.Tests
                                         casted.EmbeddedDataSpecifications,
                                         Transform)
                                     .All(item => item))
-                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null
+                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null)
                     && that.OrderRelevant == casted.OrderRelevant
-                    && (that.SemanticIdListElement != null && casted.SemanticIdListElement != null)
+                    && ((that.SemanticIdListElement != null && casted.SemanticIdListElement != null)
                         ? Transform(
                                 that.SemanticIdListElement,
                                 casted.SemanticIdListElement)
-                        : that.SemanticIdListElement == null && casted.SemanticIdListElement == null
+                        : that.SemanticIdListElement == null && casted.SemanticIdListElement == null)
                     && that.TypeValueListElement == casted.TypeValueListElement
-                    && (that.ValueTypeListElement != null && casted.ValueTypeListElement != null)
+                    && ((that.ValueTypeListElement.HasValue && casted.ValueTypeListElement.HasValue)
                         ? that.ValueTypeListElement == casted.ValueTypeListElement
-                        : that.ValueTypeListElement == null && casted.ValueTypeListElement == null
-                    && (that.Value != null && casted.Value != null)
+                        : !that.ValueTypeListElement.HasValue && !casted.ValueTypeListElement.HasValue)
+                    && ((that.Value != null && casted.Value != null)
                         ? that.Value.Count == casted.Value.Count
                             && (
                                 that.Value
@@ -544,7 +544,7 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Value,
                                         Transform)
                                     .All(item => item))
-                        : that.Value == null && casted.Value == null);
+                        : that.Value == null && casted.Value == null));
             }
 
             public override bool TransformSubmodelElementCollection(
@@ -557,7 +557,7 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.Extensions != null && casted.Extensions != null)
+                    ((that.Extensions != null && casted.Extensions != null)
                         ? that.Extensions.Count == casted.Extensions.Count
                             && (
                                 that.Extensions
@@ -565,10 +565,10 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Extensions,
                                         Transform)
                                     .All(item => item))
-                        : that.Extensions == null && casted.Extensions == null
+                        : that.Extensions == null && casted.Extensions == null)
                     && that.Category == casted.Category
                     && that.IdShort == casted.IdShort
-                    && (that.DisplayName != null && casted.DisplayName != null)
+                    && ((that.DisplayName != null && casted.DisplayName != null)
                         ? that.DisplayName.Count == casted.DisplayName.Count
                             && (
                                 that.DisplayName
@@ -576,8 +576,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.DisplayName,
                                         Transform)
                                     .All(item => item))
-                        : that.DisplayName == null && casted.DisplayName == null
-                    && (that.Description != null && casted.Description != null)
+                        : that.DisplayName == null && casted.DisplayName == null)
+                    && ((that.Description != null && casted.Description != null)
                         ? that.Description.Count == casted.Description.Count
                             && (
                                 that.Description
@@ -585,13 +585,13 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Description,
                                         Transform)
                                     .All(item => item))
-                        : that.Description == null && casted.Description == null
-                    && (that.SemanticId != null && casted.SemanticId != null)
+                        : that.Description == null && casted.Description == null)
+                    && ((that.SemanticId != null && casted.SemanticId != null)
                         ? Transform(
                                 that.SemanticId,
                                 casted.SemanticId)
-                        : that.SemanticId == null && casted.SemanticId == null
-                    && (that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
+                        : that.SemanticId == null && casted.SemanticId == null)
+                    && ((that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
                         ? that.SupplementalSemanticIds.Count == casted.SupplementalSemanticIds.Count
                             && (
                                 that.SupplementalSemanticIds
@@ -599,8 +599,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SupplementalSemanticIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null
-                    && (that.Qualifiers != null && casted.Qualifiers != null)
+                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null)
+                    && ((that.Qualifiers != null && casted.Qualifiers != null)
                         ? that.Qualifiers.Count == casted.Qualifiers.Count
                             && (
                                 that.Qualifiers
@@ -608,8 +608,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Qualifiers,
                                         Transform)
                                     .All(item => item))
-                        : that.Qualifiers == null && casted.Qualifiers == null
-                    && (that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
+                        : that.Qualifiers == null && casted.Qualifiers == null)
+                    && ((that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
                         ? that.EmbeddedDataSpecifications.Count == casted.EmbeddedDataSpecifications.Count
                             && (
                                 that.EmbeddedDataSpecifications
@@ -617,8 +617,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.EmbeddedDataSpecifications,
                                         Transform)
                                     .All(item => item))
-                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null
-                    && (that.Value != null && casted.Value != null)
+                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null)
+                    && ((that.Value != null && casted.Value != null)
                         ? that.Value.Count == casted.Value.Count
                             && (
                                 that.Value
@@ -626,7 +626,7 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Value,
                                         Transform)
                                     .All(item => item))
-                        : that.Value == null && casted.Value == null);
+                        : that.Value == null && casted.Value == null));
             }
 
             public override bool TransformProperty(
@@ -639,7 +639,7 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.Extensions != null && casted.Extensions != null)
+                    ((that.Extensions != null && casted.Extensions != null)
                         ? that.Extensions.Count == casted.Extensions.Count
                             && (
                                 that.Extensions
@@ -647,10 +647,10 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Extensions,
                                         Transform)
                                     .All(item => item))
-                        : that.Extensions == null && casted.Extensions == null
+                        : that.Extensions == null && casted.Extensions == null)
                     && that.Category == casted.Category
                     && that.IdShort == casted.IdShort
-                    && (that.DisplayName != null && casted.DisplayName != null)
+                    && ((that.DisplayName != null && casted.DisplayName != null)
                         ? that.DisplayName.Count == casted.DisplayName.Count
                             && (
                                 that.DisplayName
@@ -658,8 +658,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.DisplayName,
                                         Transform)
                                     .All(item => item))
-                        : that.DisplayName == null && casted.DisplayName == null
-                    && (that.Description != null && casted.Description != null)
+                        : that.DisplayName == null && casted.DisplayName == null)
+                    && ((that.Description != null && casted.Description != null)
                         ? that.Description.Count == casted.Description.Count
                             && (
                                 that.Description
@@ -667,13 +667,13 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Description,
                                         Transform)
                                     .All(item => item))
-                        : that.Description == null && casted.Description == null
-                    && (that.SemanticId != null && casted.SemanticId != null)
+                        : that.Description == null && casted.Description == null)
+                    && ((that.SemanticId != null && casted.SemanticId != null)
                         ? Transform(
                                 that.SemanticId,
                                 casted.SemanticId)
-                        : that.SemanticId == null && casted.SemanticId == null
-                    && (that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
+                        : that.SemanticId == null && casted.SemanticId == null)
+                    && ((that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
                         ? that.SupplementalSemanticIds.Count == casted.SupplementalSemanticIds.Count
                             && (
                                 that.SupplementalSemanticIds
@@ -681,8 +681,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SupplementalSemanticIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null
-                    && (that.Qualifiers != null && casted.Qualifiers != null)
+                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null)
+                    && ((that.Qualifiers != null && casted.Qualifiers != null)
                         ? that.Qualifiers.Count == casted.Qualifiers.Count
                             && (
                                 that.Qualifiers
@@ -690,8 +690,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Qualifiers,
                                         Transform)
                                     .All(item => item))
-                        : that.Qualifiers == null && casted.Qualifiers == null
-                    && (that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
+                        : that.Qualifiers == null && casted.Qualifiers == null)
+                    && ((that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
                         ? that.EmbeddedDataSpecifications.Count == casted.EmbeddedDataSpecifications.Count
                             && (
                                 that.EmbeddedDataSpecifications
@@ -699,14 +699,14 @@ namespace AasCore.Aas3_0.Tests
                                         casted.EmbeddedDataSpecifications,
                                         Transform)
                                     .All(item => item))
-                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null
+                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null)
                     && that.ValueType == casted.ValueType
                     && that.Value == casted.Value
-                    && (that.ValueId != null && casted.ValueId != null)
+                    && ((that.ValueId != null && casted.ValueId != null)
                         ? Transform(
                                 that.ValueId,
                                 casted.ValueId)
-                        : that.ValueId == null && casted.ValueId == null);
+                        : that.ValueId == null && casted.ValueId == null));
             }
 
             public override bool TransformMultiLanguageProperty(
@@ -719,7 +719,7 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.Extensions != null && casted.Extensions != null)
+                    ((that.Extensions != null && casted.Extensions != null)
                         ? that.Extensions.Count == casted.Extensions.Count
                             && (
                                 that.Extensions
@@ -727,10 +727,10 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Extensions,
                                         Transform)
                                     .All(item => item))
-                        : that.Extensions == null && casted.Extensions == null
+                        : that.Extensions == null && casted.Extensions == null)
                     && that.Category == casted.Category
                     && that.IdShort == casted.IdShort
-                    && (that.DisplayName != null && casted.DisplayName != null)
+                    && ((that.DisplayName != null && casted.DisplayName != null)
                         ? that.DisplayName.Count == casted.DisplayName.Count
                             && (
                                 that.DisplayName
@@ -738,8 +738,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.DisplayName,
                                         Transform)
                                     .All(item => item))
-                        : that.DisplayName == null && casted.DisplayName == null
-                    && (that.Description != null && casted.Description != null)
+                        : that.DisplayName == null && casted.DisplayName == null)
+                    && ((that.Description != null && casted.Description != null)
                         ? that.Description.Count == casted.Description.Count
                             && (
                                 that.Description
@@ -747,13 +747,13 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Description,
                                         Transform)
                                     .All(item => item))
-                        : that.Description == null && casted.Description == null
-                    && (that.SemanticId != null && casted.SemanticId != null)
+                        : that.Description == null && casted.Description == null)
+                    && ((that.SemanticId != null && casted.SemanticId != null)
                         ? Transform(
                                 that.SemanticId,
                                 casted.SemanticId)
-                        : that.SemanticId == null && casted.SemanticId == null
-                    && (that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
+                        : that.SemanticId == null && casted.SemanticId == null)
+                    && ((that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
                         ? that.SupplementalSemanticIds.Count == casted.SupplementalSemanticIds.Count
                             && (
                                 that.SupplementalSemanticIds
@@ -761,8 +761,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SupplementalSemanticIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null
-                    && (that.Qualifiers != null && casted.Qualifiers != null)
+                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null)
+                    && ((that.Qualifiers != null && casted.Qualifiers != null)
                         ? that.Qualifiers.Count == casted.Qualifiers.Count
                             && (
                                 that.Qualifiers
@@ -770,8 +770,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Qualifiers,
                                         Transform)
                                     .All(item => item))
-                        : that.Qualifiers == null && casted.Qualifiers == null
-                    && (that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
+                        : that.Qualifiers == null && casted.Qualifiers == null)
+                    && ((that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
                         ? that.EmbeddedDataSpecifications.Count == casted.EmbeddedDataSpecifications.Count
                             && (
                                 that.EmbeddedDataSpecifications
@@ -779,8 +779,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.EmbeddedDataSpecifications,
                                         Transform)
                                     .All(item => item))
-                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null
-                    && (that.Value != null && casted.Value != null)
+                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null)
+                    && ((that.Value != null && casted.Value != null)
                         ? that.Value.Count == casted.Value.Count
                             && (
                                 that.Value
@@ -788,12 +788,12 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Value,
                                         Transform)
                                     .All(item => item))
-                        : that.Value == null && casted.Value == null
-                    && (that.ValueId != null && casted.ValueId != null)
+                        : that.Value == null && casted.Value == null)
+                    && ((that.ValueId != null && casted.ValueId != null)
                         ? Transform(
                                 that.ValueId,
                                 casted.ValueId)
-                        : that.ValueId == null && casted.ValueId == null);
+                        : that.ValueId == null && casted.ValueId == null));
             }
 
             public override bool TransformRange(
@@ -806,7 +806,7 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.Extensions != null && casted.Extensions != null)
+                    ((that.Extensions != null && casted.Extensions != null)
                         ? that.Extensions.Count == casted.Extensions.Count
                             && (
                                 that.Extensions
@@ -814,10 +814,10 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Extensions,
                                         Transform)
                                     .All(item => item))
-                        : that.Extensions == null && casted.Extensions == null
+                        : that.Extensions == null && casted.Extensions == null)
                     && that.Category == casted.Category
                     && that.IdShort == casted.IdShort
-                    && (that.DisplayName != null && casted.DisplayName != null)
+                    && ((that.DisplayName != null && casted.DisplayName != null)
                         ? that.DisplayName.Count == casted.DisplayName.Count
                             && (
                                 that.DisplayName
@@ -825,8 +825,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.DisplayName,
                                         Transform)
                                     .All(item => item))
-                        : that.DisplayName == null && casted.DisplayName == null
-                    && (that.Description != null && casted.Description != null)
+                        : that.DisplayName == null && casted.DisplayName == null)
+                    && ((that.Description != null && casted.Description != null)
                         ? that.Description.Count == casted.Description.Count
                             && (
                                 that.Description
@@ -834,13 +834,13 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Description,
                                         Transform)
                                     .All(item => item))
-                        : that.Description == null && casted.Description == null
-                    && (that.SemanticId != null && casted.SemanticId != null)
+                        : that.Description == null && casted.Description == null)
+                    && ((that.SemanticId != null && casted.SemanticId != null)
                         ? Transform(
                                 that.SemanticId,
                                 casted.SemanticId)
-                        : that.SemanticId == null && casted.SemanticId == null
-                    && (that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
+                        : that.SemanticId == null && casted.SemanticId == null)
+                    && ((that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
                         ? that.SupplementalSemanticIds.Count == casted.SupplementalSemanticIds.Count
                             && (
                                 that.SupplementalSemanticIds
@@ -848,8 +848,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SupplementalSemanticIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null
-                    && (that.Qualifiers != null && casted.Qualifiers != null)
+                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null)
+                    && ((that.Qualifiers != null && casted.Qualifiers != null)
                         ? that.Qualifiers.Count == casted.Qualifiers.Count
                             && (
                                 that.Qualifiers
@@ -857,8 +857,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Qualifiers,
                                         Transform)
                                     .All(item => item))
-                        : that.Qualifiers == null && casted.Qualifiers == null
-                    && (that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
+                        : that.Qualifiers == null && casted.Qualifiers == null)
+                    && ((that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
                         ? that.EmbeddedDataSpecifications.Count == casted.EmbeddedDataSpecifications.Count
                             && (
                                 that.EmbeddedDataSpecifications
@@ -866,7 +866,7 @@ namespace AasCore.Aas3_0.Tests
                                         casted.EmbeddedDataSpecifications,
                                         Transform)
                                     .All(item => item))
-                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null
+                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null)
                     && that.ValueType == casted.ValueType
                     && that.Min == casted.Min
                     && that.Max == casted.Max);
@@ -882,7 +882,7 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.Extensions != null && casted.Extensions != null)
+                    ((that.Extensions != null && casted.Extensions != null)
                         ? that.Extensions.Count == casted.Extensions.Count
                             && (
                                 that.Extensions
@@ -890,10 +890,10 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Extensions,
                                         Transform)
                                     .All(item => item))
-                        : that.Extensions == null && casted.Extensions == null
+                        : that.Extensions == null && casted.Extensions == null)
                     && that.Category == casted.Category
                     && that.IdShort == casted.IdShort
-                    && (that.DisplayName != null && casted.DisplayName != null)
+                    && ((that.DisplayName != null && casted.DisplayName != null)
                         ? that.DisplayName.Count == casted.DisplayName.Count
                             && (
                                 that.DisplayName
@@ -901,8 +901,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.DisplayName,
                                         Transform)
                                     .All(item => item))
-                        : that.DisplayName == null && casted.DisplayName == null
-                    && (that.Description != null && casted.Description != null)
+                        : that.DisplayName == null && casted.DisplayName == null)
+                    && ((that.Description != null && casted.Description != null)
                         ? that.Description.Count == casted.Description.Count
                             && (
                                 that.Description
@@ -910,13 +910,13 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Description,
                                         Transform)
                                     .All(item => item))
-                        : that.Description == null && casted.Description == null
-                    && (that.SemanticId != null && casted.SemanticId != null)
+                        : that.Description == null && casted.Description == null)
+                    && ((that.SemanticId != null && casted.SemanticId != null)
                         ? Transform(
                                 that.SemanticId,
                                 casted.SemanticId)
-                        : that.SemanticId == null && casted.SemanticId == null
-                    && (that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
+                        : that.SemanticId == null && casted.SemanticId == null)
+                    && ((that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
                         ? that.SupplementalSemanticIds.Count == casted.SupplementalSemanticIds.Count
                             && (
                                 that.SupplementalSemanticIds
@@ -924,8 +924,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SupplementalSemanticIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null
-                    && (that.Qualifiers != null && casted.Qualifiers != null)
+                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null)
+                    && ((that.Qualifiers != null && casted.Qualifiers != null)
                         ? that.Qualifiers.Count == casted.Qualifiers.Count
                             && (
                                 that.Qualifiers
@@ -933,8 +933,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Qualifiers,
                                         Transform)
                                     .All(item => item))
-                        : that.Qualifiers == null && casted.Qualifiers == null
-                    && (that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
+                        : that.Qualifiers == null && casted.Qualifiers == null)
+                    && ((that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
                         ? that.EmbeddedDataSpecifications.Count == casted.EmbeddedDataSpecifications.Count
                             && (
                                 that.EmbeddedDataSpecifications
@@ -942,12 +942,12 @@ namespace AasCore.Aas3_0.Tests
                                         casted.EmbeddedDataSpecifications,
                                         Transform)
                                     .All(item => item))
-                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null
-                    && (that.Value != null && casted.Value != null)
+                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null)
+                    && ((that.Value != null && casted.Value != null)
                         ? Transform(
                                 that.Value,
                                 casted.Value)
-                        : that.Value == null && casted.Value == null);
+                        : that.Value == null && casted.Value == null));
             }
 
             public override bool TransformBlob(
@@ -960,7 +960,7 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.Extensions != null && casted.Extensions != null)
+                    ((that.Extensions != null && casted.Extensions != null)
                         ? that.Extensions.Count == casted.Extensions.Count
                             && (
                                 that.Extensions
@@ -968,10 +968,10 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Extensions,
                                         Transform)
                                     .All(item => item))
-                        : that.Extensions == null && casted.Extensions == null
+                        : that.Extensions == null && casted.Extensions == null)
                     && that.Category == casted.Category
                     && that.IdShort == casted.IdShort
-                    && (that.DisplayName != null && casted.DisplayName != null)
+                    && ((that.DisplayName != null && casted.DisplayName != null)
                         ? that.DisplayName.Count == casted.DisplayName.Count
                             && (
                                 that.DisplayName
@@ -979,8 +979,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.DisplayName,
                                         Transform)
                                     .All(item => item))
-                        : that.DisplayName == null && casted.DisplayName == null
-                    && (that.Description != null && casted.Description != null)
+                        : that.DisplayName == null && casted.DisplayName == null)
+                    && ((that.Description != null && casted.Description != null)
                         ? that.Description.Count == casted.Description.Count
                             && (
                                 that.Description
@@ -988,13 +988,13 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Description,
                                         Transform)
                                     .All(item => item))
-                        : that.Description == null && casted.Description == null
-                    && (that.SemanticId != null && casted.SemanticId != null)
+                        : that.Description == null && casted.Description == null)
+                    && ((that.SemanticId != null && casted.SemanticId != null)
                         ? Transform(
                                 that.SemanticId,
                                 casted.SemanticId)
-                        : that.SemanticId == null && casted.SemanticId == null
-                    && (that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
+                        : that.SemanticId == null && casted.SemanticId == null)
+                    && ((that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
                         ? that.SupplementalSemanticIds.Count == casted.SupplementalSemanticIds.Count
                             && (
                                 that.SupplementalSemanticIds
@@ -1002,8 +1002,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SupplementalSemanticIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null
-                    && (that.Qualifiers != null && casted.Qualifiers != null)
+                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null)
+                    && ((that.Qualifiers != null && casted.Qualifiers != null)
                         ? that.Qualifiers.Count == casted.Qualifiers.Count
                             && (
                                 that.Qualifiers
@@ -1011,8 +1011,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Qualifiers,
                                         Transform)
                                     .All(item => item))
-                        : that.Qualifiers == null && casted.Qualifiers == null
-                    && (that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
+                        : that.Qualifiers == null && casted.Qualifiers == null)
+                    && ((that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
                         ? that.EmbeddedDataSpecifications.Count == casted.EmbeddedDataSpecifications.Count
                             && (
                                 that.EmbeddedDataSpecifications
@@ -1020,7 +1020,7 @@ namespace AasCore.Aas3_0.Tests
                                         casted.EmbeddedDataSpecifications,
                                         Transform)
                                     .All(item => item))
-                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null
+                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null)
                     && ByteSpansEqual(
                         that.Value,
                         casted.Value)
@@ -1037,7 +1037,7 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.Extensions != null && casted.Extensions != null)
+                    ((that.Extensions != null && casted.Extensions != null)
                         ? that.Extensions.Count == casted.Extensions.Count
                             && (
                                 that.Extensions
@@ -1045,10 +1045,10 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Extensions,
                                         Transform)
                                     .All(item => item))
-                        : that.Extensions == null && casted.Extensions == null
+                        : that.Extensions == null && casted.Extensions == null)
                     && that.Category == casted.Category
                     && that.IdShort == casted.IdShort
-                    && (that.DisplayName != null && casted.DisplayName != null)
+                    && ((that.DisplayName != null && casted.DisplayName != null)
                         ? that.DisplayName.Count == casted.DisplayName.Count
                             && (
                                 that.DisplayName
@@ -1056,8 +1056,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.DisplayName,
                                         Transform)
                                     .All(item => item))
-                        : that.DisplayName == null && casted.DisplayName == null
-                    && (that.Description != null && casted.Description != null)
+                        : that.DisplayName == null && casted.DisplayName == null)
+                    && ((that.Description != null && casted.Description != null)
                         ? that.Description.Count == casted.Description.Count
                             && (
                                 that.Description
@@ -1065,13 +1065,13 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Description,
                                         Transform)
                                     .All(item => item))
-                        : that.Description == null && casted.Description == null
-                    && (that.SemanticId != null && casted.SemanticId != null)
+                        : that.Description == null && casted.Description == null)
+                    && ((that.SemanticId != null && casted.SemanticId != null)
                         ? Transform(
                                 that.SemanticId,
                                 casted.SemanticId)
-                        : that.SemanticId == null && casted.SemanticId == null
-                    && (that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
+                        : that.SemanticId == null && casted.SemanticId == null)
+                    && ((that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
                         ? that.SupplementalSemanticIds.Count == casted.SupplementalSemanticIds.Count
                             && (
                                 that.SupplementalSemanticIds
@@ -1079,8 +1079,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SupplementalSemanticIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null
-                    && (that.Qualifiers != null && casted.Qualifiers != null)
+                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null)
+                    && ((that.Qualifiers != null && casted.Qualifiers != null)
                         ? that.Qualifiers.Count == casted.Qualifiers.Count
                             && (
                                 that.Qualifiers
@@ -1088,8 +1088,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Qualifiers,
                                         Transform)
                                     .All(item => item))
-                        : that.Qualifiers == null && casted.Qualifiers == null
-                    && (that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
+                        : that.Qualifiers == null && casted.Qualifiers == null)
+                    && ((that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
                         ? that.EmbeddedDataSpecifications.Count == casted.EmbeddedDataSpecifications.Count
                             && (
                                 that.EmbeddedDataSpecifications
@@ -1097,7 +1097,7 @@ namespace AasCore.Aas3_0.Tests
                                         casted.EmbeddedDataSpecifications,
                                         Transform)
                                     .All(item => item))
-                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null
+                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null)
                     && that.Value == casted.Value
                     && that.ContentType == casted.ContentType);
             }
@@ -1112,7 +1112,7 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.Extensions != null && casted.Extensions != null)
+                    ((that.Extensions != null && casted.Extensions != null)
                         ? that.Extensions.Count == casted.Extensions.Count
                             && (
                                 that.Extensions
@@ -1120,10 +1120,10 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Extensions,
                                         Transform)
                                     .All(item => item))
-                        : that.Extensions == null && casted.Extensions == null
+                        : that.Extensions == null && casted.Extensions == null)
                     && that.Category == casted.Category
                     && that.IdShort == casted.IdShort
-                    && (that.DisplayName != null && casted.DisplayName != null)
+                    && ((that.DisplayName != null && casted.DisplayName != null)
                         ? that.DisplayName.Count == casted.DisplayName.Count
                             && (
                                 that.DisplayName
@@ -1131,8 +1131,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.DisplayName,
                                         Transform)
                                     .All(item => item))
-                        : that.DisplayName == null && casted.DisplayName == null
-                    && (that.Description != null && casted.Description != null)
+                        : that.DisplayName == null && casted.DisplayName == null)
+                    && ((that.Description != null && casted.Description != null)
                         ? that.Description.Count == casted.Description.Count
                             && (
                                 that.Description
@@ -1140,13 +1140,13 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Description,
                                         Transform)
                                     .All(item => item))
-                        : that.Description == null && casted.Description == null
-                    && (that.SemanticId != null && casted.SemanticId != null)
+                        : that.Description == null && casted.Description == null)
+                    && ((that.SemanticId != null && casted.SemanticId != null)
                         ? Transform(
                                 that.SemanticId,
                                 casted.SemanticId)
-                        : that.SemanticId == null && casted.SemanticId == null
-                    && (that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
+                        : that.SemanticId == null && casted.SemanticId == null)
+                    && ((that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
                         ? that.SupplementalSemanticIds.Count == casted.SupplementalSemanticIds.Count
                             && (
                                 that.SupplementalSemanticIds
@@ -1154,8 +1154,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SupplementalSemanticIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null
-                    && (that.Qualifiers != null && casted.Qualifiers != null)
+                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null)
+                    && ((that.Qualifiers != null && casted.Qualifiers != null)
                         ? that.Qualifiers.Count == casted.Qualifiers.Count
                             && (
                                 that.Qualifiers
@@ -1163,8 +1163,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Qualifiers,
                                         Transform)
                                     .All(item => item))
-                        : that.Qualifiers == null && casted.Qualifiers == null
-                    && (that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
+                        : that.Qualifiers == null && casted.Qualifiers == null)
+                    && ((that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
                         ? that.EmbeddedDataSpecifications.Count == casted.EmbeddedDataSpecifications.Count
                             && (
                                 that.EmbeddedDataSpecifications
@@ -1172,14 +1172,14 @@ namespace AasCore.Aas3_0.Tests
                                         casted.EmbeddedDataSpecifications,
                                         Transform)
                                     .All(item => item))
-                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null
+                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null)
                     && Transform(
                         that.First,
                         casted.First)
                     && Transform(
                         that.Second,
                         casted.Second)
-                    && (that.Annotations != null && casted.Annotations != null)
+                    && ((that.Annotations != null && casted.Annotations != null)
                         ? that.Annotations.Count == casted.Annotations.Count
                             && (
                                 that.Annotations
@@ -1187,7 +1187,7 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Annotations,
                                         Transform)
                                     .All(item => item))
-                        : that.Annotations == null && casted.Annotations == null);
+                        : that.Annotations == null && casted.Annotations == null));
             }
 
             public override bool TransformEntity(
@@ -1200,7 +1200,7 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.Extensions != null && casted.Extensions != null)
+                    ((that.Extensions != null && casted.Extensions != null)
                         ? that.Extensions.Count == casted.Extensions.Count
                             && (
                                 that.Extensions
@@ -1208,10 +1208,10 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Extensions,
                                         Transform)
                                     .All(item => item))
-                        : that.Extensions == null && casted.Extensions == null
+                        : that.Extensions == null && casted.Extensions == null)
                     && that.Category == casted.Category
                     && that.IdShort == casted.IdShort
-                    && (that.DisplayName != null && casted.DisplayName != null)
+                    && ((that.DisplayName != null && casted.DisplayName != null)
                         ? that.DisplayName.Count == casted.DisplayName.Count
                             && (
                                 that.DisplayName
@@ -1219,8 +1219,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.DisplayName,
                                         Transform)
                                     .All(item => item))
-                        : that.DisplayName == null && casted.DisplayName == null
-                    && (that.Description != null && casted.Description != null)
+                        : that.DisplayName == null && casted.DisplayName == null)
+                    && ((that.Description != null && casted.Description != null)
                         ? that.Description.Count == casted.Description.Count
                             && (
                                 that.Description
@@ -1228,13 +1228,13 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Description,
                                         Transform)
                                     .All(item => item))
-                        : that.Description == null && casted.Description == null
-                    && (that.SemanticId != null && casted.SemanticId != null)
+                        : that.Description == null && casted.Description == null)
+                    && ((that.SemanticId != null && casted.SemanticId != null)
                         ? Transform(
                                 that.SemanticId,
                                 casted.SemanticId)
-                        : that.SemanticId == null && casted.SemanticId == null
-                    && (that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
+                        : that.SemanticId == null && casted.SemanticId == null)
+                    && ((that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
                         ? that.SupplementalSemanticIds.Count == casted.SupplementalSemanticIds.Count
                             && (
                                 that.SupplementalSemanticIds
@@ -1242,8 +1242,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SupplementalSemanticIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null
-                    && (that.Qualifiers != null && casted.Qualifiers != null)
+                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null)
+                    && ((that.Qualifiers != null && casted.Qualifiers != null)
                         ? that.Qualifiers.Count == casted.Qualifiers.Count
                             && (
                                 that.Qualifiers
@@ -1251,8 +1251,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Qualifiers,
                                         Transform)
                                     .All(item => item))
-                        : that.Qualifiers == null && casted.Qualifiers == null
-                    && (that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
+                        : that.Qualifiers == null && casted.Qualifiers == null)
+                    && ((that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
                         ? that.EmbeddedDataSpecifications.Count == casted.EmbeddedDataSpecifications.Count
                             && (
                                 that.EmbeddedDataSpecifications
@@ -1260,8 +1260,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.EmbeddedDataSpecifications,
                                         Transform)
                                     .All(item => item))
-                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null
-                    && (that.Statements != null && casted.Statements != null)
+                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null)
+                    && ((that.Statements != null && casted.Statements != null)
                         ? that.Statements.Count == casted.Statements.Count
                             && (
                                 that.Statements
@@ -1269,10 +1269,10 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Statements,
                                         Transform)
                                     .All(item => item))
-                        : that.Statements == null && casted.Statements == null
+                        : that.Statements == null && casted.Statements == null)
                     && that.EntityType == casted.EntityType
                     && that.GlobalAssetId == casted.GlobalAssetId
-                    && (that.SpecificAssetIds != null && casted.SpecificAssetIds != null)
+                    && ((that.SpecificAssetIds != null && casted.SpecificAssetIds != null)
                         ? that.SpecificAssetIds.Count == casted.SpecificAssetIds.Count
                             && (
                                 that.SpecificAssetIds
@@ -1280,7 +1280,7 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SpecificAssetIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SpecificAssetIds == null && casted.SpecificAssetIds == null);
+                        : that.SpecificAssetIds == null && casted.SpecificAssetIds == null));
             }
 
             public override bool TransformEventPayload(
@@ -1296,25 +1296,25 @@ namespace AasCore.Aas3_0.Tests
                     Transform(
                         that.Source,
                         casted.Source)
-                    && (that.SourceSemanticId != null && casted.SourceSemanticId != null)
+                    && ((that.SourceSemanticId != null && casted.SourceSemanticId != null)
                         ? Transform(
                                 that.SourceSemanticId,
                                 casted.SourceSemanticId)
-                        : that.SourceSemanticId == null && casted.SourceSemanticId == null
+                        : that.SourceSemanticId == null && casted.SourceSemanticId == null)
                     && Transform(
                         that.ObservableReference,
                         casted.ObservableReference)
-                    && (that.ObservableSemanticId != null && casted.ObservableSemanticId != null)
+                    && ((that.ObservableSemanticId != null && casted.ObservableSemanticId != null)
                         ? Transform(
                                 that.ObservableSemanticId,
                                 casted.ObservableSemanticId)
-                        : that.ObservableSemanticId == null && casted.ObservableSemanticId == null
+                        : that.ObservableSemanticId == null && casted.ObservableSemanticId == null)
                     && that.Topic == casted.Topic
-                    && (that.SubjectId != null && casted.SubjectId != null)
+                    && ((that.SubjectId != null && casted.SubjectId != null)
                         ? Transform(
                                 that.SubjectId,
                                 casted.SubjectId)
-                        : that.SubjectId == null && casted.SubjectId == null
+                        : that.SubjectId == null && casted.SubjectId == null)
                     && that.TimeStamp == casted.TimeStamp
                     && ByteSpansEqual(
                         that.Payload,
@@ -1331,7 +1331,7 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.Extensions != null && casted.Extensions != null)
+                    ((that.Extensions != null && casted.Extensions != null)
                         ? that.Extensions.Count == casted.Extensions.Count
                             && (
                                 that.Extensions
@@ -1339,10 +1339,10 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Extensions,
                                         Transform)
                                     .All(item => item))
-                        : that.Extensions == null && casted.Extensions == null
+                        : that.Extensions == null && casted.Extensions == null)
                     && that.Category == casted.Category
                     && that.IdShort == casted.IdShort
-                    && (that.DisplayName != null && casted.DisplayName != null)
+                    && ((that.DisplayName != null && casted.DisplayName != null)
                         ? that.DisplayName.Count == casted.DisplayName.Count
                             && (
                                 that.DisplayName
@@ -1350,8 +1350,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.DisplayName,
                                         Transform)
                                     .All(item => item))
-                        : that.DisplayName == null && casted.DisplayName == null
-                    && (that.Description != null && casted.Description != null)
+                        : that.DisplayName == null && casted.DisplayName == null)
+                    && ((that.Description != null && casted.Description != null)
                         ? that.Description.Count == casted.Description.Count
                             && (
                                 that.Description
@@ -1359,13 +1359,13 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Description,
                                         Transform)
                                     .All(item => item))
-                        : that.Description == null && casted.Description == null
-                    && (that.SemanticId != null && casted.SemanticId != null)
+                        : that.Description == null && casted.Description == null)
+                    && ((that.SemanticId != null && casted.SemanticId != null)
                         ? Transform(
                                 that.SemanticId,
                                 casted.SemanticId)
-                        : that.SemanticId == null && casted.SemanticId == null
-                    && (that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
+                        : that.SemanticId == null && casted.SemanticId == null)
+                    && ((that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
                         ? that.SupplementalSemanticIds.Count == casted.SupplementalSemanticIds.Count
                             && (
                                 that.SupplementalSemanticIds
@@ -1373,8 +1373,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SupplementalSemanticIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null
-                    && (that.Qualifiers != null && casted.Qualifiers != null)
+                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null)
+                    && ((that.Qualifiers != null && casted.Qualifiers != null)
                         ? that.Qualifiers.Count == casted.Qualifiers.Count
                             && (
                                 that.Qualifiers
@@ -1382,8 +1382,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Qualifiers,
                                         Transform)
                                     .All(item => item))
-                        : that.Qualifiers == null && casted.Qualifiers == null
-                    && (that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
+                        : that.Qualifiers == null && casted.Qualifiers == null)
+                    && ((that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
                         ? that.EmbeddedDataSpecifications.Count == casted.EmbeddedDataSpecifications.Count
                             && (
                                 that.EmbeddedDataSpecifications
@@ -1391,18 +1391,18 @@ namespace AasCore.Aas3_0.Tests
                                         casted.EmbeddedDataSpecifications,
                                         Transform)
                                     .All(item => item))
-                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null
+                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null)
                     && Transform(
                         that.Observed,
                         casted.Observed)
                     && that.Direction == casted.Direction
                     && that.State == casted.State
                     && that.MessageTopic == casted.MessageTopic
-                    && (that.MessageBroker != null && casted.MessageBroker != null)
+                    && ((that.MessageBroker != null && casted.MessageBroker != null)
                         ? Transform(
                                 that.MessageBroker,
                                 casted.MessageBroker)
-                        : that.MessageBroker == null && casted.MessageBroker == null
+                        : that.MessageBroker == null && casted.MessageBroker == null)
                     && that.LastUpdate == casted.LastUpdate
                     && that.MinInterval == casted.MinInterval
                     && that.MaxInterval == casted.MaxInterval);
@@ -1418,7 +1418,7 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.Extensions != null && casted.Extensions != null)
+                    ((that.Extensions != null && casted.Extensions != null)
                         ? that.Extensions.Count == casted.Extensions.Count
                             && (
                                 that.Extensions
@@ -1426,10 +1426,10 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Extensions,
                                         Transform)
                                     .All(item => item))
-                        : that.Extensions == null && casted.Extensions == null
+                        : that.Extensions == null && casted.Extensions == null)
                     && that.Category == casted.Category
                     && that.IdShort == casted.IdShort
-                    && (that.DisplayName != null && casted.DisplayName != null)
+                    && ((that.DisplayName != null && casted.DisplayName != null)
                         ? that.DisplayName.Count == casted.DisplayName.Count
                             && (
                                 that.DisplayName
@@ -1437,8 +1437,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.DisplayName,
                                         Transform)
                                     .All(item => item))
-                        : that.DisplayName == null && casted.DisplayName == null
-                    && (that.Description != null && casted.Description != null)
+                        : that.DisplayName == null && casted.DisplayName == null)
+                    && ((that.Description != null && casted.Description != null)
                         ? that.Description.Count == casted.Description.Count
                             && (
                                 that.Description
@@ -1446,13 +1446,13 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Description,
                                         Transform)
                                     .All(item => item))
-                        : that.Description == null && casted.Description == null
-                    && (that.SemanticId != null && casted.SemanticId != null)
+                        : that.Description == null && casted.Description == null)
+                    && ((that.SemanticId != null && casted.SemanticId != null)
                         ? Transform(
                                 that.SemanticId,
                                 casted.SemanticId)
-                        : that.SemanticId == null && casted.SemanticId == null
-                    && (that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
+                        : that.SemanticId == null && casted.SemanticId == null)
+                    && ((that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
                         ? that.SupplementalSemanticIds.Count == casted.SupplementalSemanticIds.Count
                             && (
                                 that.SupplementalSemanticIds
@@ -1460,8 +1460,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SupplementalSemanticIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null
-                    && (that.Qualifiers != null && casted.Qualifiers != null)
+                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null)
+                    && ((that.Qualifiers != null && casted.Qualifiers != null)
                         ? that.Qualifiers.Count == casted.Qualifiers.Count
                             && (
                                 that.Qualifiers
@@ -1469,8 +1469,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Qualifiers,
                                         Transform)
                                     .All(item => item))
-                        : that.Qualifiers == null && casted.Qualifiers == null
-                    && (that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
+                        : that.Qualifiers == null && casted.Qualifiers == null)
+                    && ((that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
                         ? that.EmbeddedDataSpecifications.Count == casted.EmbeddedDataSpecifications.Count
                             && (
                                 that.EmbeddedDataSpecifications
@@ -1478,8 +1478,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.EmbeddedDataSpecifications,
                                         Transform)
                                     .All(item => item))
-                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null
-                    && (that.InputVariables != null && casted.InputVariables != null)
+                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null)
+                    && ((that.InputVariables != null && casted.InputVariables != null)
                         ? that.InputVariables.Count == casted.InputVariables.Count
                             && (
                                 that.InputVariables
@@ -1487,8 +1487,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.InputVariables,
                                         Transform)
                                     .All(item => item))
-                        : that.InputVariables == null && casted.InputVariables == null
-                    && (that.OutputVariables != null && casted.OutputVariables != null)
+                        : that.InputVariables == null && casted.InputVariables == null)
+                    && ((that.OutputVariables != null && casted.OutputVariables != null)
                         ? that.OutputVariables.Count == casted.OutputVariables.Count
                             && (
                                 that.OutputVariables
@@ -1496,8 +1496,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.OutputVariables,
                                         Transform)
                                     .All(item => item))
-                        : that.OutputVariables == null && casted.OutputVariables == null
-                    && (that.InoutputVariables != null && casted.InoutputVariables != null)
+                        : that.OutputVariables == null && casted.OutputVariables == null)
+                    && ((that.InoutputVariables != null && casted.InoutputVariables != null)
                         ? that.InoutputVariables.Count == casted.InoutputVariables.Count
                             && (
                                 that.InoutputVariables
@@ -1505,7 +1505,7 @@ namespace AasCore.Aas3_0.Tests
                                         casted.InoutputVariables,
                                         Transform)
                                     .All(item => item))
-                        : that.InoutputVariables == null && casted.InoutputVariables == null);
+                        : that.InoutputVariables == null && casted.InoutputVariables == null));
             }
 
             public override bool TransformOperationVariable(
@@ -1533,7 +1533,7 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.Extensions != null && casted.Extensions != null)
+                    ((that.Extensions != null && casted.Extensions != null)
                         ? that.Extensions.Count == casted.Extensions.Count
                             && (
                                 that.Extensions
@@ -1541,10 +1541,10 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Extensions,
                                         Transform)
                                     .All(item => item))
-                        : that.Extensions == null && casted.Extensions == null
+                        : that.Extensions == null && casted.Extensions == null)
                     && that.Category == casted.Category
                     && that.IdShort == casted.IdShort
-                    && (that.DisplayName != null && casted.DisplayName != null)
+                    && ((that.DisplayName != null && casted.DisplayName != null)
                         ? that.DisplayName.Count == casted.DisplayName.Count
                             && (
                                 that.DisplayName
@@ -1552,8 +1552,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.DisplayName,
                                         Transform)
                                     .All(item => item))
-                        : that.DisplayName == null && casted.DisplayName == null
-                    && (that.Description != null && casted.Description != null)
+                        : that.DisplayName == null && casted.DisplayName == null)
+                    && ((that.Description != null && casted.Description != null)
                         ? that.Description.Count == casted.Description.Count
                             && (
                                 that.Description
@@ -1561,13 +1561,13 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Description,
                                         Transform)
                                     .All(item => item))
-                        : that.Description == null && casted.Description == null
-                    && (that.SemanticId != null && casted.SemanticId != null)
+                        : that.Description == null && casted.Description == null)
+                    && ((that.SemanticId != null && casted.SemanticId != null)
                         ? Transform(
                                 that.SemanticId,
                                 casted.SemanticId)
-                        : that.SemanticId == null && casted.SemanticId == null
-                    && (that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
+                        : that.SemanticId == null && casted.SemanticId == null)
+                    && ((that.SupplementalSemanticIds != null && casted.SupplementalSemanticIds != null)
                         ? that.SupplementalSemanticIds.Count == casted.SupplementalSemanticIds.Count
                             && (
                                 that.SupplementalSemanticIds
@@ -1575,8 +1575,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.SupplementalSemanticIds,
                                         Transform)
                                     .All(item => item))
-                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null
-                    && (that.Qualifiers != null && casted.Qualifiers != null)
+                        : that.SupplementalSemanticIds == null && casted.SupplementalSemanticIds == null)
+                    && ((that.Qualifiers != null && casted.Qualifiers != null)
                         ? that.Qualifiers.Count == casted.Qualifiers.Count
                             && (
                                 that.Qualifiers
@@ -1584,8 +1584,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Qualifiers,
                                         Transform)
                                     .All(item => item))
-                        : that.Qualifiers == null && casted.Qualifiers == null
-                    && (that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
+                        : that.Qualifiers == null && casted.Qualifiers == null)
+                    && ((that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
                         ? that.EmbeddedDataSpecifications.Count == casted.EmbeddedDataSpecifications.Count
                             && (
                                 that.EmbeddedDataSpecifications
@@ -1593,7 +1593,7 @@ namespace AasCore.Aas3_0.Tests
                                         casted.EmbeddedDataSpecifications,
                                         Transform)
                                     .All(item => item))
-                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null);
+                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null));
             }
 
             public override bool TransformConceptDescription(
@@ -1606,7 +1606,7 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.Extensions != null && casted.Extensions != null)
+                    ((that.Extensions != null && casted.Extensions != null)
                         ? that.Extensions.Count == casted.Extensions.Count
                             && (
                                 that.Extensions
@@ -1614,10 +1614,10 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Extensions,
                                         Transform)
                                     .All(item => item))
-                        : that.Extensions == null && casted.Extensions == null
+                        : that.Extensions == null && casted.Extensions == null)
                     && that.Category == casted.Category
                     && that.IdShort == casted.IdShort
-                    && (that.DisplayName != null && casted.DisplayName != null)
+                    && ((that.DisplayName != null && casted.DisplayName != null)
                         ? that.DisplayName.Count == casted.DisplayName.Count
                             && (
                                 that.DisplayName
@@ -1625,8 +1625,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.DisplayName,
                                         Transform)
                                     .All(item => item))
-                        : that.DisplayName == null && casted.DisplayName == null
-                    && (that.Description != null && casted.Description != null)
+                        : that.DisplayName == null && casted.DisplayName == null)
+                    && ((that.Description != null && casted.Description != null)
                         ? that.Description.Count == casted.Description.Count
                             && (
                                 that.Description
@@ -1634,14 +1634,14 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Description,
                                         Transform)
                                     .All(item => item))
-                        : that.Description == null && casted.Description == null
-                    && (that.Administration != null && casted.Administration != null)
+                        : that.Description == null && casted.Description == null)
+                    && ((that.Administration != null && casted.Administration != null)
                         ? Transform(
                                 that.Administration,
                                 casted.Administration)
-                        : that.Administration == null && casted.Administration == null
+                        : that.Administration == null && casted.Administration == null)
                     && that.Id == casted.Id
-                    && (that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
+                    && ((that.EmbeddedDataSpecifications != null && casted.EmbeddedDataSpecifications != null)
                         ? that.EmbeddedDataSpecifications.Count == casted.EmbeddedDataSpecifications.Count
                             && (
                                 that.EmbeddedDataSpecifications
@@ -1649,8 +1649,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.EmbeddedDataSpecifications,
                                         Transform)
                                     .All(item => item))
-                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null
-                    && (that.IsCaseOf != null && casted.IsCaseOf != null)
+                        : that.EmbeddedDataSpecifications == null && casted.EmbeddedDataSpecifications == null)
+                    && ((that.IsCaseOf != null && casted.IsCaseOf != null)
                         ? that.IsCaseOf.Count == casted.IsCaseOf.Count
                             && (
                                 that.IsCaseOf
@@ -1658,7 +1658,7 @@ namespace AasCore.Aas3_0.Tests
                                         casted.IsCaseOf,
                                         Transform)
                                     .All(item => item))
-                        : that.IsCaseOf == null && casted.IsCaseOf == null);
+                        : that.IsCaseOf == null && casted.IsCaseOf == null));
             }
 
             public override bool TransformReference(
@@ -1672,11 +1672,11 @@ namespace AasCore.Aas3_0.Tests
 
                 return (
                     that.Type == casted.Type
-                    && (that.ReferredSemanticId != null && casted.ReferredSemanticId != null)
+                    && ((that.ReferredSemanticId != null && casted.ReferredSemanticId != null)
                         ? Transform(
                                 that.ReferredSemanticId,
                                 casted.ReferredSemanticId)
-                        : that.ReferredSemanticId == null && casted.ReferredSemanticId == null
+                        : that.ReferredSemanticId == null && casted.ReferredSemanticId == null)
                     && that.Keys.Count == casted.Keys.Count
                     && (
                         that.Keys
@@ -1738,7 +1738,7 @@ namespace AasCore.Aas3_0.Tests
                 }
 
                 return (
-                    (that.AssetAdministrationShells != null && casted.AssetAdministrationShells != null)
+                    ((that.AssetAdministrationShells != null && casted.AssetAdministrationShells != null)
                         ? that.AssetAdministrationShells.Count == casted.AssetAdministrationShells.Count
                             && (
                                 that.AssetAdministrationShells
@@ -1746,8 +1746,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.AssetAdministrationShells,
                                         Transform)
                                     .All(item => item))
-                        : that.AssetAdministrationShells == null && casted.AssetAdministrationShells == null
-                    && (that.Submodels != null && casted.Submodels != null)
+                        : that.AssetAdministrationShells == null && casted.AssetAdministrationShells == null)
+                    && ((that.Submodels != null && casted.Submodels != null)
                         ? that.Submodels.Count == casted.Submodels.Count
                             && (
                                 that.Submodels
@@ -1755,8 +1755,8 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Submodels,
                                         Transform)
                                     .All(item => item))
-                        : that.Submodels == null && casted.Submodels == null
-                    && (that.ConceptDescriptions != null && casted.ConceptDescriptions != null)
+                        : that.Submodels == null && casted.Submodels == null)
+                    && ((that.ConceptDescriptions != null && casted.ConceptDescriptions != null)
                         ? that.ConceptDescriptions.Count == casted.ConceptDescriptions.Count
                             && (
                                 that.ConceptDescriptions
@@ -1764,7 +1764,7 @@ namespace AasCore.Aas3_0.Tests
                                         casted.ConceptDescriptions,
                                         Transform)
                                     .All(item => item))
-                        : that.ConceptDescriptions == null && casted.ConceptDescriptions == null);
+                        : that.ConceptDescriptions == null && casted.ConceptDescriptions == null));
             }
 
             public override bool TransformEmbeddedDataSpecification(
@@ -1895,7 +1895,7 @@ namespace AasCore.Aas3_0.Tests
                                 casted.PreferredName,
                                 Transform)
                             .All(item => item))
-                    && (that.ShortName != null && casted.ShortName != null)
+                    && ((that.ShortName != null && casted.ShortName != null)
                         ? that.ShortName.Count == casted.ShortName.Count
                             && (
                                 that.ShortName
@@ -1903,19 +1903,19 @@ namespace AasCore.Aas3_0.Tests
                                         casted.ShortName,
                                         Transform)
                                     .All(item => item))
-                        : that.ShortName == null && casted.ShortName == null
+                        : that.ShortName == null && casted.ShortName == null)
                     && that.Unit == casted.Unit
-                    && (that.UnitId != null && casted.UnitId != null)
+                    && ((that.UnitId != null && casted.UnitId != null)
                         ? Transform(
                                 that.UnitId,
                                 casted.UnitId)
-                        : that.UnitId == null && casted.UnitId == null
+                        : that.UnitId == null && casted.UnitId == null)
                     && that.SourceOfDefinition == casted.SourceOfDefinition
                     && that.Symbol == casted.Symbol
-                    && (that.DataType != null && casted.DataType != null)
+                    && ((that.DataType.HasValue && casted.DataType.HasValue)
                         ? that.DataType == casted.DataType
-                        : that.DataType == null && casted.DataType == null
-                    && (that.Definition != null && casted.Definition != null)
+                        : !that.DataType.HasValue && !casted.DataType.HasValue)
+                    && ((that.Definition != null && casted.Definition != null)
                         ? that.Definition.Count == casted.Definition.Count
                             && (
                                 that.Definition
@@ -1923,19 +1923,19 @@ namespace AasCore.Aas3_0.Tests
                                         casted.Definition,
                                         Transform)
                                     .All(item => item))
-                        : that.Definition == null && casted.Definition == null
+                        : that.Definition == null && casted.Definition == null)
                     && that.ValueFormat == casted.ValueFormat
-                    && (that.ValueList != null && casted.ValueList != null)
+                    && ((that.ValueList != null && casted.ValueList != null)
                         ? Transform(
                                 that.ValueList,
                                 casted.ValueList)
-                        : that.ValueList == null && casted.ValueList == null
+                        : that.ValueList == null && casted.ValueList == null)
                     && that.Value == casted.Value
-                    && (that.LevelType != null && casted.LevelType != null)
+                    && ((that.LevelType != null && casted.LevelType != null)
                         ? Transform(
                                 that.LevelType,
                                 casted.LevelType)
-                        : that.LevelType == null && casted.LevelType == null);
+                        : that.LevelType == null && casted.LevelType == null));
             }
         }  // internal class DeepEqualiser
 

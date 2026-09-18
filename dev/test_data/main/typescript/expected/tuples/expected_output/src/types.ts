@@ -321,6 +321,8 @@ export class Something extends Class {
 
   tricky: [number, SomeItem, IAbstractItem, SomeItem, number, Result];
 
+  optionalPair: [string, IAbstractItem] | null;
+
   /**
    * Iterate over the instances referenced from this instance.
    *
@@ -338,6 +340,10 @@ export class Something extends Class {
     yield this.tricky[2];
 
     yield this.tricky[3];
+
+    if (this.optionalPair !== null) {
+      yield this.optionalPair[1];
+    }
   }
 
   /**
@@ -365,6 +371,12 @@ export class Something extends Class {
     yield this.tricky[3];
 
     yield * this.tricky[3].descend();
+
+    if (this.optionalPair !== null) {
+      yield this.optionalPair[1];
+
+      yield * this.optionalPair[1].descend();
+    }
   }
 
   /**
@@ -422,12 +434,14 @@ export class Something extends Class {
   constructor(
     pair: [string, number],
     items: [IAbstractItem, IAbstractItem],
-    tricky: [number, SomeItem, IAbstractItem, SomeItem, number, Result]
+    tricky: [number, SomeItem, IAbstractItem, SomeItem, number, Result],
+    optionalPair: [string, IAbstractItem] | null = null
   ) {
     super();
     this.pair = pair;
     this.items = items;
     this.tricky = tricky;
+    this.optionalPair = optionalPair;
   }
 }
 

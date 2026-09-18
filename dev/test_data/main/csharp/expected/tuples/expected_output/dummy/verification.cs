@@ -163,6 +163,20 @@ namespace dummy
                             "tricky"));
                     yield return error;
                 }
+
+                if (that.OptionalPair.HasValue)
+                {
+                    foreach (var error in Verification.Verify(that.OptionalPair.Value.Item2))
+                    {
+                        error.PrependSegment(
+                            new Reporting.IndexSegment(
+                                1));
+                        error.PrependSegment(
+                            new Reporting.NameSegment(
+                                "optionalPair"));
+                        yield return error;
+                    }
+                }
             }
         }  // private class Transformer
 

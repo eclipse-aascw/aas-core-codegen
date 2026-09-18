@@ -168,6 +168,29 @@ class ISomething
     > value
   ) = 0;
 
+  virtual const common::optional<
+    std::tuple<
+      std::wstring,
+      std::shared_ptr<IAbstractItem>
+    >
+  >& optional_pair() const = 0;
+
+  virtual common::optional<
+    std::tuple<
+      std::wstring,
+      std::shared_ptr<IAbstractItem>
+    >
+  >& mutable_optional_pair() = 0;
+
+  virtual void set_optional_pair(
+    common::optional<
+      std::tuple<
+        std::wstring,
+        std::shared_ptr<IAbstractItem>
+      >
+    > value
+  ) = 0;
+
   virtual ~ISomething() = default;
 };
 
@@ -248,7 +271,13 @@ class Something
       std::shared_ptr<ISomeItem>,
       int64_t,
       Result
-    > tricky
+    > tricky,
+    common::optional<
+      std::tuple<
+        std::wstring,
+        std::shared_ptr<IAbstractItem>
+      >
+    > optional_pair = common::nullopt
   );
 
   ModelType model_type() const override;
@@ -328,6 +357,33 @@ class Something
 
   // endregion
 
+  // region Get and set optional_pair_
+
+  const common::optional<
+    std::tuple<
+      std::wstring,
+      std::shared_ptr<IAbstractItem>
+    >
+  >& optional_pair() const override;
+
+  common::optional<
+    std::tuple<
+      std::wstring,
+      std::shared_ptr<IAbstractItem>
+    >
+  >& mutable_optional_pair() override;
+
+  void set_optional_pair(
+    common::optional<
+      std::tuple<
+        std::wstring,
+        std::shared_ptr<IAbstractItem>
+      >
+    > value
+  ) override;
+
+  // endregion
+
   ~Something() override = default;
 
  private:
@@ -349,6 +405,13 @@ class Something
     int64_t,
     Result
   > tricky_;
+
+  common::optional<
+    std::tuple<
+      std::wstring,
+      std::shared_ptr<IAbstractItem>
+    >
+  > optional_pair_;
 };
 
 // endregion

@@ -1893,20 +1893,15 @@ def _generate_transform_property(
     prop_literal = csharp_common.string_literal(prop.json_name)
 
     # NOTE (mristin):
-    # An optional enumeration is a ``System.Nullable`` of that enumeration, and
-    # not the enumeration itself, so it has to be unwrapped before it can be
-    # converted. Every other optional property is of a reference type, which
-    # needs no unwrapping.
-    is_optional_enumeration = (
-        isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation)
-        and isinstance(prop.type_annotation.value, intermediate.OurTypeAnnotation)
-        and isinstance(prop.type_annotation.value.our_type, intermediate.Enumeration)
-    )
-
-    if is_optional_enumeration:
+    # An optional of a value type, such as an enumeration or a tuple, is
+    # a ``System.Nullable`` of that type, and not the type itself, so it has to be
+    # unwrapped before it can be converted. Every other optional property is of
+    # a reference type, which needs no unwrapping.
+    source_expr = Stripped(f"that.{name}")
+    if isinstance(
+        prop.type_annotation, intermediate.OptionalTypeAnnotation
+    ) and csharp_common.is_value_type(type_anno):
         source_expr = Stripped(f"that.{name}.Value")
-    else:
-        source_expr = Stripped(f"that.{name}")
 
     serialize_block: Stripped
 
@@ -1975,7 +1970,9 @@ catch (SerializationFailure failure)
         return serialize_block, None
 
     condition = (
-        f"that.{name}.HasValue" if is_optional_enumeration else f"that.{name} != null"
+        f"that.{name}.HasValue"
+        if csharp_common.is_value_type(type_anno)
+        else f"that.{name} != null"
     )
 
     return (

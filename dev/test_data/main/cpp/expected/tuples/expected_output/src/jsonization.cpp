@@ -1568,7 +1568,8 @@ std::pair<
 std::set<std::string> kPropertiesInSomething = {
   "pair",
   "items",
-  "tricky"
+  "tricky",
+  "optionalPair"
 };
 
 std::pair<
@@ -1690,6 +1691,13 @@ std::pair<
     >
   > the_tricky;
 
+  common::optional<
+    std::tuple<
+      std::wstring,
+      std::shared_ptr<types::IAbstractItem>
+    >
+  > the_optional_pair;
+
   // endregion Initialization
 
   // region De-serialize pair
@@ -1810,6 +1818,42 @@ std::pair<
 
   // endregion De-serialize tricky
 
+  // region De-serialize optionalPair
+
+  if (json.contains("optionalPair")) {
+    std::tie(
+      the_optional_pair,
+      error
+    ) = DeserializeTuple2<
+      std::wstring,
+      std::shared_ptr<types::IAbstractItem>
+    >(
+      json["optionalPair"],
+      DeserializeWstring,
+      [&additional_properties](const nlohmann::json& a_json) {
+        return DeserializeAbstractItem(a_json, additional_properties);
+      }
+    );
+
+    if (error.has_value()) {
+      error->path.segments.emplace_front(
+        common::make_unique<PropertySegment>(
+          L"optionalPair"
+        )
+      );
+
+      return std::make_pair<
+        common::optional<std::shared_ptr<types::ISomething> >,
+        common::optional<DeserializationError>
+      >(
+        common::nullopt,
+        std::move(error)
+      );
+    }
+  }
+
+  // endregion De-serialize optionalPair
+
   return std::make_pair(
     common::make_optional<
       std::shared_ptr<types::ISomething>
@@ -1820,7 +1864,8 @@ std::pair<
       new types::Something(
         std::move(*the_pair),
         std::move(*the_items),
-        std::move(*the_tricky)
+        std::move(*the_tricky),
+        std::move(the_optional_pair)
       )
     ),
     common::nullopt
@@ -2752,6 +2797,58 @@ std::pair<
   result["tricky"] = std::move(
     *json_tricky
   );
+
+  const common::optional<
+    std::tuple<
+      std::wstring,
+      std::shared_ptr<types::IAbstractItem>
+    >
+  >& maybe_optional_pair(
+    that.optional_pair()
+  );
+  if (that.optional_pair().has_value()) {
+    common::optional<nlohmann::json> json_optional_pair;
+    std::tie(
+      json_optional_pair,
+      error
+    ) = SerializeTuple2(
+      *maybe_optional_pair,
+      [](const std::wstring& item) {
+        return std::make_pair(
+          common::make_optional<nlohmann::json>(
+            SerializeWstring(item)
+          ),
+          common::nullopt
+        );
+      },
+      [](
+        const std::shared_ptr<types::IAbstractItem>& item
+      ) {
+        return SerializeIClass(
+          *item
+        );
+      }
+    );
+    if (error.has_value()) {
+      error->path.segments.emplace_front(
+        common::make_unique<iteration::PropertySegment>(
+          iteration::Property::kOptionalPair
+        )
+      );
+
+      return std::make_pair<
+        common::optional<nlohmann::json>,
+        common::optional<SerializationError>
+      >(
+        common::nullopt,
+        std::move(error)
+      );
+    }
+
+    result["optionalPair"] = std::move(
+      *json_optional_pair
+    );
+  }
 
   return std::make_pair<
     common::optional<nlohmann::json>,

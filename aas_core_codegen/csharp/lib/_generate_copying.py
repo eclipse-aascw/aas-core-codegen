@@ -420,9 +420,18 @@ if (that.{prop_name} != null)
                 # NOTE (mristin):
                 # Tuples are fixed-length and heterogeneous, so, unlike lists, we can
                 # construct the copy directly in-line without a pre-sized collection.
+
+                # NOTE (mristin):
+                # A tuple is a ``System.ValueTuple``, so an optional tuple is
+                # a ``System.Nullable`` which has to be unwrapped before we can
+                # access its items.
+                access_expr = (
+                    f"that.{prop_name}.Value" if optional else f"that.{prop_name}"
+                )
+
                 item_exprs = []  # type: List[Stripped]
                 for i, item_type_anno in enumerate(type_anno.items):
-                    item_expr = f"that.{prop_name}.Item{i + 1}"
+                    item_expr = f"{access_expr}.Item{i + 1}"
 
                     if isinstance(
                         item_type_anno, intermediate.OurTypeAnnotation
@@ -442,9 +451,26 @@ if (that.{prop_name} != null)
 
                     item_exprs.append(Stripped(item_expr))
 
-                constructor_arg_exprs.append(
-                    csharp_common.generate_tuple_literal(item_exprs)
-                )
+                tuple_literal = csharp_common.generate_tuple_literal(item_exprs)
+
+                if optional:
+                    condition = f"that.{prop_name}.HasValue"
+
+                    # NOTE (mristin):
+                    # The ``null`` has to be cast explicitly. Otherwise, the C#
+                    # compiler can not find a common type of the two branches --
+                    # a ``System.ValueTuple`` and a ``null`` -- unless the language
+                    # version is 9.0 or above, which we do not want to require.
+                    nullable_type = csharp_common.generate_type(arg.type_annotation)
+
+                    constructor_arg_exprs.append(
+                        f"""\
+({condition})
+{I}? {indent_but_first_line(tuple_literal, I)}
+{I}: ({nullable_type})null"""
+                    )
+                else:
+                    constructor_arg_exprs.append(tuple_literal)
             else:
                 # noinspection PyTypeChecker
                 assert_never(type_anno)

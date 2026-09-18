@@ -80,13 +80,21 @@ Something::Something(
     std::shared_ptr<ISomeItem>,
     int64_t,
     Result
-  > tricky
+  > tricky,
+  common::optional<
+    std::tuple<
+      std::wstring,
+      std::shared_ptr<IAbstractItem>
+    >
+  > optional_pair
 ) {
   pair_ = std::move(pair);
 
   items_ = std::move(items);
 
   tricky_ = std::move(tricky);
+
+  optional_pair_ = std::move(optional_pair);
 }
 
 ModelType Something::model_type() const {
@@ -172,6 +180,35 @@ void Something::set_tricky(
   > value
 ) {
   tricky_ = value;
+}
+
+const common::optional<
+  std::tuple<
+    std::wstring,
+    std::shared_ptr<IAbstractItem>
+  >
+>& Something::optional_pair() const {
+  return optional_pair_;
+}
+
+common::optional<
+  std::tuple<
+    std::wstring,
+    std::shared_ptr<IAbstractItem>
+  >
+>& Something::mutable_optional_pair() {
+  return optional_pair_;
+}
+
+void Something::set_optional_pair(
+  common::optional<
+    std::tuple<
+      std::wstring,
+      std::shared_ptr<IAbstractItem>
+    >
+  > value
+) {
+  optional_pair_ = value;
 }
 
 // endregion Something

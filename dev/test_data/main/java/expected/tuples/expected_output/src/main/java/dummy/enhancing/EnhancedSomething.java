@@ -72,6 +72,16 @@ public class EnhancedSomething<EnhancementT>
     instance.setTricky(tricky);
   }
 
+  @Override
+  public Optional<Tuple2<String, IAbstractItem>> getOptionalPair() {
+    return instance.getOptionalPair();
+  }
+
+  @Override
+  public void setOptionalPair(Tuple2<String, IAbstractItem> optionalPair) {
+    instance.setOptionalPair(optionalPair);
+  }
+
   public Iterable<IClass> descendOnce() {
     return instance.descendOnce();
   }

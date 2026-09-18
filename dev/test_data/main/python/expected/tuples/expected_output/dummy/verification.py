@@ -268,6 +268,22 @@ class _Transformer(
             )
             yield error
 
+        if that.optional_pair is not None:
+            for error in self.transform(that.optional_pair[1]):
+                error.path._prepend(
+                    IndexSegment(
+                        that.optional_pair,
+                        1
+                    )
+                )
+                error.path._prepend(
+                    PropertySegment(
+                        that,
+                        'optional_pair'
+                    )
+                )
+                yield error
+
 
 _TRANSFORMER = _Transformer()
 

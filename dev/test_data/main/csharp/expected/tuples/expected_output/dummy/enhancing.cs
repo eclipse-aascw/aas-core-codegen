@@ -176,6 +176,12 @@ namespace dummy
                 set => _instance.Tricky = value;
             }
 
+            public (string, IAbstractItem)? OptionalPair
+            {
+                get => _instance.OptionalPair;
+                set => _instance.OptionalPair = value;
+            }
+
             public IEnumerable<Aas.IClass> DescendOnce()
             {
                 return _instance.DescendOnce();
@@ -338,6 +344,23 @@ namespace dummy
                     that.Tricky.Item5,
                     that.Tricky.Item6
                 );
+
+                if (that.OptionalPair.HasValue)
+                {
+                    var transformedOptionalPair1 = Transform(
+                        that.OptionalPair.Value.Item2
+                    );
+                    var castedOptionalPair1 = (
+                        transformedOptionalPair1 as Aas.IAbstractItem
+                    ) ?? throw new System.InvalidOperationException(
+                        "Expected the transformed value to be a IAbstractItem, " +
+                        $"but got: {transformedOptionalPair1}"
+                    );
+                    that.OptionalPair = (
+                        that.OptionalPair.Value.Item1,
+                        castedOptionalPair1
+                    );
+                }
 
                 var enhancement = _enhancementFactory(that);
                 return (enhancement == null)

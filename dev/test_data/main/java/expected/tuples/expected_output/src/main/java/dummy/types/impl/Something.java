@@ -40,6 +40,8 @@ public class Something implements ISomething {
     Long,
     Result> tricky;
 
+  private Tuple2<String, IAbstractItem> optionalPair;
+
   public Something(
     Tuple2<String, Long> pair,
     Tuple2<IAbstractItem, IAbstractItem> items,
@@ -59,6 +61,29 @@ public class Something implements ISomething {
     this.tricky = Objects.requireNonNull(
       tricky,
       "Argument \"tricky\" must be non-null.");
+  }
+
+  public Something(
+    Tuple2<String, Long> pair,
+    Tuple2<IAbstractItem, IAbstractItem> items,
+    Tuple6<
+      Long,
+      ISomeItem,
+      IAbstractItem,
+      ISomeItem,
+      Long,
+      Result> tricky,
+    Tuple2<String, IAbstractItem> optionalPair) {
+    this.pair = Objects.requireNonNull(
+      pair,
+      "Argument \"pair\" must be non-null.");
+    this.items = Objects.requireNonNull(
+      items,
+      "Argument \"items\" must be non-null.");
+    this.tricky = Objects.requireNonNull(
+      tricky,
+      "Argument \"tricky\" must be non-null.");
+    this.optionalPair = optionalPair;
   }
 
   @Override
@@ -107,6 +132,16 @@ public class Something implements ISomething {
     this.tricky = Objects.requireNonNull(
       tricky,
       "Argument \"tricky\" must be non-null.");
+  }
+
+  @Override
+  public Optional<Tuple2<String, IAbstractItem>> getOptionalPair() {
+    return Optional.ofNullable(optionalPair);
+  }
+
+  @Override
+  public void setOptionalPair(Tuple2<String, IAbstractItem> optionalPair) {
+    this.optionalPair = optionalPair;
   }
 
   /**
@@ -202,6 +237,11 @@ public class Something implements ISomething {
             Stream.<IClass>of(Something.this.tricky.item4())));
       }
 
+      if (optionalPair != null) {
+        memberStream = Stream.concat(memberStream,
+          Stream.<IClass>of(Something.this.optionalPair.item2()));
+      }
+
       return memberStream;
     }
   }
@@ -250,6 +290,12 @@ public class Something implements ISomething {
                 StreamSupport.stream(Something.this.tricky.item3().descend().spliterator(), false))),
             Stream.concat(Stream.<IClass>of(Something.this.tricky.item4()),
               StreamSupport.stream(Something.this.tricky.item4().descend().spliterator(), false))));
+      }
+
+      if (optionalPair != null) {
+        memberStream = Stream.concat(memberStream,
+          Stream.concat(Stream.<IClass>of(Something.this.optionalPair.item2()),
+            StreamSupport.stream(Something.this.optionalPair.item2().descend().spliterator(), false)));
       }
 
       return memberStream;

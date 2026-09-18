@@ -24,6 +24,8 @@ std::wstring PropertyToWstring(
       return L"items";
     case Property::kName:
       return L"name";
+    case Property::kOptionalPair:
+      return L"optional_pair";
     case Property::kPair:
       return L"pair";
     case Property::kSerialNumber:
@@ -479,11 +481,35 @@ void IteratorOverSomething::Execute() {
       case 5: {
         cursor_.reset();
 
+        if (!(casted_->optional_pair().has_value())) {
+          state_ = 7;
+          continue;
+        }
+
+        property_ = Property::kOptionalPair;
+
+        cursor_ = 1;
+        item_ = std::move(
+          std::static_pointer_cast<types::IClass>(
+            std::get<1>(*(casted_->optional_pair()))
+          )
+        );
+        ++index_;
+
+        state_ = 6;
+        return;
+      }
+
+      case 6: {
+        cursor_.reset();
+      }
+
+      case 7: {
         done_ = true;
         index_ = -1;
 
         // We invalidate the state since we reached the end of the routine.
-        state_ = 6;
+        state_ = 8;
         return;
       }
 

@@ -202,6 +202,17 @@ func (es *enhancedSomething[E]) SetTricky(
 	es.instance.SetTricky(value)
 }
 
+func (es *enhancedSomething[E]) OptionalPair(
+) *aascommon.Tuple2[string, aastypes.IAbstractItem] {
+	return es.instance.OptionalPair()
+}
+
+func (es *enhancedSomething[E]) SetOptionalPair(
+	value *aascommon.Tuple2[string, aastypes.IAbstractItem],
+) {
+	es.instance.SetOptionalPair(value)
+}
+
 func (es *enhancedSomething[E]) getEnhancement(
 ) E {
 	return es.enhancement
@@ -259,6 +270,17 @@ func wrapSomething[E any](
 	that.SetTricky(
 		theTricky,
 	)
+
+	theOptionalPair := that.OptionalPair()
+	if theOptionalPair != nil {
+		theOptionalPair.Item2 = Wrap[E](
+			theOptionalPair.Item2,
+			factory,
+		).(aastypes.IAbstractItem)
+		that.SetOptionalPair(
+			theOptionalPair,
+		)
+	}
 
 	return
 }
