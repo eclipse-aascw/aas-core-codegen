@@ -2062,6 +2062,77 @@ std::pair<
 
 // region De-serialize primitives
 
+/**
+ * \brief Normalize \p text the way `whiteSpace="collapse"` prescribes.
+ *
+ * Every atomic XSD type except a string, and every type derived from one by
+ * restriction, fixes `whiteSpace` to `collapse`, and a schema author can not
+ * change it. A tab, a line feed and a carriage return each become a space,
+ * a run of spaces becomes one space, and the leading and trailing spaces go.
+ * Only the result of that is a lexical representation to be matched.
+ *
+ * Mind that this strips only the whitespace *around* the value: a space
+ * within it survives as a single space, so `2  3` becomes `2 3`, which is
+ * still no number.
+ *
+ * See: https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace
+ */
+std::string CollapseWhitespace(const std::string& text) {
+  std::string result;
+  result.reserve(text.size());
+
+  bool pending_space = false;
+  for (const char character : text) {
+    if (
+      character == ' '
+      || character == '\t'
+      || character == '\n'
+      || character == '\r'
+    ) {
+      // NOTE (mristin):
+      // A space is only worth keeping once something has come before it,
+      // which trims the leading ones, and it is written out only when
+      // something follows, which trims the trailing ones.
+      pending_space = !result.empty();
+    } else {
+      if (pending_space) {
+        result += ' ';
+        pending_space = false;
+      }
+      result += character;
+    }
+  }
+
+  return result;
+}
+
+/**
+ * \brief Drop every whitespace character of \p text.
+ *
+ * This is what `xs:base64Binary` needs: it allows whitespace between
+ * the characters and not only around them, so collapsing is not enough --
+ * the decoder accepts none of it.
+ *
+ * See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+ */
+std::string RemoveWhitespace(const std::string& text) {
+  std::string result;
+  result.reserve(text.size());
+
+  for (const char character : text) {
+    if (
+      character != ' '
+      && character != '\t'
+      && character != '\n'
+      && character != '\r'
+    ) {
+      result += character;
+    }
+  }
+
+  return result;
+}
+
 const std::unordered_map<
   std::string,
   bool
@@ -2096,10 +2167,12 @@ std::pair<
     );
   }
 
-  const std::string& text(
-    static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-      const TextNode&
-    >(reader.node()).text
+  const std::string text(
+    CollapseWhitespace(
+      static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+        const TextNode&
+      >(reader.node()).text
+    )
   );
 
   auto it = kTextToBool.find(text);
@@ -2151,10 +2224,12 @@ std::pair<
     );
   }
 
-  const std::string& text(
-    static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-      const TextNode&
-    >(reader.node()).text
+  const std::string text(
+    CollapseWhitespace(
+      static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+        const TextNode&
+      >(reader.node()).text
+    )
   );
 
   common::optional<int64_t> deserialized;
@@ -2251,10 +2326,12 @@ std::pair<
     );
   }
 
-  const std::string& text(
-    static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-      const TextNode&
-    >(reader.node()).text
+  const std::string text(
+    CollapseWhitespace(
+      static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+        const TextNode&
+      >(reader.node()).text
+    )
   );
 
   double deserialized;
@@ -2408,10 +2485,12 @@ std::pair<
         );
   }
 
-  const std::string& text(
-    static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-      const TextNode&
-    >(reader.node()).text
+  const std::string text(
+    RemoveWhitespace(
+      static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+        const TextNode&
+      >(reader.node()).text
+    )
   );
 
   common::expected<

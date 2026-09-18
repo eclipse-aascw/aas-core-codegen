@@ -198,7 +198,7 @@ def _generate_parse_content_for_primitive_type(
 function {function_name}(
 {I}cursor: XmlCursor
 ): AasCommon.Either<boolean, DeserializationError> {{
-{I}const text = parseTextContent(cursor);
+{I}const text = collapseWhitespace(parseTextContent(cursor));
 
 {I}if (text === "true" || text === "1") {{
 {II}return new AasCommon.Either<boolean, DeserializationError>(true, null);
@@ -219,7 +219,7 @@ function {function_name}(
 function {function_name}(
 {I}cursor: XmlCursor
 ): AasCommon.Either<number, DeserializationError> {{
-{I}const text = parseTextContent(cursor);
+{I}const text = collapseWhitespace(parseTextContent(cursor));
 
 {I}if (!/^[+-]?\\d+$/.test(text)) {{
 {II}return newDeserializationError<number>(
@@ -255,7 +255,7 @@ function {function_name}(
 function {function_name}(
 {I}cursor: XmlCursor
 ): AasCommon.Either<number, DeserializationError> {{
-{I}const text = parseTextContent(cursor);
+{I}const text = collapseWhitespace(parseTextContent(cursor));
 
 {I}if (text === "INF") {{
 {II}return new AasCommon.Either<number, DeserializationError>(Infinity, null);
@@ -310,7 +310,14 @@ function {function_name}(
 function {function_name}(
 {I}cursor: XmlCursor
 ): AasCommon.Either<Uint8Array, DeserializationError> {{
-{I}const decodedOrError = AasCommon.base64Decode(parseTextContent(cursor));
+{I}// NOTE (mristin):
+{I}// ``xs:base64Binary`` allows whitespace between the characters, and not
+{I}// only around them, while the decoder accepts none of it. So every
+{I}// whitespace character is dropped, and not merely collapsed.
+{I}//
+{I}// See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+{I}const decodedOrError = AasCommon.base64Decode(
+{II}removeWhitespace(parseTextContent(cursor)));
 {I}if (decodedOrError.error !== null) {{
 {II}return newDeserializationError<Uint8Array>(
 {III}decodedOrError.error
@@ -2311,6 +2318,41 @@ function readRequiredRootOpenTag(
 {II}token,
 {II}null
 {I});
+}}
+
+/**
+ * Match a run of the four characters which XML calls whitespace.
+ */
+const WHITESPACE_RUN = /[ \\t\\n\\r]+/g;
+
+/**
+ * Normalize `text` the way `whiteSpace="collapse"` prescribes.
+ *
+ * Every atomic XSD type except a string, and every type derived from one by
+ * restriction, fixes `whiteSpace` to `collapse`, and a schema author can not
+ * change it. A tab, a line feed and a carriage return each become a space,
+ * a run of spaces becomes one space, and the leading and trailing spaces go.
+ * Only the result of that is a lexical representation to be matched.
+ *
+ * Mind that this strips only the whitespace *around* the value: a space
+ * within it survives as a single space, so `2  3` becomes `2 3`, which is
+ * still no number.
+ *
+ * See: https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace
+ */
+function collapseWhitespace(text: string): string {{
+{I}return text.replace(WHITESPACE_RUN, " ").trim();
+}}
+
+/**
+ * Drop every whitespace character of `text`.
+ *
+ * This is what `xs:base64Binary` needs: it allows whitespace between
+ * the characters and not only around them, so collapsing is not enough --
+ * the decoder accepts none of it.
+ */
+function removeWhitespace(text: string): string {{
+{I}return text.replace(WHITESPACE_RUN, "");
 }}
 
 /**

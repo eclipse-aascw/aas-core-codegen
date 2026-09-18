@@ -1013,6 +1013,31 @@ def _read_instance_from_iterparse(
         raise exception
 
 
+_XS_WHITESPACE_RE = re.compile(r"[ \t\n\r]+")
+
+
+def _collapse_whitespace(text: str) -> str:
+    """
+    Normalize :paramref:`text` the way ``whiteSpace="collapse"`` prescribes.
+
+    Every atomic XSD type except a string, and every type derived from one
+    by restriction, fixes ``whiteSpace`` to ``collapse``, and a schema author
+    can not change it. A tab, a line feed and a carriage return each become
+    a space, a run of spaces becomes one space, and the leading and trailing
+    spaces go. Only then is the result a lexical representation to be matched.
+
+    Mind that this strips only the whitespace *around* the value: a space
+    within it survives as a single space, so ``2  3`` becomes ``2 3``, which
+    is still no number.
+
+    See: https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace
+
+    :param text: to be normalized
+    :return: normalized text
+    """
+    return _XS_WHITESPACE_RE.sub(" ", text).strip(" ")
+
+
 def _read_text_from_element(
     element: Element,
     iterator: Iterator[Tuple[str, Element]]
@@ -1075,9 +1100,11 @@ def _read_bool_from_element_text(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed value
     """
-    text = _read_text_from_element(
-        element,
-        iterator
+    text = _collapse_whitespace(
+        _read_text_from_element(
+            element,
+            iterator
+        )
     )
 
     if text not in _XS_BOOLEAN_LITERAL_SET:
@@ -1113,9 +1140,11 @@ def _read_int_from_element_text(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed value
     """
-    text = _read_text_from_element(
-        element,
-        iterator
+    text = _collapse_whitespace(
+        _read_text_from_element(
+            element,
+            iterator
+        )
     )
 
     # NOTE (mristin):
@@ -1180,9 +1209,11 @@ def _read_float_from_element_text(
     :raise: :py:class:`DeserializationException` if unexpected input
     :return: parsed value
     """
-    text = _read_text_from_element(
-        element,
-        iterator
+    text = _collapse_whitespace(
+        _read_text_from_element(
+            element,
+            iterator
+        )
     )
 
     value = _TEXT_TO_XS_DOUBLE_LITERALS.get(text, None)

@@ -404,6 +404,42 @@ public class Xmlization {
       return result;
     }
 
+    /**
+     * Match a run of the four characters which XML calls whitespace.
+     */
+    private static final Pattern WHITESPACE_RUN = Pattern.compile("[ \t\n\r]+");
+
+    /**
+     * Normalize {@code text} the way {@code whiteSpace="collapse"} prescribes.
+     *
+     * <p>Every atomic XSD type except a string, and every type derived from one
+     * by restriction, fixes {@code whiteSpace} to {@code collapse}, and
+     * a schema author can not change it. A tab, a line feed and a carriage
+     * return each become a space, a run of spaces becomes one space, and
+     * the leading and trailing spaces go. Only the result of that is a lexical
+     * representation to be matched.
+     *
+     * <p>Mind that this strips only the whitespace <i>around</i> the value:
+     * a space within it survives as a single space, so {@code 2  3} becomes
+     * {@code 2 3}, which is still no number.
+     *
+     * <p>See: https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace
+     */
+    private static String collapseWhitespace(String text) {
+      return WHITESPACE_RUN.matcher(text).replaceAll(" ").trim();
+    }
+
+    /**
+     * Drop every whitespace character of {@code text}.
+     *
+     * <p>This is what {@code xs:base64Binary} needs: it allows whitespace
+     * between the characters and not only around them, so collapsing is not
+     * enough -- the decoder accepts none of it.
+     */
+    private static String removeWhitespace(String text) {
+      return WHITESPACE_RUN.matcher(text).replaceAll("");
+    }
+
     private static Boolean readContentAsBool(XMLEventReader reader) throws XMLStreamException {
       final StringBuilder content = new StringBuilder();
 
@@ -413,7 +449,7 @@ public class Xmlization {
         }
         reader.nextEvent();
       }
-      final String text = content.toString();
+      final String text = collapseWhitespace(content.toString());
 
       // NOTE (mristin):
       // ``xs:boolean`` spells the two values in four ways, not two, so ``1`` and
@@ -460,7 +496,14 @@ public class Xmlization {
         reader.nextEvent();
       }
 
-      String encodedData = content.toString();
+      // NOTE (mristin):
+      // ``xs:base64Binary`` allows whitespace *between* the characters, not only
+      // around them -- its grammar admits a space after every one -- while
+      // Base64.getDecoder() refuses all of it. So every whitespace character is
+      // dropped, and not merely collapsed.
+      //
+      // See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+      String encodedData = removeWhitespace(content.toString());
       final byte[] decodedData;
       Base64.Decoder decoder = Base64.getDecoder();
 

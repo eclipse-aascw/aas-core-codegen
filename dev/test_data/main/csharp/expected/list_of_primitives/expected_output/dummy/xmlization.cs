@@ -329,6 +329,15 @@ namespace dummy
             ///
             /// See: https://www.w3.org/TR/xmlschema-2/#double
             /// </remarks>
+            /// <summary>
+            /// Match a run of the four characters which XML calls whitespace.
+            /// </summary>
+            private static readonly RegularExpressions.Regex WhitespaceRunRegex = (
+                new RegularExpressions.Regex(
+                    @"[ 	
+            ]+",
+                    RegularExpressions.RegexOptions.Compiled));
+
             private static readonly RegularExpressions.Regex XsDoubleRegex = (
                 new RegularExpressions.Regex(
                     @"^(\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+)([Ee](\+|-)?[0-9]+)?\z",
@@ -347,8 +356,23 @@ namespace dummy
             /// <exception cref="System.FormatException">
             /// Thrown when <paramref name="text" /> is not a <c>xs:double</c>
             /// </exception>
-            private static double ParseXsDouble(string text)
+            private static double ParseXsDouble(string rawText)
             {
+                // NOTE (mristin):
+                // Every atomic XSD type except a string fixes whiteSpace to collapse,
+                // and a schema author can not change it, so the text is normalized
+                // before it is matched: a tab, a line feed and a carriage return each
+                // become a space, a run of spaces becomes one space, and the leading
+                // and trailing spaces go. Mind that this strips only the whitespace
+                // *around* the value: a space within it survives as a single space, so
+                // "2  3" becomes "2 3", which is still no number.
+                //
+                // The other readers of this class need no such thing -- XmlConvert,
+                // which XmlReader.ReadContentAs* goes through, already collapses.
+                //
+                // See: https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace
+                string text = WhitespaceRunRegex.Replace(rawText, " ").Trim(' ');
+
                 switch (text)
                 {
                     case "INF":

@@ -2783,6 +2783,81 @@ def _generate_functions_to_deserialize_primitives() -> List[Stripped]:
         Stripped("// region De-serialize primitives"),
         Stripped(
             f"""\
+/**
+ * \\brief Normalize \\p text the way `whiteSpace="collapse"` prescribes.
+ *
+ * Every atomic XSD type except a string, and every type derived from one by
+ * restriction, fixes `whiteSpace` to `collapse`, and a schema author can not
+ * change it. A tab, a line feed and a carriage return each become a space,
+ * a run of spaces becomes one space, and the leading and trailing spaces go.
+ * Only the result of that is a lexical representation to be matched.
+ *
+ * Mind that this strips only the whitespace *around* the value: a space
+ * within it survives as a single space, so `2  3` becomes `2 3`, which is
+ * still no number.
+ *
+ * See: https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace
+ */
+std::string CollapseWhitespace(const std::string& text) {{
+{I}std::string result;
+{I}result.reserve(text.size());
+
+{I}bool pending_space = false;
+{I}for (const char character : text) {{
+{II}if (
+{III}character == ' '
+{III}|| character == '\\t'
+{III}|| character == '\\n'
+{III}|| character == '\\r'
+{II}) {{
+{III}// NOTE (mristin):
+{III}// A space is only worth keeping once something has come before it,
+{III}// which trims the leading ones, and it is written out only when
+{III}// something follows, which trims the trailing ones.
+{III}pending_space = !result.empty();
+{II}}} else {{
+{III}if (pending_space) {{
+{IIII}result += ' ';
+{IIII}pending_space = false;
+{III}}}
+{III}result += character;
+{II}}}
+{I}}}
+
+{I}return result;
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * \\brief Drop every whitespace character of \\p text.
+ *
+ * This is what `xs:base64Binary` needs: it allows whitespace between
+ * the characters and not only around them, so collapsing is not enough --
+ * the decoder accepts none of it.
+ *
+ * See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+ */
+std::string RemoveWhitespace(const std::string& text) {{
+{I}std::string result;
+{I}result.reserve(text.size());
+
+{I}for (const char character : text) {{
+{II}if (
+{III}character != ' '
+{III}&& character != '\\t'
+{III}&& character != '\\n'
+{III}&& character != '\\r'
+{II}) {{
+{III}result += character;
+{II}}}
+{I}}}
+
+{I}return result;
+}}"""
+        ),
+        Stripped(
+            f"""\
 const std::unordered_map<
 {I}std::string,
 {I}bool
@@ -2819,10 +2894,12 @@ std::pair<
 {II});
 {I}}}
 
-{I}const std::string& text(
-{II}static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-{III}const TextNode&
-{II}>(reader.node()).text
+{I}const std::string text(
+{II}CollapseWhitespace(
+{III}static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+{IIII}const TextNode&
+{III}>(reader.node()).text
+{II})
 {I});
 
 {I}auto it = kTextToBool.find(text);
@@ -2876,10 +2953,12 @@ std::pair<
 {II});
 {I}}}
 
-{I}const std::string& text(
-{II}static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-{III}const TextNode&
-{II}>(reader.node()).text
+{I}const std::string text(
+{II}CollapseWhitespace(
+{III}static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+{IIII}const TextNode&
+{III}>(reader.node()).text
+{II})
 {I});
 
 {I}common::optional<int64_t> deserialized;
@@ -2978,10 +3057,12 @@ std::pair<
 {II});
 {I}}}
 
-{I}const std::string& text(
-{II}static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-{III}const TextNode&
-{II}>(reader.node()).text
+{I}const std::string text(
+{II}CollapseWhitespace(
+{III}static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+{IIII}const TextNode&
+{III}>(reader.node()).text
+{II})
 {I});
 
 {I}double deserialized;
@@ -3139,10 +3220,12 @@ std::pair<
 {IIII});
 {I}}}
 
-{I}const std::string& text(
-{II}static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
-{III}const TextNode&
-{II}>(reader.node()).text
+{I}const std::string text(
+{II}RemoveWhitespace(
+{III}static_cast<  // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+{IIII}const TextNode&
+{III}>(reader.node()).text
+{II})
 {I});
 
 {I}common::expected<

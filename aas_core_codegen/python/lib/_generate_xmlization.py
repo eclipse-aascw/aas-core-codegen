@@ -2705,9 +2705,19 @@ _HELPER_DEPENDENCIES = {
     "_read_tuple_item": [],
     "_read_instance_from_iterparse": [],
     "_read_text_from_element": ["_raise_if_has_tail_or_attrib", "_read_end_element"],
-    "_read_bool_from_element_text": ["_read_text_from_element"],
-    "_read_int_from_element_text": ["_read_text_from_element"],
-    "_read_float_from_element_text": ["_read_text_from_element"],
+    "_collapse_whitespace": [],
+    "_read_bool_from_element_text": [
+        "_read_text_from_element",
+        "_collapse_whitespace",
+    ],
+    "_read_int_from_element_text": [
+        "_read_text_from_element",
+        "_collapse_whitespace",
+    ],
+    "_read_float_from_element_text": [
+        "_read_text_from_element",
+        "_collapse_whitespace",
+    ],
     "_read_str_from_element_text": [
         "_read_end_element",
         "_raise_if_has_tail_or_attrib",
@@ -3175,6 +3185,32 @@ def _read_instance_from_iterparse(
 {II}exception.path._prepend(ElementSegment(next_element))
 {II}raise exception"""
         ),
+        "_collapse_whitespace": Stripped(
+            f'''\
+_XS_WHITESPACE_RE = re.compile(r"[ \\t\\n\\r]+")
+
+
+def _collapse_whitespace(text: str) -> str:
+{I}"""
+{I}Normalize :paramref:`text` the way ``whiteSpace="collapse"`` prescribes.
+
+{I}Every atomic XSD type except a string, and every type derived from one
+{I}by restriction, fixes ``whiteSpace`` to ``collapse``, and a schema author
+{I}can not change it. A tab, a line feed and a carriage return each become
+{I}a space, a run of spaces becomes one space, and the leading and trailing
+{I}spaces go. Only then is the result a lexical representation to be matched.
+
+{I}Mind that this strips only the whitespace *around* the value: a space
+{I}within it survives as a single space, so ``2  3`` becomes ``2 3``, which
+{I}is still no number.
+
+{I}See: https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace
+
+{I}:param text: to be normalized
+{I}:return: normalized text
+{I}"""
+{I}return _XS_WHITESPACE_RE.sub(" ", text).strip(" ")'''
+        ),
         "_read_text_from_element": Stripped(
             f"""\
 def _read_text_from_element(
@@ -3240,9 +3276,11 @@ def _read_bool_from_element_text(
 {I}:raise: :py:class:`DeserializationException` if unexpected input
 {I}:return: parsed value
 {I}\"\"\"
-{I}text = _read_text_from_element(
-{II}element,
-{II}iterator
+{I}text = _collapse_whitespace(
+{II}_read_text_from_element(
+{III}element,
+{III}iterator
+{II})
 {I})
 
 {I}if text not in _XS_BOOLEAN_LITERAL_SET:
@@ -3279,9 +3317,11 @@ def _read_int_from_element_text(
 {I}:raise: :py:class:`DeserializationException` if unexpected input
 {I}:return: parsed value
 {I}\"\"\"
-{I}text = _read_text_from_element(
-{II}element,
-{II}iterator
+{I}text = _collapse_whitespace(
+{II}_read_text_from_element(
+{III}element,
+{III}iterator
+{II})
 {I})
 
 {I}# NOTE (mristin):
@@ -3347,9 +3387,11 @@ def _read_float_from_element_text(
 {I}:raise: :py:class:`DeserializationException` if unexpected input
 {I}:return: parsed value
 {I}\"\"\"
-{I}text = _read_text_from_element(
-{II}element,
-{II}iterator
+{I}text = _collapse_whitespace(
+{II}_read_text_from_element(
+{III}element,
+{III}iterator
+{II})
 {I})
 
 {I}value = _TEXT_TO_XS_DOUBLE_LITERALS.get(text, None)

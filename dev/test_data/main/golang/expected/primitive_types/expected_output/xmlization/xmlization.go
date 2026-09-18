@@ -142,6 +142,35 @@ func skipEmptyTextWhitespaceAndComments(
 //
 // Any comment tokens are skipped.
 //
+// Match a run of the four characters which XML calls whitespace.
+var whitespaceRunRe = regexp.MustCompile("[ \t\n\r]+")
+
+// Normalize `text` the way `whiteSpace="collapse"` prescribes.
+//
+// Every atomic XSD type except a string, and every type derived from one by
+// restriction, fixes `whiteSpace` to `collapse`, and a schema author can not
+// change it. A tab, a line feed and a carriage return each become a space,
+// a run of spaces becomes one space, and the leading and trailing spaces go.
+// Only the result of that is a lexical representation to be matched.
+//
+// Mind that this strips only the whitespace *around* the value: a space
+// within it survives as a single space, so "2  3" becomes "2 3", which is
+// still no number.
+//
+// See: https://www.w3.org/TR/xmlschema-2/#rf-whiteSpace
+func collapseWhitespace(text string) string {
+	return strings.Trim(whitespaceRunRe.ReplaceAllString(text, " "), " ")
+}
+
+// Drop every whitespace character of `text`.
+//
+// This is what `xs:base64Binary` needs: it allows whitespace between
+// the characters and not only around them, so collapsing is not enough --
+// the decoder accepts none of it.
+func removeWhitespace(text string) string {
+	return whitespaceRunRe.ReplaceAllString(text, "")
+}
+
 // The resulting `next` token points to the first token which is neither text
 // nor comment.
 //
@@ -203,6 +232,7 @@ func readTextAs_bool(
 	if err != nil {
 		return
 	}
+	text = collapseWhitespace(text)
 
 	switch text {
 	case "1":
@@ -245,6 +275,7 @@ func readTextAs_long(
 	if err != nil {
 		return
 	}
+	text = collapseWhitespace(text)
 
 	var parseErr error
 	value, parseErr = strconv.ParseInt(text, 10, 64)
@@ -305,6 +336,7 @@ func readTextAs_double(
 	if err != nil {
 		return
 	}
+	text = collapseWhitespace(text)
 
 	// We need to check explicitly for the regular expression since
 	// strconv.ParseFloat is too permissive. For example, it accepts "nan"
@@ -359,6 +391,13 @@ func readTextAs_bytes(
 	if err != nil {
 		return
 	}
+	// NOTE:
+	// xs:base64Binary allows whitespace between the characters, and not only
+	// around them, while the decoder accepts none of it. So every whitespace
+	// character is dropped, and not merely collapsed.
+	//
+	// See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+	text = removeWhitespace(text)
 
 	var decodingErr error
 	value, decodingErr = b64.StdEncoding.DecodeString(text)
