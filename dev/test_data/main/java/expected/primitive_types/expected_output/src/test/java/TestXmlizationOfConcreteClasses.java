@@ -5,6 +5,7 @@
 
 package dummy.tests;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -292,6 +293,177 @@ public class TestXmlizationOfConcreteClasses {
       }
     }
   } // public void testSomethingVerificationFail
+
+  /**
+   * Read the first recorded example of Something with the content of
+   * the element {@code xmlName} replaced by {@code text}.
+   */
+  private static Something readWith(String xmlName, String text)
+    throws IOException, XMLStreamException {
+    final Path searchPath =
+      Paths.get(Common.TEST_DATA_DIR, "Xml", "Expected", "something");
+    final List<Path> paths = Common.findPaths(searchPath, ".xml");
+
+    if (paths.isEmpty()) {
+      fail(
+        "Expected at least one recorded example of something, but got none");
+    }
+
+    final String original =
+      new String(Files.readAllBytes(paths.get(0)), StandardCharsets.UTF_8);
+
+    final int start = original.indexOf("<" + xmlName + ">") + xmlName.length() + 2;
+    final int end = original.indexOf("</" + xmlName + ">");
+
+    final String patched =
+      original.substring(0, start) + text + original.substring(end);
+
+    final XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
+    final XMLEventReader xmlReader =
+      xmlInputFactory.createXMLEventReader(new StringReader(patched));
+
+    return Xmlization.Deserialize.deserializeSomething(xmlReader);
+  }
+
+  @Test
+  public void testSomeFloatReadFrom1e400() throws IOException, XMLStreamException {
+    final Something instance =
+      readWith("someFloat", "1e400");
+
+    assertEquals(
+      Double.POSITIVE_INFINITY,
+      instance.getSomeFloat());
+  } // public void testSomeFloatReadFrom1e400
+
+  @Test
+  public void testSomeFloatReadFromMinus1e400() throws IOException, XMLStreamException {
+    final Something instance =
+      readWith("someFloat", "-1e400");
+
+    assertEquals(
+      Double.NEGATIVE_INFINITY,
+      instance.getSomeFloat());
+  } // public void testSomeFloatReadFromMinus1e400
+
+  @Test
+  public void testSomeFloatReadFrom1eminus400() throws IOException, XMLStreamException {
+    final Something instance =
+      readWith("someFloat", "1e-400");
+
+    assertEquals(
+      0.0,
+      instance.getSomeFloat());
+  } // public void testSomeFloatReadFrom1eminus400
+
+  @Test
+  public void testSomeFloatReadFromInf() throws IOException, XMLStreamException {
+    final Something instance =
+      readWith("someFloat", "INF");
+
+    assertEquals(
+      Double.POSITIVE_INFINITY,
+      instance.getSomeFloat());
+  } // public void testSomeFloatReadFromInf
+
+  @Test
+  public void testSomeFloatReadFromPlusinf() throws IOException, XMLStreamException {
+    final Something instance =
+      readWith("someFloat", "+INF");
+
+    assertEquals(
+      Double.POSITIVE_INFINITY,
+      instance.getSomeFloat());
+  } // public void testSomeFloatReadFromPlusinf
+
+  @Test
+  public void testSomeFloatReadFromMinusinf() throws IOException, XMLStreamException {
+    final Something instance =
+      readWith("someFloat", "-INF");
+
+    assertEquals(
+      Double.NEGATIVE_INFINITY,
+      instance.getSomeFloat());
+  } // public void testSomeFloatReadFromMinusinf
+
+  @Test
+  public void testSomeBoolReadFrom1() throws IOException, XMLStreamException {
+    final Something instance =
+      readWith("someBool", "1");
+
+    assertEquals(
+      true,
+      instance.getSomeBool());
+  } // public void testSomeBoolReadFrom1
+
+  @Test
+  public void testSomeBoolReadFrom0() throws IOException, XMLStreamException {
+    final Something instance =
+      readWith("someBool", "0");
+
+    assertEquals(
+      false,
+      instance.getSomeBool());
+  } // public void testSomeBoolReadFrom0
+
+  @Test
+  public void testSomeBoolReadFromTrue() throws IOException, XMLStreamException {
+    final Something instance =
+      readWith("someBool", "true");
+
+    assertEquals(
+      true,
+      instance.getSomeBool());
+  } // public void testSomeBoolReadFromTrue
+
+  @Test
+  public void testSomeBoolReadFromFalse() throws IOException, XMLStreamException {
+    final Something instance =
+      readWith("someBool", "false");
+
+    assertEquals(
+      false,
+      instance.getSomeBool());
+  } // public void testSomeBoolReadFromFalse
+
+  @Test
+  public void testSomeBytesReadFromSgkpad() throws IOException, XMLStreamException {
+    final Something instance =
+      readWith("someBytes", "SGk=");
+
+    assertArrayEquals(
+      new byte[] {72, 105},
+      instance.getSomeBytes());
+  } // public void testSomeBytesReadFromSgkpad
+
+  @Test
+  public void testSomeBytesReadFromSgspacekpad() throws IOException, XMLStreamException {
+    final Something instance =
+      readWith("someBytes", "SG k=");
+
+    assertArrayEquals(
+      new byte[] {72, 105},
+      instance.getSomeBytes());
+  } // public void testSomeBytesReadFromSgspacekpad
+
+  @Test
+  public void testSomeBytesReadFromSspacegspacekspacepad() throws IOException, XMLStreamException {
+    final Something instance =
+      readWith("someBytes", "S G k =");
+
+    assertArrayEquals(
+      new byte[] {72, 105},
+      instance.getSomeBytes());
+  } // public void testSomeBytesReadFromSspacegspacekspacepad
+
+  @Test
+  public void testSomeBytesReadFromEmpty() throws IOException, XMLStreamException {
+    final Something instance =
+      readWith("someBytes", "");
+
+    assertArrayEquals(
+      new byte[] {},
+      instance.getSomeBytes());
+  } // public void testSomeBytesReadFromEmpty
 } // class TestXmlizationOfConcreteClasses
 
 // package dummy.tests

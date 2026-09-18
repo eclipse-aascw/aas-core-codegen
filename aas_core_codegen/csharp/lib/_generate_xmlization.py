@@ -1043,7 +1043,12 @@ private static double ParseXsDouble(string rawText)
 
 {I}switch (text)
 {I}{{
+{II}// NOTE (mristin):
+{II}// "+INF" is read although it is written as "INF": XSD 1.1 admits it,
+{II}// its production being (\\+|-)?INF, and being liberal in what we
+{II}// accept costs nothing here.
 {II}case "INF":
+{II}case "+INF":
 {III}return System.Double.PositiveInfinity;
 {II}case "-INF":
 {III}return System.Double.NegativeInfinity;

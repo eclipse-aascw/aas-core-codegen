@@ -3655,6 +3655,33 @@ def collect_ids_of_types_reaching_a_number(symbol_table: SymbolTable) -> Set[int
     return result
 
 
+def first_class_of_only_required_primitives(
+    symbol_table: SymbolTable,
+) -> Optional[ConcreteClass]:
+    """
+    Give out the first concrete class whose every property is a required primitive.
+
+    Such a class serializes to a flat document: one element per property, each
+    named after it, and never repeated. That is what lets a generated test take
+    a recorded example and put a value of its own in the place of one element,
+    without having to know anything else about the shape of the document.
+
+    ``None`` is given out when the meta-model has no such class, in which case
+    the tests which need one are simply not generated.
+    """
+    for cls in symbol_table.concrete_classes:
+        if len(cls.properties) == 0:
+            continue
+
+        if all(
+            isinstance(prop.type_annotation, PrimitiveTypeAnnotation)
+            for prop in cls.properties
+        ):
+            return cls
+
+    return None
+
+
 def numeric_places(symbol_table: SymbolTable) -> List[NumericPlace]:
     """
     List the places where a number unrepresentable in JSON can sit.

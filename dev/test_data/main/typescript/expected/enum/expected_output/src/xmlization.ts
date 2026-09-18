@@ -786,7 +786,11 @@ function parse_float(
 ): AasCommon.Either<number, DeserializationError> {
   const text = collapseWhitespace(parseTextContent(cursor));
 
-  if (text === "INF") {
+  // NOTE (mristin):
+  // `+INF` is read although it is written as `INF`: XSD 1.1 admits it, its
+  // production being `(\+|-)?INF`, and being liberal in what we accept
+  // costs nothing here.
+  if (text === "INF" || text === "+INF") {
     return new AasCommon.Either<number, DeserializationError>(Infinity, null);
   }
   if (text === "-INF") {

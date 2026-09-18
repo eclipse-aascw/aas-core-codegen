@@ -2510,7 +2510,11 @@ std::pair<
   // See: https://www.w3.org/TR/xmlschema11-2/#double
   double deserialized;
 
-  if (text == "INF") {
+  // NOTE (mristin):
+  // "+INF" is read although it is written as "INF": XSD 1.1 admits it, its
+  // production being (\+|-)?INF, and being liberal in what we accept costs
+  // nothing here.
+  if (text == "INF" || text == "+INF") {
     deserialized = std::numeric_limits<double>::infinity();
   } else if (text == "-INF") {
     deserialized = -std::numeric_limits<double>::infinity();

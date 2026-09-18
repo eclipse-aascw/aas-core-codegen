@@ -1,11 +1,11 @@
 """Generate code to test the XML de/serialization of concrete classes."""
 
-from typing import List
+from typing import Dict, List, Mapping, Tuple
 
 from icontract import ensure
 
 from aas_core_codegen import intermediate, naming
-from aas_core_codegen.common import Stripped, indent_but_first_line
+from aas_core_codegen.common import Identifier, Stripped, indent_but_first_line
 from aas_core_codegen.csharp import common as csharp_common, naming as csharp_naming
 from aas_core_codegen.csharp.common import (
     INDENT as I,
@@ -14,6 +14,168 @@ from aas_core_codegen.csharp.common import (
     INDENT4 as IIII,
     INDENT5 as IIIII,
 )
+
+
+#: The lexical forms which no recorded example can hold, by the primitive
+#: they belong to. See the Java generator for why they can not be fixtures.
+_LEXICAL_CASES_BY_PRIMITIVE = {
+    intermediate.PrimitiveType.FLOAT: [
+        # NOTE (mristin):
+        # A literal too large for a double is not an error: XSD rounds it to
+        # an infinity, and one too small to zero.
+        #
+        # See: https://www.w3.org/TR/xmlschema11-2/#double
+        ("1e400", "System.Double.PositiveInfinity"),
+        ("-1e400", "System.Double.NegativeInfinity"),
+        ("1e-400", "0.0"),
+        ("INF", "System.Double.PositiveInfinity"),
+        ("+INF", "System.Double.PositiveInfinity"),
+        ("-INF", "System.Double.NegativeInfinity"),
+    ],
+    intermediate.PrimitiveType.BYTEARRAY: [
+        # NOTE (mristin):
+        # ``xs:base64Binary`` admits whitespace *between* the characters and
+        # not only around them, and an empty value stands for zero bytes.
+        # Neither can be a recorded example: the first is written back without
+        # the space, and the second as an empty element.
+        #
+        # See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+        ("SGk=", "new byte[] { 72, 105 }"),
+        ("SG k=", "new byte[] { 72, 105 }"),
+        ("S G k =", "new byte[] { 72, 105 }"),
+        ("", "new byte[] { }"),
+    ],
+    intermediate.PrimitiveType.BOOL: [
+        # NOTE (mristin):
+        # ``xs:boolean`` spells the two values in four ways, not two.
+        ("1", "true"),
+        ("0", "false"),
+        ("true", "true"),
+        ("false", "false"),
+    ],
+}  # type: Mapping[intermediate.PrimitiveType, List[Tuple[str, str]]]
+
+
+def _lexical_test_name_chunk(text: str) -> str:
+    """
+    Make a chunk of a test name out of ``text``.
+
+    The result has to satisfy :py:attr:`aas_core_codegen.common.IDENTIFIER_RE`,
+    so every character which is not a letter or a digit is spelled out, and
+    an empty text is named as such.
+    """
+    if text == "":
+        return "empty"
+
+    mapping = {
+        "+": "plus_",
+        "-": "minus_",
+        ".": "point_",
+        " ": "space_",
+        "=": "pad",
+    }
+    return "".join(mapping.get(character, character) for character in text)
+
+
+def _generate_lexical_tests(symbol_table: intermediate.SymbolTable) -> List[Stripped]:
+    """Generate the tests over the lexical forms which no example can hold."""
+    cls = intermediate.first_class_of_only_required_primitives(symbol_table)
+    if cls is None:
+        return []
+
+    prop_by_a_type = (
+        dict()
+    )  # type: Dict[intermediate.PrimitiveType, intermediate.Property]
+    for prop in cls.properties:
+        assert isinstance(prop.type_annotation, intermediate.PrimitiveTypeAnnotation)
+        prop_by_a_type.setdefault(prop.type_annotation.a_type, prop)
+
+    relevant = [
+        (a_type, prop_by_a_type[a_type])
+        for a_type in (
+            intermediate.PrimitiveType.FLOAT,
+            intermediate.PrimitiveType.BOOL,
+            intermediate.PrimitiveType.BYTEARRAY,
+        )
+        if a_type in prop_by_a_type
+    ]
+
+    if len(relevant) == 0:
+        return []
+
+    cls_name_csharp = csharp_naming.class_name(cls.name)
+    cls_name_xml = naming.xml_class_name(cls.name)
+
+    result = [
+        Stripped(
+            f"""\
+/// <summary>
+/// Read the first recorded example of {cls_name_csharp} with the content of
+/// the element <paramref name="xmlName" /> replaced by
+/// <paramref name="text" />.
+/// </summary>
+private static Aas.{cls_name_csharp} ReadWith(string xmlName, string text)
+{{
+{I}var paths = Directory.GetFiles(
+{II}Path.Combine(
+{III}Aas.Tests.Common.TestDataDir,
+{III}"Xml",
+{III}"Expected",
+{III}{csharp_common.string_literal(cls_name_xml)}
+{II}),
+{II}"*.xml",
+{II}System.IO.SearchOption.AllDirectories).ToList();
+{I}paths.Sort();
+
+{I}Assert.IsNotEmpty(
+{II}paths,
+{II}$"Expected at least one recorded example of {cls_name_xml}, but got none");
+
+{I}string original = System.IO.File.ReadAllText(paths[0]);
+
+{I}int start = original.IndexOf($"<{{xmlName}}>") + xmlName.Length + 2;
+{I}int end = original.IndexOf($"</{{xmlName}}>");
+
+{I}string patched =
+{II}original.Substring(0, start) + text + original.Substring(end);
+
+{I}using var xmlReader = System.Xml.XmlReader.Create(
+{II}new System.IO.StringReader(patched));
+
+{I}return Aas.Xmlization.Deserialize.{cls_name_csharp}From(xmlReader);
+}}"""
+        )
+    ]  # type: List[Stripped]
+
+    for a_type, prop in relevant:
+        prop_xml_name = naming.xml_property(prop.name)
+        prop_name = csharp_naming.property_name(prop.name)
+
+        for a_text, expected in _LEXICAL_CASES_BY_PRIMITIVE[a_type]:
+            test_name = csharp_naming.method_name(
+                Identifier(
+                    f"Test_{prop.name}_read_from_" f"{_lexical_test_name_chunk(a_text)}"
+                )
+            )
+
+            result.append(
+                Stripped(
+                    f"""\
+[Test]
+public void {test_name}()
+{{
+{I}var instance = ReadWith(
+{II}{csharp_common.string_literal(prop_xml_name)},
+{II}{csharp_common.string_literal(a_text)});
+
+{I}Assert.AreEqual(
+{II}{expected},
+{II}instance.{prop_name});
+}}  // public void {test_name}"""
+                )
+            )
+
+    return result
 
 
 # fmt: off
@@ -341,6 +503,8 @@ public void Test_{cls_name_csharp}_verification_fail()
 }}  // public void Test_{cls_name_csharp}_verification_fail"""
             )
         )
+
+    blocks.extend(_generate_lexical_tests(symbol_table))
 
     blocks_joined = "\n\n".join(blocks)
 

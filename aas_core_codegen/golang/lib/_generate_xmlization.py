@@ -682,7 +682,11 @@ def _generate_is_valid_xs_double() -> List[Stripped]:
         Stripped(
             f"""\
 func constructXsDoubleRe() *regexp.Regexp {{
-{I}doubleRep := "((\\\\+|-)?([0-9]+(\\\\.[0-9]*)?|\\\\.[0-9]+)([Ee](\\\\+|-)?[0-9]+)?|-?INF|NaN)"
+{I}// NOTE:
+{I}// "+INF" is matched although it is written as "INF": XSD 1.1 admits it,
+{I}// its production being (\\+|-)?INF, and being liberal in what we accept
+{I}// costs nothing here. strconv.ParseFloat reads it without complaint.
+{I}doubleRep := "((\\\\+|-)?([0-9]+(\\\\.[0-9]*)?|\\\\.[0-9]+)([Ee](\\\\+|-)?[0-9]+)?|(\\\\+|-)?INF|NaN)"
 {I}pattern := aascommon.Concat(
 {II}"^",
 {II}doubleRep,

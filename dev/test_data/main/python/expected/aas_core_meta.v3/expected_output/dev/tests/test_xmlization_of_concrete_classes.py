@@ -11,10 +11,12 @@
 import io
 import pathlib
 import tempfile
+import math
 import unittest
 import xml.etree.ElementTree as ET
 
 
+import aas_core3.types as aas_types
 import aas_core3.xmlization as aas_xmlization
 
 
@@ -2302,6 +2304,51 @@ class TestRoundTrips(unittest.TestCase):
             tests.common_xmlization.remove_redundant_whitespace(et_from_str)
             tests.common_xmlization.assert_elements_equal(et_concrete, et_from_str)
             # endregion
+
+
+class TestLexicalForms(unittest.TestCase):
+    """Test the lexical forms which a recorded example can not hold."""
+
+    def _read_with(self, xml_name: str, text: str) -> aas_types.LevelType:
+        """Read a recorded example with the content of ``xml_name`` put to ``text``."""
+        paths = sorted(
+            (
+                tests.common.TEST_DATA_DIR
+                / "Xml"
+                / "Expected"
+                / 'levelType'
+            ).glob("**/*.xml")
+        )
+        self.assertGreater(
+            len(paths),
+            0,
+            f"Expected at least one recorded example of levelType, but got none",
+        )
+
+        original = paths[0].read_text(encoding="utf-8")
+
+        start = original.index(f"<{xml_name}>") + len(xml_name) + 2
+        end = original.index(f"</{xml_name}>")
+
+        return aas_xmlization.level_type_from_str(
+            original[:start] + text + original[end:]
+        )
+
+    def test_min_read_from_1(self) -> None:
+        instance = self._read_with('min', '1')
+        self.assertIs(True, instance.min)
+
+    def test_min_read_from_0(self) -> None:
+        instance = self._read_with('min', '0')
+        self.assertIs(False, instance.min)
+
+    def test_min_read_from_true(self) -> None:
+        instance = self._read_with('min', 'true')
+        self.assertIs(True, instance.min)
+
+    def test_min_read_from_false(self) -> None:
+        instance = self._read_with('min', 'false')
+        self.assertIs(False, instance.min)
 
 
 if __name__ == "__main__":

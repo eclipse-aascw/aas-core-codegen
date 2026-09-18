@@ -11,10 +11,12 @@
 import io
 import pathlib
 import tempfile
+import math
 import unittest
 import xml.etree.ElementTree as ET
 
 
+import dummy.types as aas_types
 import dummy.xmlization as aas_xmlization
 
 
@@ -82,6 +84,91 @@ class TestRoundTrips(unittest.TestCase):
             tests.common_xmlization.remove_redundant_whitespace(et_from_str)
             tests.common_xmlization.assert_elements_equal(et_concrete, et_from_str)
             # endregion
+
+
+class TestLexicalForms(unittest.TestCase):
+    """Test the lexical forms which a recorded example can not hold."""
+
+    def _read_with(self, xml_name: str, text: str) -> aas_types.Something:
+        """Read a recorded example with the content of ``xml_name`` put to ``text``."""
+        paths = sorted(
+            (
+                tests.common.TEST_DATA_DIR
+                / "Xml"
+                / "Expected"
+                / 'something'
+            ).glob("**/*.xml")
+        )
+        self.assertGreater(
+            len(paths),
+            0,
+            f"Expected at least one recorded example of something, but got none",
+        )
+
+        original = paths[0].read_text(encoding="utf-8")
+
+        start = original.index(f"<{xml_name}>") + len(xml_name) + 2
+        end = original.index(f"</{xml_name}>")
+
+        return aas_xmlization.something_from_str(
+            original[:start] + text + original[end:]
+        )
+
+    def test_some_float_read_from_1e400(self) -> None:
+        instance = self._read_with('someFloat', '1e400')
+        self.assertEqual(math.inf, instance.some_float)
+
+    def test_some_float_read_from_minus_1e400(self) -> None:
+        instance = self._read_with('someFloat', '-1e400')
+        self.assertEqual(-math.inf, instance.some_float)
+
+    def test_some_float_read_from_1eminus_400(self) -> None:
+        instance = self._read_with('someFloat', '1e-400')
+        self.assertEqual(0.0, instance.some_float)
+
+    def test_some_float_read_from_inf(self) -> None:
+        instance = self._read_with('someFloat', 'INF')
+        self.assertEqual(math.inf, instance.some_float)
+
+    def test_some_float_read_from_plus_inf(self) -> None:
+        instance = self._read_with('someFloat', '+INF')
+        self.assertEqual(math.inf, instance.some_float)
+
+    def test_some_float_read_from_minus_inf(self) -> None:
+        instance = self._read_with('someFloat', '-INF')
+        self.assertEqual(-math.inf, instance.some_float)
+
+    def test_some_bytes_read_from_sgk_pad(self) -> None:
+        instance = self._read_with('someBytes', 'SGk=')
+        self.assertEqual(b'Hi', instance.some_bytes)
+
+    def test_some_bytes_read_from_sg_space_k_pad(self) -> None:
+        instance = self._read_with('someBytes', 'SG k=')
+        self.assertEqual(b'Hi', instance.some_bytes)
+
+    def test_some_bytes_read_from_s_space_g_space_k_space__pad(self) -> None:
+        instance = self._read_with('someBytes', 'S G k =')
+        self.assertEqual(b'Hi', instance.some_bytes)
+
+    def test_some_bytes_read_from_empty(self) -> None:
+        instance = self._read_with('someBytes', '')
+        self.assertEqual(b'', instance.some_bytes)
+
+    def test_some_bool_read_from_1(self) -> None:
+        instance = self._read_with('someBool', '1')
+        self.assertIs(True, instance.some_bool)
+
+    def test_some_bool_read_from_0(self) -> None:
+        instance = self._read_with('someBool', '0')
+        self.assertIs(False, instance.some_bool)
+
+    def test_some_bool_read_from_true(self) -> None:
+        instance = self._read_with('someBool', 'true')
+        self.assertIs(True, instance.some_bool)
+
+    def test_some_bool_read_from_false(self) -> None:
+        instance = self._read_with('someBool', 'false')
+        self.assertIs(False, instance.some_bool)
 
 
 if __name__ == "__main__":

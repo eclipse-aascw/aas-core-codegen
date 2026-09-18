@@ -5,6 +5,7 @@
 
 package aas_core.aas3_0.tests;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -3733,6 +3734,77 @@ public class TestXmlizationOfConcreteClasses {
       }
     }
   } // public void testDataSpecificationIec61360VerificationFail
+
+  /**
+   * Read the first recorded example of LevelType with the content of
+   * the element {@code xmlName} replaced by {@code text}.
+   */
+  private static LevelType readWith(String xmlName, String text)
+    throws IOException, XMLStreamException {
+    final Path searchPath =
+      Paths.get(Common.TEST_DATA_DIR, "Xml", "Expected", "levelType");
+    final List<Path> paths = Common.findPaths(searchPath, ".xml");
+
+    if (paths.isEmpty()) {
+      fail(
+        "Expected at least one recorded example of levelType, but got none");
+    }
+
+    final String original =
+      new String(Files.readAllBytes(paths.get(0)), StandardCharsets.UTF_8);
+
+    final int start = original.indexOf("<" + xmlName + ">") + xmlName.length() + 2;
+    final int end = original.indexOf("</" + xmlName + ">");
+
+    final String patched =
+      original.substring(0, start) + text + original.substring(end);
+
+    final XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
+    final XMLEventReader xmlReader =
+      xmlInputFactory.createXMLEventReader(new StringReader(patched));
+
+    return Xmlization.Deserialize.deserializeLevelType(xmlReader);
+  }
+
+  @Test
+  public void testMinReadFrom1() throws IOException, XMLStreamException {
+    final LevelType instance =
+      readWith("min", "1");
+
+    assertEquals(
+      true,
+      instance.getMin());
+  } // public void testMinReadFrom1
+
+  @Test
+  public void testMinReadFrom0() throws IOException, XMLStreamException {
+    final LevelType instance =
+      readWith("min", "0");
+
+    assertEquals(
+      false,
+      instance.getMin());
+  } // public void testMinReadFrom0
+
+  @Test
+  public void testMinReadFromTrue() throws IOException, XMLStreamException {
+    final LevelType instance =
+      readWith("min", "true");
+
+    assertEquals(
+      true,
+      instance.getMin());
+  } // public void testMinReadFromTrue
+
+  @Test
+  public void testMinReadFromFalse() throws IOException, XMLStreamException {
+    final LevelType instance =
+      readWith("min", "false");
+
+    assertEquals(
+      false,
+      instance.getMin());
+  } // public void testMinReadFromFalse
 } // class TestXmlizationOfConcreteClasses
 
 // package aas_core.aas3_0.tests

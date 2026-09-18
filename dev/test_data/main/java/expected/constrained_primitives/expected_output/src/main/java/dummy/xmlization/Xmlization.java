@@ -520,7 +520,11 @@ public class Xmlization {
       // NOTE (mristin):
       // The two infinities have to be spelled out: Double.valueOf refuses
       // ``INF`` and ``-INF``, which is exactly what ``xs:double`` calls them.
-      if (text.equals("INF")) {
+      // NOTE (mristin):
+      // ``+INF`` is read although it is written as ``INF``: XSD 1.1 admits it,
+      // its production being ``(\+|-)?INF``, and being liberal in what we
+      // accept costs nothing here.
+      if (text.equals("INF") || text.equals("+INF")) {
         return Double.POSITIVE_INFINITY;
       }
 

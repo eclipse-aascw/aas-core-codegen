@@ -79,6 +79,7 @@ tuple_arities = _types.tuple_arities
 
 NumericPlace = _types.NumericPlace
 numeric_places = _types.numeric_places
+first_class_of_only_required_primitives = _types.first_class_of_only_required_primitives
 collect_ids_of_types_reaching_a_number = _types.collect_ids_of_types_reaching_a_number
 reaches_a_number = _types.reaches_a_number
 

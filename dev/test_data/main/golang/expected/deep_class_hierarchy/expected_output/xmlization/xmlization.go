@@ -350,7 +350,11 @@ func readTextAs_long(
 }
 
 func constructXsDoubleRe() *regexp.Regexp {
-	doubleRep := "((\\+|-)?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([Ee](\\+|-)?[0-9]+)?|-?INF|NaN)"
+	// NOTE:
+	// "+INF" is matched although it is written as "INF": XSD 1.1 admits it,
+	// its production being (\+|-)?INF, and being liberal in what we accept
+	// costs nothing here. strconv.ParseFloat reads it without complaint.
+	doubleRep := "((\\+|-)?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([Ee](\\+|-)?[0-9]+)?|(\\+|-)?INF|NaN)"
 	pattern := aascommon.Concat(
 		"^",
 		doubleRep,

@@ -884,7 +884,11 @@ private static Double readContentAsDouble(XMLEventReader reader) throws XMLStrea
 {I}// NOTE (mristin):
 {I}// The two infinities have to be spelled out: Double.valueOf refuses
 {I}// ``INF`` and ``-INF``, which is exactly what ``xs:double`` calls them.
-{I}if (text.equals("INF")) {{
+{I}// NOTE (mristin):
+{I}// ``+INF`` is read although it is written as ``INF``: XSD 1.1 admits it,
+{I}// its production being ``(\\+|-)?INF``, and being liberal in what we
+{I}// accept costs nothing here.
+{I}if (text.equals("INF") || text.equals("+INF")) {{
 {II}return Double.POSITIVE_INFINITY;
 {I}}}
 

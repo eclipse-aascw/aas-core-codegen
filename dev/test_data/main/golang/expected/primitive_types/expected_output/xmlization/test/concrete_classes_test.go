@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 	"encoding/xml"
+	"math"
 	aastesting "github.com/dummy-works/dummy/aastesting"
 	aastypes "github.com/dummy-works/dummy/types"
 	aasxmlization "github.com/dummy-works/dummy/xmlization"
@@ -140,6 +141,256 @@ func TestSomethingDeserializationFail(t *testing.T) {
 				return
 			}
 		}
+	}
+}
+
+// Read the first recorded example of ISomething with the content of
+// the element `xmlName` replaced by `text`.
+func readSomethingWith(
+	t *testing.T,
+	xmlName string,
+	text string,
+) aastypes.ISomething {
+	pths := aastesting.FindFilesBySuffixRecursively(
+		filepath.Join(
+			aastesting.TestDataDir,
+			"Xml",
+			"Expected",
+			"something",
+		),
+		".xml",
+	)
+	sort.Strings(pths)
+
+	if len(pths) == 0 {
+		t.Fatalf(
+			"Expected at least one recorded example of %s, but got none",
+			"something",
+		)
+	}
+
+	bb, err := os.ReadFile(pths[0])
+	if err != nil {
+		t.Fatalf("Failed to read the file %s: %s", pths[0], err.Error())
+	}
+
+	original := string(bb)
+
+	start := strings.Index(original, "<"+xmlName+">") + len(xmlName) + 2
+	end := strings.Index(original, "</"+xmlName+">")
+
+	patched := original[:start] + text + original[end:]
+
+	decoder := xml.NewDecoder(strings.NewReader(patched))
+	deserialized, deseriaErr := aasxmlization.Unmarshal(decoder)
+	if deseriaErr != nil {
+		t.Fatalf(
+			"Expected no de-serialization error on %v, but got: %s",
+			patched, deseriaErr.Error(),
+		)
+	}
+
+	instance, ok := deserialized.(aastypes.ISomething)
+	if !ok {
+		t.Fatalf("Expected an instance of ISomething, but got %T", deserialized)
+	}
+
+	return instance
+}
+
+func TestSomeFloatReadFrom1e400(t *testing.T) {
+	instance := readSomethingWith(
+		t,
+		"someFloat",
+		"1e400",
+	)
+
+	got := instance.SomeFloat()
+	expected := math.Inf(1)
+	if got != expected {
+		t.Fatalf("Expected %v, but got %v", expected, got)
+	}
+}
+
+func TestSomeFloatReadFromMinus1e400(t *testing.T) {
+	instance := readSomethingWith(
+		t,
+		"someFloat",
+		"-1e400",
+	)
+
+	got := instance.SomeFloat()
+	expected := math.Inf(-1)
+	if got != expected {
+		t.Fatalf("Expected %v, but got %v", expected, got)
+	}
+}
+
+func TestSomeFloatReadFrom1eminus400(t *testing.T) {
+	instance := readSomethingWith(
+		t,
+		"someFloat",
+		"1e-400",
+	)
+
+	got := instance.SomeFloat()
+	expected := 0.0
+	if got != expected {
+		t.Fatalf("Expected %v, but got %v", expected, got)
+	}
+}
+
+func TestSomeFloatReadFromINF(t *testing.T) {
+	instance := readSomethingWith(
+		t,
+		"someFloat",
+		"INF",
+	)
+
+	got := instance.SomeFloat()
+	expected := math.Inf(1)
+	if got != expected {
+		t.Fatalf("Expected %v, but got %v", expected, got)
+	}
+}
+
+func TestSomeFloatReadFromPlusINF(t *testing.T) {
+	instance := readSomethingWith(
+		t,
+		"someFloat",
+		"+INF",
+	)
+
+	got := instance.SomeFloat()
+	expected := math.Inf(1)
+	if got != expected {
+		t.Fatalf("Expected %v, but got %v", expected, got)
+	}
+}
+
+func TestSomeFloatReadFromMinusINF(t *testing.T) {
+	instance := readSomethingWith(
+		t,
+		"someFloat",
+		"-INF",
+	)
+
+	got := instance.SomeFloat()
+	expected := math.Inf(-1)
+	if got != expected {
+		t.Fatalf("Expected %v, but got %v", expected, got)
+	}
+}
+
+func TestSomeBoolReadFrom1(t *testing.T) {
+	instance := readSomethingWith(
+		t,
+		"someBool",
+		"1",
+	)
+
+	got := instance.SomeBool()
+	expected := true
+	if got != expected {
+		t.Fatalf("Expected %v, but got %v", expected, got)
+	}
+}
+
+func TestSomeBoolReadFrom0(t *testing.T) {
+	instance := readSomethingWith(
+		t,
+		"someBool",
+		"0",
+	)
+
+	got := instance.SomeBool()
+	expected := false
+	if got != expected {
+		t.Fatalf("Expected %v, but got %v", expected, got)
+	}
+}
+
+func TestSomeBoolReadFromTrue(t *testing.T) {
+	instance := readSomethingWith(
+		t,
+		"someBool",
+		"true",
+	)
+
+	got := instance.SomeBool()
+	expected := true
+	if got != expected {
+		t.Fatalf("Expected %v, but got %v", expected, got)
+	}
+}
+
+func TestSomeBoolReadFromFalse(t *testing.T) {
+	instance := readSomethingWith(
+		t,
+		"someBool",
+		"false",
+	)
+
+	got := instance.SomeBool()
+	expected := false
+	if got != expected {
+		t.Fatalf("Expected %v, but got %v", expected, got)
+	}
+}
+
+func TestSomeBytesReadFromSGkPad(t *testing.T) {
+	instance := readSomethingWith(
+		t,
+		"someBytes",
+		"SGk=",
+	)
+
+	got := instance.SomeBytes()
+	expected := []byte{72, 105}
+	if !bytes.Equal(got, expected) {
+		t.Fatalf("Expected %v, but got %v", expected, got)
+	}
+}
+
+func TestSomeBytesReadFromSGSpacekPad(t *testing.T) {
+	instance := readSomethingWith(
+		t,
+		"someBytes",
+		"SG k=",
+	)
+
+	got := instance.SomeBytes()
+	expected := []byte{72, 105}
+	if !bytes.Equal(got, expected) {
+		t.Fatalf("Expected %v, but got %v", expected, got)
+	}
+}
+
+func TestSomeBytesReadFromSSpaceGSpacekSpacePad(t *testing.T) {
+	instance := readSomethingWith(
+		t,
+		"someBytes",
+		"S G k =",
+	)
+
+	got := instance.SomeBytes()
+	expected := []byte{72, 105}
+	if !bytes.Equal(got, expected) {
+		t.Fatalf("Expected %v, but got %v", expected, got)
+	}
+}
+
+func TestSomeBytesReadFromEmpty(t *testing.T) {
+	instance := readSomethingWith(
+		t,
+		"someBytes",
+		"",
+	)
+
+	got := instance.SomeBytes()
+	expected := []byte{}
+	if !bytes.Equal(got, expected) {
+		t.Fatalf("Expected %v, but got %v", expected, got)
 	}
 }
 
