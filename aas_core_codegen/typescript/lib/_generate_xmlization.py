@@ -228,9 +228,20 @@ function {function_name}(
 {I}}}
 
 {I}const value = Number(text);
-{I}if (!Number.isInteger(value)) {{
+
+{I}// NOTE (mristin):
+{I}// An integer is a ``number`` in TypeScript, and a ``number`` holds only
+{I}// the integers up to 2^53 - 1 exactly. Beyond that ``Number`` rounds
+{I}// silently -- 9007199254740993 comes back as 9007199254740992, and
+{I}// 9223372036854775807 as 9223372036854776000, which is a perfectly
+{I}// well-formed but *different* xs:long. We refuse instead of corrupting.
+{I}//
+{I}// ``Number.isSafeInteger`` covers ``Number.isInteger`` as well, so
+{I}// a non-integer is refused here too.
+{I}if (!Number.isSafeInteger(value)) {{
 {II}return newDeserializationError<number>(
-{III}`Expected integer text, but got: ${{text}}`
+{III}`Expected an integer within the safe range of a number, `
+{IIII}+ `but got: ${{text}}`
 {II});
 {I}}}
 
@@ -254,6 +265,19 @@ function {function_name}(
 {I}}}
 {I}if (text === "NaN") {{
 {II}return new AasCommon.Either<number, DeserializationError>(NaN, null);
+{I}}}
+
+{I}// NOTE (mristin):
+{I}// ``Number`` is far too permissive to be trusted with the text: it reads
+{I}// an empty string and a run of whitespace as 0, a hexadecimal, binary or
+{I}// octal prefix as the number it spells -- ``0x10`` as 16 -- and
+{I}// ``Infinity`` as an infinity, none of which is a valid ``xs:double``.
+{I}//
+{I}// See: https://www.w3.org/TR/xmlschema-2/#double
+{I}if (!/^(\\+|-)?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([Ee](\\+|-)?[0-9]+)?$/.test(text)) {{
+{II}return newDeserializationError<number>(
+{III}`Expected xs:double text, but got: ${{text}}`
+{II});
 {I}}}
 
 {I}const value = Number(text);
@@ -1216,9 +1240,15 @@ function {function_name}(
 {I}parts: Array<string>,
 {I}value: number
 ): void {{
-{I}if (!Number.isInteger(value)) {{
+{I}// NOTE (mristin):
+{I}// Beyond 2^53 - 1 a ``number`` no longer holds every integer, so the value
+{I}// we were handed has already lost its identity -- writing it out would
+{I}// record a different xs:long without a word. ``Number.isSafeInteger``
+{I}// covers ``Number.isInteger`` as well.
+{I}if (!Number.isSafeInteger(value)) {{
 {II}throw new SerializationError(
-{III}`Expected an integer, but got: ${{value}}`
+{III}`Expected an integer within the safe range of a number, `
+{IIII}+ `but got: ${{value}}`
 {II});
 {I}}}
 
@@ -1239,6 +1269,14 @@ function {function_name}(
 {II}parts.push("INF");
 {I}}} else if (value === -Infinity) {{
 {II}parts.push("-INF");
+{I}}} else if (Object.is(value, -0)) {{
+{II}// NOTE (mristin):
+{II}// ``${{-0}}`` is "0", so the sign would be dropped, and a negative zero
+{II}// would come back as a positive one. ``-0`` is a valid xs:double, and
+{II}// the other SDKs keep the sign, so we keep it too. Mind that
+{II}// ``value === -0`` is true for a positive zero as well, which is why
+{II}// this asks ``Object.is``.
+{II}parts.push("-0");
 {I}}} else {{
 {II}parts.push(`${{value}}`);
 {I}}}

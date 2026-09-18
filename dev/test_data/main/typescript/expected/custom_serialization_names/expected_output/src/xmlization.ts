@@ -636,9 +636,20 @@ function parse_int(
   }
 
   const value = Number(text);
-  if (!Number.isInteger(value)) {
+
+  // NOTE (mristin):
+  // An integer is a ``number`` in TypeScript, and a ``number`` holds only
+  // the integers up to 2^53 - 1 exactly. Beyond that ``Number`` rounds
+  // silently -- 9007199254740993 comes back as 9007199254740992, and
+  // 9223372036854775807 as 9223372036854776000, which is a perfectly
+  // well-formed but *different* xs:long. We refuse instead of corrupting.
+  //
+  // ``Number.isSafeInteger`` covers ``Number.isInteger`` as well, so
+  // a non-integer is refused here too.
+  if (!Number.isSafeInteger(value)) {
     return newDeserializationError<number>(
-      `Expected integer text, but got: ${text}`
+      `Expected an integer within the safe range of a number, `
+        + `but got: ${text}`
     );
   }
 
@@ -658,6 +669,19 @@ function parse_float(
   }
   if (text === "NaN") {
     return new AasCommon.Either<number, DeserializationError>(NaN, null);
+  }
+
+  // NOTE (mristin):
+  // ``Number`` is far too permissive to be trusted with the text: it reads
+  // an empty string and a run of whitespace as 0, a hexadecimal, binary or
+  // octal prefix as the number it spells -- ``0x10`` as 16 -- and
+  // ``Infinity`` as an infinity, none of which is a valid ``xs:double``.
+  //
+  // See: https://www.w3.org/TR/xmlschema-2/#double
+  if (!/^(\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+)([Ee](\+|-)?[0-9]+)?$/.test(text)) {
+    return newDeserializationError<number>(
+      `Expected xs:double text, but got: ${text}`
+    );
   }
 
   const value = Number(text);
@@ -1060,9 +1084,15 @@ function write_int(
   parts: Array<string>,
   value: number
 ): void {
-  if (!Number.isInteger(value)) {
+  // NOTE (mristin):
+  // Beyond 2^53 - 1 a ``number`` no longer holds every integer, so the value
+  // we were handed has already lost its identity -- writing it out would
+  // record a different xs:long without a word. ``Number.isSafeInteger``
+  // covers ``Number.isInteger`` as well.
+  if (!Number.isSafeInteger(value)) {
     throw new SerializationError(
-      `Expected an integer, but got: ${value}`
+      `Expected an integer within the safe range of a number, `
+        + `but got: ${value}`
     );
   }
 
@@ -1079,6 +1109,14 @@ function write_float(
     parts.push("INF");
   } else if (value === -Infinity) {
     parts.push("-INF");
+  } else if (Object.is(value, -0)) {
+    // NOTE (mristin):
+    // ``${-0}`` is "0", so the sign would be dropped, and a negative zero
+    // would come back as a positive one. ``-0`` is a valid xs:double, and
+    // the other SDKs keep the sign, so we keep it too. Mind that
+    // ``value === -0`` is true for a positive zero as well, which is why
+    // this asks ``Object.is``.
+    parts.push("-0");
   } else {
     parts.push(`${value}`);
   }
