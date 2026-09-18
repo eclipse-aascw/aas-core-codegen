@@ -1,0 +1,7 @@
+{
+  "someBool": true,
+  "someInt": true,
+  "someFloat": 34.23,
+  "someString": "hello world",
+  "someBytes": "SGVsbG8gV29ybGQ="
+}

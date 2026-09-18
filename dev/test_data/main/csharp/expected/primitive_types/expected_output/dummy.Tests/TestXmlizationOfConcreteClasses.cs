@@ -294,6 +294,210 @@ namespace dummy.Tests
                 }
             }
         }  // public void Test_Something_verification_fail
+
+        /// <summary>
+        /// Read the first recorded example of Something with the content of
+        /// the element <paramref name="xmlName" /> replaced by
+        /// <paramref name="text" />.
+        /// </summary>
+        private static Aas.Something ReadWith(string xmlName, string text)
+        {
+            var paths = Directory.GetFiles(
+                Path.Combine(
+                    Aas.Tests.Common.TestDataDir,
+                    "Xml",
+                    "Expected",
+                    "something"
+                ),
+                "*.xml",
+                System.IO.SearchOption.AllDirectories).ToList();
+            paths.Sort();
+
+            Assert.IsNotEmpty(
+                paths,
+                $"Expected at least one recorded example of something, but got none");
+
+            string original = System.IO.File.ReadAllText(paths[0]);
+
+            int start = original.IndexOf($"<{xmlName}>") + xmlName.Length + 2;
+            int end = original.IndexOf($"</{xmlName}>");
+
+            string patched =
+                original.Substring(0, start) + text + original.Substring(end);
+
+            using var xmlReader = System.Xml.XmlReader.Create(
+                new System.IO.StringReader(patched));
+
+            return Aas.Xmlization.Deserialize.SomethingFrom(xmlReader);
+        }
+
+        [Test]
+        public void TestSomeFloatReadFrom1e400()
+        {
+            var instance = ReadWith(
+                "someFloat",
+                "1e400");
+
+            Assert.AreEqual(
+                System.Double.PositiveInfinity,
+                instance.SomeFloat);
+        }  // public void TestSomeFloatReadFrom1e400
+
+        [Test]
+        public void TestSomeFloatReadFromMinus1e400()
+        {
+            var instance = ReadWith(
+                "someFloat",
+                "-1e400");
+
+            Assert.AreEqual(
+                System.Double.NegativeInfinity,
+                instance.SomeFloat);
+        }  // public void TestSomeFloatReadFromMinus1e400
+
+        [Test]
+        public void TestSomeFloatReadFrom1eminus400()
+        {
+            var instance = ReadWith(
+                "someFloat",
+                "1e-400");
+
+            Assert.AreEqual(
+                0.0,
+                instance.SomeFloat);
+        }  // public void TestSomeFloatReadFrom1eminus400
+
+        [Test]
+        public void TestSomeFloatReadFromInf()
+        {
+            var instance = ReadWith(
+                "someFloat",
+                "INF");
+
+            Assert.AreEqual(
+                System.Double.PositiveInfinity,
+                instance.SomeFloat);
+        }  // public void TestSomeFloatReadFromInf
+
+        [Test]
+        public void TestSomeFloatReadFromPlusInf()
+        {
+            var instance = ReadWith(
+                "someFloat",
+                "+INF");
+
+            Assert.AreEqual(
+                System.Double.PositiveInfinity,
+                instance.SomeFloat);
+        }  // public void TestSomeFloatReadFromPlusInf
+
+        [Test]
+        public void TestSomeFloatReadFromMinusInf()
+        {
+            var instance = ReadWith(
+                "someFloat",
+                "-INF");
+
+            Assert.AreEqual(
+                System.Double.NegativeInfinity,
+                instance.SomeFloat);
+        }  // public void TestSomeFloatReadFromMinusInf
+
+        [Test]
+        public void TestSomeBoolReadFrom1()
+        {
+            var instance = ReadWith(
+                "someBool",
+                "1");
+
+            Assert.AreEqual(
+                true,
+                instance.SomeBool);
+        }  // public void TestSomeBoolReadFrom1
+
+        [Test]
+        public void TestSomeBoolReadFrom0()
+        {
+            var instance = ReadWith(
+                "someBool",
+                "0");
+
+            Assert.AreEqual(
+                false,
+                instance.SomeBool);
+        }  // public void TestSomeBoolReadFrom0
+
+        [Test]
+        public void TestSomeBoolReadFromTrue()
+        {
+            var instance = ReadWith(
+                "someBool",
+                "true");
+
+            Assert.AreEqual(
+                true,
+                instance.SomeBool);
+        }  // public void TestSomeBoolReadFromTrue
+
+        [Test]
+        public void TestSomeBoolReadFromFalse()
+        {
+            var instance = ReadWith(
+                "someBool",
+                "false");
+
+            Assert.AreEqual(
+                false,
+                instance.SomeBool);
+        }  // public void TestSomeBoolReadFromFalse
+
+        [Test]
+        public void TestSomeBytesReadFromSgkpad()
+        {
+            var instance = ReadWith(
+                "someBytes",
+                "SGk=");
+
+            Assert.AreEqual(
+                new byte[] { 72, 105 },
+                instance.SomeBytes);
+        }  // public void TestSomeBytesReadFromSgkpad
+
+        [Test]
+        public void TestSomeBytesReadFromSgspaceKpad()
+        {
+            var instance = ReadWith(
+                "someBytes",
+                "SG k=");
+
+            Assert.AreEqual(
+                new byte[] { 72, 105 },
+                instance.SomeBytes);
+        }  // public void TestSomeBytesReadFromSgspaceKpad
+
+        [Test]
+        public void TestSomeBytesReadFromSspaceGspaceKspacePad()
+        {
+            var instance = ReadWith(
+                "someBytes",
+                "S G k =");
+
+            Assert.AreEqual(
+                new byte[] { 72, 105 },
+                instance.SomeBytes);
+        }  // public void TestSomeBytesReadFromSspaceGspaceKspacePad
+
+        [Test]
+        public void TestSomeBytesReadFromEmpty()
+        {
+            var instance = ReadWith(
+                "someBytes",
+                "");
+
+            Assert.AreEqual(
+                new byte[] { },
+                instance.SomeBytes);
+        }  // public void TestSomeBytesReadFromEmpty
     }  // class TestXmlizationOfConcreteClasses
 }  // namespace dummy.Tests
 

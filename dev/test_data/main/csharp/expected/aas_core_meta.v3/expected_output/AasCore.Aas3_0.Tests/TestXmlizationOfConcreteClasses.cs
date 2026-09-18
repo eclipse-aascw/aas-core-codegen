@@ -5067,6 +5067,90 @@ namespace AasCore.Aas3_0.Tests
                 }
             }
         }  // public void Test_DataSpecificationIec61360_verification_fail
+
+        /// <summary>
+        /// Read the first recorded example of LevelType with the content of
+        /// the element <paramref name="xmlName" /> replaced by
+        /// <paramref name="text" />.
+        /// </summary>
+        private static Aas.LevelType ReadWith(string xmlName, string text)
+        {
+            var paths = Directory.GetFiles(
+                Path.Combine(
+                    Aas.Tests.Common.TestDataDir,
+                    "Xml",
+                    "Expected",
+                    "levelType"
+                ),
+                "*.xml",
+                System.IO.SearchOption.AllDirectories).ToList();
+            paths.Sort();
+
+            Assert.IsNotEmpty(
+                paths,
+                $"Expected at least one recorded example of levelType, but got none");
+
+            string original = System.IO.File.ReadAllText(paths[0]);
+
+            int start = original.IndexOf($"<{xmlName}>") + xmlName.Length + 2;
+            int end = original.IndexOf($"</{xmlName}>");
+
+            string patched =
+                original.Substring(0, start) + text + original.Substring(end);
+
+            using var xmlReader = System.Xml.XmlReader.Create(
+                new System.IO.StringReader(patched));
+
+            return Aas.Xmlization.Deserialize.LevelTypeFrom(xmlReader);
+        }
+
+        [Test]
+        public void TestMinReadFrom1()
+        {
+            var instance = ReadWith(
+                "min",
+                "1");
+
+            Assert.AreEqual(
+                true,
+                instance.Min);
+        }  // public void TestMinReadFrom1
+
+        [Test]
+        public void TestMinReadFrom0()
+        {
+            var instance = ReadWith(
+                "min",
+                "0");
+
+            Assert.AreEqual(
+                false,
+                instance.Min);
+        }  // public void TestMinReadFrom0
+
+        [Test]
+        public void TestMinReadFromTrue()
+        {
+            var instance = ReadWith(
+                "min",
+                "true");
+
+            Assert.AreEqual(
+                true,
+                instance.Min);
+        }  // public void TestMinReadFromTrue
+
+        [Test]
+        public void TestMinReadFromFalse()
+        {
+            var instance = ReadWith(
+                "min",
+                "false");
+
+            Assert.AreEqual(
+                false,
+                instance.Min);
+        }  // public void TestMinReadFromFalse
     }  // class TestXmlizationOfConcreteClasses
 }  // namespace AasCore.Aas3_0.Tests
 

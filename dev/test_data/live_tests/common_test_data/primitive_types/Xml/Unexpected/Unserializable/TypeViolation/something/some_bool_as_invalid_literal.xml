@@ -1,8 +1,1 @@
-<?xml version="1.0"?>
-<something xmlns="https://dummy.com">
-    <someBool>totally invalid</someBool>
-    <someInt>1234</someInt>
-    <someFloat>34.23</someFloat>
-    <someString>hello world</someString>
-    <someBytes>SGVsbG8gV29ybGQ=</someBytes>
-</something>
+<something xmlns="https://dummy.com"><someBool>totally invalid</someBool><someInt>1234</someInt><someFloat>34.23</someFloat><someString>hello world</someString><someBytes>SGVsbG8gV29ybGQ=</someBytes></something>

@@ -1,6 +1,6 @@
 """Generate code to test the XML de/serialization of concrete classes."""
 import io
-from typing import List
+from typing import Dict, List, Mapping, Tuple
 
 from icontract import ensure
 
@@ -16,6 +16,164 @@ from aas_core_codegen.cpp.common import (
     INDENT4 as IIII,
     INDENT5 as IIIII,
 )
+
+
+#: The lexical forms which no recorded example can hold, by the primitive they
+#: belong to. A recorded example has to serialize back to itself, character for
+#: character, so it can hold neither a value written in another form than it
+#: was read nor one whose written form the targets spell differently.
+_LEXICAL_CASES_BY_PRIMITIVE = {
+    intermediate.PrimitiveType.FLOAT: [
+        # NOTE (mristin):
+        # A literal too large for a double is not an error: XSD rounds it to
+        # an infinity, and one too small to zero.
+        #
+        # See: https://www.w3.org/TR/xmlschema11-2/#double
+        ("1e400", "std::numeric_limits<double>::infinity()"),
+        ("-1e400", "-std::numeric_limits<double>::infinity()"),
+        ("1e-400", "0.0"),
+        ("INF", "std::numeric_limits<double>::infinity()"),
+        ("+INF", "std::numeric_limits<double>::infinity()"),
+        ("-INF", "-std::numeric_limits<double>::infinity()"),
+    ],
+    intermediate.PrimitiveType.BYTEARRAY: [
+        # NOTE (mristin):
+        # ``xs:base64Binary`` admits whitespace *between* the characters and
+        # not only around them, and an empty value stands for zero bytes.
+        # Neither can be a recorded example: the first is written back without
+        # the space, and the second as an empty element.
+        #
+        # See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+        ("SGk=", "std::vector<std::uint8_t>{72, 105}"),
+        ("SG k=", "std::vector<std::uint8_t>{72, 105}"),
+        ("S G k =", "std::vector<std::uint8_t>{72, 105}"),
+        ("", "std::vector<std::uint8_t>{}"),
+    ],
+    intermediate.PrimitiveType.BOOL: [
+        # NOTE (mristin):
+        # ``xs:boolean`` spells the two values in four ways, not two.
+        ("1", "true"),
+        ("0", "false"),
+        ("true", "true"),
+        ("false", "false"),
+    ],
+}  # type: Mapping[intermediate.PrimitiveType, List[Tuple[str, str]]]
+
+
+def _generate_lexical_tests(
+    symbol_table: intermediate.SymbolTable,
+) -> List[Stripped]:
+    """Generate the tests over the lexical forms which no example can hold."""
+    cls = intermediate.first_class_of_only_required_primitives(symbol_table)
+    if cls is None:
+        return []
+
+    prop_by_a_type = (
+        dict()
+    )  # type: Dict[intermediate.PrimitiveType, intermediate.Property]
+    for prop in cls.properties:
+        assert isinstance(prop.type_annotation, intermediate.PrimitiveTypeAnnotation)
+        prop_by_a_type.setdefault(prop.type_annotation.a_type, prop)
+
+    relevant = [
+        (a_type, prop_by_a_type[a_type])
+        for a_type in (
+            intermediate.PrimitiveType.FLOAT,
+            intermediate.PrimitiveType.BOOL,
+            intermediate.PrimitiveType.BYTEARRAY,
+        )
+        if a_type in prop_by_a_type
+    ]
+
+    if len(relevant) == 0:
+        return []
+
+    interface_name = cpp_naming.interface_name(cls.name)
+    cls_name_xml = naming.xml_class_name(cls.name)
+
+    result = [
+        Stripped(
+            f"""\
+/**
+ * \\brief Read the first recorded example of {interface_name} with the content
+ * of the element \\p xml_name replaced by \\p text.
+ */
+std::shared_ptr<aas::types::{interface_name}> ReadWith(
+{I}const std::string& xml_name,
+{I}const std::string& text
+) {{
+{I}// NOTE (mristin):
+{I}// FindFilesBySuffixRecursively answers a deque, and it is already sorted,
+{I}// which is what the round-trip test above relies on as well.
+{I}const std::deque<std::filesystem::path> paths(
+{II}test::common::FindFilesBySuffixRecursively(
+{III}DetermineXmlDir()
+{IIII}/ "Expected"
+{IIII}/ {cpp_common.string_literal(cls_name_xml)},
+{III}".xml"
+{II})
+{I});
+
+{I}REQUIRE(!paths.empty());
+
+{I}const std::string original(test::common::MustReadString(paths.front()));
+
+{I}const std::size_t start(
+{II}original.find(aas::common::Concat("<", xml_name, ">"))
+{III}+ xml_name.size() + 2
+{I});
+{I}const std::size_t end(
+{II}original.find(aas::common::Concat("</", xml_name, ">"))
+{I});
+
+{I}const std::string patched(
+{II}original.substr(0, start) + text + original.substr(end)
+{I});
+
+{I}std::istringstream iss(patched);
+
+{I}aas::common::expected<
+{II}std::shared_ptr<aas::types::IClass>,
+{II}aas::xmlization::DeserializationError
+{I}> deserialized = aas::xmlization::From(iss);
+
+{I}INFO(aas::common::Concat("De-serializing: ", patched))
+{I}REQUIRE(deserialized.has_value());
+
+{I}std::shared_ptr<aas::types::{interface_name}> casted(
+{II}std::dynamic_pointer_cast<aas::types::{interface_name}>(*deserialized)
+{I});
+{I}REQUIRE(casted != nullptr);
+
+{I}return casted;
+}}"""
+        )
+    ]  # type: List[Stripped]
+
+    for a_type, prop in relevant:
+        prop_xml_name = naming.xml_property(prop.name)
+        getter_name = cpp_naming.getter_name(prop.name)
+
+        for a_text, expected in _LEXICAL_CASES_BY_PRIMITIVE[a_type]:
+            title = f"Read {prop_xml_name} from {a_text}"
+
+            result.append(
+                Stripped(
+                    f"""\
+TEST_CASE({cpp_common.string_literal(title)}) {{
+{I}std::shared_ptr<aas::types::{interface_name}> instance(
+{II}ReadWith(
+{III}{cpp_common.string_literal(prop_xml_name)},
+{III}{cpp_common.string_literal(a_text)}
+{II})
+{I});
+
+{I}REQUIRE(instance->{getter_name}() == {expected});
+}}"""
+                )
+            )
+
+    return result
 
 
 # fmt: off
@@ -197,6 +355,8 @@ TEST_CASE("Test the de-serialization failure on an unexpected {cls_name}") {{
 }}"""
             )
         )
+
+    blocks.extend(_generate_lexical_tests(symbol_table))
 
     blocks.append(cpp_common.WARNING)
 

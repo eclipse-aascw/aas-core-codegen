@@ -3448,9 +3448,18 @@ def _read_int_from_element_text(
         ),
         "_read_float_from_element_text": Stripped(
             f"""\
+#: Map the named literals of ``xs:double`` onto their values.
+#:
+#: ``+INF`` is read although it is written as ``INF``: XSD 1.1 admits it --
+#: the production is ``(\\+|-)?INF`` -- and being liberal in what we accept
+#: costs nothing here, while a document from a 1.1 processor would otherwise
+#: be unreadable.
+#:
+#: See: https://www.w3.org/TR/xmlschema11-2/#double
 _TEXT_TO_XS_DOUBLE_LITERALS = {{
 {I}"NaN": math.nan,
 {I}"INF": math.inf,
+{I}"+INF": math.inf,
 {I}"-INF": -math.inf,
 }}
 

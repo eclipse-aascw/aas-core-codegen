@@ -1,0 +1,1 @@
+<something xmlns="https://dummy.com"><someBool>true</someBool><someInt>1234</someInt><someFloat>34.23</someFloat><someString>hello world</someString><someBytes>SG==</someBytes></something>

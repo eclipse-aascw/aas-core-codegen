@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 	"encoding/xml"
+	"math"
 	aastesting "github.com/aas-core-works/aas-core3.0-golang/aastesting"
 	aastypes "github.com/aas-core-works/aas-core3.0-golang/types"
 	aasxmlization "github.com/aas-core-works/aas-core3.0-golang/xmlization"
@@ -4802,6 +4803,116 @@ func TestDataSpecificationIEC61360DeserializationFail(t *testing.T) {
 				return
 			}
 		}
+	}
+}
+
+// Read the first recorded example of ILevelType with the content of
+// the element `xmlName` replaced by `text`.
+func readLevelTypeWith(
+	t *testing.T,
+	xmlName string,
+	text string,
+) aastypes.ILevelType {
+	pths := aastesting.FindFilesBySuffixRecursively(
+		filepath.Join(
+			aastesting.TestDataDir,
+			"Xml",
+			"Expected",
+			"levelType",
+		),
+		".xml",
+	)
+	sort.Strings(pths)
+
+	if len(pths) == 0 {
+		t.Fatalf(
+			"Expected at least one recorded example of %s, but got none",
+			"levelType",
+		)
+	}
+
+	bb, err := os.ReadFile(pths[0])
+	if err != nil {
+		t.Fatalf("Failed to read the file %s: %s", pths[0], err.Error())
+	}
+
+	original := string(bb)
+
+	start := strings.Index(original, "<"+xmlName+">") + len(xmlName) + 2
+	end := strings.Index(original, "</"+xmlName+">")
+
+	patched := original[:start] + text + original[end:]
+
+	decoder := xml.NewDecoder(strings.NewReader(patched))
+	deserialized, deseriaErr := aasxmlization.Unmarshal(decoder)
+	if deseriaErr != nil {
+		t.Fatalf(
+			"Expected no de-serialization error on %v, but got: %s",
+			patched, deseriaErr.Error(),
+		)
+	}
+
+	instance, ok := deserialized.(aastypes.ILevelType)
+	if !ok {
+		t.Fatalf("Expected an instance of ILevelType, but got %T", deserialized)
+	}
+
+	return instance
+}
+
+func TestMinReadFrom1(t *testing.T) {
+	instance := readLevelTypeWith(
+		t,
+		"min",
+		"1",
+	)
+
+	got := instance.Min()
+	expected := true
+	if got != expected {
+		t.Fatalf("Expected %v, but got %v", expected, got)
+	}
+}
+
+func TestMinReadFrom0(t *testing.T) {
+	instance := readLevelTypeWith(
+		t,
+		"min",
+		"0",
+	)
+
+	got := instance.Min()
+	expected := false
+	if got != expected {
+		t.Fatalf("Expected %v, but got %v", expected, got)
+	}
+}
+
+func TestMinReadFromTrue(t *testing.T) {
+	instance := readLevelTypeWith(
+		t,
+		"min",
+		"true",
+	)
+
+	got := instance.Min()
+	expected := true
+	if got != expected {
+		t.Fatalf("Expected %v, but got %v", expected, got)
+	}
+}
+
+func TestMinReadFromFalse(t *testing.T) {
+	instance := readLevelTypeWith(
+		t,
+		"min",
+		"false",
+	)
+
+	got := instance.Min()
+	expected := false
+	if got != expected {
+		t.Fatalf("Expected %v, but got %v", expected, got)
 	}
 }
 

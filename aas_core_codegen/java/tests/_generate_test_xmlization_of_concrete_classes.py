@@ -1,9 +1,9 @@
 """Generate code to test the XML de/serialization of concrete classes."""
 
-from typing import List
+from typing import Dict, List, Mapping, Tuple
 
 from aas_core_codegen import intermediate, naming
-from aas_core_codegen.common import Stripped, indent_but_first_line
+from aas_core_codegen.common import Identifier, Stripped, indent_but_first_line
 from aas_core_codegen.java import common as java_common, naming as java_naming
 from aas_core_codegen.java.common import (
     INDENT as I,
@@ -17,6 +17,175 @@ from aas_core_codegen.java.common import (
     INDENT9 as IIIIIIIII,
     INDENT10 as IIIIIIIIII,
 )
+
+
+#: The lexical forms which no recorded example can hold, by the primitive
+#: they belong to.
+#:
+#: A recorded example under ``Xml/Expected`` has to serialize back to itself,
+#: character for character, so it can hold neither a value written in another
+#: form than it was read -- ``1`` for a boolean comes back as ``true`` -- nor
+#: one whose written form the targets spell differently, which is the case for
+#: every interesting double. Both are asserted here on the *value*, and no
+#: text is ever compared.
+_LEXICAL_CASES_BY_PRIMITIVE = {
+    intermediate.PrimitiveType.FLOAT: [
+        # NOTE (mristin):
+        # A literal too large for a double is not an error: XSD rounds it to
+        # an infinity, and one too small to zero.
+        #
+        # See: https://www.w3.org/TR/xmlschema11-2/#double
+        ("1e400", "Double.POSITIVE_INFINITY"),
+        ("-1e400", "Double.NEGATIVE_INFINITY"),
+        ("1e-400", "0.0"),
+        ("INF", "Double.POSITIVE_INFINITY"),
+        ("+INF", "Double.POSITIVE_INFINITY"),
+        ("-INF", "Double.NEGATIVE_INFINITY"),
+    ],
+    intermediate.PrimitiveType.BYTEARRAY: [
+        # NOTE (mristin):
+        # ``xs:base64Binary`` admits whitespace *between* the characters and
+        # not only around them, and an empty value stands for zero bytes.
+        # Neither can be a recorded example: the first is written back without
+        # the space, and the second as an empty element.
+        #
+        # See: https://www.w3.org/TR/xmlschema-2/#base64Binary
+        ("SGk=", "new byte[] {72, 105}"),
+        ("SG k=", "new byte[] {72, 105}"),
+        ("S G k =", "new byte[] {72, 105}"),
+        ("", "new byte[] {}"),
+    ],
+    intermediate.PrimitiveType.BOOL: [
+        # NOTE (mristin):
+        # ``xs:boolean`` spells the two values in four ways, not two.
+        ("1", "true"),
+        ("0", "false"),
+        ("true", "true"),
+        ("false", "false"),
+    ],
+}  # type: Mapping[intermediate.PrimitiveType, List[Tuple[str, str]]]
+
+
+def _lexical_test_name_chunk(text: str) -> str:
+    """
+    Make a chunk of a test name out of ``text``.
+
+    The result has to satisfy :py:attr:`aas_core_codegen.common.IDENTIFIER_RE`,
+    so every character which is not a letter or a digit is spelled out, and
+    an empty text is named as such.
+    """
+    if text == "":
+        return "Empty"
+
+    mapping = {
+        "+": "Plus",
+        "-": "Minus",
+        ".": "Point",
+        " ": "Space",
+        "=": "Pad",
+    }
+    return "".join(mapping.get(character, character) for character in text)
+
+
+def _generate_lexical_tests(symbol_table: intermediate.SymbolTable) -> List[Stripped]:
+    """Generate the tests over the lexical forms which no example can hold."""
+    cls = intermediate.first_class_of_only_required_primitives(symbol_table)
+    if cls is None:
+        return []
+
+    prop_by_a_type = (
+        dict()
+    )  # type: Dict[intermediate.PrimitiveType, intermediate.Property]
+    for prop in cls.properties:
+        assert isinstance(prop.type_annotation, intermediate.PrimitiveTypeAnnotation)
+        prop_by_a_type.setdefault(prop.type_annotation.a_type, prop)
+
+    relevant = [
+        (a_type, prop_by_a_type[a_type])
+        for a_type in (
+            intermediate.PrimitiveType.FLOAT,
+            intermediate.PrimitiveType.BOOL,
+            intermediate.PrimitiveType.BYTEARRAY,
+        )
+        if a_type in prop_by_a_type
+    ]
+
+    if len(relevant) == 0:
+        return []
+
+    cls_name_java = java_naming.class_name(cls.name)
+    cls_name_xml = naming.xml_class_name(cls.name)
+
+    result = [
+        Stripped(
+            f"""\
+/**
+ * Read the first recorded example of {cls_name_java} with the content of
+ * the element {{@code xmlName}} replaced by {{@code text}}.
+ */
+private static {cls_name_java} readWith(String xmlName, String text)
+{I}throws IOException, XMLStreamException {{
+{I}final Path searchPath =
+{II}Paths.get(Common.TEST_DATA_DIR, "Xml", "Expected", {java_common.string_literal(cls_name_xml)});
+{I}final List<Path> paths = Common.findPaths(searchPath, ".xml");
+
+{I}if (paths.isEmpty()) {{
+{II}fail(
+{III}"Expected at least one recorded example of {cls_name_xml}, but got none");
+{I}}}
+
+{I}final String original =
+{II}new String(Files.readAllBytes(paths.get(0)), StandardCharsets.UTF_8);
+
+{I}final int start = original.indexOf("<" + xmlName + ">") + xmlName.length() + 2;
+{I}final int end = original.indexOf("</" + xmlName + ">");
+
+{I}final String patched =
+{II}original.substring(0, start) + text + original.substring(end);
+
+{I}final XMLInputFactory xmlInputFactory = XMLInputFactory.newInstance();
+{I}final XMLEventReader xmlReader =
+{II}xmlInputFactory.createXMLEventReader(new StringReader(patched));
+
+{I}return Xmlization.Deserialize.deserialize{cls_name_java}(xmlReader);
+}}"""
+        )
+    ]  # type: List[Stripped]
+
+    for a_type, prop in relevant:
+        prop_xml_name = naming.xml_property(prop.name)
+        getter_name = java_naming.getter_name(prop.name)
+
+        for text, expected in _LEXICAL_CASES_BY_PRIMITIVE[a_type]:
+            # NOTE (mristin):
+            # A byte array is compared element by element, and not by
+            # its identity, which is what assertEquals would do.
+            assertion = (
+                f"assertArrayEquals(\n{II}{expected},\n{II}instance.{getter_name}())"
+                if a_type is intermediate.PrimitiveType.BYTEARRAY
+                else f"assertEquals(\n{II}{expected},\n{II}instance.{getter_name}())"
+            )
+
+            test_name = java_naming.method_name(
+                Identifier(
+                    f"test_{prop.name}_read_from_" f"{_lexical_test_name_chunk(text)}"
+                )
+            )
+
+            result.append(
+                Stripped(
+                    f"""\
+@Test
+public void {test_name}() throws IOException, XMLStreamException {{
+{I}final {cls_name_java} instance =
+{II}readWith({java_common.string_literal(prop_xml_name)}, {java_common.string_literal(text)});
+
+{I}{assertion};
+}} // public void {test_name}"""
+                )
+            )
+
+    return result
 
 
 def generate(
@@ -321,6 +490,8 @@ public void test{cls_name_java}VerificationFail() throws IOException, XMLStreamE
             )
         )
 
+    blocks.extend(_generate_lexical_tests(symbol_table))
+
     blocks_joined = "\n\n".join(blocks)
 
     return [
@@ -331,6 +502,7 @@ public void test{cls_name_java}VerificationFail() throws IOException, XMLStreamE
 
 package {package}.tests;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
 

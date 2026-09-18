@@ -257,7 +257,11 @@ function {function_name}(
 ): AasCommon.Either<number, DeserializationError> {{
 {I}const text = collapseWhitespace(parseTextContent(cursor));
 
-{I}if (text === "INF") {{
+{I}// NOTE (mristin):
+{I}// `+INF` is read although it is written as `INF`: XSD 1.1 admits it, its
+{I}// production being `(\\+|-)?INF`, and being liberal in what we accept
+{I}// costs nothing here.
+{I}if (text === "INF" || text === "+INF") {{
 {II}return new AasCommon.Either<number, DeserializationError>(Infinity, null);
 {I}}}
 {I}if (text === "-INF") {{

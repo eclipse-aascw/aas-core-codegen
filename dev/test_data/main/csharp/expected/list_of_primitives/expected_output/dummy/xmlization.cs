@@ -448,7 +448,12 @@ namespace dummy
 
                 switch (text)
                 {
+                    // NOTE (mristin):
+                    // "+INF" is read although it is written as "INF": XSD 1.1 admits it,
+                    // its production being (\+|-)?INF, and being liberal in what we
+                    // accept costs nothing here.
                     case "INF":
+                    case "+INF":
                         return System.Double.PositiveInfinity;
                     case "-INF":
                         return System.Double.NegativeInfinity;
