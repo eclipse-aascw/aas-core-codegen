@@ -481,6 +481,17 @@ def _float_from_jsonable(
 {II}raise DeserializationException(
 {III}f"Expected a float, but got: {{type(jsonable)}}"
 {II})
+
+{I}# NOTE (mristin):
+{I}# JSON knows neither an infinity nor a not-a-number, so a conformant parser
+{I}# can never give us one. :py:mod:`json` is not conformant in this respect --
+{I}# it parses ``NaN``, ``Infinity`` and ``-Infinity`` out of the box -- so we
+{I}# have to check here.
+{I}if not math.isfinite(jsonable):
+{II}raise DeserializationException(
+{III}f"Expected a finite float, but got: {{jsonable}}"
+{II})
+
 {I}return jsonable'''
         ),
         "_str_from_jsonable": Stripped(
@@ -1415,14 +1426,24 @@ def _bytes_to_base64_str(
 
 
 #: Primitive types whose values are already JSON-able as they come
+# NOTE (mristin):
+# A number is deliberately absent here. JSON can represent neither a non-finite
+# floating-point number nor an integer outside ``[-2^53 + 1, 2^53 - 1]``, so
+# a number has to be checked instead of being put into the mapping unchanged.
 _PRIMITIVE_TYPES_SERIALIZED_AS_THEY_ARE = frozenset(
     [
         intermediate.PrimitiveType.BOOL,
-        intermediate.PrimitiveType.INT,
-        intermediate.PrimitiveType.FLOAT,
         intermediate.PrimitiveType.STR,
     ]
 )
+
+
+_NUMBER_SERIALIZER_BY_PRIMITIVE_TYPE: Mapping[
+    intermediate.PrimitiveType, Identifier
+] = {
+    intermediate.PrimitiveType.INT: Identifier("_int_to_jsonable"),
+    intermediate.PrimitiveType.FLOAT: Identifier("_float_to_jsonable"),
+}
 
 
 def _serialized_as_it_is(type_annotation: intermediate.TypeAnnotationUnion) -> bool:
@@ -1493,14 +1514,17 @@ def _generate_atomic_serialization(
 
     primitive_type = intermediate.try_primitive_type(type_anno)
     if primitive_type is not None:
-        assert primitive_type is intermediate.PrimitiveType.BYTEARRAY, (
-            f"Expected all the other primitive types to be handled before, "
-            f"but got: {primitive_type}"
-        )
+        serializer_name = _NUMBER_SERIALIZER_BY_PRIMITIVE_TYPE.get(primitive_type, None)
+        if serializer_name is None:
+            assert primitive_type is intermediate.PrimitiveType.BYTEARRAY, (
+                f"Expected all the other primitive types to be handled before, "
+                f"but got: {primitive_type}"
+            )
+            serializer_name = Identifier("_bytes_to_base64_str")
 
         return Stripped(
             f"""\
-_bytes_to_base64_str(
+{serializer_name}(
 {I}{access_expression}
 )"""
         )
@@ -1610,10 +1634,12 @@ class _SerializerRegistry:
     give out nothing.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, ids_of_types_reaching_a_number: Set[int]) -> None:
         """Initialize with nothing registered."""
         self._blocks_by_name = dict()  # type: MutableMapping[Identifier, Stripped]
         self._bytes_are_encoded = False
+        self._ids_of_types_reaching_a_number = ids_of_types_reaching_a_number
+        self._checked_numbers = set()  # type: Set[intermediate.PrimitiveType]
 
     @property
     def blocks(self) -> List[Stripped]:
@@ -1624,6 +1650,11 @@ class _SerializerRegistry:
     def bytes_are_encoded(self) -> bool:
         """Check whether a byte array is encoded anywhere in the meta-model."""
         return self._bytes_are_encoded
+
+    @property
+    def checked_numbers(self) -> AbstractSet[intermediate.PrimitiveType]:
+        """Give out the number types which occur anywhere in the meta-model."""
+        return self._checked_numbers
 
     def note_bytes_are_encoded(self) -> None:
         """Note that a byte array is encoded somewhere in the meta-model."""
@@ -1665,6 +1696,34 @@ class _SerializerRegistry:
             Stripped("item"), items_type_anno
         )
 
+        if not intermediate.reaches_a_number(
+            items_type_anno, self._ids_of_types_reaching_a_number
+        ):
+            body = Stripped(
+                f"""\
+return [
+{I}{item_serialization}
+{I}for item in that
+]"""
+            )
+        else:
+            # NOTE (mristin):
+            # A comprehension can not record which item was refused, so the items
+            # are walked in a loop which knows the index.
+            body = Stripped(
+                f"""\
+jsonable = []  # type: List[MutableJsonable]
+for i, item in enumerate(that):
+{I}try:
+{II}jsonable.append(
+{III}{indent_but_first_line(item_serialization, III)}
+{II})
+{I}except SerializationException as exception:
+{II}exception._prepend_index(i)
+{II}raise
+return jsonable"""
+            )
+
         self._add(
             name,
             Stripped(
@@ -1679,10 +1738,7 @@ def {name}(
 {I}:param that: list to be serialized
 {I}:return: JSON-able representation of :paramref:`that`
 {I}"""
-{I}return [
-{II}{item_serialization}
-{II}for item in that
-{I}]'''
+{I}{indent_but_first_line(body, I)}'''
             ),
         )
 
@@ -1691,6 +1747,7 @@ def {name}(
     ) -> None:
         """Register the serializer of a tuple with items of the ``type_annotation``."""
         item_expressions = []  # type: List[Stripped]
+        item_is_fallible = []  # type: List[bool]
 
         for i, item_type_anno in enumerate(type_annotation.items):
             assert isinstance(
@@ -1708,6 +1765,12 @@ def {name}(
                 _generate_atomic_serialization(Stripped(f"that[{i}]"), item_type_anno)
             )
 
+            item_is_fallible.append(
+                intermediate.reaches_a_number(
+                    item_type_anno, self._ids_of_types_reaching_a_number
+                )
+            )
+
         name = _tuple_serializer_name(type_annotation)
 
         tuple_type = python_common.generate_type(
@@ -1715,6 +1778,53 @@ def {name}(
         )
 
         joined_item_expressions = ",\n".join(item_expressions)
+
+        body: Stripped
+
+        if not any(item_is_fallible):
+            body = Stripped(
+                f"""\
+return [
+{I}{indent_but_first_line(joined_item_expressions, I)}
+]"""
+            )
+        else:
+            # NOTE (mristin):
+            # A list literal can not record which item was refused, so the items
+            # which can be refused are appended one by one, each under its own
+            # position.
+            append_statements = []  # type: List[Stripped]
+
+            for i, (item_expression, is_fallible) in enumerate(
+                zip(item_expressions, item_is_fallible)
+            ):
+                append_statement = Stripped(
+                    f"""\
+jsonable.append(
+{I}{indent_but_first_line(item_expression, I)}
+)"""
+                )
+
+                if is_fallible:
+                    append_statement = Stripped(
+                        f"""\
+try:
+{I}{indent_but_first_line(append_statement, I)}
+except SerializationException as exception:
+{I}exception._prepend_index({i})
+{I}raise"""
+                    )
+
+                append_statements.append(append_statement)
+
+            joined_append_statements = "\n".join(append_statements)
+
+            body = Stripped(
+                f"""\
+jsonable = []  # type: List[MutableJsonable]
+{joined_append_statements}
+return jsonable"""
+            )
 
         self._add(
             name,
@@ -1729,9 +1839,7 @@ def {name}(
 {I}:param that: tuple to be serialized
 {I}:return: JSON-able representation of :paramref:`that`
 {I}"""
-{I}return [
-{II}{indent_but_first_line(joined_item_expressions, II)}
-{I}]'''
+{I}{indent_but_first_line(body, I)}'''
             ),
         )
 
@@ -1748,6 +1856,13 @@ def {name}(
 
         primitive_type = intermediate.try_primitive_type(type_anno)
         if primitive_type is not None:
+            # NOTE (mristin):
+            # A number is serialized by a module-level function which is emitted
+            # unconditionally, so there is nothing to register for it.
+            if primitive_type in _NUMBER_SERIALIZER_BY_PRIMITIVE_TYPE:
+                self._checked_numbers.add(primitive_type)
+                return
+
             assert primitive_type is intermediate.PrimitiveType.BYTEARRAY, (
                 f"Expected all the other primitive types to be handled before, "
                 f"but got: {primitive_type}"
@@ -1776,7 +1891,126 @@ def {name}(
             assert_never(type_anno)
 
 
-def _generate_cls_to_jsonable(cls: intermediate.ConcreteClass) -> Stripped:
+def _generate_serialization_exception() -> Stripped:
+    """Generate the exception signalling that a value could not be serialized."""
+    return Stripped(
+        f'''\
+class SerializationException(Exception):
+{I}"""Signal that the JSON serialization could not be performed."""
+
+{I}#: Human-readable explanation of the exception's cause
+{I}cause: Final[str]
+
+{I}def __init__(
+{III}self,
+{III}cause: str
+{I}) -> None:
+{II}"""Initialize with the given :paramref:`cause` and an empty path."""
+{II}self.cause = cause
+{II}self._segments = []  # type: List[str]
+
+{I}@property
+{I}def path(self) -> str:
+{II}"""
+{II}Render the path to the erroneous value as a Python access expression.
+
+{II}The path points into the instance which you handed over for
+{II}the serialization, and *not* into a JSON document -- at the point of
+{II}the failure, there is no document yet. For example, ``.submodels[0].value``
+{II}tells you that the serialization broke on ``that.submodels[0].value``.
+{II}"""
+{II}return ''.join(self._segments)
+
+{I}def _prepend_property(self, name: str) -> None:
+{II}"""Insert the access to the property :paramref:`name` before the path."""
+{II}self._segments.insert(0, f'.{{name}}')
+
+{I}def _prepend_index(self, index: int) -> None:
+{II}"""Insert the access to the item at :paramref:`index` before the path."""
+{II}self._segments.insert(0, f'[{{index}}]')
+
+{I}def __str__(self) -> str:
+{II}if len(self._segments) == 0:
+{III}return self.cause
+
+{II}return f'{{self.path}}: {{self.cause}}\''''
+    )
+
+
+def _generate_number_serializers(
+    checked_numbers: AbstractSet[intermediate.PrimitiveType],
+) -> List[Stripped]:
+    """
+    Generate the serializers of the numbers which JSON can not represent.
+
+    Only the serializers which are actually called are generated. A serializer
+    which is not is not merely dead code: the one of a floating-point number
+    needs :py:mod:`math`, which is imported only where a number occurs.
+    """
+    result = []  # type: List[Stripped]
+
+    blocks = [
+        Stripped(
+            f'''\
+def _int_to_jsonable(
+{I}that: int
+) -> int:
+{I}"""
+{I}Serialize :paramref:`that` integer to a JSON-able value.
+
+{I}Only the integers in the range :math:`[-2^{{53}} + 1, 2^{{53}} - 1]` are
+{I}serialized. Outside of it, an integer can not be exactly represented as
+{I}a 64-bit floating-point number, which is what the JSON de-serializers of
+{I}the other languages read a number into.
+
+{I}:param that: integer to be serialized
+{I}:return: :paramref:`that`, unchanged
+{I}:raise: :py:class:`SerializationException` if outside the range
+{I}"""
+{I}if that < -9007199254740991 or that > 9007199254740991:
+{II}raise SerializationException(
+{III}f"The integer can not be serialized to JSON as it is outside "
+{III}f"the range [-2^53 + 1, 2^53 - 1]: {{that}}"
+{II})
+{I}return that'''
+        ),
+        Stripped(
+            f'''\
+def _float_to_jsonable(
+{I}that: float
+) -> float:
+{I}"""
+{I}Serialize :paramref:`that` floating-point number to a JSON-able value.
+
+{I}JSON knows neither an infinity nor a not-a-number, so we refuse to serialize
+{I}them instead of leaving it to :py:mod:`json` to write them out as ``NaN``
+{I}and ``Infinity``, which no conformant parser reads back.
+
+{I}:param that: floating-point number to be serialized
+{I}:return: :paramref:`that`, unchanged
+{I}:raise: :py:class:`SerializationException` if not finite
+{I}"""
+{I}if not math.isfinite(that):
+{II}raise SerializationException(
+{III}f"JSON knows neither an infinity nor a not-a-number, so the value "
+{III}f"can not be serialized: {{that}}"
+{II})
+{I}return that'''
+        ),
+    ]
+
+    for primitive_type, block in zip(
+        (intermediate.PrimitiveType.INT, intermediate.PrimitiveType.FLOAT), blocks
+    ):
+        if primitive_type in checked_numbers:
+            result.append(block)
+
+    return result
+
+
+def _generate_cls_to_jsonable(
+    cls: intermediate.ConcreteClass, ids_of_types_reaching_a_number: Set[int]
+) -> Stripped:
     """Generate the function to serialize an instance of the ``cls``."""
     cls_name = python_naming.class_name(cls.name)
     function_name = _cls_serializer_name(cls)
@@ -1796,6 +2030,24 @@ def _generate_cls_to_jsonable(cls: intermediate.ConcreteClass) -> Stripped:
         )
 
         statement = Stripped(f"jsonable[{key_literal}] = {serialization}")
+
+        # NOTE (mristin):
+        # Only a value which can be refused at all is worth guarding. The property
+        # is recorded here, and nowhere below, as nothing below knows through which
+        # property the value was reached.
+        if intermediate.reaches_a_number(
+            prop.type_annotation, ids_of_types_reaching_a_number
+        ):
+            prop_name_literal = python_common.string_literal(prop.name)
+
+            statement = Stripped(
+                f"""\
+try:
+{I}{indent_but_first_line(statement, I)}
+except SerializationException as exception:
+{I}exception._prepend_property({prop_name_literal})
+{I}raise"""
+            )
 
         if isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
             statement = Stripped(
@@ -1896,6 +2148,10 @@ def generate(
     if len(errors) > 0:
         return None, errors
 
+    ids_of_types_reaching_a_number = (
+        intermediate.collect_ids_of_types_reaching_a_number(symbol_table)
+    )
+
     # region Compose the de/serializers
 
     # NOTE (mristin):
@@ -1904,7 +2160,9 @@ def generate(
     # generated, gated along the call graph.
 
     registry = _ParserRegistry()
-    serializer_registry = _SerializerRegistry()
+    serializer_registry = _SerializerRegistry(
+        ids_of_types_reaching_a_number=ids_of_types_reaching_a_number
+    )
 
     for concrete_cls in symbol_table.concrete_classes:
         # NOTE (mristin):
@@ -1968,6 +2226,18 @@ def generate(
         else ""
     )
 
+    # NOTE (mristin):
+    # The :py:mod:`math` module is imported only for the numbers, to tell
+    # an infinity and a not-a-number apart from what JSON can represent.
+    math_import = (
+        "import math\n"
+        if (
+            "_float_from_jsonable" in needed_helpers
+            or intermediate.PrimitiveType.FLOAT in serializer_registry.checked_numbers
+        )
+        else ""
+    )
+
     # endregion
 
     blocks = [
@@ -1986,6 +2256,7 @@ properties do not have fixed order, and hence we can not read
             f"""\
 {base64_import}\
 import collections.abc
+{math_import}\
 import sys
 from typing import (
 {I}cast,
@@ -2241,6 +2512,10 @@ _Parser = Callable[
 
     blocks.append(Stripped("# region Serialization"))
 
+    blocks.append(_generate_serialization_exception())
+
+    blocks.extend(_generate_number_serializers(serializer_registry.checked_numbers))
+
     if serializer_registry.bytes_are_encoded:
         blocks.append(_generate_bytes_to_base64_str())
 
@@ -2274,7 +2549,12 @@ _Parser = Callable[
             # properties, and the model type is part of that.
             blocks.append(implementation)
         else:
-            blocks.append(_generate_cls_to_jsonable(cls=our_type))
+            blocks.append(
+                _generate_cls_to_jsonable(
+                    cls=our_type,
+                    ids_of_types_reaching_a_number=ids_of_types_reaching_a_number,
+                )
+            )
 
     blocks.append(_generate_serializer(symbol_table=symbol_table))
 
@@ -2291,6 +2571,9 @@ def to_jsonable(that: aas_types.Class) -> MutableJsonable:
 {II}AAS data to be recursively converted to a JSON-able structure
 {I}:return:
 {II}JSON-able structure which can be further encoded with, *e.g.*, :py:mod:`json`
+{I}:raise:
+{II}:py:class:`SerializationException` if :paramref:`that` contains a number
+{II}which JSON can not represent
 {I}\"\"\"
 {I}return that.transform(_SERIALIZER)"""
         )

@@ -9,6 +9,7 @@ from aas_core_codegen import intermediate, naming
 from aas_core_codegen.common import (
     Stripped,
     Identifier,
+    indent_but_first_line,
 )
 from aas_core_codegen.cpp import common as cpp_common, naming as cpp_naming
 from aas_core_codegen.cpp.common import (
@@ -18,6 +19,191 @@ from aas_core_codegen.cpp.common import (
     INDENT4 as IIII,
     INDENT5 as IIIII,
 )
+
+
+def _generate_serialization_failure_infrastructure() -> List[Stripped]:
+    """Generate the helpers shared by the tests of the serialization failures."""
+    return [
+        Stripped(
+            f"""\
+template<class ClassT>
+std::shared_ptr<ClassT> MustDeserializeTheFirstExpected(
+{I}const std::string& model_type,
+{I}std::function<
+{II}aas::common::expected<
+{III}std::shared_ptr<ClassT>,
+{III}aas::jsonization::DeserializationError
+{II}>(const nlohmann::json&, bool)
+{I}> deserialization_function
+) {{
+{I}const std::deque<std::filesystem::path> paths(
+{II}test::common::FindFilesBySuffixRecursively(
+{III}DetermineJsonDir() / "Expected" / model_type,
+{III}".json"
+{II})
+{I});
+
+{I}INFO("We expect at least one recorded example of " + model_type)
+{I}REQUIRE(!paths.empty());
+
+{I}const nlohmann::json json = test::common::jsonization::MustReadJson(
+{II}paths.front()
+{I});
+
+{I}aas::common::expected<
+{II}std::shared_ptr<ClassT>,
+{II}aas::jsonization::DeserializationError
+{I}> deserialized = deserialization_function(json, false);
+
+{I}INFO(
+{II}aas::common::Concat(
+{III}"Failed to de-serialize from ",
+{III}paths.front().string()
+{II})
+{I})
+{I}REQUIRE(deserialized.has_value());
+
+{I}return deserialized.value();
+}}"""
+        ),
+        Stripped(
+            f"""\
+/**
+ * Assert that \\p that instance can not be serialized to JSON, and that
+ * the failure is reported at \\p expected_path.
+ */
+void AssertSerializationFailsAt(
+{I}const aas::types::IClass& that,
+{I}const std::string& expected_path
+) {{
+{I}try {{
+{II}aas::jsonization::Serialize(that);
+{I}}} catch (const aas::jsonization::SerializationException& exception) {{
+{II}const std::string observed_path(
+{III}aas::common::WstringToUtf8(
+{IIII}exception.path().ToWstring()
+{III})
+{II});
+
+{II}INFO(
+{III}aas::common::Concat(
+{IIII}"Expected the serialization to fail at ",
+{IIII}expected_path,
+{IIII}", but it failed at ",
+{IIII}observed_path,
+{IIII}": ",
+{IIII}aas::common::WstringToUtf8(exception.cause())
+{III})
+{II})
+{II}REQUIRE(observed_path == expected_path);
+
+{II}return;
+{I}}}
+
+{I}INFO(
+{II}aas::common::Concat(
+{III}"Expected the serialization to fail at ",
+{III}expected_path,
+{III}", but it succeeded"
+{II})
+{I})
+{I}REQUIRE(false);
+}}"""
+        ),
+    ]
+
+
+def _generate_serialization_failure_test_case(
+    numeric_place: intermediate.NumericPlace,
+) -> Stripped:
+    """Generate the test that a number unrepresentable in JSON is refused."""
+    if numeric_place.a_type is intermediate.PrimitiveType.FLOAT:
+        value_type = "double"
+        zero_literal = "0.0"
+        what = "a non-finite floating-point number"
+        value_literals = [
+            "std::numeric_limits<double>::infinity()",
+            "-std::numeric_limits<double>::infinity()",
+            "std::numeric_limits<double>::quiet_NaN()",
+        ]
+    else:
+        value_type = "int64_t"
+        zero_literal = "0LL"
+        what = "an integer outside the range representable in JSON"
+        value_literals = ["9007199254740992LL", "-9007199254740992LL"]
+
+    setter_name = cpp_naming.setter_name(numeric_place.prop.name)
+
+    if numeric_place.index is None:
+        mutation = Stripped(f"instance->{setter_name}(value);")
+        expected_path = f".{numeric_place.prop.name}"
+    elif numeric_place.in_list:
+        # NOTE (mristin):
+        # The value goes to the position indicated by the numeric place so that
+        # a serializer which always reports the index 0 does not pass.
+        items_joined = ",\n".join(
+            "value" if i == numeric_place.index else zero_literal
+            for i in range(numeric_place.index + 1)
+        )
+
+        mutation = Stripped(
+            f"""\
+instance->{setter_name}(
+{I}std::vector<{value_type}>{{
+{II}{indent_but_first_line(items_joined, II)}
+{I}}}
+);"""
+        )
+        expected_path = f".{numeric_place.prop.name}[{numeric_place.index}]"
+    else:
+        mutable_getter_name = cpp_naming.mutable_getter_name(numeric_place.prop.name)
+
+        mutation = Stripped(
+            f"""\
+std::get<{numeric_place.index}>(
+{I}instance->{mutable_getter_name}()
+) = value;"""
+        )
+        expected_path = f".{numeric_place.prop.name}[{numeric_place.index}]"
+
+    interface_name = cpp_naming.interface_name(numeric_place.cls.name)
+
+    model_type = naming.json_model_type(numeric_place.cls.name)
+
+    deserialization_function = cpp_naming.function_name(
+        Identifier(f"{numeric_place.cls.name}_from")
+    )
+
+    values_joined = ",\n".join(value_literals)
+
+    return Stripped(
+        f"""\
+TEST_CASE(
+{I}"Test the serialization failure on {what} "
+{I}"at {expected_path} of {model_type}"
+) {{
+{I}for (
+{II}const {value_type} value
+{II}: {{
+{III}{indent_but_first_line(values_joined, III)}
+{II}}}
+{I}) {{
+{II}std::shared_ptr<aas::types::{interface_name}> instance(
+{III}MustDeserializeTheFirstExpected<aas::types::{interface_name}>(
+{IIII}{cpp_common.string_literal(model_type)},
+{IIII}aas::jsonization::{deserialization_function}
+{III})
+{II});
+
+{II}{indent_but_first_line(mutation, II)}
+
+{II}AssertSerializationFailsAt(
+{III}*instance,
+{III}{cpp_common.string_literal(expected_path)}
+{II});
+{I}}}
+}}"""
+    )
 
 
 # fmt: off
@@ -33,6 +219,13 @@ def generate_implementation(
     """Generate implementation to test the JSON de/serialization of concrete classes."""
     include_prefix_path = cpp_common.generate_include_prefix_path(library_namespace)
 
+    numeric_places = intermediate.numeric_places(symbol_table)
+
+    # NOTE (mristin):
+    # Only the tests of the serialization failures need the limits of
+    # the floating-point numbers.
+    limits_include = "\n#include <limits>\n" if len(numeric_places) > 0 else ""
+
     blocks = [
         cpp_common.WARNING,
         Stripped(
@@ -41,7 +234,7 @@ def generate_implementation(
 #include "./common_jsonization.hpp"
 
 #include <{include_prefix_path}/jsonization.hpp>
-
+{limits_include}
 #define CATCH_CONFIG_MAIN
 #include <catch2/catch.hpp>
 
@@ -175,6 +368,9 @@ const std::filesystem::path& DetermineErrorDir() {{
         ),
     ]  # type: List[Stripped]
 
+    if len(numeric_places) > 0:
+        blocks.extend(_generate_serialization_failure_infrastructure())
+
     for concrete_cls in symbol_table.concrete_classes:
         interface_name = cpp_naming.interface_name(concrete_cls.name)
 
@@ -251,6 +447,9 @@ TEST_CASE("Test the de-serialization failure on an unexpected {cls_name}") {{
 }}"""
             )
         )
+
+    for numeric_place in numeric_places:
+        blocks.append(_generate_serialization_failure_test_case(numeric_place))
 
     blocks.append(cpp_common.WARNING)
 

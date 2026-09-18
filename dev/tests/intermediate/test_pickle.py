@@ -946,6 +946,54 @@ __xml_namespace__ = "https://dummy.com"
             [implementer.name for implementer in unpickled.implementers],
         )
 
+    def test_numeric_place(self) -> None:
+        source = """\
+from typing import List
+
+class Something:
+    some_float: float
+    some_ints: List[int]
+
+    def __init__(self, some_float: float, some_ints: List[int]) -> None:
+        self.some_float = some_float
+        self.some_ints = some_ints
+
+__version__ = "dummy"
+__xml_namespace__ = "https://dummy.com"
+"""
+
+        symbol_table, error = tests.common.translate_source_to_intermediate(
+            source=source
+        )
+        if error is not None:
+            raise AssertionError(tests.common.most_underlying_messages(error))
+        assert symbol_table is not None
+
+        places = intermediate.numeric_places(symbol_table)
+
+        self.assertListEqual(
+            ["some_float", "some_ints"], [place.prop.name for place in places]
+        )
+
+        pickled_data = pickle.dumps(places)
+        unpickled = pickle.loads(pickled_data)
+
+        assert isinstance(unpickled, list)
+        assert all(isinstance(place, intermediate.NumericPlace) for place in unpickled)
+
+        self.assertListEqual(
+            ["some_float", "some_ints"], [place.prop.name for place in unpickled]
+        )
+        self.assertListEqual(
+            ["Something", "Something"], [place.cls.name for place in unpickled]
+        )
+        self.assertListEqual(
+            [intermediate.PrimitiveType.FLOAT, intermediate.PrimitiveType.INT],
+            [place.a_type for place in unpickled],
+        )
+        self.assertListEqual([None, 1], [place.index for place in unpickled])
+        self.assertListEqual([False, True], [place.in_list for place in unpickled])
+
     def test_optional_type_annotation(self) -> None:
         source = """\
 class Some_class:
