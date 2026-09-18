@@ -5,6 +5,8 @@
 
 using Aas = dummy;  // renamed
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
+using Globalization = System.Globalization;
+using RegularExpressions = System.Text.RegularExpressions;
 using Xml = System.Xml;
 
 using System.Collections.Generic;  // can't alias
@@ -224,7 +226,13 @@ namespace dummy
                     }
                     catch (System.Exception exception)
                             when (exception is System.FormatException
-                                || exception is System.Xml.XmlException)
+                                || exception is System.Xml.XmlException
+                                // NOTE (mristin):
+                                // An integer beyond the range of a long leaves
+                                // ReadContentAsLong as an OverflowException, which is neither
+                                // of the two above, so it used to escape this filter and leave
+                                // the de-serialization through an exception we never declared.
+                                || exception is System.OverflowException)
                     {
                         error = new Reporting.Error(
                             $"The content could not be de-serialized as {typeof(T).Name}: " +
@@ -287,7 +295,8 @@ namespace dummy
             /// </summary>
             private static double ReadContentAsDouble(Xml.XmlReader reader)
             {
-                return reader.ReadContentAsDouble();
+                return ParseXsDouble(
+                    reader.ReadContentAsString());
             }
 
             /// <summary>
@@ -307,6 +316,61 @@ namespace dummy
             {
                 return ReadWholeContentAsBase64(
                     reader);
+            }
+
+            /// <summary>
+            /// Match the lexical space of <c>xs:double</c>, save for the three named
+            /// literals, which <see cref="ParseXsDouble" /> takes care of.
+            /// </summary>
+            /// <remarks>
+            /// The pattern ends in <c>\z</c>, and not in <c>$</c>: <c>$</c> matches not
+            /// only at the end of the text but also just before a trailing newline, so
+            /// <c>"1.0\n"</c> would pass.
+            ///
+            /// See: https://www.w3.org/TR/xmlschema-2/#double
+            /// </remarks>
+            private static readonly RegularExpressions.Regex XsDoubleRegex = (
+                new RegularExpressions.Regex(
+                    @"^(\+|-)?([0-9]+(\.[0-9]*)?|\.[0-9]+)([Ee](\+|-)?[0-9]+)?\z",
+                    RegularExpressions.RegexOptions.Compiled));
+
+            /// <summary>
+            /// Parse <paramref name="text" /> as a <c>xs:double</c>.
+            /// </summary>
+            /// <remarks>
+            /// <c>XmlReader.ReadContentAsDouble</c> can not be used directly. It reads
+            /// the three named literals correctly, but it also takes <c>Infinity</c>,
+            /// <c>-Infinity</c>, <c>nan</c> and <c>NAN</c>, none of which
+            /// <c>xs:double</c> admits -- it spells them <c>INF</c>, <c>-INF</c> and
+            /// <c>NaN</c>, and it is case-sensitive.
+            /// </remarks>
+            /// <exception cref="System.FormatException">
+            /// Thrown when <paramref name="text" /> is not a <c>xs:double</c>
+            /// </exception>
+            private static double ParseXsDouble(string text)
+            {
+                switch (text)
+                {
+                    case "INF":
+                        return System.Double.PositiveInfinity;
+                    case "-INF":
+                        return System.Double.NegativeInfinity;
+                    case "NaN":
+                        return System.Double.NaN;
+                    default:
+                        break;
+                }
+
+                if (!XsDoubleRegex.IsMatch(text))
+                {
+                    throw new System.FormatException(
+                        $"Expected a value as xs:double, but got: {text}");
+                }
+
+                return System.Double.Parse(
+                    text,
+                    Globalization.NumberStyles.Float,
+                    Globalization.CultureInfo.InvariantCulture);
             }
 
             /// <summary>

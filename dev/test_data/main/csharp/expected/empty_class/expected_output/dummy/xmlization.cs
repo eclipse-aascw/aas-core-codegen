@@ -5,6 +5,8 @@
 
 using Aas = dummy;  // renamed
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
+using Globalization = System.Globalization;
+using RegularExpressions = System.Text.RegularExpressions;
 using Xml = System.Xml;
 
 using System.Collections.Generic;  // can't alias

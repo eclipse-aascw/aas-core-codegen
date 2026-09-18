@@ -5,6 +5,8 @@
 
 using Aas = AasCore.Aas3_0;  // renamed
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
+using Globalization = System.Globalization;
+using RegularExpressions = System.Text.RegularExpressions;
 using Xml = System.Xml;
 
 using System.Collections.Generic;  // can't alias
@@ -224,7 +226,13 @@ namespace AasCore.Aas3_0
                     }
                     catch (System.Exception exception)
                             when (exception is System.FormatException
-                                || exception is System.Xml.XmlException)
+                                || exception is System.Xml.XmlException
+                                // NOTE (mristin):
+                                // An integer beyond the range of a long leaves
+                                // ReadContentAsLong as an OverflowException, which is neither
+                                // of the two above, so it used to escape this filter and leave
+                                // the de-serialization through an exception we never declared.
+                                || exception is System.OverflowException)
                     {
                         error = new Reporting.Error(
                             $"The content could not be de-serialized as {typeof(T).Name}: " +
