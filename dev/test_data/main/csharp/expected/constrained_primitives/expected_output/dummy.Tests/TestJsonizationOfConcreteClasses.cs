@@ -9,6 +9,7 @@ using Directory = System.IO.Directory;
 using Nodes = System.Text.Json.Nodes;
 using Path = System.IO.Path;
 
+using System.Collections.Generic;  // can't alias
 using System.Linq;  // can't alias
 using NUnit.Framework; // can't alias
 
@@ -251,6 +252,98 @@ namespace dummy.Tests
                 }
             }
         }  // public void Test_Something_verification_fail
+
+        /// <summary>
+        /// Read the first recorded example of the <paramref name="modelType" />.
+        /// </summary>
+        private static Nodes.JsonNode LoadTheFirstExpected(string modelType)
+        {
+            var paths = Directory.GetFiles(
+                Path.Combine(
+                    Aas.Tests.Common.TestDataDir,
+                    "Json",
+                    "Expected",
+                    modelType),
+                "*.json",
+                System.IO.SearchOption.AllDirectories).ToList();
+            paths.Sort();
+
+            Assert.IsNotEmpty(
+                paths,
+                $"Expected at least one recorded example of {modelType}, but got none");
+
+            return Aas.Tests.CommonJson.ReadFromFile(paths[0]);
+        }
+
+        [Test]
+        public void TestSomethingSomeIntSerializationOutOfRange()
+        {
+            foreach (var value in new long[] { 9007199254740992L, -9007199254740992L })
+            {
+                var node = LoadTheFirstExpected(
+                    "Something");
+
+                var instance = Aas.Jsonization.Deserialize.SomethingFrom(
+                    node);
+
+                instance.SomeInt = value;
+
+                Aas.Jsonization.SerializationException? exception = null;
+                try
+                {
+                    var _ = Aas.Jsonization.Serialize.ToJsonObject(instance);
+                }
+                catch (Aas.Jsonization.SerializationException observedException)
+                {
+                    exception = observedException;
+                }
+
+                Assert.IsNotNull(
+                    exception,
+                    "Expected the serialization to fail at " +
+                        "someInt" +
+                        ", but it succeeded");
+
+                Assert.AreEqual(
+                    "someInt",
+                    exception!.Path);
+            }
+        }  // public void TestSomethingSomeIntSerializationOutOfRange
+
+        [Test]
+        public void TestSomethingSomeFloatSerializationNonFinite()
+        {
+            foreach (var value in new double[] { System.Double.PositiveInfinity, System.Double.NegativeInfinity, System.Double.NaN })
+            {
+                var node = LoadTheFirstExpected(
+                    "Something");
+
+                var instance = Aas.Jsonization.Deserialize.SomethingFrom(
+                    node);
+
+                instance.SomeFloat = value;
+
+                Aas.Jsonization.SerializationException? exception = null;
+                try
+                {
+                    var _ = Aas.Jsonization.Serialize.ToJsonObject(instance);
+                }
+                catch (Aas.Jsonization.SerializationException observedException)
+                {
+                    exception = observedException;
+                }
+
+                Assert.IsNotNull(
+                    exception,
+                    "Expected the serialization to fail at " +
+                        "someFloat" +
+                        ", but it succeeded");
+
+                Assert.AreEqual(
+                    "someFloat",
+                    exception!.Path);
+            }
+        }  // public void TestSomethingSomeFloatSerializationNonFinite
     }  // class TestJsonizationOfConcreteClasses
 }  // namespace dummy.Tests
 

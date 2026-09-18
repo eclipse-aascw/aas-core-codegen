@@ -9,6 +9,7 @@ using Directory = System.IO.Directory;
 using Nodes = System.Text.Json.Nodes;
 using Path = System.IO.Path;
 
+using System.Collections.Generic;  // can't alias
 using System.Linq;  // can't alias
 using NUnit.Framework; // can't alias
 

@@ -149,6 +149,12 @@ namespace dummy
                         $"from {value.ToJsonString()}");
                     return default!;
                 }
+                if (!System.Double.IsFinite(result))
+                {
+                    error = new Reporting.Error(
+                        $"Expected a finite number, but got {result}");
+                    return default!;
+                }
                 return result;
             }
 
@@ -789,6 +795,42 @@ namespace dummy
         }
 
         /// <summary>
+        /// Represent a critical error during the serialization.
+        /// </summary>
+        public class SerializationException : System.Exception
+        {
+            public readonly string Path;
+            public readonly string Cause;
+            public SerializationException(string path, string cause)
+                : base($"{cause} at: {path}")
+            {
+                Path = path;
+                Cause = cause;
+            }
+        }
+
+        /// <summary>
+        /// Signal a failure of the serialization, carrying the path to the culprit.
+        /// </summary>
+        /// <remarks>
+        /// The path is built as the stack unwinds -- every container prepends the one
+        /// segment it knows, the property its name and the list the index of the item
+        /// -- which is why this can not be a <see cref="SerializationException" />
+        /// already: that one renders its message in its constructor, so its path has
+        /// to be complete by then. <see cref="Serialize.ToJsonObject" /> renders and
+        /// converts.
+        /// </remarks>
+        internal class SerializationFailure : System.Exception
+        {
+            public readonly Reporting.Error Error;
+            public SerializationFailure(Reporting.Error error)
+                : base(error.Cause)
+            {
+                Error = error;
+            }
+        }
+
+        /// <summary>
         /// Deserialize instances of meta-model classes from JSON nodes.
         /// </summary>
         /// <example>
@@ -952,18 +994,45 @@ namespace dummy
             /// Convert <paramref name="that" /> 64-bit long integer to a JSON value.
             /// </summary>
             /// <param name="that">value to be converted</param>
-            /// <exception name="System.ArgumentException">
-            /// Thrown if <paramref name="that" /> is not within the range where it
-            /// can be losslessly converted to a double floating number.
+            /// <exception name="SerializationFailure">
+            /// Thrown if <paramref name="that" /> lies outside the range where it can be
+            /// exactly represented as a 64-bit floating-point number, which is what
+            /// the JSON de-serializers of the other languages read a number into.
             /// </exception>
             [CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
             private static Nodes.JsonValue ToJsonValue(long that)
             {
-                // We need to check that we can perform a lossless conversion.
-                if ((long)((double)that) != that)
+                if (that < -9007199254740991L || that > 9007199254740991L)
                 {
-                    throw new System.ArgumentException(
-                        $"The number can not be losslessly represented in JSON: {that}");
+                    throw new SerializationFailure(
+                        new Reporting.Error(
+                            "The integer can not be serialized to JSON as it is outside " +
+                            $"the range [-2^53 + 1, 2^53 - 1]: {that}"));
+                }
+                return Nodes.JsonValue.Create(that);
+            }
+
+            /// <summary>
+            /// Convert <paramref name="that" /> 64-bit floating-point number to a JSON
+            /// value.
+            /// </summary>
+            /// <param name="that">value to be converted</param>
+            /// <exception name="SerializationFailure">
+            /// Thrown if <paramref name="that" /> is not finite. JSON knows neither
+            /// an infinity nor a not-a-number, so we refuse them here instead of
+            /// leaving it to <c>System.Text.Json</c>, which throws much later -- when
+            /// the caller writes the document out -- and says nothing about where
+            /// the offending value sat.
+            /// </exception>
+            [CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
+            private static Nodes.JsonValue ToJsonValue(double that)
+            {
+                if (!System.Double.IsFinite(that))
+                {
+                    throw new SerializationFailure(
+                        new Reporting.Error(
+                            "JSON knows neither an infinity nor a not-a-number, so " +
+                            $"the value can not be serialized: {that}"));
                 }
                 return Nodes.JsonValue.Create(that);
             }
@@ -1005,8 +1074,26 @@ namespace dummy
                 return (that) =>
                 {
                     var result = new Nodes.JsonArray();
-                    result.Add(serializeItem0(that.Item1));
-                    result.Add(serializeItem1(that.Item2));
+                    try
+                    {
+                        result.Add(serializeItem0(that.Item1));
+                    }
+                    catch (SerializationFailure failure)
+                    {
+                        failure.Error.PrependSegment(
+                            new Reporting.IndexSegment(0));
+                        throw;
+                    }
+                    try
+                    {
+                        result.Add(serializeItem1(that.Item2));
+                    }
+                    catch (SerializationFailure failure)
+                    {
+                        failure.Error.PrependSegment(
+                            new Reporting.IndexSegment(1));
+                        throw;
+                    }
                     return result;
                 };
             }
@@ -1032,12 +1119,66 @@ namespace dummy
                 return (that) =>
                 {
                     var result = new Nodes.JsonArray();
-                    result.Add(serializeItem0(that.Item1));
-                    result.Add(serializeItem1(that.Item2));
-                    result.Add(serializeItem2(that.Item3));
-                    result.Add(serializeItem3(that.Item4));
-                    result.Add(serializeItem4(that.Item5));
-                    result.Add(serializeItem5(that.Item6));
+                    try
+                    {
+                        result.Add(serializeItem0(that.Item1));
+                    }
+                    catch (SerializationFailure failure)
+                    {
+                        failure.Error.PrependSegment(
+                            new Reporting.IndexSegment(0));
+                        throw;
+                    }
+                    try
+                    {
+                        result.Add(serializeItem1(that.Item2));
+                    }
+                    catch (SerializationFailure failure)
+                    {
+                        failure.Error.PrependSegment(
+                            new Reporting.IndexSegment(1));
+                        throw;
+                    }
+                    try
+                    {
+                        result.Add(serializeItem2(that.Item3));
+                    }
+                    catch (SerializationFailure failure)
+                    {
+                        failure.Error.PrependSegment(
+                            new Reporting.IndexSegment(2));
+                        throw;
+                    }
+                    try
+                    {
+                        result.Add(serializeItem3(that.Item4));
+                    }
+                    catch (SerializationFailure failure)
+                    {
+                        failure.Error.PrependSegment(
+                            new Reporting.IndexSegment(3));
+                        throw;
+                    }
+                    try
+                    {
+                        result.Add(serializeItem4(that.Item5));
+                    }
+                    catch (SerializationFailure failure)
+                    {
+                        failure.Error.PrependSegment(
+                            new Reporting.IndexSegment(4));
+                        throw;
+                    }
+                    try
+                    {
+                        result.Add(serializeItem5(that.Item6));
+                    }
+                    catch (SerializationFailure failure)
+                    {
+                        failure.Error.PrependSegment(
+                            new Reporting.IndexSegment(5));
+                        throw;
+                    }
                     return result;
                 };
             }
@@ -1085,8 +1226,17 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                result["serialNumber"] = Transformer.ToJsonValue(
-                    that.SerialNumber);
+                try
+                {
+                    result["serialNumber"] = Transformer.ToJsonValue(
+                        that.SerialNumber);
+                }
+                catch (SerializationFailure failure)
+                {
+                    failure.Error.PrependSegment(
+                        new Reporting.NameSegment("serialNumber"));
+                    throw;
+                }
 
                 result["modelType"] = "AnotherItem";
 
@@ -1099,14 +1249,41 @@ namespace dummy
             {
                 var result = new Nodes.JsonObject();
 
-                result["pair"] = Serialize_TupleOf2_string_long(
-                    that.Pair);
+                try
+                {
+                    result["pair"] = Serialize_TupleOf2_string_long(
+                        that.Pair);
+                }
+                catch (SerializationFailure failure)
+                {
+                    failure.Error.PrependSegment(
+                        new Reporting.NameSegment("pair"));
+                    throw;
+                }
 
-                result["items"] = Serialize_TupleOf2_IAbstractItem_IAbstractItem(
-                    that.Items);
+                try
+                {
+                    result["items"] = Serialize_TupleOf2_IAbstractItem_IAbstractItem(
+                        that.Items);
+                }
+                catch (SerializationFailure failure)
+                {
+                    failure.Error.PrependSegment(
+                        new Reporting.NameSegment("items"));
+                    throw;
+                }
 
-                result["tricky"] = Serialize_TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result(
-                    that.Tricky);
+                try
+                {
+                    result["tricky"] = Serialize_TupleOf6_long_ISomeItem_IAbstractItem_ISomeItem_long_Result(
+                        that.Tricky);
+                }
+                catch (SerializationFailure failure)
+                {
+                    failure.Error.PrependSegment(
+                        new Reporting.NameSegment("tricky"));
+                    throw;
+                }
 
                 return result;
             }
@@ -1131,9 +1308,22 @@ namespace dummy
             /// <summary>
             /// Serialize an instance of the meta-model into a JSON object.
             /// </summary>
+            /// <exception cref="SerializationException">
+            /// Thrown when a value within <paramref name="that" /> instance can not be
+            /// represented in JSON
+            /// </exception>
             public static Nodes.JsonObject ToJsonObject(Aas.IClass that)
             {
-                return Transformer.TransformIClass(that);
+                try
+                {
+                    return Transformer.TransformIClass(that);
+                }
+                catch (SerializationFailure failure)
+                {
+                    throw new SerializationException(
+                        Reporting.GenerateJsonPath(failure.Error.PathSegments),
+                        failure.Error.Cause);
+                }
             }
 
             /// <summary>

@@ -372,6 +372,27 @@ if (result == null)
 return result;"""
         )
 
+    elif primitive_type is intermediate.PrimitiveType.FLOAT:
+        # NOTE (mristin):
+        # JSON knows neither an infinity nor a not-a-number, so a conformant
+        # parser can never give us one. The caller can still hand us a node
+        # which has been constructed programmatically, so we check here.
+        body = Stripped(
+            f"""\
+bool ok = value.TryGetValue<{value_type}>(out {value_type} result);
+if (!ok)
+{{
+{I}{indent_but_first_line(conversion_failed, I)}
+}}
+if (!System.Double.IsFinite(result))
+{{
+{I}error = new Reporting.Error(
+{II}$"Expected a finite number, but got {{result}}");
+{I}return default!;
+}}
+return result;"""
+        )
+
     else:
         body = Stripped(
             f"""\
@@ -1425,7 +1446,6 @@ def _generate_serialize_primitive_value(
     """
     if (
         primitive_type is intermediate.PrimitiveType.BOOL
-        or primitive_type is intermediate.PrimitiveType.FLOAT
         or primitive_type is intermediate.PrimitiveType.STR
     ):
         # We can not use textwrap due to indent_but_first_line.
@@ -1434,7 +1454,15 @@ def _generate_serialize_primitive_value(
 Nodes.JsonValue.Create(
 {I}{indent_but_first_line(source_expr, I)})"""
         )
-    elif primitive_type is intermediate.PrimitiveType.INT:
+    elif (
+        primitive_type is intermediate.PrimitiveType.INT
+        or primitive_type is intermediate.PrimitiveType.FLOAT
+    ):
+        # NOTE (mristin):
+        # A number is the only value which the serialization can refuse, so it
+        # is the only one converted by a method of ours instead of going
+        # straight to ``Nodes.JsonValue.Create``.
+        #
         # We can not use textwrap due to indent_but_first_line.
         return Stripped(
             f"""\
@@ -1598,7 +1626,6 @@ def _generate_atomic_serializer_helpers(
 
     for primitive_type, csharp_type, conversion_expr in (
         (intermediate.PrimitiveType.BOOL, "bool", "Nodes.JsonValue.Create(that)"),
-        (intermediate.PrimitiveType.FLOAT, "double", "Nodes.JsonValue.Create(that)"),
         (intermediate.PrimitiveType.STR, "string", "Nodes.JsonValue.Create(that)"),
         (
             intermediate.PrimitiveType.BYTEARRAY,
@@ -1726,9 +1753,20 @@ private static Serializer<List<T>> SerializeList<T>(
 {I}return (that) =>
 {I}{{
 {II}var result = new Nodes.JsonArray();
+{II}int i = 0;
 {II}foreach (T item in that)
 {II}{{
-{III}result.Add(serializeItem(item));
+{III}try
+{III}{{
+{IIII}result.Add(serializeItem(item));
+{III}}}
+{III}catch (SerializationFailure failure)
+{III}{{
+{IIII}failure.Error.PrependSegment(
+{IIIII}new Reporting.IndexSegment(i));
+{IIII}throw;
+{III}}}
+{III}i++;
 {II}}}
 {II}return result;
 {I}}};
@@ -1802,7 +1840,18 @@ def _generate_serialize_tuple_helper(arity: int) -> Stripped:
     )
 
     add_stmts_joined = "\n".join(
-        f"result.Add(serializeItem{i}(that.Item{i + 1}));" for i in range(arity)
+        f"""\
+try
+{{
+{I}result.Add(serializeItem{i}(that.Item{i + 1}));
+}}
+catch (SerializationFailure failure)
+{{
+{I}failure.Error.PrependSegment(
+{II}new Reporting.IndexSegment({i}));
+{I}throw;
+}}"""
+        for i in range(arity)
     )
 
     function_name = f"SerializeTuple{arity}"
@@ -1834,7 +1883,7 @@ private static Serializer<{tuple_type}> {function_name}<{type_params_joined}>(
 
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_transform_property(
-    prop: intermediate.Property,
+    prop: intermediate.Property, ids_of_types_reaching_a_number: Set[int]
 ) -> Tuple[Optional[Stripped], Optional[Error]]:
     """Generate the snippet to transform a property into a JSON node."""
     type_anno = intermediate.beneath_optional(prop.type_annotation)
@@ -1900,6 +1949,27 @@ result[{prop_literal}] = {_serializer_expr(type_anno)}(
     else:
         assert_never(type_anno)
 
+    # NOTE (mristin):
+    # Only a value which can be refused at all is worth guarding. The property
+    # is recorded here, and nowhere below, as nothing below knows through which
+    # property the value was reached.
+    if intermediate.reaches_a_number(
+        prop.type_annotation, ids_of_types_reaching_a_number
+    ):
+        serialize_block = Stripped(
+            f"""\
+try
+{{
+{I}{indent_but_first_line(serialize_block, I)}
+}}
+catch (SerializationFailure failure)
+{{
+{I}failure.Error.PrependSegment(
+{II}new Reporting.NameSegment({prop_literal}));
+{I}throw;
+}}"""
+        )
+
     if not isinstance(prop.type_annotation, intermediate.OptionalTypeAnnotation):
         return serialize_block, None
 
@@ -1921,7 +1991,7 @@ if ({condition})
 
 @ensure(lambda result: (result[0] is not None) ^ (result[1] is not None))
 def _generate_transform_for_class(
-    cls: intermediate.ConcreteClass,
+    cls: intermediate.ConcreteClass, ids_of_types_reaching_a_number: Set[int]
 ) -> Tuple[Optional[Stripped], Optional[List[Error]]]:
     """Generate the transform method to a JSON object for the given concrete class."""
     errors = []  # type: List[Error]
@@ -1929,7 +1999,9 @@ def _generate_transform_for_class(
     blocks = [Stripped("var result = new Nodes.JsonObject();")]  # type: List[Stripped]
 
     for prop in cls.properties:
-        block, error = _generate_transform_property(prop=prop)
+        block, error = _generate_transform_property(
+            prop=prop, ids_of_types_reaching_a_number=ids_of_types_reaching_a_number
+        )
         if error is not None:
             errors.append(error)
         else:
@@ -1977,6 +2049,10 @@ def _generate_transformer(
     """Generate a transformer which transforms instances of the meta-model to JSON."""
     errors = []  # type: List[Error]
 
+    ids_of_types_reaching_a_number = (
+        intermediate.collect_ids_of_types_reaching_a_number(symbol_table)
+    )
+
     blocks = [
         Stripped(
             """\
@@ -2014,18 +2090,47 @@ internal static Nodes.JsonObject TransformIClass(Aas.IClass that)
 /// Convert <paramref name="that" /> 64-bit long integer to a JSON value.
 /// </summary>
 /// <param name="that">value to be converted</param>
-/// <exception name="System.ArgumentException">
-/// Thrown if <paramref name="that" /> is not within the range where it
-/// can be losslessly converted to a double floating number.
+/// <exception name="SerializationFailure">
+/// Thrown if <paramref name="that" /> lies outside the range where it can be
+/// exactly represented as a 64-bit floating-point number, which is what
+/// the JSON de-serializers of the other languages read a number into.
 /// </exception>
 [CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
 private static Nodes.JsonValue ToJsonValue(long that)
 {{
-{I}// We need to check that we can perform a lossless conversion.
-{I}if ((long)((double)that) != that)
+{I}if (that < -9007199254740991L || that > 9007199254740991L)
 {I}{{
-{II}throw new System.ArgumentException(
-{III}$"The number can not be losslessly represented in JSON: {{that}}");
+{II}throw new SerializationFailure(
+{III}new Reporting.Error(
+{IIII}"The integer can not be serialized to JSON as it is outside " +
+{IIII}$"the range [-2^53 + 1, 2^53 - 1]: {{that}}"));
+{I}}}
+{I}return Nodes.JsonValue.Create(that);
+}}"""
+        ),
+        Stripped(
+            f"""\
+/// <summary>
+/// Convert <paramref name="that" /> 64-bit floating-point number to a JSON
+/// value.
+/// </summary>
+/// <param name="that">value to be converted</param>
+/// <exception name="SerializationFailure">
+/// Thrown if <paramref name="that" /> is not finite. JSON knows neither
+/// an infinity nor a not-a-number, so we refuse them here instead of
+/// leaving it to <c>System.Text.Json</c>, which throws much later -- when
+/// the caller writes the document out -- and says nothing about where
+/// the offending value sat.
+/// </exception>
+[CodeAnalysis.SuppressMessage("ReSharper", "UnusedMember.Local")]
+private static Nodes.JsonValue ToJsonValue(double that)
+{{
+{I}if (!System.Double.IsFinite(that))
+{I}{{
+{II}throw new SerializationFailure(
+{III}new Reporting.Error(
+{IIII}"JSON knows neither an infinity nor a not-a-number, so " +
+{IIII}$"the value can not be serialized: {{that}}"));
 {I}}}
 {I}return Nodes.JsonValue.Create(that);
 }}"""
@@ -2095,7 +2200,10 @@ private static Nodes.JsonValue ToJsonValue(long that)
 
                 blocks.append(spec_impls[implementation_key])
             else:
-                block, cls_errors = _generate_transform_for_class(cls=our_type)
+                block, cls_errors = _generate_transform_for_class(
+                    cls=our_type,
+                    ids_of_types_reaching_a_number=ids_of_types_reaching_a_number,
+                )
                 if cls_errors is not None:
                     errors.extend(cls_errors)
                 else:
@@ -2143,9 +2251,22 @@ def _generate_serialize(
 /// <summary>
 /// Serialize an instance of the meta-model into a JSON object.
 /// </summary>
+/// <exception cref="SerializationException">
+/// Thrown when a value within <paramref name="that" /> instance can not be
+/// represented in JSON
+/// </exception>
 public static Nodes.JsonObject ToJsonObject(Aas.IClass that)
 {{
-{I}return Transformer.TransformIClass(that);
+{I}try
+{I}{{
+{II}return Transformer.TransformIClass(that);
+{I}}}
+{I}catch (SerializationFailure failure)
+{I}{{
+{II}throw new SerializationException(
+{III}Reporting.GenerateJsonPath(failure.Error.PathSegments),
+{III}failure.Error.Cause);
+{I}}}
 }}"""
         ),
     ]  # type: List[Stripped]
@@ -2286,6 +2407,42 @@ public class Exception : System.Exception
 {I}{{
 {II}Path = path;
 {II}Cause = cause;
+{I}}}
+}}
+
+/// <summary>
+/// Represent a critical error during the serialization.
+/// </summary>
+public class SerializationException : System.Exception
+{{
+{I}public readonly string Path;
+{I}public readonly string Cause;
+{I}public SerializationException(string path, string cause)
+{II}: base($"{{cause}} at: {{path}}")
+{I}{{
+{II}Path = path;
+{II}Cause = cause;
+{I}}}
+}}
+
+/// <summary>
+/// Signal a failure of the serialization, carrying the path to the culprit.
+/// </summary>
+/// <remarks>
+/// The path is built as the stack unwinds -- every container prepends the one
+/// segment it knows, the property its name and the list the index of the item
+/// -- which is why this can not be a <see cref="SerializationException" />
+/// already: that one renders its message in its constructor, so its path has
+/// to be complete by then. <see cref="Serialize.ToJsonObject" /> renders and
+/// converts.
+/// </remarks>
+internal class SerializationFailure : System.Exception
+{{
+{I}public readonly Reporting.Error Error;
+{I}public SerializationFailure(Reporting.Error error)
+{II}: base(error.Cause)
+{I}{{
+{II}Error = error;
 {I}}}
 }}"""
     )

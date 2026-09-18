@@ -9,6 +9,7 @@ using Directory = System.IO.Directory;
 using Nodes = System.Text.Json.Nodes;
 using Path = System.IO.Path;
 
+using System.Collections.Generic;  // can't alias
 using System.Linq;  // can't alias
 using NUnit.Framework; // can't alias
 
@@ -731,6 +732,63 @@ namespace dummy.Tests
                 }
             }
         }  // public void Test_Something_verification_fail
+
+        /// <summary>
+        /// Read the first recorded example of the <paramref name="modelType" />.
+        /// </summary>
+        private static Nodes.JsonNode LoadTheFirstExpected(string modelType)
+        {
+            var paths = Directory.GetFiles(
+                Path.Combine(
+                    Aas.Tests.Common.TestDataDir,
+                    "Json",
+                    "Expected",
+                    modelType),
+                "*.json",
+                System.IO.SearchOption.AllDirectories).ToList();
+            paths.Sort();
+
+            Assert.IsNotEmpty(
+                paths,
+                $"Expected at least one recorded example of {modelType}, but got none");
+
+            return Aas.Tests.CommonJson.ReadFromFile(paths[0]);
+        }
+
+        [Test]
+        public void TestAnotherItemSerialNumberSerializationOutOfRange()
+        {
+            foreach (var value in new long[] { 9007199254740992L, -9007199254740992L })
+            {
+                var node = LoadTheFirstExpected(
+                    "AnotherItem");
+
+                var instance = Aas.Jsonization.Deserialize.AnotherItemFrom(
+                    node);
+
+                instance.SerialNumber = value;
+
+                Aas.Jsonization.SerializationException? exception = null;
+                try
+                {
+                    var _ = Aas.Jsonization.Serialize.ToJsonObject(instance);
+                }
+                catch (Aas.Jsonization.SerializationException observedException)
+                {
+                    exception = observedException;
+                }
+
+                Assert.IsNotNull(
+                    exception,
+                    "Expected the serialization to fail at " +
+                        "serialNumber" +
+                        ", but it succeeded");
+
+                Assert.AreEqual(
+                    "serialNumber",
+                    exception!.Path);
+            }
+        }  // public void TestAnotherItemSerialNumberSerializationOutOfRange
     }  // class TestJsonizationOfConcreteClasses
 }  // namespace dummy.Tests
 
