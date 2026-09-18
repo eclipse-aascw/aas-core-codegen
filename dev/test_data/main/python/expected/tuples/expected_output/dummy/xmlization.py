@@ -79,6 +79,7 @@ import enum
 import io
 import math
 import os
+import re
 import sys
 from typing import (
     Any,
@@ -1562,6 +1563,14 @@ def _read_text_from_element(
     return text
 
 
+#: Match the lexical space of ``xs:long``.
+#:
+#: Mind the explicit ``[0-9]``: ``\d`` would match a digit of any script.
+#:
+#: See: https://www.w3.org/TR/xmlschema-2/#long
+_XS_LONG_RE = re.compile(r"(\+|-)?[0-9]+")
+
+
 def _read_int_from_element_text(
     element: Element,
     iterator: Iterator[Tuple[str, Element]]
@@ -1582,6 +1591,20 @@ def _read_int_from_element_text(
         element,
         iterator
     )
+
+    # NOTE (mristin):
+    # ``int`` is far too permissive to be handed the text directly: it takes
+    # a digit group separator as in ``1_0``, surrounding whitespace, and
+    # a digit of any script -- the Arabic-Indic ``۵`` would be read as 5.
+    # Mind that it is checked with ``fullmatch`` and not with ``match``: ``$``
+    # would also match just before a trailing newline.
+    #
+    # See: https://www.w3.org/TR/xmlschema-2/#long
+    if _XS_LONG_RE.fullmatch(text) is None:
+        raise DeserializationException(
+            f"Expected a value as xs:long, "
+            f"but got an element with text: {text!r}"
+        )
 
     try:
         value = int(text)
