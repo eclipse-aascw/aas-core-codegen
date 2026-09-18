@@ -325,7 +325,7 @@ _CONTENT_READER_BY_PRIMITIVE: Final[
     intermediate.PrimitiveType.FLOAT: (
         "ReadContentAsDouble",
         "double",
-        "reader.ReadContentAsDouble()",
+        f"ParseXsDouble(\n{II}reader.ReadContentAsString())",
     ),
     intermediate.PrimitiveType.STR: (
         "ReadContentAsString",
@@ -595,7 +595,13 @@ private static ContentReader<T> AsText<T>(
 {II}}}
 {II}catch (System.Exception exception)
 {IIII}when (exception is System.FormatException
-{IIIII}|| exception is System.Xml.XmlException)
+{IIIII}|| exception is System.Xml.XmlException
+{IIIII}// NOTE (mristin):
+{IIIII}// An integer beyond the range of a long leaves
+{IIIII}// ReadContentAsLong as an OverflowException, which is neither
+{IIIII}// of the two above, so it used to escape this filter and leave
+{IIIII}// the de-serialization through an exception we never declared.
+{IIIII}|| exception is System.OverflowException)
 {II}{{
 {III}error = new Reporting.Error(
 {IIII}$"The content could not be de-serialized as {{typeof(T).Name}}: " +
@@ -884,6 +890,67 @@ def _generate_content_converters(
 private static {csharp_type} {function_name}(Xml.XmlReader reader)
 {{
 {I}return {conversion_expr};
+}}"""
+            )
+        )
+
+    if intermediate.PrimitiveType.FLOAT in primitive_types:
+        result.append(
+            Stripped(
+                f"""\
+/// <summary>
+/// Match the lexical space of <c>xs:double</c>, save for the three named
+/// literals, which <see cref="ParseXsDouble" /> takes care of.
+/// </summary>
+/// <remarks>
+/// The pattern ends in <c>\\z</c>, and not in <c>$</c>: <c>$</c> matches not
+/// only at the end of the text but also just before a trailing newline, so
+/// <c>"1.0\\n"</c> would pass.
+///
+/// See: https://www.w3.org/TR/xmlschema-2/#double
+/// </remarks>
+private static readonly RegularExpressions.Regex XsDoubleRegex = (
+{I}new RegularExpressions.Regex(
+{II}@"^(\\+|-)?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([Ee](\\+|-)?[0-9]+)?\\z",
+{II}RegularExpressions.RegexOptions.Compiled));
+
+/// <summary>
+/// Parse <paramref name="text" /> as a <c>xs:double</c>.
+/// </summary>
+/// <remarks>
+/// <c>XmlReader.ReadContentAsDouble</c> can not be used directly. It reads
+/// the three named literals correctly, but it also takes <c>Infinity</c>,
+/// <c>-Infinity</c>, <c>nan</c> and <c>NAN</c>, none of which
+/// <c>xs:double</c> admits -- it spells them <c>INF</c>, <c>-INF</c> and
+/// <c>NaN</c>, and it is case-sensitive.
+/// </remarks>
+/// <exception cref="System.FormatException">
+/// Thrown when <paramref name="text" /> is not a <c>xs:double</c>
+/// </exception>
+private static double ParseXsDouble(string text)
+{{
+{I}switch (text)
+{I}{{
+{II}case "INF":
+{III}return System.Double.PositiveInfinity;
+{II}case "-INF":
+{III}return System.Double.NegativeInfinity;
+{II}case "NaN":
+{III}return System.Double.NaN;
+{II}default:
+{III}break;
+{I}}}
+
+{I}if (!XsDoubleRegex.IsMatch(text))
+{I}{{
+{II}throw new System.FormatException(
+{III}$"Expected a value as xs:double, but got: {{text}}");
+{I}}}
+
+{I}return System.Double.Parse(
+{II}text,
+{II}Globalization.NumberStyles.Float,
+{II}Globalization.CultureInfo.InvariantCulture);
 }}"""
             )
         )
@@ -3184,6 +3251,8 @@ namespace {namespace}
         Stripped(
             """\
 using CodeAnalysis = System.Diagnostics.CodeAnalysis;
+using Globalization = System.Globalization;
+using RegularExpressions = System.Text.RegularExpressions;
 using Xml = System.Xml;
 
 using System.Collections.Generic;  // can't alias"""
